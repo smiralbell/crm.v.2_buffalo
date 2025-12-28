@@ -77,7 +77,7 @@ export default async function handler(
       return res.status(400).json({ error: error.errors[0].message })
     }
 
-    if (error instanceof Error && error.message === 'No session' || error.message === 'Invalid session' || error.message === 'Expired session') {
+    if (error instanceof Error && (error.message === 'No session' || error.message === 'Invalid session' || error.message === 'Expired session')) {
       return // Ya se envió la respuesta 401
     }
 
