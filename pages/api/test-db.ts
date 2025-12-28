@@ -32,14 +32,10 @@ export default async function handler(
     // Obtener algunos leads
     const leads = await prisma.lead.findMany({
       take: 5,
-      select: {
-        id: true,
-        estado: true,
-        contact_id: true,
-      },
       include: {
         contact: {
           select: {
+            id: true,
             nombre: true,
             email: true,
           },
