@@ -1,0 +1,120 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// NOTA: La autenticación ahora usa variables de entorno (CRM_ADMIN_EMAIL y CRM_ADMIN_PASSWORD)
+// No se necesitan tablas users ni sessions en la base de datos
+
+// Modelo Contact - coincide con la estructura existente
+model Contact {
+  id              Int     @id @default(autoincrement())
+  nombre          String?
+  email           String? @unique
+  instagram_user  String? @unique
+  telefono        String?
+  empresa         String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @default(now()) @updatedAt
+  direccion_fiscal String?
+  ciudad          String?
+  codigo_postal   String?
+  pais            String?
+  cif             String?
+  iban            String?
+  dni             String?
+  leads           Lead[]
+  messages        Message[]
+  tasks           Task[]
+
+  @@map("contacts")
+}
+
+// Modelo Lead - adaptado a la estructura existente
+model Lead {
+  id                Int      @id @default(autoincrement())
+  contact_id        Int      @unique
+  estado            String?  @default("frio")
+  notas             String?  // Campo adicional para notas
+  origen_principal  String?
+  prioridad         String?  @default("media")
+  score             Int?
+  ultima_interaccion DateTime?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @default(now()) @updatedAt
+  pipeline_id       Int?
+  pipeline_stage_id Int?
+  valor             Decimal? @db.Decimal(10, 2)
+  position          Int?
+  contact           Contact  @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+  pipeline          Pipeline? @relation(fields: [pipeline_id], references: [id], onDelete: SetNull)
+  pipeline_stage    PipelineStage? @relation(fields: [pipeline_stage_id], references: [id], onDelete: SetNull)
+  messages          Message[]
+  tasks             Task[]
+
+  @@index([contact_id])
+  @@index([estado])
+  @@map("leads")
+}
+
+// Modelo Message - estructura existente
+model Message {
+  id          Int      @id @default(autoincrement())
+  contact_id  Int
+  lead_id     Int?
+  canal       String
+  direccion   String
+  contenido   String
+  timestamp   DateTime @default(now())
+  raw_payload Json?    @db.JsonB
+  contact     Contact  @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+  lead        Lead?    @relation(fields: [lead_id], references: [id], onDelete: SetNull)
+
+  @@index([contact_id])
+  @@index([lead_id])
+  @@map("messages")
+}
+
+// Modelo Pipeline - estructura existente
+model Pipeline {
+  id         Int            @id @default(autoincrement())
+  nombre     String
+  created_at DateTime       @default(now())
+  stages     PipelineStage[]
+  leads      Lead[]
+
+  @@map("pipelines")
+}
+
+// Modelo PipelineStage - estructura existente
+model PipelineStage {
+  id         Int      @id @default(autoincrement())
+  pipeline_id Int
+  nombre     String
+  position   Int
+  pipeline   Pipeline @relation(fields: [pipeline_id], references: [id], onDelete: Cascade)
+  leads      Lead[]
+
+  @@map("pipeline_stages")
+}
+
+// Modelo Task - estructura existente
+model Task {
+  id         Int       @id @default(autoincrement())
+  lead_id    Int?
+  contact_id Int?
+  tarea      String
+  pendiente  Boolean   @default(true)
+  fecha      DateTime?
+  lead       Lead?     @relation(fields: [lead_id], references: [id], onDelete: SetNull)
+  contact    Contact?  @relation(fields: [contact_id], references: [id], onDelete: SetNull)
+
+  @@map("tasks")
+}

@@ -1,0 +1,51 @@
+# ============================================
+# .dockerignore - Archivos a excluir del build
+# ============================================
+
+# Dependencias (se instalan en el contenedor)
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Build local (se genera en el contenedor)
+.next
+out
+build
+
+# Archivos de entorno (se pasan como variables)
+.env
+.env.local
+.env.development
+.env.production
+.env*.local
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentación (no necesaria en producción)
+*.md
+!README.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Testing
+coverage
+.nyc_output
+
+# Misc
+*.tsbuildinfo
+next-env.d.ts
