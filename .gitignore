@@ -38,10 +38,7 @@ pnpm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# prisma
-# NO ignorar /prisma/migrations (necesarias para deploy)
-# Solo ignorar el cliente generado si es necesario
-# /node_modules/.prisma
+# prisma - cliente generado en node_modules/.prisma (ya ignorado)
 
 # logs
 logs

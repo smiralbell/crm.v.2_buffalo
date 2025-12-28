@@ -1,6 +1,6 @@
 # CRM Buffalo
 
-CRM interno, minimalista y profesional, diseñado para gestionar contactos y leads de manera simple y efectiva.
+CRM interno profesional para gestión de contactos, leads, facturas y pipelines Kanban.
 
 ## 🚀 Inicio Rápido
 
@@ -10,9 +10,14 @@ CRM interno, minimalista y profesional, diseñado para gestionar contactos y lea
 - PostgreSQL 12 o superior
 - npm o yarn
 
-### Instalación
+### Instalación Local
 
-1. Clonar el repositorio
+1. Clonar el repositorio:
+```bash
+git clone <repository-url>
+cd "CRM V.2"
+```
+
 2. Instalar dependencias:
 ```bash
 npm install
@@ -23,24 +28,19 @@ npm install
 cp .env.example .env
 ```
 
-Editar `.env` con tus credenciales de base de datos:
-```
-DATABASE_URL=postgresql://postgres:password@localhost:5432/crm_buffalo
+Editar `.env` con tus credenciales:
+```env
+DATABASE_URL=postgresql://user:password@host:5432/database
 SESSION_SECRET=your-secret-key-here
+CRM_ADMIN_EMAIL=admin@buffalo.ai
+CRM_ADMIN_PASSWORD=your-secure-password
 NODE_ENV=development
 PORT=3000
 ```
 
-4. Configurar la base de datos:
+4. Generar Prisma Client:
 ```bash
-# Generar Prisma Client
 npm run prisma:generate
-
-# Ejecutar migraciones
-npm run prisma:migrate
-
-# Crear usuario inicial
-npm run prisma:seed
 ```
 
 5. Iniciar el servidor de desarrollo:
@@ -50,100 +50,83 @@ npm run dev
 
 6. Abrir [http://localhost:3000](http://localhost:3000)
 
-### Credenciales por Defecto
+## 📦 Deploy en EasyPanel
 
-- Email: `admin@buffalo.ai`
-- Password: `admin123`
+### Variables de Entorno Requeridas
 
-## 📦 Deploy con Docker
+Configura estas variables en EasyPanel:
 
-### Build de la imagen
+- `DATABASE_URL` - URL completa de conexión PostgreSQL
+- `CRM_ADMIN_EMAIL` - Email del administrador
+- `CRM_ADMIN_PASSWORD` - Contraseña del administrador
+- `SESSION_SECRET` - Secret para cookies (genera con: `openssl rand -base64 32`)
+- `NODE_ENV=production`
+- `PORT=3000`
 
-```bash
-docker build -t crm-buffalo .
-```
+### Configuración en EasyPanel
 
-### Ejecutar contenedor
+1. **Conectar repositorio GitHub**
+2. **Tipo de aplicación:** Docker
+3. **Puerto:** 3000
+4. **Health Check:** `/api/health` (debe devolver 200)
+5. **Build Command:** (automático desde Dockerfile)
+6. **Start Command:** (automático desde Dockerfile)
 
-```bash
-docker run -p 3000:3000 \
-  -e DATABASE_URL=postgresql://user:password@host:5432/database \
-  -e SESSION_SECRET=your-secret-key \
-  -e NODE_ENV=production \
-  -e PORT=3000 \
-  crm-buffalo
-```
+### Notas Importantes
+
+- **Base de datos:** La base de datos debe estar creada y accesible desde el contenedor
+- **Tablas:** Las tablas se crean manualmente en PostgreSQL (ver SQL en `prisma/`)
+- **Prisma:** El Dockerfile genera Prisma Client automáticamente, no ejecuta migraciones
 
 ## 🏗️ Estructura del Proyecto
 
 ```
-crm-buffalo/
+CRM V.2/
 ├── pages/              # Páginas Next.js (Pages Router)
+│   ├── api/           # API Routes
+│   ├── dashboard.tsx  # Dashboard principal
+│   ├── contacts/      # Gestión de contactos
+│   ├── leads/         # Gestión de leads
+│   ├── invoices/      # Sistema de facturas
+│   └── pipelines/     # Pipelines Kanban
 ├── components/         # Componentes React
-├── lib/                # Utilidades (auth, prisma, etc.)
-├── prisma/             # Schema y migraciones
+├── lib/                # Utilidades (auth, prisma, utils)
+├── prisma/             # Schema Prisma y SQL scripts
 ├── styles/             # Estilos globales
-└── public/             # Assets estáticos
+└── templates/          # Plantillas HTML
 ```
 
 ## 📝 Scripts Disponibles
 
-- `npm run dev` - Inicia servidor de desarrollo
-- `npm run build` - Construye para producción
-- `npm start` - Inicia servidor de producción
+- `npm run dev` - Servidor de desarrollo
+- `npm run build` - Build para producción
+- `npm start` - Servidor de producción
 - `npm run lint` - Ejecuta ESLint
 - `npm run prisma:generate` - Genera Prisma Client
-- `npm run prisma:migrate` - Ejecuta migraciones
 - `npm run prisma:studio` - Abre Prisma Studio
-- `npm run prisma:seed` - Ejecuta seed de base de datos
 
 ## 🔐 Autenticación
 
-El sistema usa autenticación basada en cookies y sesiones almacenadas en base de datos. Las sesiones expiran después de 7 días.
+Sistema de autenticación simple basado en variables de entorno:
+- Email: `CRM_ADMIN_EMAIL`
+- Password: `CRM_ADMIN_PASSWORD`
+- Sesiones gestionadas con cookies firmadas
 
 ## 📊 Funcionalidades
 
-- **Dashboard**: Métricas, gráficos y actividad reciente
-- **Contactos**: CRUD completo de contactos
-- **Leads**: CRUD completo de leads con estados y valores
-- **Relaciones**: Leads asociados a contactos
+- **Dashboard:** Métricas, gráficos y actividad reciente
+- **Contactos:** CRUD completo de contactos
+- **Leads:** CRUD completo de leads con estados y valores
+- **Facturas:** Sistema de facturación con generación de PDF
+- **Pipelines:** Tableros Kanban para gestión de oportunidades
 
-## 🐳 Deploy en EasyPanel
+## 🗄️ Base de Datos
 
-Para una guía completa paso a paso, consulta **[DEPLOY_EASYPANEL.md](./DEPLOY_EASYPANEL.md)**
-
-### Resumen rápido:
-
-1. **Preparar para GitHub:**
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit"
-   git remote add origin https://github.com/USERNAME/REPO.git
-   git push -u origin main
-   ```
-
-2. **Variables de entorno en EasyPanel:**
-   - `DATABASE_URL` - URL de conexión PostgreSQL
-   - `CRM_ADMIN_EMAIL` - Email del administrador
-   - `CRM_ADMIN_PASSWORD` - Contraseña del administrador
-   - `SESSION_SECRET` - Secret para cookies (genera con `openssl rand -base64 32`)
-   - `NODE_ENV=production`
-   - `PORT=3000`
-
-3. **Configurar en EasyPanel:**
-   - Conectar repositorio GitHub
-   - Tipo: Docker
-   - Puerto: 3000
-   - Health Check: `/api/health` (status 200)
-
-4. **Verificar:**
-   - Health check: `https://tu-dominio/api/health`
-   - Login con credenciales configuradas
-
-**📋 Usa el [CHECKLIST_DEPLOY.md](./CHECKLIST_DEPLOY.md) para asegurar un deploy sin errores.**
+Las tablas se crean manualmente en PostgreSQL. Scripts SQL disponibles en:
+- `prisma/CREATE_INVOICES_TABLE.sql` - Tablas de facturas
+- `prisma/CREATE_PIPELINES_TABLES.sql` - Tablas de pipelines
+- `prisma/ADD_CARD_FIELDS.sql` - Campos adicionales de tarjetas
 
 ## 📄 Licencia
 
-Privado - Uso interno
-
+Privado - Uso interno Buffalo AI

@@ -53,8 +53,8 @@ model Lead {
   valor             Decimal? @db.Decimal(10, 2)
   position          Int?
   contact           Contact  @relation(fields: [contact_id], references: [id], onDelete: Cascade)
-  pipeline          Pipeline? @relation(fields: [pipeline_id], references: [id], onDelete: SetNull)
-  pipeline_stage    PipelineStage? @relation(fields: [pipeline_stage_id], references: [id], onDelete: SetNull)
+  // pipeline          Pipeline? @relation(fields: [pipeline_id], references: [id], onDelete: SetNull)
+  // pipeline_stage    PipelineStage? @relation(fields: [pipeline_stage_id], references: [id], onDelete: SetNull)
   messages          Message[]
   tasks             Task[]
 
@@ -81,28 +81,28 @@ model Message {
   @@map("messages")
 }
 
-// Modelo Pipeline - estructura existente
-model Pipeline {
-  id         Int            @id @default(autoincrement())
-  nombre     String
-  created_at DateTime       @default(now())
-  stages     PipelineStage[]
-  leads      Lead[]
+// Modelo Pipeline - estructura existente (comentado porque ahora usamos PipelineKanban)
+// model Pipeline {
+//   id         Int            @id @default(autoincrement())
+//   nombre     String
+//   created_at DateTime       @default(now())
+//   stages     PipelineStage[]
+//   leads      Lead[]
 
-  @@map("pipelines")
-}
+//   @@map("pipelines")
+// }
 
-// Modelo PipelineStage - estructura existente
-model PipelineStage {
-  id         Int      @id @default(autoincrement())
-  pipeline_id Int
-  nombre     String
-  position   Int
-  pipeline   Pipeline @relation(fields: [pipeline_id], references: [id], onDelete: Cascade)
-  leads      Lead[]
+// Modelo PipelineStage - estructura existente (comentado porque Pipeline está comentado)
+// model PipelineStage {
+//   id         Int      @id @default(autoincrement())
+//   pipeline_id Int
+//   nombre     String
+//   position   Int
+//   pipeline   Pipeline @relation(fields: [pipeline_id], references: [id], onDelete: Cascade)
+//   leads      Lead[]
 
-  @@map("pipeline_stages")
-}
+//   @@map("pipeline_stages")
+// }
 
 // Modelo Task - estructura existente
 model Task {
@@ -116,4 +116,88 @@ model Task {
   contact    Contact?  @relation(fields: [contact_id], references: [id], onDelete: SetNull)
 
   @@map("tasks")
+}
+
+// ============================================
+// SISTEMA DE FACTURACIÓN SIMPLE
+// ============================================
+
+// Factura - TODO en una sola tabla
+model Invoice {
+  id                Int       @id @default(autoincrement())
+  invoice_number    String    @unique
+  client_name       String
+  client_email      String?
+  client_address    String?   @db.Text
+  client_tax_id     String?
+  issue_date        DateTime  @default(now()) @db.Date
+  due_date          DateTime? @db.Date
+  services          Json?     @db.JsonB // Array de servicios
+  subtotal          Decimal   @default(0) @db.Decimal(10, 2)
+  iva               Decimal   @default(0) @db.Decimal(10, 2)
+  total             Decimal   @default(0) @db.Decimal(10, 2)
+  status            String    @default("draft") // draft, sent, cancelled
+  pdf_drive_file_id String?
+  pdf_drive_url     String?   @db.Text
+  deleted_at        DateTime?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  @@index([invoice_number])
+  @@index([status])
+  @@index([deleted_at])
+  @@index([issue_date])
+  @@map("invoices")
+}
+
+// Plantilla HTML (opcional - solo si quieres guardarla en BD)
+model InvoiceTemplate {
+  id          Int      @id @default(1)
+  html_content String  @db.Text
+  updated_at   DateTime @updatedAt
+
+  @@map("invoice_template")
+}
+
+// ============================================
+// SISTEMA DE PIPELINES KANBAN (MVP)
+// ============================================
+// Sistema simple tipo GoHighLevel/Holded
+// Solo 2 tablas, sin overengineering
+
+model PipelineKanban {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  entity_type String   // 'client' | 'contact'
+  created_at  DateTime @default(now())
+
+  cards       PipelineCard[]
+
+  @@map("pipelines")
+}
+
+model PipelineCard {
+  id            String    @id @default(uuid()) @db.Uuid
+  pipeline_id   String    @db.Uuid
+  entity_id     String    @db.Text // ID del contacto o cliente (referencia externa) - almacenado como TEXT
+  entity_type   String    // 'client' | 'contact'
+  stage         String    // Nombre de la columna
+  stage_color   String?   // Color de la columna (hex) - nullable porque puede no tener default en BD
+  position      Int       // Orden dentro de la columna - sin default porque puede no tenerlo en BD
+  tags          String[]  // Array de etiquetas
+  capture_date  DateTime? // Fecha de captación del lead
+  amount        Decimal? @db.Decimal(10, 2) // Cantidad de dinero del objeto
+  notes         String?  @db.Text // Notas adicionales
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+  deleted_at    DateTime?
+
+  pipeline      PipelineKanban @relation(fields: [pipeline_id], references: [id], onDelete: Cascade)
+
+  @@index([pipeline_id])
+  @@index([stage])
+  @@index([entity_id, entity_type])
+  @@index([deleted_at])
+  @@index([pipeline_id, stage, position])
+  @@map("pipeline_cards")
 }

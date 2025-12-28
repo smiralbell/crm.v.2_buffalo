@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factura {{invoice_number}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #333;
+            padding: 40px;
+            background: #fff;
+        }
+        
+        .invoice {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #10b981;
+        }
+        
+        .logo {
+            max-width: 150px;
+        }
+        
+        .company {
+            color: #666;
+            font-size: 11px;
+        }
+        
+        .invoice-info {
+            text-align: right;
+        }
+        
+        .invoice-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #10b981;
+            margin-bottom: 8px;
+        }
+        
+        .invoice-number {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        /* Cliente */
+        .client {
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 6px;
+        }
+        
+        .client-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        
+        .client-name {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        
+        /* Servicios */
+        .services {
+            margin-bottom: 30px;
+        }
+        
+        .services-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .services-table thead {
+            background: #10b981;
+            color: #fff;
+        }
+        
+        .services-table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 11px;
+        }
+        
+        .services-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .text-right {
+            text-align: right;
+        }
+        
+        /* Totales */
+        .totals {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 30px;
+        }
+        
+        .totals-table {
+            width: 300px;
+        }
+        
+        .totals-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .totals-label {
+            text-align: right;
+            color: #666;
+        }
+        
+        .totals-value {
+            text-align: right;
+            font-weight: 600;
+        }
+        
+        .total-row {
+            border-top: 2px solid #10b981;
+            border-bottom: 2px solid #10b981;
+        }
+        
+        .total-label {
+            font-size: 14px;
+            font-weight: 700;
+            color: #10b981;
+        }
+        
+        .total-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #10b981;
+        }
+        
+        /* Footer */
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            font-size: 10px;
+            color: #666;
+        }
+        
+        @media print {
+            body {
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="invoice">
+        <!-- Header -->
+        <div class="header">
+            <div>
+                <!-- Logo Buffalo AI - Reemplazar con URL real o base64 -->
+                <img src="{{company_logo}}" alt="Buffalo AI" class="logo" />
+                <div class="company" style="margin-top: 10px;">
+                    <div><strong>Buffalo AI</strong></div>
+                    <div>{{company_address}}</div>
+                    <div>CIF: {{company_tax_id}}</div>
+                    <div>Email: {{company_email}}</div>
+                </div>
+            </div>
+            
+            <div class="invoice-info">
+                <div class="invoice-title">FACTURA</div>
+                <div class="invoice-number">{{invoice_number}}</div>
+                <div style="margin-top: 8px; font-size: 11px; color: #666;">
+                    <div>Fecha: {{issue_date}}</div>
+                    {{#if due_date}}
+                    <div>Vencimiento: {{due_date}}</div>
+                    {{/if}}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Cliente -->
+        <div class="client">
+            <div class="client-label">Facturar a</div>
+            <div class="client-name">{{client_name}}</div>
+            {{#if client_address}}
+            <div>{{client_address}}</div>
+            {{/if}}
+            {{#if client_tax_id}}
+            <div>CIF/NIF: {{client_tax_id}}</div>
+            {{/if}}
+            {{#if client_email}}
+            <div>Email: {{client_email}}</div>
+            {{/if}}
+        </div>
+        
+        <!-- Servicios -->
+        <div class="services">
+            <table class="services-table">
+                <thead>
+                    <tr>
+                        <th>Descripción</th>
+                        <th class="text-right">Cantidad</th>
+                        <th class="text-right">Precio</th>
+                        <th class="text-right">IVA</th>
+                        <th class="text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{#each services}}
+                    <tr>
+                        <td>{{description}}</td>
+                        <td class="text-right">{{quantity}}</td>
+                        <td class="text-right">€{{format_price price}}</td>
+                        <td class="text-right">{{tax}}%</td>
+                        <td class="text-right"><strong>€{{format_price total}}</strong></td>
+                    </tr>
+                    {{/each}}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Totales -->
+        <div class="totals">
+            <table class="totals-table">
+                <tr>
+                    <td class="totals-label">Subtotal:</td>
+                    <td class="totals-value">€{{format_price subtotal}}</td>
+                </tr>
+                <tr>
+                    <td class="totals-label">IVA:</td>
+                    <td class="totals-value">€{{format_price iva}}</td>
+                </tr>
+                <tr class="total-row">
+                    <td class="totals-label total-label">TOTAL:</td>
+                    <td class="totals-value total-value">€{{format_price total}}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <div>Buffalo AI - Sistema de Facturación Interno</div>
+            <div>Factura generada el {{generated_at}}</div>
+        </div>
+    </div>
+</body>
+</html>
+
