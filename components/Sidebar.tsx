@@ -24,7 +24,13 @@ export default function Sidebar() {
     <div className="flex h-screen w-64 flex-col border-r bg-white">
       {/* Logo */}
       <div className="border-b p-6">
-        <h1 className="text-xl font-bold text-gray-900">CRM Buffalo</h1>
+        <Link href="/dashboard" className="flex items-center justify-center">
+          <img
+            src="https://agenciabuffalo.es/wp-content/uploads/2025/10/Generated_Image_September_25__2025_-_11_16AM-removebg-preview.png"
+            alt="Buffalo AI Logo"
+            className="h-12 w-auto object-contain"
+          />
+        </Link>
       </div>
 
       {/* Navigation */}
