@@ -42,7 +42,6 @@ model Lead {
   id                Int      @id @default(autoincrement())
   contact_id        Int      @unique
   estado            String?  @default("frio")
-  notas             String?  // Campo adicional para notas
   origen_principal  String?
   prioridad         String?  @default("media")
   score             Int?

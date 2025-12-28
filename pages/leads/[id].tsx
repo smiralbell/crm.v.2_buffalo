@@ -14,7 +14,6 @@ interface LeadDetailProps {
     id: number
     estado: string
     valor: number | null
-    notas: string | null
     created_at: string
     updated_at: string
     contact: {
@@ -142,12 +141,6 @@ export default function LeadDetail({ lead }: LeadDetailProps) {
                         maximumFractionDigits: 2,
                       })}`
                     : '-'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500">Notas</p>
-                <p className="mt-1 whitespace-pre-wrap">
-                  {lead.notas || '-'}
                 </p>
               </div>
               <div>

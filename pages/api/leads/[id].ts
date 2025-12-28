@@ -7,7 +7,6 @@ const leadUpdateSchema = z.object({
   contact_id: z.number().optional(),
   estado: z.string().optional(),
   valor: z.number().optional().nullable(),
-  notas: z.string().optional().nullable(),
   origen_principal: z.string().optional().nullable(),
   prioridad: z.string().optional().nullable(),
   score: z.number().optional().nullable(),
@@ -50,7 +49,6 @@ export default async function handler(
       if (data.contact_id !== undefined) updateData.contact_id = data.contact_id
       if (data.estado !== undefined) updateData.estado = data.estado
       if (data.valor !== undefined) updateData.valor = data.valor
-      if (data.notas !== undefined) updateData.notas = data.notas
       if (data.origen_principal !== undefined) updateData.origen_principal = data.origen_principal
       if (data.prioridad !== undefined) updateData.prioridad = data.prioridad
       if (data.score !== undefined) updateData.score = data.score

@@ -25,7 +25,6 @@ interface EditLeadProps {
     contact_id: number | null
     estado: string
     valor: number | null
-    notas: string | null
   }
   contacts: Array<{
     id: number
@@ -87,7 +86,6 @@ export default function EditLead({ lead, contacts }: EditLeadProps) {
     contact_id: lead.contact_id?.toString() || 'none',
     estado: lead.estado,
     valor: lead.valor?.toString() || '',
-    notas: lead.notas || '',
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -98,7 +96,6 @@ export default function EditLead({ lead, contacts }: EditLeadProps) {
     try {
       const payload: any = {
         estado: formData.estado,
-        notas: formData.notas || null,
       }
 
       if (formData.contact_id && formData.contact_id !== "none") {
@@ -222,17 +219,6 @@ export default function EditLead({ lead, contacts }: EditLeadProps) {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="notas">Notas</Label>
-                <Textarea
-                  id="notas"
-                  name="notas"
-                  value={formData.notas}
-                  onChange={handleChange}
-                  rows={5}
-                  disabled={loading}
-                />
-              </div>
             </CardContent>
           </Card>
 

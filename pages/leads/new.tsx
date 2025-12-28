@@ -69,7 +69,6 @@ export default function NewLead({ contacts, contactId }: NewLeadProps) {
     contact_id: contactId?.toString() || '',
     estado: 'nuevo',
     valor: '',
-    notas: '',
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,7 +79,6 @@ export default function NewLead({ contacts, contactId }: NewLeadProps) {
     try {
       const payload: any = {
         estado: formData.estado || 'frio',
-        notas: formData.notas || null,
       }
 
       if (formData.contact_id && formData.contact_id !== "none") {
@@ -200,17 +198,6 @@ export default function NewLead({ contacts, contactId }: NewLeadProps) {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="notas">Notas</Label>
-                <Textarea
-                  id="notas"
-                  name="notas"
-                  value={formData.notas}
-                  onChange={handleChange}
-                  rows={5}
-                  disabled={loading}
-                />
-              </div>
             </CardContent>
           </Card>
 

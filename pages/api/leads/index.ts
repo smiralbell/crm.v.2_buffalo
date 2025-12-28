@@ -7,7 +7,6 @@ const leadSchema = z.object({
   contact_id: z.number(), // Requerido según la estructura real
   estado: z.string().optional(), // Puede ser cualquier string, no solo los enum
   valor: z.number().optional().nullable(),
-  notas: z.string().optional().nullable(),
   origen_principal: z.string().optional().nullable(),
   prioridad: z.string().optional().nullable(),
   score: z.number().optional().nullable(),
@@ -80,7 +79,6 @@ export default async function handler(
           contact_id: data.contact_id,
           estado: data.estado || 'frio',
           valor: data.valor || null,
-          notas: data.notas || null,
           origen_principal: data.origen_principal || null,
           prioridad: data.prioridad || 'media',
           score: data.score || null,
