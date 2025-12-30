@@ -33,7 +33,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({
         settings: {
           corporate_tax_percent: Number(settings.corporate_tax_percent),
-          initial_capital: Number(settings.initial_capital || 0),
         },
       })
     } catch (error: any) {
