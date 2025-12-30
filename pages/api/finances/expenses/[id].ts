@@ -5,7 +5,8 @@ import { z } from 'zod'
 
 const updateExpenseSchema = z.object({
   name: z.string().min(1).optional(),
-  date: z.string().optional(),
+  date_start: z.string().optional(),
+  date_end: z.string().optional(),
   base_amount: z.union([z.string(), z.number()]).transform((val) => parseFloat(String(val))).optional(),
   iva_amount: z.union([z.string(), z.number()]).transform((val) => parseFloat(String(val))).optional(),
   total_amount: z.union([z.string(), z.number()]).transform((val) => parseFloat(String(val))).optional(),
@@ -13,6 +14,7 @@ const updateExpenseSchema = z.object({
   project: z.string().optional().nullable(),
   client_name: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  tags: z.array(z.string()).optional(),
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -40,7 +42,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           base_amount: Number(expense.base_amount),
           iva_amount: Number(expense.iva_amount),
           total_amount: Number(expense.total_amount),
-          date: expense.date.toISOString(),
+          date_start: expense.date_start.toISOString(),
+          date_end: expense.date_end.toISOString(),
         },
       })
     } catch (error: any) {
@@ -55,7 +58,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const updateData: any = {}
       if (data.name) updateData.name = data.name
-      if (data.date) updateData.date = new Date(data.date)
+      if (data.date_start) updateData.date_start = new Date(data.date_start)
+      if (data.date_end) updateData.date_end = new Date(data.date_end)
       if (data.base_amount !== undefined) updateData.base_amount = data.base_amount
       if (data.iva_amount !== undefined) updateData.iva_amount = data.iva_amount
       if (data.total_amount !== undefined) updateData.total_amount = data.total_amount
@@ -63,6 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (data.project !== undefined) updateData.project = data.project
       if (data.client_name !== undefined) updateData.client_name = data.client_name
       if (data.notes !== undefined) updateData.notes = data.notes
+      if (data.tags !== undefined) updateData.tags = data.tags
 
       const expense = await prisma.expense.update({
         where: { id },
@@ -75,7 +80,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           base_amount: Number(expense.base_amount),
           iva_amount: Number(expense.iva_amount),
           total_amount: Number(expense.total_amount),
-          date: expense.date.toISOString(),
+          date_start: expense.date_start.toISOString(),
+          date_end: expense.date_end.toISOString(),
         },
       })
     } catch (error: any) {
