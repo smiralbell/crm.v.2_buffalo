@@ -78,7 +78,7 @@ export default async function handler(
     })
 
     // Generar el buffer del PDF
-    const pdfBlob = await pdf(pdfDoc).toBlob()
+    const pdfBlob = await pdf(pdfDoc as any).toBlob()
     const pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer())
     const pdfFileName = `factura_${invoice.invoice_number}.pdf`
 
