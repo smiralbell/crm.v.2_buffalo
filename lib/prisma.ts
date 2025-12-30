@@ -19,6 +19,11 @@ function createPrismaClient(): PrismaClient {
 
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL,
+      },
+    },
   })
 }
 
@@ -29,14 +34,21 @@ function getPrismaClient(): PrismaClient {
     return {} as PrismaClient
   }
 
+  // Reutilizar el cliente existente si ya existe (tanto en desarrollo como en producción)
   if (globalForPrisma.prisma) {
     return globalForPrisma.prisma
   }
 
   const client = createPrismaClient()
 
-  if (process.env.NODE_ENV !== 'production') {
-    globalForPrisma.prisma = client
+  // Guardar el cliente en global para reutilizarlo (importante para evitar múltiples conexiones)
+  globalForPrisma.prisma = client
+
+  // Cerrar conexiones cuando la aplicación se cierra
+  if (typeof process !== 'undefined') {
+    process.on('beforeExit', async () => {
+      await client.$disconnect()
+    })
   }
 
   return client
