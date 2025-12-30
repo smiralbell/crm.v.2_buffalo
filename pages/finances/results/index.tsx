@@ -34,6 +34,27 @@ interface ResultsPageProps {
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
+  // Durante el build, si DATABASE_URL no está disponible, retornar datos por defecto
+  if (!process.env.DATABASE_URL && process.env.NEXT_PHASE === 'phase-production-build') {
+    const now = new Date()
+    return {
+      props: {
+        dateRange: {
+          start: startOfYear(now).toISOString(),
+          end: endOfYear(now).toISOString(),
+        },
+        monthlyData: [],
+        totals: {
+          totalIncome: 0,
+          totalExpenses: 0,
+          totalProfit: 0,
+          totalCorporateTax: 0,
+          totalNetProfit: 0,
+        },
+      },
+    }
+  }
+
   try {
     await requireAuth(context)
   } catch (error) {

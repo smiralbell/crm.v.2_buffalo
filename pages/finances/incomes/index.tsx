@@ -30,6 +30,20 @@ interface IncomesPageProps {
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
+  // Durante el build, si DATABASE_URL no está disponible, retornar datos por defecto
+  if (!process.env.DATABASE_URL && process.env.NEXT_PHASE === 'phase-production-build') {
+    const now = new Date()
+    return {
+      props: {
+        incomes: [],
+        dateRange: {
+          start: startOfMonth(now).toISOString(),
+          end: endOfMonth(now).toISOString(),
+        },
+      },
+    }
+  }
+
   try {
     await requireAuth(context)
   } catch (error) {
