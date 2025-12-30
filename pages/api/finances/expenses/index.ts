@@ -34,12 +34,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const monthNum = parseInt(month.split('-')[1])
         const startDate = new Date(year, monthNum - 1, 1)
         const endDate = new Date(year, monthNum, 0)
-        where.date = { gte: startDate, lte: endDate }
+        where.OR = [
+          { date_start: { gte: startDate, lte: endDate } },
+          { date_end: { gte: startDate, lte: endDate } },
+          { AND: [{ date_start: { lte: startDate } }, { date_end: { gte: endDate } }] },
+        ]
       }
 
       const expenses = await prisma.expense.findMany({
         where,
-        orderBy: { date: 'desc' },
+        orderBy: { date_start: 'desc' },
       })
 
       return res.status(200).json({
@@ -48,7 +52,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           base_amount: Number(e.base_amount),
           iva_amount: Number(e.iva_amount),
           total_amount: Number(e.total_amount),
-          date: e.date.toISOString(),
+          date_start: e.date_start.toISOString(),
+          date_end: e.date_end.toISOString(),
         })),
       })
     } catch (error: any) {
