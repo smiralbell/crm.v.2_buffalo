@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { LayoutDashboard, Users, TrendingUp, FileText, LogOut, Workflow } from 'lucide-react'
+import { LayoutDashboard, Users, TrendingUp, FileText, LogOut, Workflow, DollarSign } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -18,6 +18,7 @@ export default function Sidebar() {
     { href: '/leads', label: 'Leads', icon: TrendingUp },
     { href: '/invoices', label: 'Facturas', icon: FileText },
     { href: '/pipelines', label: 'Pipelines', icon: Workflow },
+    { href: '/finances', label: 'Finanzas', icon: DollarSign },
   ]
 
   return (
@@ -37,7 +38,7 @@ export default function Sidebar() {
       <nav className="flex-1 space-y-1 p-4">
         {navItems.map((item) => {
           const Icon = item.icon
-          const isActive = router.pathname === item.href
+          const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/')
 
           return (
             <Link

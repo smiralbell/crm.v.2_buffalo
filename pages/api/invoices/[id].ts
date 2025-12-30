@@ -4,10 +4,14 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
 const invoiceUpdateSchema = z.object({
+  invoice_number: z.string().min(1).optional(),
   client_name: z.string().min(1).optional(),
+  client_company_name: z.string().optional(),
   client_email: z.string().email().optional().or(z.literal('')),
   client_address: z.string().optional(),
   client_tax_id: z.string().optional(),
+  company_name: z.string().optional(),
+  company_address: z.string().optional(),
   issue_date: z.string().optional(),
   due_date: z.string().optional(),
   services: z.array(z.object({
@@ -20,6 +24,7 @@ const invoiceUpdateSchema = z.object({
   subtotal: z.number().min(0).optional(),
   iva: z.number().min(0).optional(),
   total: z.number().positive().optional(),
+  status: z.enum(['draft', 'sent', 'cancelled']).optional(),
 })
 
 export default async function handler(
@@ -62,24 +67,24 @@ export default async function handler(
         return res.status(404).json({ error: 'Factura no encontrada' })
       }
 
-      // Solo se puede editar si está en draft
-      if (invoice.status !== 'draft') {
-        return res.status(400).json({ error: 'Solo se pueden editar facturas en borrador' })
-      }
-
       const data = invoiceUpdateSchema.parse(req.body)
 
       const updateData: any = {}
+      if (data.invoice_number !== undefined) updateData.invoice_number = data.invoice_number
       if (data.client_name !== undefined) updateData.client_name = data.client_name
+      if (data.client_company_name !== undefined) updateData.client_company_name = data.client_company_name
       if (data.client_email !== undefined) updateData.client_email = data.client_email || null
       if (data.client_address !== undefined) updateData.client_address = data.client_address
       if (data.client_tax_id !== undefined) updateData.client_tax_id = data.client_tax_id
+      if (data.company_name !== undefined) updateData.company_name = data.company_name
+      if (data.company_address !== undefined) updateData.company_address = data.company_address
       if (data.issue_date !== undefined) updateData.issue_date = new Date(data.issue_date)
       if (data.due_date !== undefined) updateData.due_date = data.due_date ? new Date(data.due_date) : null
       if (data.services !== undefined) updateData.services = data.services as any
       if (data.subtotal !== undefined) updateData.subtotal = data.subtotal
       if (data.iva !== undefined) updateData.iva = data.iva
       if (data.total !== undefined) updateData.total = data.total
+      if (data.status !== undefined) updateData.status = data.status
 
       const updated = await prisma.invoice.update({
         where: { id },

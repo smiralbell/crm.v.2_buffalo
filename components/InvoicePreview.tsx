@@ -1,6 +1,4 @@
-import { Card } from '@/components/ui/card'
 import { format } from 'date-fns'
-import { useState, useEffect } from 'react'
 
 interface Service {
   description: string
@@ -13,9 +11,12 @@ interface Service {
 interface InvoicePreviewProps {
   invoiceNumber: string
   clientName: string
+  clientCompanyName?: string
   clientEmail?: string
   clientAddress?: string
   clientTaxId?: string
+  companyName?: string
+  companyAddress?: string
   issueDate: string
   dueDate?: string
   services: Service[]
@@ -28,9 +29,12 @@ interface InvoicePreviewProps {
 export default function InvoicePreview({
   invoiceNumber,
   clientName,
+  clientCompanyName,
   clientEmail,
   clientAddress,
   clientTaxId,
+  companyName = 'BUFFALO AI',
+  companyAddress,
   issueDate,
   dueDate,
   services,
@@ -39,162 +43,236 @@ export default function InvoicePreview({
   total,
   status = 'draft',
 }: InvoicePreviewProps) {
-  const [logoBase64, setLogoBase64] = useState<string>('')
-  const logoUrl = 'https://agenciabuffalo.es/wp-content/uploads/2025/10/Generated_Image_September_25__2025_-_11_16AM-removebg-preview.png'
-
-  // Convertir logo a base64 para que se vea en el PDF
-  useEffect(() => {
-    const convertLogo = async () => {
-      try {
-        const response = await fetch(logoUrl)
-        const blob = await response.blob()
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          setLogoBase64(reader.result as string)
-        }
-        reader.readAsDataURL(blob)
-      } catch (error) {
-        console.error('Error loading logo:', error)
-        // Usar la URL directamente si falla la conversión
-        setLogoBase64(logoUrl)
-      }
-    }
-    convertLogo()
-  }, [])
+  const logoUrl = '/buffalo-logo.png'
 
   return (
-    <div className="bg-white" style={{ width: '210mm', minHeight: '297mm' }}>
-      {/* Hoja A4 - tamaño real con márgenes adecuados */}
-      <div className="bg-white" style={{ width: '210mm', minHeight: '297mm', padding: '20mm 15mm' }}>
-        {/* Header con logo y número de factura */}
-        <div className="border-b-2 border-gray-300 pb-6 mb-6">
-          <div className="flex justify-between items-start">
-            {/* Logo - Izquierda */}
-            <div>
-              {logoBase64 && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={logoBase64}
-                  alt="Buffalo AI Logo"
-                  className="h-20"
-                  style={{ maxWidth: '250px', objectFit: 'contain' }}
-                  crossOrigin="anonymous"
-                />
+    <div 
+      data-invoice-preview
+      style={{ 
+        width: '210mm', 
+        minHeight: '297mm',
+        maxHeight: '297mm',
+        margin: '0',
+        padding: '0',
+        backgroundColor: '#ffffff',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+        fontSize: '14px',
+        lineHeight: '1.5',
+        color: '#111827',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        position: 'relative',
+      }}
+    >
+      {/* Contenedor principal con padding */}
+      <div 
+        style={{ 
+          width: '100%',
+          height: '297mm',
+          minHeight: '297mm',
+          maxHeight: '297mm',
+          padding: '20mm 25mm 15mm 25mm',
+          boxSizing: 'border-box',
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Header */}
+        <div style={{ marginBottom: '32px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+            {/* Logo */}
+            <div style={{ flex: '0 0 auto', minHeight: '90px', display: 'flex', alignItems: 'center' }}>
+              <img
+                src={logoUrl}
+                alt="Buffalo AI Logo"
+                style={{ 
+                  maxWidth: '320px',
+                  maxHeight: '90px',
+                  height: 'auto',
+                  width: 'auto',
+                  objectFit: 'contain',
+                  display: 'block'
+                }}
+                crossOrigin="anonymous"
+              />
+            </div>
+            {/* Número y fecha */}
+            <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
+              <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#111827', margin: '0 0 4px 0', lineHeight: '1.2' }}>
+                FACTURA
+              </h1>
+              <p style={{ fontSize: '14px', color: '#4B5563', margin: '0 0 8px 0', lineHeight: '1.4' }}>
+                Nº {invoiceNumber}
+              </p>
+              <p style={{ fontSize: '14px', fontWeight: '500', color: '#111827', margin: '8px 0 0 0', lineHeight: '1.4' }}>
+                {format(new Date(issueDate), 'dd MMM yyyy')}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Información empresa y cliente */}
+        <div style={{ display: 'flex', gap: '32px', marginBottom: '32px', flexShrink: 0 }}>
+          {/* Emisor */}
+          <div style={{ flex: '1', minWidth: '0', textAlign: 'left' }}>
+            <h3 style={{ fontSize: '11px', fontWeight: '500', color: '#6B7280', margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: '1.4', textAlign: 'left' }}>
+              Emisor
+            </h3>
+            <div style={{ fontSize: '14px', color: '#111827', lineHeight: '1.6', textAlign: 'left' }}>
+              <p style={{ fontWeight: '600', fontSize: '16px', margin: '0 0 4px 0', lineHeight: '1.4' }}>{companyName}</p>
+              <p style={{ color: '#4B5563', margin: '0 0 12px 0', lineHeight: '1.4' }}>Global Digital Solutions</p>
+              <div style={{ marginTop: '12px' }}>
+                {companyAddress ? (
+                  <p style={{ color: '#4B5563', margin: '0 0 4px 0', lineHeight: '1.4' }}>{companyAddress}</p>
+                ) : (
+                  <>
+                    <p style={{ color: '#4B5563', margin: '0 0 4px 0', lineHeight: '1.4' }}>C/ Provença 474, esc B, entr. 2ª</p>
+                    <p style={{ color: '#4B5563', margin: '0 0 4px 0', lineHeight: '1.4' }}>Barcelona (08025), Barcelona, España</p>
+                  </>
+                )}
+                <p style={{ color: '#4B5563', margin: '0 0 4px 0', lineHeight: '1.4' }}>CIF: B22944599</p>
+                <p style={{ color: '#4B5563', margin: '0', lineHeight: '1.4' }}>admin@agenciabuffalo.es</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Línea divisoria */}
+          <div style={{ width: '1px', backgroundColor: '#D1D5DB', flexShrink: '0' }}></div>
+          
+          {/* Cliente */}
+          <div style={{ flex: '1', minWidth: '0', textAlign: 'right' }}>
+            <h3 style={{ fontSize: '11px', fontWeight: '500', color: '#6B7280', margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: '1.4', textAlign: 'right' }}>
+              Cliente
+            </h3>
+            <div style={{ fontSize: '14px', color: '#111827', lineHeight: '1.6', textAlign: 'right' }}>
+              <p style={{ fontWeight: '600', fontSize: '16px', margin: '0 0 4px 0', lineHeight: '1.4' }}>{clientName}</p>
+              {clientCompanyName && (
+                <p style={{ color: '#4B5563', margin: '0 0 4px 0', lineHeight: '1.4' }}>{clientCompanyName}</p>
+              )}
+              {clientAddress && (
+                <p style={{ color: '#4B5563', margin: '0 0 4px 0', lineHeight: '1.4' }}>{clientAddress}</p>
+              )}
+              {clientEmail && (
+                <p style={{ color: '#4B5563', margin: '0 0 4px 0', lineHeight: '1.4' }}>{clientEmail}</p>
+              )}
+              {clientTaxId && (
+                <p style={{ color: '#4B5563', margin: '0', lineHeight: '1.4' }}>CIF/NIF: {clientTaxId}</p>
               )}
             </div>
-            {/* Factura y número - Derecha */}
-            <div className="text-right">
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">FACTURA</h2>
-              <p className="text-lg font-semibold text-gray-700">Nº {invoiceNumber}</p>
-            </div>
           </div>
         </div>
 
-        {/* Información empresa y cliente - Lado a lado */}
-        <div className="grid grid-cols-2 gap-8 mb-8">
-          {/* Datos empresa - Izquierda */}
-          <div>
-            <h3 className="font-semibold text-gray-900 mb-2 text-sm uppercase">De:</h3>
-            <div className="text-sm text-gray-700 space-y-1">
-              <p className="font-bold text-base">BUFFALO AI, GLOBAL DIGITAL</p>
-              <p className="font-semibold">SOLUTIONS</p>
-              <p>C/ Provença 474, esc B, entr. 2ª</p>
-              <p>Barcelona (08025), Barcelona,</p>
-              <p>España</p>
-              <p>B22944599</p>
-              <p>admin@agenciabuffalo.es</p>
-            </div>
-          </div>
-          {/* Datos cliente - Derecha */}
-          <div>
-            <h3 className="font-semibold text-gray-900 mb-2 text-sm uppercase">Para:</h3>
-            <div className="text-sm text-gray-700 space-y-1">
-              <p className="font-semibold text-base">{clientName}</p>
-              {clientAddress && <p>{clientAddress}</p>}
-              {clientTaxId && <p>CIF/NIF: {clientTaxId}</p>}
-              {clientEmail && <p>Email: {clientEmail}</p>}
-            </div>
-          </div>
-        </div>
-
-        {/* Fechas */}
-        <div className="grid grid-cols-2 gap-8 mb-8 pb-6 border-b border-gray-200">
-          <div>
-            <p className="text-xs text-gray-500 mb-1">Fecha de Emisión</p>
-            <p className="text-sm font-medium text-gray-900">
-              {format(new Date(issueDate), 'dd MMM yyyy')}
+        {/* Fecha de vencimiento */}
+        {dueDate && (
+          <div style={{ marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid #E5E7EB', flexShrink: 0 }}>
+            <p style={{ fontSize: '11px', color: '#6B7280', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: '1.4' }}>
+              Fecha de Vencimiento
+            </p>
+            <p style={{ fontSize: '14px', fontWeight: '500', color: '#111827', margin: '0', lineHeight: '1.4' }}>
+              {format(new Date(dueDate), 'dd MMM yyyy')}
             </p>
           </div>
-          {dueDate && (
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Fecha de Vencimiento</p>
-              <p className="text-sm font-medium text-gray-900">
-                {format(new Date(dueDate), 'dd MMM yyyy')}
-              </p>
+        )}
+
+        {/* Tabla de servicios - Diseño mejorado con padding uniforme */}
+        <div style={{ marginBottom: '24px', flexShrink: 0 }}>
+          {/* Header */}
+          <div style={{ 
+            display: 'flex', 
+            width: '100%', 
+            borderBottom: '1px solid #D1D5DB', 
+            paddingTop: '12px',
+            paddingBottom: '12px',
+            boxSizing: 'border-box', 
+            margin: '0', 
+          }}>
+            <div style={{ width: '38%', paddingLeft: '12px', paddingRight: '12px', fontSize: '11px', fontWeight: '500', color: '#4B5563', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: '1.4', display: 'flex', alignItems: 'center', boxSizing: 'border-box', margin: '0' }}>
+              Descripción
+            </div>
+            <div style={{ width: '12%', paddingLeft: '12px', paddingRight: '12px', fontSize: '11px', fontWeight: '500', color: '#4B5563', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: '1.4', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', margin: '0' }}>
+              Cantidad
+            </div>
+            <div style={{ width: '18%', paddingLeft: '12px', paddingRight: '12px', fontSize: '11px', fontWeight: '500', color: '#4B5563', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: '1.4', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', boxSizing: 'border-box', margin: '0', whiteSpace: 'nowrap' }}>
+              Precio Unit.
+            </div>
+            <div style={{ width: '12%', paddingLeft: '12px', paddingRight: '12px', fontSize: '11px', fontWeight: '500', color: '#4B5563', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: '1.4', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', boxSizing: 'border-box', margin: '0' }}>
+              IVA
+            </div>
+            <div style={{ width: '20%', paddingLeft: '12px', paddingRight: '12px', fontSize: '11px', fontWeight: '500', color: '#4B5563', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: '1.4', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', boxSizing: 'border-box', margin: '0' }}>
+              Total
+            </div>
+          </div>
+          
+          {/* Rows */}
+          {services && services.length > 0 ? (
+            services.map((service, index) => (
+              <div 
+                key={index} 
+                style={{ 
+                  display: 'flex', 
+                  width: '100%', 
+                  borderBottom: '1px solid #F3F4F6', 
+                  paddingTop: '12px',
+                  paddingBottom: '12px',
+                  boxSizing: 'border-box', 
+                  margin: '0', 
+                }}
+              >
+                <div style={{ width: '38%', paddingLeft: '12px', paddingRight: '12px', fontSize: '13px', color: '#111827', lineHeight: '1.4', display: 'flex', alignItems: 'center', boxSizing: 'border-box', margin: '0', wordWrap: 'break-word' }}>
+                  {service.description || 'Sin descripción'}
+                </div>
+                <div style={{ width: '12%', paddingLeft: '12px', paddingRight: '12px', fontSize: '13px', color: '#374151', lineHeight: '1.4', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', margin: '0' }}>
+                  {service.quantity || 0}
+                </div>
+                <div style={{ width: '18%', paddingLeft: '12px', paddingRight: '12px', fontSize: '13px', color: '#374151', lineHeight: '1.4', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', boxSizing: 'border-box', margin: '0', fontVariantNumeric: 'tabular-nums' }}>
+                  {(service.price || 0).toLocaleString('es-ES', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })} €
+                </div>
+                <div style={{ width: '12%', paddingLeft: '12px', paddingRight: '12px', fontSize: '13px', color: '#374151', lineHeight: '1.4', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', boxSizing: 'border-box', margin: '0' }}>
+                  {service.tax || 0}%
+                </div>
+                <div style={{ width: '20%', paddingLeft: '12px', paddingRight: '12px', fontSize: '13px', fontWeight: '500', color: '#111827', lineHeight: '1.4', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', boxSizing: 'border-box', margin: '0', fontVariantNumeric: 'tabular-nums' }}>
+                  {(service.total || 0).toLocaleString('es-ES', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })} €
+                </div>
+              </div>
+            ))
+          ) : (
+            <div style={{ padding: '16px', textAlign: 'center', fontSize: '13px', color: '#6B7280', lineHeight: '1.5' }}>
+              No hay servicios añadidos
             </div>
           )}
         </div>
 
-        {/* Tabla de servicios */}
-        <div className="mb-8">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-100 border-b-2 border-gray-300">
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-900">Descripción</th>
-                <th className="text-center py-3 px-4 text-sm font-semibold text-gray-900">Cantidad</th>
-                <th className="text-right py-3 px-4 text-sm font-semibold text-gray-900">Precio Unit.</th>
-                <th className="text-right py-3 px-4 text-sm font-semibold text-gray-900">IVA</th>
-                <th className="text-right py-3 px-4 text-sm font-semibold text-gray-900">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {services.map((service, index) => (
-                <tr key={index} className="border-b border-gray-200">
-                  <td className="py-3 px-4 text-sm text-gray-700">{service.description}</td>
-                  <td className="py-3 px-4 text-sm text-center text-gray-700">{service.quantity}</td>
-                  <td className="py-3 px-4 text-sm text-right text-gray-700">
-                    {service.price.toLocaleString('es-ES', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })} €
-                  </td>
-                  <td className="py-3 px-4 text-sm text-right text-gray-700">{service.tax}%</td>
-                  <td className="py-3 px-4 text-sm text-right font-medium text-gray-900">
-                    {service.total.toLocaleString('es-ES', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })} €
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
         {/* Totales */}
-        <div className="flex justify-end mb-8">
-          <div className="w-64">
-            <div className="flex justify-between py-2 border-b border-gray-200">
-              <span className="text-sm text-gray-600">Subtotal:</span>
-              <span className="text-sm font-medium text-gray-900">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px', flexShrink: 0, boxSizing: 'border-box' }}>
+          <div style={{ width: '240px', boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', paddingBottom: '8px', lineHeight: '1.4', boxSizing: 'border-box', margin: '0' }}>
+              <span style={{ fontSize: '13px', color: '#4B5563', lineHeight: '1.4', margin: '0', padding: '0' }}>Subtotal:</span>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: '#111827', fontVariantNumeric: 'tabular-nums', lineHeight: '1.4', textAlign: 'right', margin: '0', padding: '0' }}>
                 {subtotal.toLocaleString('es-ES', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })} €
               </span>
             </div>
-            <div className="flex justify-between py-2 border-b border-gray-200">
-              <span className="text-sm text-gray-600">IVA:</span>
-              <span className="text-sm font-medium text-gray-900">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', paddingBottom: '8px', lineHeight: '1.4', boxSizing: 'border-box', margin: '0' }}>
+              <span style={{ fontSize: '13px', color: '#4B5563', lineHeight: '1.4', margin: '0', padding: '0' }}>IVA:</span>
+              <span style={{ fontSize: '13px', fontWeight: '500', color: '#111827', fontVariantNumeric: 'tabular-nums', lineHeight: '1.4', textAlign: 'right', margin: '0', padding: '0' }}>
                 {iva.toLocaleString('es-ES', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })} €
               </span>
             </div>
-            <div className="flex justify-between py-3 mt-2">
-              <span className="text-lg font-bold text-gray-900">TOTAL:</span>
-              <span className="text-lg font-bold text-gray-900">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', paddingBottom: '12px', marginTop: '8px', borderTop: '1px solid #D1D5DB', lineHeight: '1.4', boxSizing: 'border-box' }}>
+              <span style={{ fontSize: '15px', fontWeight: '600', color: '#111827', lineHeight: '1.4', margin: '0', padding: '0' }}>Total:</span>
+              <span style={{ fontSize: '18px', fontWeight: '700', color: '#111827', fontVariantNumeric: 'tabular-nums', lineHeight: '1.4', textAlign: 'right', margin: '0', padding: '0' }}>
                 {total.toLocaleString('es-ES', {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
@@ -204,30 +282,34 @@ export default function InvoicePreview({
           </div>
         </div>
 
-        {/* Condiciones de pago */}
-        <div className="mt-8 pt-6 border-t border-gray-200">
-          <div className="text-sm text-gray-700 space-y-2">
-            <p className="font-semibold">Condiciones de pago</p>
-            <p>Pagar por transferencia bancaria al siguiente número de cuenta:</p>
-            <p className="font-mono font-semibold text-base">ES16 2100 0795 1802 0064 1987</p>
+        {/* Información de pago */}
+        <div style={{ marginBottom: '24px', paddingTop: '20px', borderTop: '1px solid #E5E7EB', flexShrink: 0 }}>
+          <div style={{ fontSize: '13px', color: '#4B5563', lineHeight: '1.6' }}>
+            <p style={{ fontWeight: '500', color: '#111827', margin: '0 0 6px 0', lineHeight: '1.4' }}>Información de pago</p>
+            <p style={{ margin: '0 0 4px 0', lineHeight: '1.4' }}>Transferencia bancaria</p>
+            <p style={{ margin: '0 0 4px 0', lineHeight: '1.4' }}>Banco CaixaBank</p>
+            <p style={{ margin: '0 0 4px 0', lineHeight: '1.4' }}>Nombre: BUFFALO IA Global Digital Solutions</p>
+            <p style={{ fontFamily: 'monospace', fontSize: '14px', color: '#111827', letterSpacing: '0.05em', margin: '0', lineHeight: '1.4' }}>
+              ES16 2100 0795 1802 0064 1987
+            </p>
           </div>
-          {status === 'draft' && (
-            <div className="mt-4">
-              <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-medium">
-                BORRADOR
-              </span>
-            </div>
-          )}
-          {status === 'sent' && (
-            <div className="mt-4">
-              <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
-                ENVIADA
-              </span>
-            </div>
-          )}
+        </div>
+
+        {/* Footer - Posicionado al final del documento */}
+        <div 
+          style={{ 
+            marginTop: 'auto',
+            paddingTop: '8px',
+            borderTop: '1px solid #F3F4F6',
+            textAlign: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <p style={{ fontSize: '10px', color: '#9CA3AF', margin: '0', lineHeight: '1.4' }}>
+            Buffalo AI - Global Digital Solutions | C/ Provença 474, esc B, entr. 2ª, Barcelona 08025
+          </p>
         </div>
       </div>
     </div>
   )
 }
-

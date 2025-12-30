@@ -127,9 +127,12 @@ model Invoice {
   id                Int       @id @default(autoincrement())
   invoice_number    String    @unique
   client_name       String
+  client_company_name String?   @db.Text
   client_email      String?
   client_address    String?   @db.Text
   client_tax_id     String?
+  company_name      String?   @default("BUFFALO AI")
+  company_address   String?   @db.Text
   issue_date        DateTime  @default(now()) @db.Date
   due_date          DateTime? @db.Date
   services          Json?     @db.JsonB // Array de servicios
@@ -139,6 +142,7 @@ model Invoice {
   status            String    @default("draft") // draft, sent, cancelled
   pdf_drive_file_id String?
   pdf_drive_url     String?   @db.Text
+  sent_to_drive     Boolean   @default(false)
   deleted_at        DateTime?
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
@@ -200,4 +204,99 @@ model PipelineCard {
   @@index([deleted_at])
   @@index([pipeline_id, stage, position])
   @@map("pipeline_cards")
+}
+
+// ============================================
+// SISTEMA DE FINANZAS
+// ============================================
+// Gestión financiera visual y manual
+// NO contabilidad oficial - solo para decisiones
+
+// Gastos fijos mensuales (se repiten automáticamente)
+model FixedExpense {
+  id          Int      @id @default(autoincrement())
+  name        String
+  amount      Decimal  @db.Decimal(10, 2)
+  has_iva     Boolean  @default(false)
+  iva_percent Decimal? @db.Decimal(5, 2) // % IVA (21, 10, 4, etc.)
+  is_active   Boolean  @default(true)
+  tags        String[] // Array de etiquetas
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  deleted_at  DateTime?
+
+  @@index([is_active, deleted_at])
+  @@map("fixed_expenses")
+}
+
+// Gastos manuales (freelancers, proveedores)
+model Expense {
+  id          Int      @id @default(autoincrement())
+  name        String
+  date_start  DateTime @db.Date // Fecha inicio del rango
+  date_end    DateTime @db.Date // Fecha fin del rango
+  base_amount Decimal  @db.Decimal(10, 2) // Base sin IVA
+  iva_amount  Decimal  @default(0) @db.Decimal(10, 2) // IVA
+  total_amount Decimal @db.Decimal(10, 2) // Total con IVA
+  tags        String[] // Array de etiquetas
+  person_name String?  // Nombre de la persona/proveedor
+  project     String?  // Proyecto asociado (opcional)
+  client_name String?  // Cliente asociado (opcional)
+  notes       String?  @db.Text
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  deleted_at  DateTime?
+
+  @@index([date_start])
+  @@index([date_end])
+  @@index([deleted_at])
+  @@map("expenses")
+}
+
+// Nóminas / Pagos a socios (sin IVA)
+model Salary {
+  id          Int      @id @default(autoincrement())
+  person_name String
+  date        DateTime @db.Date
+  amount      Decimal  @db.Decimal(10, 2)
+  tags        String[] // Array de etiquetas
+  notes       String?  @db.Text
+  created_at DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  deleted_at  DateTime?
+
+  @@index([date])
+  @@index([deleted_at])
+  @@map("salaries")
+}
+
+// Ingresos (facturas reales o estimadas)
+model FinancialIncome {
+  id          Int      @id @default(autoincrement())
+  client_name String
+  date        DateTime @db.Date
+  base_amount Decimal  @db.Decimal(10, 2) // Base sin IVA
+  iva_amount  Decimal  @default(0) @db.Decimal(10, 2) // IVA
+  total_amount Decimal @db.Decimal(10, 2) // Total con IVA
+  status      String   @default("pending") // pending, paid, estimated
+  project     String?  // Proyecto asociado (opcional)
+  invoice_id  Int?     // ID de factura si está vinculada (opcional)
+  notes       String?  @db.Text
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  deleted_at  DateTime?
+
+  @@index([date])
+  @@index([status])
+  @@index([deleted_at])
+  @@map("financial_incomes")
+}
+
+// Configuración financiera (IVA, impuesto sociedades)
+model FinancialSettings {
+  id                    Int      @id @default(1)
+  corporate_tax_percent  Decimal  @default(25) @db.Decimal(5, 2) // % Impuesto sociedades (15%, 25%, etc.)
+  updated_at             DateTime @updatedAt
+
+  @@map("financial_settings")
 }

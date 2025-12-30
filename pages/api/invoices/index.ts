@@ -12,16 +12,21 @@ const serviceSchema = z.object({
 })
 
 const invoiceSchema = z.object({
+  invoice_number: z.string().min(1).optional(),
   client_name: z.string().min(1, 'El nombre del cliente es requerido'),
+  client_company_name: z.string().optional(),
   client_email: z.string().email('Email inválido').optional().or(z.literal('')),
   client_address: z.string().optional(),
   client_tax_id: z.string().optional(),
+  company_name: z.string().optional(),
+  company_address: z.string().optional(),
   issue_date: z.string().optional(),
   due_date: z.string().optional(),
   services: z.array(serviceSchema).min(1, 'Debe haber al menos un servicio'),
   subtotal: z.number().min(0),
   iva: z.number().min(0),
   total: z.number().positive(),
+  status: z.enum(['draft', 'sent', 'cancelled']).optional(),
 })
 
 export default async function handler(
@@ -88,43 +93,56 @@ export default async function handler(
     if (req.method === 'POST') {
       const data = invoiceSchema.parse(req.body)
 
-      // Generar número de factura (BUF-YYYY-NNNN)
-      const year = new Date().getFullYear()
+      // Usar el número de factura proporcionado o generar uno automáticamente
+      let invoiceNumber = data.invoice_number
       
-      // Buscar el último número de factura del año actual (incluyendo eliminadas para evitar duplicados)
-      const lastInvoice = await prisma.invoice.findFirst({
-        where: {
-          invoice_number: {
-            startsWith: `BUF-${year}-`,
+      if (!invoiceNumber) {
+        // Generar número de factura (BUF-YYYY-NNNN)
+        const year = new Date().getFullYear()
+        
+        // Buscar el último número de factura del año actual (incluyendo eliminadas para evitar duplicados)
+        const lastInvoice = await prisma.invoice.findFirst({
+          where: {
+            invoice_number: {
+              startsWith: `BUF-${year}-`,
+            },
           },
-        },
-        orderBy: {
-          invoice_number: 'desc',
-        },
-      })
+          orderBy: {
+            invoice_number: 'desc',
+          },
+        })
 
-      let nextNumber = 1
-      if (lastInvoice) {
-        const parts = lastInvoice.invoice_number.split('-')
-        if (parts.length >= 3) {
-          const lastNum = parseInt(parts[2] || '0')
-          if (!isNaN(lastNum)) {
-            nextNumber = lastNum + 1
+        let nextNumber = 1
+        if (lastInvoice) {
+          const parts = lastInvoice.invoice_number.split('-')
+          if (parts.length >= 3) {
+            const lastNum = parseInt(parts[2] || '0')
+            if (!isNaN(lastNum)) {
+              nextNumber = lastNum + 1
+            }
           }
         }
-      }
 
-      // Verificar que el número no exista (por si acaso)
-      let invoiceNumber = `BUF-${year}-${String(nextNumber).padStart(4, '0')}`
-      let attempts = 0
-      while (attempts < 100) {
+        // Verificar que el número no exista (por si acaso)
+        invoiceNumber = `BUF-${year}-${String(nextNumber).padStart(4, '0')}`
+        let attempts = 0
+        while (attempts < 100) {
+          const exists = await prisma.invoice.findUnique({
+            where: { invoice_number: invoiceNumber },
+          })
+          if (!exists) break
+          nextNumber++
+          invoiceNumber = `BUF-${year}-${String(nextNumber).padStart(4, '0')}`
+          attempts++
+        }
+      } else {
+        // Verificar que el número proporcionado no exista
         const exists = await prisma.invoice.findUnique({
           where: { invoice_number: invoiceNumber },
         })
-        if (!exists) break
-        nextNumber++
-        invoiceNumber = `BUF-${year}-${String(nextNumber).padStart(4, '0')}`
-        attempts++
+        if (exists) {
+          return res.status(400).json({ error: 'El número de factura ya existe' })
+        }
       }
 
       // Crear factura
@@ -132,16 +150,19 @@ export default async function handler(
         data: {
           invoice_number: invoiceNumber,
           client_name: data.client_name,
+          client_company_name: data.client_company_name || null,
           client_email: data.client_email || null,
           client_address: data.client_address || null,
           client_tax_id: data.client_tax_id || null,
+          company_name: data.company_name || 'BUFFALO AI',
+          company_address: data.company_address || null,
           issue_date: data.issue_date ? new Date(data.issue_date) : new Date(),
           due_date: data.due_date ? new Date(data.due_date) : null,
           services: data.services as any,
           subtotal: data.subtotal,
           iva: data.iva,
           total: data.total,
-          status: 'draft',
+          status: data.status || 'draft',
         },
       })
 

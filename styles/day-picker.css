@@ -1,0 +1,189 @@
+/* Estilos personalizados para react-day-picker - Diseño minimalista y profesional */
+.rdp {
+  margin: 0;
+  font-family: inherit;
+}
+
+.rdp-calendar {
+  font-size: 13px;
+}
+
+/* Contenedor de meses */
+.rdp-months {
+  gap: 2rem;
+}
+
+/* Mes individual */
+.rdp-month {
+  min-width: 280px;
+}
+
+/* Encabezado del mes */
+.rdp-caption {
+  margin-bottom: 1rem;
+}
+
+.rdp-caption_label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  text-transform: capitalize;
+}
+
+/* Botones de navegación */
+.rdp-button_previous,
+.rdp-button_next {
+  color: #6b7280;
+  border: none;
+  background: transparent;
+  padding: 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.rdp-button_previous:hover,
+.rdp-button_next:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.rdp-button_previous:focus,
+.rdp-button_next:focus {
+  outline: none;
+  background: #f3f4f6;
+}
+
+/* Tabla del calendario */
+.rdp-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Encabezados de días de la semana */
+.rdp-head_row {
+  margin-bottom: 0.5rem;
+}
+
+.rdp-head_cell {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  width: 40px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Filas de días */
+.rdp-row {
+  margin-bottom: 0.25rem;
+}
+
+/* Celdas */
+.rdp-cell {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  position: relative;
+}
+
+/* Días del calendario */
+.rdp-day {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  font-weight: 400;
+  font-size: 13px;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.rdp-day:hover:not(.rdp-day_selected):not(.rdp-day_disabled):not(.rdp-day_range_middle) {
+  background-color: #f3f4f6;
+  color: #111827;
+  border-color: #e5e7eb;
+}
+
+.rdp-day:focus {
+  outline: none;
+  background-color: #f3f4f6;
+}
+
+/* Día de hoy */
+.rdp-day_today {
+  background-color: #f9fafb;
+  color: #111827;
+  font-weight: 500;
+}
+
+.rdp-day_today:hover {
+  background-color: #f3f4f6;
+}
+
+/* Rango seleccionado - inicio y fin */
+.rdp-day_range_start,
+.rdp-day_range_end {
+  background-color: #3b82f6 !important;
+  color: white !important;
+  font-weight: 500;
+  border-color: #3b82f6 !important;
+  border-radius: 50% !important;
+}
+
+.rdp-day_range_start:hover,
+.rdp-day_range_end:hover {
+  background-color: #2563eb !important;
+  color: white !important;
+}
+
+/* Rango seleccionado - medio */
+.rdp-day_range_middle {
+  background-color: #eff6ff !important;
+  color: #111827 !important;
+  border-radius: 0 !important;
+  border-color: transparent !important;
+}
+
+.rdp-day_range_middle:hover {
+  background-color: #dbeafe !important;
+}
+
+/* Asegurar que el rango medio no tenga bordes redondeados */
+.rdp-cell[aria-selected="true"]:not(.rdp-day_range_start):not(.rdp-day_range_end) .rdp-day {
+  border-radius: 0 !important;
+}
+
+/* Días fuera del mes */
+.rdp-day_outside {
+  color: #d1d5db;
+  opacity: 0.5;
+}
+
+.rdp-day_outside:hover {
+  background-color: transparent;
+}
+
+/* Días deshabilitados */
+.rdp-day_disabled {
+  color: #e5e7eb;
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.rdp-day_disabled:hover {
+  background-color: transparent;
+}
+
+/* Días ocultos */
+.rdp-day_hidden {
+  visibility: hidden;
+}
+

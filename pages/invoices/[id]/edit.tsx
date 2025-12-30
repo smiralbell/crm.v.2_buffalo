@@ -1,6 +1,6 @@
 import { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import FullScreenLayout from '@/components/FullScreenLayout'
@@ -9,6 +9,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { ArrowLeft, Plus, Trash2, Download } from 'lucide-react'
 import Link from 'next/link'
 import InvoicePreview from '@/components/InvoicePreview'
@@ -31,10 +38,12 @@ interface EditInvoiceProps {
     client_email: string | null
     client_address: string | null
     client_tax_id: string | null
+    company_address: string | null
     issue_date: string
     due_date: string | null
     services: Service[]
   }
+  nextInvoiceNumber: string
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -62,13 +71,29 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       }
     }
 
-    // Solo se puede editar si está en draft
-    if (invoice.status !== 'draft') {
-      return {
-        redirect: {
-          destination: `/invoices/${id}`,
-          permanent: false,
+    // Calcular el siguiente número de factura basándose en borradores
+    const year = new Date().getFullYear()
+    const lastDraftInvoice = await prisma.invoice.findFirst({
+      where: {
+        status: 'draft',
+        deleted_at: null,
+        invoice_number: {
+          startsWith: `BUF-${year}-`,
         },
+      },
+      orderBy: {
+        invoice_number: 'desc',
+      },
+    })
+
+    let nextInvoiceNumber = `BUF-${year}-0001`
+    if (lastDraftInvoice) {
+      const parts = lastDraftInvoice.invoice_number.split('-')
+      if (parts.length >= 3) {
+        const lastNum = parseInt(parts[2] || '0')
+        if (!isNaN(lastNum)) {
+          nextInvoiceNumber = `BUF-${year}-${String(lastNum + 1).padStart(4, '0')}`
+        }
       }
     }
 
@@ -76,10 +101,17 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       props: {
         invoice: {
           ...invoice,
+          subtotal: Number(invoice.subtotal),
+          iva: Number(invoice.iva),
+          total: Number(invoice.total),
           issue_date: invoice.issue_date.toISOString().split('T')[0],
           due_date: invoice.due_date?.toISOString().split('T')[0] || null,
           services: (invoice.services as any) || [],
+          created_at: invoice.created_at.toISOString(),
+          updated_at: invoice.updated_at.toISOString(),
+          deleted_at: invoice.deleted_at?.toISOString() || null,
         },
+        nextInvoiceNumber,
       },
     }
   } catch (error: any) {
@@ -102,18 +134,23 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   }
 }
 
-export default function EditInvoice({ invoice }: EditInvoiceProps) {
+export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const [formData, setFormData] = useState({
+    invoice_number: invoice.invoice_number,
     client_name: invoice.client_name,
-    client_email: invoice.client_email || '',
+    client_company_name: (invoice as any).client_company_name || '',
     client_address: invoice.client_address || '',
+    client_email: invoice.client_email || '',
     client_tax_id: invoice.client_tax_id || '',
+    company_name: (invoice as any).company_name || 'BUFFALO AI',
+    company_address: (invoice as any).company_address || 'C/ Provença 474, esc B, entr. 2ª, Barcelona (08025), Barcelona, España',
     issue_date: invoice.issue_date,
     due_date: invoice.due_date || '',
+    status: invoice.status as 'draft' | 'sent' | 'cancelled',
   })
 
   const [services, setServices] = useState<Service[]>(invoice.services)
@@ -194,22 +231,24 @@ export default function EditInvoice({ invoice }: EditInvoiceProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          invoice_number: formData.invoice_number || nextInvoiceNumber,
           services: servicesWithTotals,
           subtotal: totals.subtotal,
           iva: totals.iva,
           total: totals.total,
+          status: formData.status,
         }),
       })
 
-      const data = await res.json()
-
       if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Error al actualizar factura' }))
         setError(data.error || 'Error al actualizar factura')
         setLoading(false)
         return
       }
 
-      router.push(`/invoices/${invoice.id}`)
+      alert('Factura guardada correctamente')
+      setLoading(false)
     } catch (err) {
       setError('Error de conexión')
       setLoading(false)
@@ -218,35 +257,69 @@ export default function EditInvoice({ invoice }: EditInvoiceProps) {
 
   const totals = calculateTotals()
 
-  // Función para descargar PDF
+  // Función para descargar PDF usando @react-pdf/renderer
   const handleDownloadPDF = async () => {
-    if (!invoicePreviewRef.current) return
-
     try {
-      // Importar html2pdf solo en el cliente (dinámicamente)
-      const html2pdf = (await import('html2pdf.js')).default
+      // Importar react-pdf dinámicamente
+      const { pdf } = await import('@react-pdf/renderer')
+      const { InvoicePDF } = await import('@/components/InvoicePDF')
 
-      const element = invoicePreviewRef.current
-      const opt = {
-        margin: 0,
-        filename: `factura-${invoice.invoice_number}.pdf`,
-        image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true,
-          allowTaint: true,
-          logging: false,
-          backgroundColor: '#ffffff',
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
-      }
+      // Preparar servicios con totales
+      const servicesWithTotals = services
+        .filter((s) => s.description)
+        .map((service) => ({
+          ...service,
+          total: service.quantity * service.price * (1 + (service.tax || 0) / 100),
+        }))
 
-      await html2pdf().set(opt).from(element).save()
+      // Crear el documento PDF
+      const doc = (
+        <InvoicePDF
+          invoiceNumber={formData.invoice_number || nextInvoiceNumber}
+          clientName={formData.client_name}
+          clientCompanyName={formData.client_company_name || undefined}
+          clientEmail={formData.client_email || undefined}
+          clientAddress={formData.client_address || undefined}
+          clientTaxId={formData.client_tax_id || undefined}
+          companyName="BUFFALO AI"
+          companyAddress={formData.company_address || undefined}
+          issueDate={formData.issue_date}
+          dueDate={formData.due_date || undefined}
+          services={servicesWithTotals}
+          subtotal={totals.subtotal}
+          iva={totals.iva}
+          total={totals.total}
+        />
+      )
+
+      // Generar y descargar el PDF
+      const blob = await pdf(doc).toBlob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `factura-${formData.invoice_number || nextInvoiceNumber}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Error al generar PDF:', error)
       alert('Error al generar el PDF. Por favor, intenta de nuevo.')
     }
   }
+
+  // Auto-descargar si viene el parámetro download
+  useEffect(() => {
+    if (typeof window !== 'undefined' && router.query.download === 'true') {
+      const timer = setTimeout(() => {
+        handleDownloadPDF()
+        // Limpiar el parámetro de la URL sin recargar
+        router.replace(`/invoices/${invoice.id}/edit`, undefined, { shallow: true })
+      }, 1500)
+      return () => clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.query.download, invoice.id])
 
   // Preparar servicios con totales para la vista previa
   const servicesWithTotals = services.map((service) => {
@@ -265,52 +338,50 @@ export default function EditInvoice({ invoice }: EditInvoiceProps) {
     <FullScreenLayout>
       <div className="h-full flex flex-col">
         {/* Header fijo */}
-        <div className="flex-shrink-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+        <div className="flex-shrink-0 border-b bg-white px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href={`/invoices/${invoice.id}`}>
+            <Link href="/invoices">
               <Button variant="ghost" size="icon">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Editar Factura</h1>
-              <p className="text-sm text-gray-600">{invoice.invoice_number}</p>
+              <p className="text-sm text-gray-600">{formData.invoice_number || nextInvoiceNumber}</p>
             </div>
           </div>
         </div>
 
         {/* Contenido principal - Layout: 1/3 formulario, 2/3 vista previa */}
-        <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-0">
+        <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-0" style={{ height: 'calc(100vh - 80px)', maxHeight: 'calc(100vh - 80px)' }}>
           {/* Columna izquierda: Formulario */}
-          <div className="overflow-y-auto bg-white p-6">
-            <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Cliente */}
-          <Card className="border border-gray-200 shadow-sm mb-6">
+          <div className="bg-white hide-scrollbar" style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden', padding: '24px', boxSizing: 'border-box' }}>
+            <form onSubmit={handleSubmit} className="space-y-6" style={{ paddingBottom: 0 }}>
+          {/* Cliente - Estilo minimalista */}
+          <Card className="border border-gray-200 shadow-sm">
             <CardHeader>
-              <CardTitle>Datos del Cliente</CardTitle>
+              <CardTitle className="text-lg font-semibold">Datos del Cliente</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="client_name">Nombre Cliente *</Label>
-                  <Input
-                    id="client_name"
-                    value={formData.client_name}
-                    onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
-                    required
-                    disabled={loading}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="client_email">Email</Label>
-                  <Input
-                    id="client_email"
-                    type="email"
-                    value={formData.client_email}
-                    onChange={(e) => setFormData({ ...formData, client_email: e.target.value })}
-                    disabled={loading}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="client_name">Nombre Cliente *</Label>
+                <Input
+                  id="client_name"
+                  value={formData.client_name}
+                  onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
+                  required
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="client_company_name">Nombre de la Empresa</Label>
+                <Input
+                  id="client_company_name"
+                  value={formData.client_company_name}
+                  onChange={(e) => setFormData({ ...formData, client_company_name: e.target.value })}
+                  disabled={loading}
+                />
               </div>
 
               <div className="space-y-2">
@@ -320,6 +391,17 @@ export default function EditInvoice({ invoice }: EditInvoiceProps) {
                   value={formData.client_address}
                   onChange={(e) => setFormData({ ...formData, client_address: e.target.value })}
                   rows={2}
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="client_email">Email</Label>
+                <Input
+                  id="client_email"
+                  type="email"
+                  value={formData.client_email}
+                  onChange={(e) => setFormData({ ...formData, client_email: e.target.value })}
                   disabled={loading}
                 />
               </div>
@@ -336,73 +418,78 @@ export default function EditInvoice({ invoice }: EditInvoiceProps) {
             </CardContent>
           </Card>
 
-          {/* Servicios */}
-          <Card className="border border-gray-200 shadow-sm mb-6">
+          {/* Servicios - Estilo minimalista */}
+          <Card className="border border-gray-200 shadow-sm">
             <CardHeader>
-              <CardTitle>Servicios / Productos</CardTitle>
+              <CardTitle className="text-lg font-semibold">Servicios / Productos</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {services.map((service, index) => (
-                <div key={index} className="grid grid-cols-12 gap-3 items-end p-4 border rounded-lg">
-                  <div className="col-span-5 space-y-2">
-                    <Label>Descripción *</Label>
+                <div key={index} className="space-y-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Descripción *</Label>
                     <Input
                       value={service.description}
                       onChange={(e) => updateService(index, 'description', e.target.value)}
                       placeholder="Descripción del servicio"
                       required
                       disabled={loading}
+                      className="w-full"
                     />
                   </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>Cantidad *</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={service.quantity}
-                      onChange={(e) => updateService(index, 'quantity', parseFloat(e.target.value) || 0)}
-                      required
-                      disabled={loading}
-                    />
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Cantidad *</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={service.quantity}
+                        onChange={(e) => updateService(index, 'quantity', parseFloat(e.target.value) || 0)}
+                        required
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Precio Unit. *</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={service.price}
+                        onChange={(e) => updateService(index, 'price', parseFloat(e.target.value) || 0)}
+                        required
+                        disabled={loading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">IVA %</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        value={service.tax}
+                        onChange={(e) => updateService(index, 'tax', parseFloat(e.target.value) || 21)}
+                        disabled={loading}
+                      />
+                    </div>
                   </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>Precio Unit. *</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={service.price}
-                      onChange={(e) => updateService(index, 'price', parseFloat(e.target.value) || 0)}
-                      required
-                      disabled={loading}
-                    />
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>IVA %</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="100"
-                      value={service.tax}
-                      onChange={(e) => updateService(index, 'tax', parseFloat(e.target.value) || 21)}
-                      disabled={loading}
-                    />
-                  </div>
-                  <div className="col-span-1">
-                    {services.length > 1 && (
+                  {services.length > 1 && (
+                    <div className="flex justify-end pt-2">
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon"
+                        size="sm"
                         onClick={() => removeService(index)}
                         disabled={loading}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
-                        <Trash2 className="h-4 w-4 text-red-500" />
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Eliminar
                       </Button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -413,12 +500,24 @@ export default function EditInvoice({ invoice }: EditInvoiceProps) {
             </CardContent>
           </Card>
 
-          {/* Totales y Fechas */}
-          <Card className="border border-gray-200 shadow-sm mb-6">
+          {/* Totales y Fechas - Estilo minimalista */}
+          <Card className="border border-gray-200 shadow-sm">
             <CardHeader>
-              <CardTitle>Resumen y Fechas</CardTitle>
+              <CardTitle className="text-lg font-semibold">Resumen y Fechas</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="invoice_number">Número de Factura</Label>
+                <Input
+                  id="invoice_number"
+                  value={formData.invoice_number}
+                  onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
+                  placeholder={nextInvoiceNumber}
+                  disabled={loading}
+                />
+                <p className="text-xs text-gray-500">Por defecto: {nextInvoiceNumber}</p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="issue_date">Fecha Emisión *</Label>
@@ -443,35 +542,60 @@ export default function EditInvoice({ invoice }: EditInvoiceProps) {
                 </div>
               </div>
 
-              <div className="border-t pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="status">Estado de la Factura</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value: 'draft' | 'sent' | 'cancelled') =>
+                    setFormData({ ...formData, status: value })
+                  }
+                  disabled={loading}
+                >
+                  <SelectTrigger id="status">
+                    <SelectValue placeholder="Seleccionar estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="draft">Borrador</SelectItem>
+                    <SelectItem value="sent">Emitida / Enviada</SelectItem>
+                    <SelectItem value="cancelled">Cancelada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="border-t pt-4 mt-4">
                 <div className="flex justify-end">
-                  <div className="w-64 space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-semibold">
-                        €{totals.subtotal.toLocaleString('es-ES', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">IVA:</span>
-                      <span className="font-semibold">
-                        €{totals.iva.toLocaleString('es-ES', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </span>
-                    </div>
-                    <div className="flex justify-between border-t pt-2">
-                      <span className="text-lg font-bold text-gray-900">TOTAL:</span>
-                      <span className="text-lg font-bold text-green-600">
-                        €{totals.total.toLocaleString('es-ES', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </span>
+                  <div className="w-full max-w-sm bg-gray-50 rounded-lg border border-gray-200 p-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">Subtotal:</span>
+                        <span className="text-sm font-medium text-gray-900">
+                          {new Intl.NumberFormat('es-ES', {
+                            style: 'currency',
+                            currency: 'EUR',
+                            minimumFractionDigits: 2,
+                          }).format(totals.subtotal)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">IVA:</span>
+                        <span className="text-sm font-medium text-gray-900">
+                          {new Intl.NumberFormat('es-ES', {
+                            style: 'currency',
+                            currency: 'EUR',
+                            minimumFractionDigits: 2,
+                          }).format(totals.iva)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 mt-2 border-t">
+                        <span className="text-base font-semibold text-gray-900">Total:</span>
+                        <span className="text-lg font-bold text-gray-900">
+                          {new Intl.NumberFormat('es-ES', {
+                            style: 'currency',
+                            currency: 'EUR',
+                            minimumFractionDigits: 2,
+                          }).format(totals.total)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -480,17 +604,26 @@ export default function EditInvoice({ invoice }: EditInvoiceProps) {
           </Card>
 
               {error && (
-                <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">
+                <div className="rounded-md bg-red-50 p-3 text-sm text-red-800 border border-red-200">
                   {error}
                 </div>
               )}
 
-              <div className="flex justify-end gap-4">
-                <Link href={`/invoices/${invoice.id}`}>
+              <div className="flex justify-end gap-4 pt-4">
+                <Link href="/invoices">
                   <Button type="button" variant="outline" disabled={loading}>
                     Cancelar
                   </Button>
                 </Link>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDownloadPDF}
+                  disabled={!formData.client_name || services.some((s) => !s.description)}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Descargar PDF
+                </Button>
                 <Button type="submit" disabled={loading}>
                   {loading ? 'Guardando...' : 'Guardar Cambios'}
                 </Button>
@@ -498,11 +631,10 @@ export default function EditInvoice({ invoice }: EditInvoiceProps) {
             </form>
           </div>
 
-          {/* Columna derecha: Vista Previa */}
-          <div className="overflow-y-auto bg-gray-100 p-6 flex items-start justify-center">
+          {/* Columna derecha: Vista Previa - Pantalla completa */}
+          <div className="bg-gray-100 hide-scrollbar" style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden', padding: '32px', boxSizing: 'border-box', display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
             <div className="w-full max-w-[210mm]">
-              <div className="mb-4 flex items-center justify-between sticky top-0 bg-gray-100 z-10 py-2">
-                <h3 className="text-lg font-semibold text-gray-900">Vista Previa</h3>
+              <div className="mb-6 flex items-center justify-end sticky top-0 z-10">
                 <Button
                   type="button"
                   variant="outline"
@@ -516,22 +648,25 @@ export default function EditInvoice({ invoice }: EditInvoiceProps) {
               </div>
               <div
                 ref={invoicePreviewRef}
-                className="bg-white shadow-2xl"
+                className="bg-white shadow-lg rounded-lg overflow-hidden"
                 style={{ width: '210mm', minHeight: '297mm' }}
               >
                 <InvoicePreview
-                  invoiceNumber={invoice.invoice_number}
+                  invoiceNumber={formData.invoice_number || nextInvoiceNumber}
                   clientName={formData.client_name}
+                  clientCompanyName={formData.client_company_name || undefined}
                   clientEmail={formData.client_email || undefined}
                   clientAddress={formData.client_address || undefined}
                   clientTaxId={formData.client_tax_id || undefined}
+                  companyName={formData.company_name}
+                  companyAddress={formData.company_address}
                   issueDate={formData.issue_date}
                   dueDate={formData.due_date || undefined}
                   services={servicesWithTotals.filter((s) => s.description)}
                   subtotal={totals.subtotal}
                   iva={totals.iva}
                   total={totals.total}
-                  status="draft"
+                  status={formData.status}
                 />
               </div>
             </div>
