@@ -192,7 +192,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       },
     }
   } catch (error: any) {
-    console.error('Error loading results:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[ERROR] Error loading results:', error)
+    }
     const now = new Date()
     return {
       props: {

@@ -54,7 +54,10 @@ export default async function handler(
       const logoBuffer = await readFile(logoPath)
       logoBase64 = `data:image/png;base64,${logoBuffer.toString('base64')}`
     } catch (logoError) {
-      console.warn('No se pudo cargar el logo, continuando sin él:', logoError)
+      // Solo loguear en desarrollo
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[WARN] No se pudo cargar el logo:', logoError)
+      }
       // Continuar sin logo si no se encuentra
     }
 
@@ -113,12 +116,10 @@ export default async function handler(
 
     // Enviar al webhook en modo POST con FormData (incluye el PDF)
     try {
-      console.log('Enviando factura al webhook:', {
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.invoice_number,
-        pdfSize: pdfBuffer.length,
-        pdfFileName,
-      })
+      // Solo loguear en desarrollo
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[INFO] Enviando factura al webhook:', invoice.invoice_number)
+      }
 
       // Extraer año y mes de la fecha de emisión (formato: aaaa-mm)
       const yearMonth = invoice.issue_date.toISOString().substring(0, 7) // YYYY-MM
@@ -134,7 +135,7 @@ export default async function handler(
 
       if (!webhookResponse.ok) {
         const errorText = await webhookResponse.text().catch(() => 'No se pudo leer la respuesta del webhook')
-        console.error(`Webhook error ${webhookResponse.status}:`, errorText)
+        console.error(`[ERROR] Webhook error ${webhookResponse.status}`)
         throw new Error(`El webhook respondió con estado ${webhookResponse.status}. ${errorText.substring(0, 200)}`)
       }
 
@@ -149,7 +150,7 @@ export default async function handler(
         message: 'Factura enviada a Google Drive correctamente',
       })
     } catch (webhookError) {
-      console.error('Error al enviar al webhook:', webhookError)
+      console.error('[ERROR] Error al enviar al webhook:', webhookError instanceof Error ? webhookError.message : 'Error desconocido')
       return res.status(500).json({
         error: 'Error al enviar la factura al webhook',
         details: webhookError instanceof Error ? webhookError.message : 'Error desconocido',
@@ -160,7 +161,7 @@ export default async function handler(
       return // Ya se envió la respuesta 401
     }
 
-    console.error('Send to drive API error:', error)
+    console.error('[ERROR] Send to drive API error:', error instanceof Error ? error.message : 'Error desconocido')
     return res.status(500).json({ error: 'Error interno del servidor' })
   }
 }

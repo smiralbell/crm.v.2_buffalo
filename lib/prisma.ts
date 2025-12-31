@@ -18,7 +18,8 @@ function createPrismaClient(): PrismaClient {
   }
 
   return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    // Solo logs de errores, sin queries ni warnings verbosos
+    log: ['error'],
     datasources: {
       db: {
         url: process.env.DATABASE_URL,

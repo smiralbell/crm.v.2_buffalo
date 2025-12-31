@@ -170,7 +170,10 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       },
     }
   } catch (error: any) {
-    console.error('Error loading expenses:', error)
+    // Solo loguear errores críticos
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[ERROR] Error loading expenses:', error)
+    }
     const now = new Date()
     return {
       props: {

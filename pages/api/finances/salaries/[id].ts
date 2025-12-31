@@ -37,7 +37,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
       })
     } catch (error: any) {
-      console.error('Error fetching salary:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[ERROR] Error fetching salary:', error)
+      }
       return res.status(500).json({ error: 'Error al obtener nómina' })
     }
   }
@@ -68,7 +70,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors[0].message })
       }
-      console.error('Error updating salary:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[ERROR] Error updating salary:', error)
+      }
       return res.status(500).json({ error: 'Error al actualizar nómina' })
     }
   }
@@ -82,7 +86,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       return res.status(200).json({ message: 'Nómina eliminada' })
     } catch (error: any) {
-      console.error('Error deleting salary:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[ERROR] Error deleting salary:', error)
+      }
       return res.status(500).json({ error: 'Error al eliminar nómina' })
     }
   }

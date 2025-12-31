@@ -49,8 +49,10 @@ export function handleApiError(error: unknown, res: NextApiResponse) {
     }
   }
 
-  // Error genérico
-  console.error('API Error:', error)
+  // Error genérico - solo loguear en desarrollo o si es crítico
+  if (process.env.NODE_ENV === 'development') {
+    console.error('[API Error]', error)
+  }
   return res.status(500).json({
     error: 'Error interno del servidor',
   })

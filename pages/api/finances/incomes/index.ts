@@ -50,7 +50,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })),
       })
     } catch (error: any) {
-      console.error('Error fetching incomes:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[ERROR] Error fetching incomes:', error)
+      }
       return res.status(500).json({ error: 'Error al obtener ingresos' })
     }
   }
@@ -86,7 +88,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors[0].message })
       }
-      console.error('Error creating income:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[ERROR] Error creating income:', error)
+      }
       return res.status(500).json({ error: 'Error al crear ingreso' })
     }
   }

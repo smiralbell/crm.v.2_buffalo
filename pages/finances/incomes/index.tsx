@@ -95,7 +95,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       },
     }
   } catch (error: any) {
-    console.error('Error loading incomes:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[ERROR] Error loading incomes:', error)
+    }
     const now = new Date()
     return {
       props: {

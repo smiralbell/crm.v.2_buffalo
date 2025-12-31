@@ -199,7 +199,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       },
     }
   } catch (error: any) {
-    console.error('Error loading financial dashboard:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[ERROR] Error loading financial dashboard:', error)
+    }
     const now = new Date()
     return {
       props: {

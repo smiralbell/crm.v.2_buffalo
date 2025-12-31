@@ -44,7 +44,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })),
       })
     } catch (error: any) {
-      console.error('Error fetching salaries:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[ERROR] Error fetching salaries:', error)
+      }
       return res.status(500).json({ error: 'Error al obtener nóminas' })
     }
   }
@@ -74,7 +76,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors[0].message })
       }
-      console.error('Error creating salary:', error)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[ERROR] Error creating salary:', error)
+      }
       return res.status(500).json({ error: 'Error al crear nómina' })
     }
   }

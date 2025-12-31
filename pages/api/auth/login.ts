@@ -36,7 +36,8 @@ export default async function handler(
     const adminPassword = process.env.CRM_ADMIN_PASSWORD
 
     if (!adminEmail || !adminPassword) {
-      console.error('CRM_ADMIN_EMAIL o CRM_ADMIN_PASSWORD no están configurados')
+      // Error crítico de configuración - siempre loguear
+      console.error('[CRITICAL] CRM_ADMIN_EMAIL o CRM_ADMIN_PASSWORD no están configurados')
       return res.status(500).json({ error: 'Configuración de servidor incorrecta' })
     }
 
