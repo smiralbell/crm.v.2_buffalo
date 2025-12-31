@@ -122,16 +122,17 @@ export function serializeDate(date: Date | null | undefined): string | null {
  * Serializa objeto con fechas
  */
 export function serializeDates<T extends Record<string, any>>(obj: T): T {
-  const serialized = { ...obj }
+  const serialized = { ...obj } as any
   
   for (const key in serialized) {
-    if (serialized[key] instanceof Date) {
-      serialized[key] = serialized[key].toISOString() as any
-    } else if (serialized[key] && typeof serialized[key] === 'object' && !Array.isArray(serialized[key])) {
-      serialized[key] = serializeDates(serialized[key])
+    const value = serialized[key]
+    if (value instanceof Date) {
+      serialized[key] = value.toISOString()
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      serialized[key] = serializeDates(value)
     }
   }
   
-  return serialized
+  return serialized as T
 }
 
