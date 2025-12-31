@@ -16,10 +16,14 @@ function getAdminCredentials(): { email: string; password: string } {
 }
 
 /**
- * Crea un token de sesión firmado
+ * Crea un token de sesión firmado con timestamp de expiración
  */
-function createSignedSessionToken(): string {
-  const token = randomBytes(32).toString('hex')
+function createSignedSessionToken(expiresAt: Date): string {
+  // Token contiene: base64(email|timestamp_expiración)
+  const { email } = getAdminCredentials()
+  const expiresTimestamp = expiresAt.getTime()
+  const tokenData = `${email}|${expiresTimestamp}`
+  const token = Buffer.from(tokenData).toString('base64')
   return signToken(token)
 }
 
@@ -27,6 +31,11 @@ function createSignedSessionToken(): string {
  * Firma un token con el SESSION_SECRET
  */
 function signToken(token: string): string {
+  // Validar que SESSION_SECRET esté configurado en producción
+  if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+    throw new Error('SESSION_SECRET debe estar configurado en producción')
+  }
+  
   const secret = process.env.SESSION_SECRET || 'default-secret-change-in-production'
   const hmac = createHmac('sha256', secret)
   hmac.update(token)
@@ -70,16 +79,30 @@ function verifyToken(signedToken: string): { valid: boolean; token?: string } {
 
 /**
  * Extrae información de la sesión del token (email y expiración)
- * El token contiene: base64(email.expiresAt.timestamp)
+ * El token contiene: base64(email|timestamp_expiración)
  */
 function decodeSessionToken(token: string): { email: string; expiresAt: Date } | null {
   try {
-    // El token firmado contiene el email y timestamp de expiración
-    // Formato: email|timestamp (en base64 dentro del token)
-    // Por simplicidad, validamos solo la firma y usamos el email de las env vars
-    const { email } = getAdminCredentials()
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 7) // 7 días
+    // Decodificar el token base64
+    const tokenData = Buffer.from(token, 'base64').toString('utf-8')
+    const [email, expiresTimestamp] = tokenData.split('|')
+    
+    if (!email || !expiresTimestamp) {
+      return null
+    }
+    
+    const expiresAt = new Date(parseInt(expiresTimestamp, 10))
+    
+    // Verificar que la fecha de expiración sea válida
+    if (isNaN(expiresAt.getTime())) {
+      return null
+    }
+    
+    // Verificar que el email coincida con las credenciales configuradas
+    const { email: configEmail } = getAdminCredentials()
+    if (email !== configEmail) {
+      return null
+    }
     
     return { email, expiresAt }
   } catch {
@@ -118,9 +141,13 @@ export async function requireAuth(
     throw new Error('Invalid session data')
   }
 
-  // Verificar expiración (7 días desde creación)
-  // Como no almacenamos timestamp, asumimos que si el token es válido, la sesión es válida
-  // En producción podrías agregar un timestamp en el token
+  // Verificar expiración real
+  const now = new Date()
+  if (sessionData.expiresAt < now) {
+    context.res.writeHead(302, { Location: '/login' })
+    context.res.end()
+    throw new Error('Session expired')
+  }
 
   const { email } = getAdminCredentials()
 
@@ -159,6 +186,13 @@ export async function requireAuthAPI(
     throw new Error('Invalid session data')
   }
 
+  // Verificar expiración real
+  const now = new Date()
+  if (sessionData.expiresAt < now) {
+    res.status(401).json({ error: 'Session expired' })
+    throw new Error('Session expired')
+  }
+
   const { email } = getAdminCredentials()
 
   return {
@@ -174,8 +208,11 @@ export async function createSession(
   email: string,
   res?: NextApiResponse
 ): Promise<string> {
-  const token = randomBytes(32).toString('hex')
-  const signedToken = signToken(token)
+  // Crear fecha de expiración (7 días desde ahora)
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + 7)
+  
+  const signedToken = createSignedSessionToken(expiresAt)
 
   // Setear cookie si hay response object
   if (res) {
@@ -202,6 +239,10 @@ export async function getSession(signedToken: string) {
 
   const sessionData = decodeSessionToken(verification.token)
   if (!sessionData) return null
+
+  // Verificar expiración
+  const now = new Date()
+  if (sessionData.expiresAt < now) return null
 
   return sessionData
 }
