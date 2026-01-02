@@ -58,41 +58,103 @@ export default async function handler(
         return res.status(404).json({ error: 'Contacto no encontrado' })
       }
 
-      // Verificar duplicados solo si el valor cambió y no está vacío
-      if (data.email && data.email.trim() !== '' && data.email !== currentContact.email) {
-        const existingContact = await prisma.contact.findUnique({
-          where: { email: data.email },
-          select: { id: true },
-        })
+      // Construir objeto de actualización solo con campos que cambiaron
+      const updateData: any = {}
+      const duplicateChecks: Promise<any>[] = []
+
+      // Verificar y actualizar email solo si cambió
+      if (data.email !== undefined) {
+        if (data.email.trim() === '') {
+          // Si se envía vacío, establecer como null
+          if (currentContact.email !== null) {
+            updateData.email = null
+          }
+        } else if (data.email !== currentContact.email) {
+          // Agregar verificación de duplicados a la lista (se ejecutará en paralelo)
+          duplicateChecks.push(
+            prisma.contact.findUnique({
+              where: { email: data.email },
+              select: { id: true },
+            }).then(existingContact => ({
+              field: 'email',
+              existingContact,
+              value: data.email
+            }))
+          )
+          updateData.email = data.email
+        }
+        // Si el email no cambió, no lo incluimos en updateData
+      }
+
+      // Verificar y actualizar instagram_user solo si cambió
+      if (data.instagram_user !== undefined) {
+        if (data.instagram_user.trim() === '') {
+          // Si se envía vacío, establecer como null
+          if (currentContact.instagram_user !== null) {
+            updateData.instagram_user = null
+          }
+        } else if (data.instagram_user !== currentContact.instagram_user) {
+          // Agregar verificación de duplicados a la lista (se ejecutará en paralelo)
+          duplicateChecks.push(
+            prisma.contact.findUnique({
+              where: { instagram_user: data.instagram_user },
+              select: { id: true },
+            }).then(existingContact => ({
+              field: 'instagram_user',
+              existingContact,
+              value: data.instagram_user
+            }))
+          )
+          updateData.instagram_user = data.instagram_user
+        }
+        // Si el instagram_user no cambió, no lo incluimos en updateData
+      }
+
+      // Ejecutar todas las verificaciones de duplicados en paralelo
+      if (duplicateChecks.length > 0) {
+        const results = await Promise.all(duplicateChecks)
         
-        // Si existe un contacto con ese email Y no es el que estamos editando
-        if (existingContact && existingContact.id !== id) {
-          return res.status(409).json({ 
-            error: 'Ya existe un contacto con este email',
-            contactId: existingContact.id
-          })
+        for (const result of results) {
+          // Si existe un contacto con ese valor Y no es el que estamos editando
+          if (result.existingContact && result.existingContact.id !== id) {
+            const errorMessage = result.field === 'email' 
+              ? 'Ya existe un contacto con este email'
+              : 'Ya existe un contacto con este usuario de Instagram'
+            
+            return res.status(409).json({ 
+              error: errorMessage,
+              contactId: result.existingContact.id
+            })
+          }
         }
       }
 
-      if (data.instagram_user && data.instagram_user.trim() !== '' && data.instagram_user !== currentContact.instagram_user) {
-        const existingContact = await prisma.contact.findUnique({
-          where: { instagram_user: data.instagram_user },
-          select: { id: true },
+      // Agregar otros campos que no tienen restricción única
+      if (data.nombre !== undefined) updateData.nombre = data.nombre
+      if (data.telefono !== undefined) updateData.telefono = data.telefono
+      if (data.empresa !== undefined) updateData.empresa = data.empresa
+      if (data.direccion_fiscal !== undefined) updateData.direccion_fiscal = data.direccion_fiscal
+      if (data.ciudad !== undefined) updateData.ciudad = data.ciudad
+      if (data.codigo_postal !== undefined) updateData.codigo_postal = data.codigo_postal
+      if (data.pais !== undefined) updateData.pais = data.pais
+      if (data.cif !== undefined) updateData.cif = data.cif
+      if (data.dni !== undefined) updateData.dni = data.dni
+      if (data.iban !== undefined) updateData.iban = data.iban
+
+      // Si no hay cambios, retornar el contacto actual sin actualizar
+      if (Object.keys(updateData).length === 0) {
+        // Ya tenemos currentContact, pero necesitamos todos los campos
+        const contact = await prisma.contact.findUnique({
+          where: { id },
         })
-        
-        // Si existe un contacto con ese instagram_user Y no es el que estamos editando
-        if (existingContact && existingContact.id !== id) {
-          return res.status(409).json({ 
-            error: 'Ya existe un contacto con este usuario de Instagram',
-            contactId: existingContact.id
-          })
-        }
+        return res.status(200).json(contact)
       }
 
-      // Si no hay duplicados, proceder con la actualización
+      // Si hay cambios, proceder con la actualización
+      // Usar update que retorna el objeto actualizado
       const contact = await prisma.contact.update({
         where: { id },
-        data,
+        data: updateData,
       })
 
       return res.status(200).json(contact)
