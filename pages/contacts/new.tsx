@@ -56,12 +56,20 @@ export default function NewContact() {
 
       if (!res.ok) {
         // Si es un error de email duplicado (409), mostrar el diálogo
-        if (res.status === 409 && data.error?.includes('email')) {
-          setDuplicateEmail(formData.email)
-          setDuplicateContactId(data.contactId || null)
-          setShowEmailDialog(true)
-          setLoading(false)
-          return
+        if (res.status === 409) {
+          const errorMessage = data.error || ''
+          const isEmailError = errorMessage.toLowerCase().includes('email') || 
+                               errorMessage.toLowerCase().includes('correo')
+          
+          if (isEmailError) {
+            setDuplicateEmail(formData.email)
+            // Asegurar que contactId sea un número válido
+            const contactId = data.contactId ? Number(data.contactId) : null
+            setDuplicateContactId(contactId)
+            setShowEmailDialog(true)
+            setLoading(false)
+            return
+          }
         }
         // Para otros errores, mostrar el mensaje normal
         setError(data.error || 'Error al crear contacto')
@@ -290,28 +298,29 @@ export default function NewContact() {
                 </p>
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-              {duplicateContactId && (
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3">
+              {duplicateContactId ? (
                 <Button
                   onClick={() => {
                     setShowEmailDialog(false)
                     router.push(`/contacts/${duplicateContactId}/edit`)
                   }}
-                  className="w-full sm:w-auto"
+                  className="w-full sm:w-auto order-2 sm:order-1"
+                  variant="default"
                 >
                   <Edit className="mr-2 h-4 w-4" />
                   Ir a editar contacto
                 </Button>
-              )}
+              ) : null}
               <AlertDialogAction
                 onClick={() => {
                   setShowEmailDialog(false)
                   setDuplicateEmail('')
                   setDuplicateContactId(null)
                 }}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto order-1 sm:order-2"
               >
-                Entendido
+                {duplicateContactId ? 'Cerrar' : 'Entendido'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

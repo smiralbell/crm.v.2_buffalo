@@ -65,11 +65,47 @@ export default async function handler(
     if (req.method === 'POST') {
       const data = contactSchema.parse(req.body)
 
-      const contact = await prisma.contact.create({
-        data,
-      })
+      try {
+        const contact = await prisma.contact.create({
+          data,
+        })
 
-      return res.status(201).json(contact)
+        return res.status(201).json(contact)
+      } catch (createError) {
+        // Manejar error de restricción única de Prisma (email duplicado) dentro del POST
+        if (createError instanceof Prisma.PrismaClientKnownRequestError) {
+          if (createError.code === 'P2002') {
+            const target = createError.meta?.target as string[] | undefined
+            if (target && target.includes('email')) {
+              // Buscar el contacto existente con ese email
+              const existingContact = await prisma.contact.findUnique({
+                where: { email: data.email },
+                select: { id: true },
+              })
+              
+              return res.status(409).json({ 
+                error: 'Ya existe un contacto con este email',
+                contactId: existingContact?.id || null
+              })
+            }
+            if (target && target.includes('instagram_user')) {
+              // Buscar el contacto existente con ese usuario de Instagram
+              const existingContact = await prisma.contact.findUnique({
+                where: { instagram_user: data.instagram_user },
+                select: { id: true },
+              })
+              
+              return res.status(409).json({ 
+                error: 'Ya existe un contacto con este usuario de Instagram',
+                contactId: existingContact?.id || null
+              })
+            }
+            return res.status(409).json({ error: 'Ya existe un contacto con estos datos' })
+          }
+        }
+        // Re-lanzar el error para que sea manejado por el catch externo
+        throw createError
+      }
     }
 
     return res.status(405).json({ error: 'Method not allowed' })
@@ -82,34 +118,9 @@ export default async function handler(
       return // Ya se envió la respuesta 401
     }
 
-    // Manejar error de restricción única de Prisma (email duplicado)
+    // Manejar otros errores de Prisma que no fueron capturados en el POST
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
-        const target = error.meta?.target as string[] | undefined
-        if (target && target.includes('email')) {
-          // Buscar el contacto existente con ese email
-          const existingContact = await prisma.contact.findUnique({
-            where: { email: req.body.email },
-            select: { id: true },
-          })
-          
-          return res.status(409).json({ 
-            error: 'Ya existe un contacto con este email',
-            contactId: existingContact?.id || null
-          })
-        }
-        if (target && target.includes('instagram_user')) {
-          // Buscar el contacto existente con ese usuario de Instagram
-          const existingContact = await prisma.contact.findUnique({
-            where: { instagram_user: req.body.instagram_user },
-            select: { id: true },
-          })
-          
-          return res.status(409).json({ 
-            error: 'Ya existe un contacto con este usuario de Instagram',
-            contactId: existingContact?.id || null
-          })
-        }
         return res.status(409).json({ error: 'Ya existe un contacto con estos datos' })
       }
     }
