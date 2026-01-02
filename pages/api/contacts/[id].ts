@@ -48,8 +48,18 @@ export default async function handler(
     if (req.method === 'PUT') {
       const data = contactUpdateSchema.parse(req.body)
 
-      // Verificar duplicados ANTES de actualizar, excluyendo el contacto actual
-      if (data.email) {
+      // Obtener el contacto actual para comparar valores
+      const currentContact = await prisma.contact.findUnique({
+        where: { id },
+        select: { email: true, instagram_user: true },
+      })
+
+      if (!currentContact) {
+        return res.status(404).json({ error: 'Contacto no encontrado' })
+      }
+
+      // Verificar duplicados solo si el valor cambió y no está vacío
+      if (data.email && data.email.trim() !== '' && data.email !== currentContact.email) {
         const existingContact = await prisma.contact.findUnique({
           where: { email: data.email },
           select: { id: true },
@@ -64,7 +74,7 @@ export default async function handler(
         }
       }
 
-      if (data.instagram_user) {
+      if (data.instagram_user && data.instagram_user.trim() !== '' && data.instagram_user !== currentContact.instagram_user) {
         const existingContact = await prisma.contact.findUnique({
           where: { instagram_user: data.instagram_user },
           select: { id: true },
