@@ -48,48 +48,44 @@ export default async function handler(
     if (req.method === 'PUT') {
       const data = contactUpdateSchema.parse(req.body)
 
-      try {
-        const contact = await prisma.contact.update({
-          where: { id },
-          data,
+      // Verificar duplicados ANTES de actualizar, excluyendo el contacto actual
+      if (data.email) {
+        const existingContact = await prisma.contact.findUnique({
+          where: { email: data.email },
+          select: { id: true },
         })
-
-        return res.status(200).json(contact)
-      } catch (updateError) {
-        // Manejar error de restricción única de Prisma (email o instagram_user duplicado)
-        if (updateError instanceof Prisma.PrismaClientKnownRequestError) {
-          if (updateError.code === 'P2002') {
-            const target = updateError.meta?.target as string[] | undefined
-            if (target && target.includes('email')) {
-              // Buscar el contacto existente con ese email
-              const existingContact = await prisma.contact.findUnique({
-                where: { email: data.email },
-                select: { id: true },
-              })
-              
-              return res.status(409).json({ 
-                error: 'Ya existe un contacto con este email',
-                contactId: existingContact?.id || null
-              })
-            }
-            if (target && target.includes('instagram_user')) {
-              // Buscar el contacto existente con ese usuario de Instagram
-              const existingContact = await prisma.contact.findUnique({
-                where: { instagram_user: data.instagram_user },
-                select: { id: true },
-              })
-              
-              return res.status(409).json({ 
-                error: 'Ya existe un contacto con este usuario de Instagram',
-                contactId: existingContact?.id || null
-              })
-            }
-            return res.status(409).json({ error: 'Ya existe un contacto con estos datos' })
-          }
+        
+        // Si existe un contacto con ese email Y no es el que estamos editando
+        if (existingContact && existingContact.id !== id) {
+          return res.status(409).json({ 
+            error: 'Ya existe un contacto con este email',
+            contactId: existingContact.id
+          })
         }
-        // Re-lanzar el error para que sea manejado por el catch externo
-        throw updateError
       }
+
+      if (data.instagram_user) {
+        const existingContact = await prisma.contact.findUnique({
+          where: { instagram_user: data.instagram_user },
+          select: { id: true },
+        })
+        
+        // Si existe un contacto con ese instagram_user Y no es el que estamos editando
+        if (existingContact && existingContact.id !== id) {
+          return res.status(409).json({ 
+            error: 'Ya existe un contacto con este usuario de Instagram',
+            contactId: existingContact.id
+          })
+        }
+      }
+
+      // Si no hay duplicados, proceder con la actualización
+      const contact = await prisma.contact.update({
+        where: { id },
+        data,
+      })
+
+      return res.status(200).json(contact)
     }
 
     if (req.method === 'DELETE') {
