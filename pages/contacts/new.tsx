@@ -6,13 +6,25 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { ArrowLeft, Mail, Edit } from 'lucide-react'
 import Link from 'next/link'
 
 export default function NewContact() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showEmailDialog, setShowEmailDialog] = useState(false)
+  const [duplicateEmail, setDuplicateEmail] = useState('')
+  const [duplicateContactId, setDuplicateContactId] = useState<number | null>(null)
   const [formData, setFormData] = useState({
     nombre: '',
     email: '',
@@ -43,6 +55,15 @@ export default function NewContact() {
       const data = await res.json()
 
       if (!res.ok) {
+        // Si es un error de email duplicado (409), mostrar el diálogo
+        if (res.status === 409 && data.error?.includes('email')) {
+          setDuplicateEmail(formData.email)
+          setDuplicateContactId(data.contactId || null)
+          setShowEmailDialog(true)
+          setLoading(false)
+          return
+        }
+        // Para otros errores, mostrar el mensaje normal
         setError(data.error || 'Error al crear contacto')
         setLoading(false)
         return
@@ -244,6 +265,57 @@ export default function NewContact() {
             </Button>
           </div>
         </form>
+
+        {/* Diálogo de email duplicado */}
+        <AlertDialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+          <AlertDialogContent className="sm:max-w-md">
+            <AlertDialogHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+                  <Mail className="h-5 w-5 text-red-600" />
+                </div>
+                <AlertDialogTitle className="text-xl">
+                  Email ya registrado
+                </AlertDialogTitle>
+              </div>
+              <AlertDialogDescription className="text-base pt-2">
+                Ya existe un contacto con este correo electrónico:
+                <span className="font-semibold text-gray-900 block mt-2 px-3 py-2 bg-gray-50 rounded-md">
+                  {duplicateEmail}
+                </span>
+                <p className="mt-4 text-sm text-gray-600">
+                  {duplicateContactId 
+                    ? 'Puedes ir a editar el contacto existente o utilizar un email diferente para crear uno nuevo.'
+                    : 'Por favor, verifica el email o utiliza uno diferente para crear el contacto.'}
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+              {duplicateContactId && (
+                <Button
+                  onClick={() => {
+                    setShowEmailDialog(false)
+                    router.push(`/contacts/${duplicateContactId}/edit`)
+                  }}
+                  className="w-full sm:w-auto"
+                >
+                  <Edit className="mr-2 h-4 w-4" />
+                  Ir a editar contacto
+                </Button>
+              )}
+              <AlertDialogAction
+                onClick={() => {
+                  setShowEmailDialog(false)
+                  setDuplicateEmail('')
+                  setDuplicateContactId(null)
+                }}
+                className="w-full sm:w-auto"
+              >
+                Entendido
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </Layout>
   )

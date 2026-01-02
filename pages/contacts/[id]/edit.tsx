@@ -46,9 +46,16 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       }
     }
 
+    // Convertir fechas a strings para serialización JSON
+    const serializedContact = {
+      ...contact,
+      created_at: contact.created_at.toISOString(),
+      updated_at: contact.updated_at.toISOString(),
+    }
+
     return {
       props: {
-        contact,
+        contact: serializedContact,
       },
     }
   } catch (error) {

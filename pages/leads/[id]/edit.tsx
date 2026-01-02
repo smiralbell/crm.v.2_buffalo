@@ -64,6 +64,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         lead: {
           ...lead,
           valor: lead.valor ? Number(lead.valor) : null,
+          created_at: lead.created_at.toISOString(),
+          updated_at: lead.updated_at.toISOString(),
         },
         contacts,
       },
