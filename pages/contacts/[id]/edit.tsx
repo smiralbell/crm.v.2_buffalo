@@ -9,7 +9,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { ArrowLeft, Mail, Edit, Instagram } from 'lucide-react'
 import Link from 'next/link'
 
 interface EditContactProps {
@@ -82,6 +91,10 @@ export default function EditContact({ contact }: EditContactProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false)
+  const [duplicateField, setDuplicateField] = useState<'email' | 'instagram' | null>(null)
+  const [duplicateValue, setDuplicateValue] = useState('')
+  const [duplicateContactId, setDuplicateContactId] = useState<number | null>(null)
   const [formData, setFormData] = useState({
     nombre: contact.nombre || '',
     email: contact.email || '',
@@ -112,6 +125,32 @@ export default function EditContact({ contact }: EditContactProps) {
       const data = await res.json()
 
       if (!res.ok) {
+        // Si es un error de campo duplicado (409), mostrar el diálogo
+        if (res.status === 409) {
+          const errorMessage = data.error || ''
+          const isEmailError = errorMessage.toLowerCase().includes('email') || 
+                               errorMessage.toLowerCase().includes('correo')
+          const isInstagramError = errorMessage.toLowerCase().includes('instagram')
+          
+          if (isEmailError) {
+            setDuplicateField('email')
+            setDuplicateValue(formData.email)
+            const contactId = data.contactId ? Number(data.contactId) : null
+            setDuplicateContactId(contactId)
+            setShowDuplicateDialog(true)
+            setLoading(false)
+            return
+          } else if (isInstagramError) {
+            setDuplicateField('instagram')
+            setDuplicateValue(formData.instagram_user)
+            const contactId = data.contactId ? Number(data.contactId) : null
+            setDuplicateContactId(contactId)
+            setShowDuplicateDialog(true)
+            setLoading(false)
+            return
+          }
+        }
+        // Para otros errores, mostrar el mensaje normal
         setError(data.error || 'Error al actualizar contacto')
         setLoading(false)
         return
@@ -313,6 +352,65 @@ export default function EditContact({ contact }: EditContactProps) {
             </Button>
           </div>
         </form>
+
+        {/* Diálogo de campo duplicado */}
+        <AlertDialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
+          <AlertDialogContent className="sm:max-w-md">
+            <AlertDialogHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+                  {duplicateField === 'email' ? (
+                    <Mail className="h-5 w-5 text-red-600" />
+                  ) : (
+                    <Instagram className="h-5 w-5 text-red-600" />
+                  )}
+                </div>
+                <AlertDialogTitle className="text-xl">
+                  {duplicateField === 'email' 
+                    ? 'Email ya registrado' 
+                    : 'Usuario de Instagram ya registrado'}
+                </AlertDialogTitle>
+              </div>
+              <AlertDialogDescription className="text-base pt-2">
+                Ya existe un contacto con este {duplicateField === 'email' ? 'correo electrónico' : 'usuario de Instagram'}:
+                <span className="font-semibold text-gray-900 block mt-2 px-3 py-2 bg-gray-50 rounded-md">
+                  {duplicateValue}
+                </span>
+                <p className="mt-4 text-sm text-gray-600">
+                  {duplicateContactId 
+                    ? `Puedes ir a editar el contacto existente o utilizar un ${duplicateField === 'email' ? 'email' : 'usuario de Instagram'} diferente.`
+                    : `Por favor, verifica el ${duplicateField === 'email' ? 'email' : 'usuario de Instagram'} o utiliza uno diferente.`}
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3">
+              {duplicateContactId ? (
+                <Button
+                  onClick={() => {
+                    setShowDuplicateDialog(false)
+                    router.push(`/contacts/${duplicateContactId}/edit`)
+                  }}
+                  className="w-full sm:w-auto order-2 sm:order-1"
+                  variant="default"
+                >
+                  <Edit className="mr-2 h-4 w-4" />
+                  Ir a editar contacto
+                </Button>
+              ) : null}
+              <AlertDialogAction
+                onClick={() => {
+                  setShowDuplicateDialog(false)
+                  setDuplicateValue('')
+                  setDuplicateField(null)
+                  setDuplicateContactId(null)
+                }}
+                className="w-full sm:w-auto order-1 sm:order-2"
+              >
+                {duplicateContactId ? 'Cerrar' : 'Entendido'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </Layout>
   )

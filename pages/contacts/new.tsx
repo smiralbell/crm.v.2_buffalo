@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { ArrowLeft, Mail, Edit } from 'lucide-react'
+import { ArrowLeft, Mail, Edit, Instagram } from 'lucide-react'
 import Link from 'next/link'
 
 export default function NewContact() {
@@ -25,6 +25,7 @@ export default function NewContact() {
   const [showEmailDialog, setShowEmailDialog] = useState(false)
   const [duplicateEmail, setDuplicateEmail] = useState('')
   const [duplicateContactId, setDuplicateContactId] = useState<number | null>(null)
+  const [duplicateField, setDuplicateField] = useState<'email' | 'instagram' | null>(null)
   const [formData, setFormData] = useState({
     nombre: '',
     email: '',
@@ -55,14 +56,16 @@ export default function NewContact() {
       const data = await res.json()
 
       if (!res.ok) {
-        // Si es un error de email duplicado (409), mostrar el diálogo
+        // Si es un error de campo duplicado (409), mostrar el diálogo
         if (res.status === 409) {
           const errorMessage = data.error || ''
           const isEmailError = errorMessage.toLowerCase().includes('email') || 
                                errorMessage.toLowerCase().includes('correo')
+          const isInstagramError = errorMessage.toLowerCase().includes('instagram')
           
-          if (isEmailError) {
-            setDuplicateEmail(formData.email)
+          if (isEmailError || isInstagramError) {
+            setDuplicateField(isEmailError ? 'email' : 'instagram')
+            setDuplicateEmail(isEmailError ? formData.email : formData.instagram_user || '')
             // Asegurar que contactId sea un número válido
             const contactId = data.contactId ? Number(data.contactId) : null
             setDuplicateContactId(contactId)
@@ -280,21 +283,27 @@ export default function NewContact() {
             <AlertDialogHeader>
               <div className="flex items-center gap-3 mb-2">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
-                  <Mail className="h-5 w-5 text-red-600" />
+                  {duplicateField === 'email' ? (
+                    <Mail className="h-5 w-5 text-red-600" />
+                  ) : (
+                    <Instagram className="h-5 w-5 text-red-600" />
+                  )}
                 </div>
                 <AlertDialogTitle className="text-xl">
-                  Email ya registrado
+                  {duplicateField === 'email' 
+                    ? 'Email ya registrado' 
+                    : 'Usuario de Instagram ya registrado'}
                 </AlertDialogTitle>
               </div>
               <AlertDialogDescription className="text-base pt-2">
-                Ya existe un contacto con este correo electrónico:
+                Ya existe un contacto con este {duplicateField === 'email' ? 'correo electrónico' : 'usuario de Instagram'}:
                 <span className="font-semibold text-gray-900 block mt-2 px-3 py-2 bg-gray-50 rounded-md">
                   {duplicateEmail}
                 </span>
                 <p className="mt-4 text-sm text-gray-600">
                   {duplicateContactId 
-                    ? 'Puedes ir a editar el contacto existente o utilizar un email diferente para crear uno nuevo.'
-                    : 'Por favor, verifica el email o utiliza uno diferente para crear el contacto.'}
+                    ? `Puedes ir a editar el contacto existente o utilizar un ${duplicateField === 'email' ? 'email' : 'usuario de Instagram'} diferente para crear uno nuevo.`
+                    : `Por favor, verifica el ${duplicateField === 'email' ? 'email' : 'usuario de Instagram'} o utiliza uno diferente para crear el contacto.`}
                 </p>
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -316,6 +325,7 @@ export default function NewContact() {
                 onClick={() => {
                   setShowEmailDialog(false)
                   setDuplicateEmail('')
+                  setDuplicateField(null)
                   setDuplicateContactId(null)
                 }}
                 className="w-full sm:w-auto order-1 sm:order-2"
