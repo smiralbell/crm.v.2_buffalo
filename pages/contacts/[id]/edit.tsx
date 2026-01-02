@@ -46,11 +46,21 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       }
     }
 
-    // Convertir fechas a strings para serialización JSON
+    // Crear objeto serializable solo con los campos necesarios (sin fechas Date)
     const serializedContact = {
-      ...contact,
-      created_at: contact.created_at.toISOString(),
-      updated_at: contact.updated_at.toISOString(),
+      id: contact.id,
+      nombre: contact.nombre,
+      email: contact.email,
+      telefono: contact.telefono,
+      empresa: contact.empresa,
+      instagram_user: contact.instagram_user,
+      direccion_fiscal: contact.direccion_fiscal,
+      ciudad: contact.ciudad,
+      codigo_postal: contact.codigo_postal,
+      pais: contact.pais,
+      cif: contact.cif,
+      dni: contact.dni,
+      iban: contact.iban,
     }
 
     return {

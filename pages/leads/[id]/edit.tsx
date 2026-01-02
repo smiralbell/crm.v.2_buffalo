@@ -62,10 +62,10 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         lead: {
-          ...lead,
+          id: lead.id,
+          contact_id: lead.contact_id,
+          estado: lead.estado,
           valor: lead.valor ? Number(lead.valor) : null,
-          created_at: lead.created_at.toISOString(),
-          updated_at: lead.updated_at.toISOString(),
         },
         contacts,
       },
