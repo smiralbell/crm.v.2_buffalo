@@ -36,6 +36,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       ? parseInt(context.query.contact_id as string)
       : undefined
 
+    // Limitar a 1000 contactos para evitar sobrecargar la base de datos
+    // Si hay más, se pueden buscar con el campo de búsqueda
     const contacts = await prisma.contact.findMany({
       select: {
         id: true,
@@ -43,6 +45,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         email: true,
       },
       orderBy: { nombre: 'asc' },
+      take: 1000, // Límite para evitar sobrecargar
     })
 
     return {

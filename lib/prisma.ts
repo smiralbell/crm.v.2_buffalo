@@ -17,12 +17,21 @@ function createPrismaClient(): PrismaClient {
     throw new Error('DATABASE_URL no está configurado en las variables de entorno')
   }
 
+  // Configurar connection pool en DATABASE_URL si no está presente
+  let databaseUrl = process.env.DATABASE_URL || ''
+  
+  // Si no tiene parámetros de pool, agregarlos
+  if (databaseUrl && !databaseUrl.includes('connection_limit')) {
+    const separator = databaseUrl.includes('?') ? '&' : '?'
+    databaseUrl = `${databaseUrl}${separator}connection_limit=10&pool_timeout=20`
+  }
+
   return new PrismaClient({
     // Solo logs de errores, sin queries ni warnings verbosos
     log: ['error'],
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        url: databaseUrl,
       },
     },
   })
