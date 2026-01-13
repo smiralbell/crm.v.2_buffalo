@@ -246,48 +246,6 @@ export default function ExpensesPage({ expenses, recurringExpenses, dateRange: i
   // Asegurar que dateRange siempre tenga un valor válido
   const currentDateRange = dateRange || defaultRange
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2,
-    }).format(amount)
-  }
-
-  const calculateBaseAndIva = () => {
-    const total = parseFloat(formData.total_amount) || 0
-    const ivaPercent = parseFloat(formData.iva_percent) || 0
-    
-    // Si tiene IVA, el importe introducido es el total CON IVA, calculamos el base sin IVA
-    // Si no tiene IVA (0%), el importe introducido es el base sin IVA
-    if (ivaPercent > 0) {
-      const base = total / (1 + ivaPercent / 100)
-      const iva = total - base
-      return { base, iva, total }
-    } else {
-      // Sin IVA, el importe introducido es el base
-      return { base: total, iva: 0, total }
-    }
-  }
-
-  const handleAddTag = (tag: string) => {
-    const trimmedTag = tag.trim()
-    if (trimmedTag && !formData.tags.includes(trimmedTag)) {
-      setFormData({
-        ...formData,
-        tags: [...formData.tags, trimmedTag],
-        newTag: '',
-      })
-    }
-  }
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    setFormData({
-      ...formData,
-      tags: formData.tags.filter((tag) => tag !== tagToRemove),
-    })
-  }
-
   const handleSubmitExpense = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
