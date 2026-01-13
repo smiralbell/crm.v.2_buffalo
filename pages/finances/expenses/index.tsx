@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { query } from '@/lib/db'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -32,9 +33,20 @@ import {
 } from '@/components/ui/alert-dialog'
 
 interface ExpensesPageProps {
-  fixedExpenses: any[]
-  expenses: any[]
-  salaries: any[]
+  expenses: Array<{
+    id: string
+    date: string
+    amount: number
+    description: string
+    account_name: string
+  }>
+  recurringExpenses: Array<{
+    description: string
+    frequency: string
+    averageAmount: number
+    count: number
+    lastDate: string
+  }>
   dateRange?: {
     start: string | null
     end: string | null
@@ -87,39 +99,93 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       endDate = endOfMonth(now)
     }
 
-    const [fixedExpenses, expenses, salaries] = await Promise.all([
-      prisma.fixedExpense.findMany({
-        where: { deleted_at: null },
-        orderBy: { name: 'asc' },
-      }),
-      prisma.expense.findMany({
-        where: {
-          OR: [
-            {
-              date_start: { gte: startDate, lte: endDate },
-            },
-            {
-              date_end: { gte: startDate, lte: endDate },
-            },
-            {
-              AND: [
-                { date_start: { lte: startDate } },
-                { date_end: { gte: endDate } },
-              ],
-            },
-          ],
-          deleted_at: null,
-        },
-        orderBy: { date_start: 'desc' },
-      }),
-      prisma.salary.findMany({
-        where: {
-          date: { gte: startDate, lte: endDate },
-          deleted_at: null,
-        },
-        orderBy: { date: 'desc' },
-      }),
-    ])
+    // Obtener gastos desde bank_transactions (datos reales)
+    const expensesResult = await query<{
+      id: string
+      date: string
+      amount: number
+      description: string
+      account_name: string
+    }>(
+      `SELECT 
+        bt.id,
+        bt.date,
+        bt.amount,
+        bt.description,
+        ba.name as account_name
+       FROM bank_transactions bt
+       JOIN bank_accounts ba ON bt.account_id = ba.id
+       WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0
+       ORDER BY bt.date DESC`,
+      [startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]]
+    )
+
+    // Detectar gastos recurrentes: agrupar por descripción normalizada y analizar frecuencia
+    const expensesByDescription = new Map<string, Array<{ date: string; amount: number }>>()
+    
+    expensesResult.rows.forEach((expense) => {
+      const normalizedDesc = expense.description
+        .toUpperCase()
+        .trim()
+        .replace(/\s+/g, ' ')
+      
+      if (!expensesByDescription.has(normalizedDesc)) {
+        expensesByDescription.set(normalizedDesc, [])
+      }
+      expensesByDescription.get(normalizedDesc)!.push({
+        date: expense.date,
+        amount: Math.abs(Number(expense.amount))
+      })
+    })
+
+    // Identificar gastos recurrentes (más de 1 ocurrencia)
+    const recurringExpenses: Array<{
+      description: string
+      frequency: string
+      averageAmount: number
+      count: number
+      lastDate: string
+    }> = []
+
+    expensesByDescription.forEach((occurrences, description) => {
+      if (occurrences.length > 1) {
+        // Ordenar por fecha
+        occurrences.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+        
+        // Calcular frecuencia promedio
+        const dates = occurrences.map(o => new Date(o.date).getTime())
+        const intervals: number[] = []
+        for (let i = 1; i < dates.length; i++) {
+          intervals.push(dates[i] - dates[i - 1])
+        }
+        const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length
+        const avgIntervalDays = avgInterval / (1000 * 60 * 60 * 24)
+        
+        let frequency = 'Variable'
+        if (avgIntervalDays >= 25 && avgIntervalDays <= 35) {
+          frequency = 'Mensual'
+        } else if (avgIntervalDays >= 85 && avgIntervalDays <= 95) {
+          frequency = 'Trimestral'
+        } else if (avgIntervalDays >= 175 && avgIntervalDays <= 185) {
+          frequency = 'Semestral'
+        } else if (avgIntervalDays >= 360 && avgIntervalDays <= 370) {
+          frequency = 'Anual'
+        }
+
+        const averageAmount = occurrences.reduce((sum, o) => sum + o.amount, 0) / occurrences.length
+
+        recurringExpenses.push({
+          description,
+          frequency,
+          averageAmount,
+          count: occurrences.length,
+          lastDate: occurrences[occurrences.length - 1].date
+        })
+      }
+    })
+
+    // Ordenar gastos recurrentes por frecuencia de ocurrencia
+    recurringExpenses.sort((a, b) => b.count - a.count)
 
     return {
       props: {
@@ -189,7 +255,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   }
 }
 
-export default function ExpensesPage({ fixedExpenses, expenses, salaries, dateRange: initialDateRange }: ExpensesPageProps) {
+export default function ExpensesPage({ expenses, recurringExpenses, dateRange: initialDateRange }: ExpensesPageProps) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('fixed')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -566,13 +632,8 @@ export default function ExpensesPage({ fixedExpenses, expenses, salaries, dateRa
   }
 
   // Calcular totales
-  const fixedTotal = fixedExpenses
-    .filter((e) => e.is_active)
-    .reduce((sum, e) => sum + e.amount, 0)
-  const expensesTotal = expenses.reduce((sum, e) => sum + e.total_amount, 0)
-  const expensesBaseTotal = expenses.reduce((sum, e) => sum + e.base_amount, 0)
-  const salariesTotal = salaries.reduce((sum, s) => sum + s.amount, 0)
-  const grandTotal = fixedTotal + expensesTotal + salariesTotal
+  const expensesTotal = expenses.reduce((sum, e) => sum + e.amount, 0)
+  const recurringTotal = recurringExpenses.reduce((sum, r) => sum + r.averageAmount, 0)
 
   return (
     <Layout>

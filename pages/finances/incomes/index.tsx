@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { query } from '@/lib/db'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -71,22 +72,35 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       endDate = endOfMonth(now)
     }
 
-    const incomes = await prisma.financialIncome.findMany({
-      where: {
-        date: { gte: startDate, lte: endDate },
-        deleted_at: null,
-      },
-      orderBy: { date: 'desc' },
-    })
+    // Obtener ingresos desde bank_transactions (datos reales)
+    const incomesResult = await query<{
+      id: string
+      date: string
+      amount: number
+      description: string
+      account_name: string
+    }>(
+      `SELECT 
+        bt.id,
+        bt.date,
+        bt.amount,
+        bt.description,
+        ba.name as account_name
+       FROM bank_transactions bt
+       JOIN bank_accounts ba ON bt.account_id = ba.id
+       WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount > 0
+       ORDER BY bt.date DESC`,
+      [startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]]
+    )
 
     return {
       props: {
-        incomes: incomes.map((i) => ({
-          ...i,
-          base_amount: Number(i.base_amount),
-          iva_amount: Number(i.iva_amount),
-          total_amount: Number(i.total_amount),
-          date: i.date.toISOString(),
+        incomes: incomesResult.rows.map((i) => ({
+          id: i.id,
+          date: i.date,
+          base_amount: Number(i.amount),
+          description: i.description,
+          account_name: i.account_name,
         })),
         dateRange: {
           start: startDate.toISOString(),

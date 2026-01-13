@@ -90,53 +90,41 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       endDate = endOfMonth(now)
     }
 
-    // Calcular desde bank_transactions (datos reales)
-    // Dinero actual en cuenta: saldo del último movimiento (más reciente)
+    // Calcular desde bank_transactions (datos reales) con filtro de fechas
+    // Dinero actual en cuenta: saldo del último movimiento dentro del período (más reciente)
     const balanceResult = await query<{ balance: number }>(
       `SELECT balance
        FROM bank_transactions
        WHERE balance IS NOT NULL
+         AND date >= $1 AND date <= $2
        ORDER BY date DESC, created_at DESC
-       LIMIT 1`
+       LIMIT 1`,
+      [startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]]
     )
     const currentBalance = balanceResult.rows[0]?.balance 
       ? Number(balanceResult.rows[0].balance) 
       : 0
 
-    // Ingresos TOTALES: suma de todas las transacciones positivas (sin filtro de fecha)
+    // Ingresos del período: suma de transacciones positivas en el rango de fechas
     const incomeResult = await query<{ total: number }>(
-      `SELECT COALESCE(SUM(amount), 0) as total
-       FROM bank_transactions
-       WHERE amount > 0`
-    )
-    const income = Number(incomeResult.rows[0]?.total || 0)
-
-    // Gastos TOTALES: suma de todas las transacciones negativas (sin filtro de fecha)
-    const expensesResult = await query<{ total: number }>(
-      `SELECT COALESCE(ABS(SUM(amount)), 0) as total
-       FROM bank_transactions
-       WHERE amount < 0`
-    )
-    const expenses = Number(expensesResult.rows[0]?.total || 0)
-
-    // Beneficio del período: ingresos del período - gastos del período
-    const incomePeriodResult = await query<{ total: number }>(
       `SELECT COALESCE(SUM(amount), 0) as total
        FROM bank_transactions
        WHERE date >= $1 AND date <= $2 AND amount > 0`,
       [startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]]
     )
-    const incomePeriod = Number(incomePeriodResult.rows[0]?.total || 0)
+    const income = Number(incomeResult.rows[0]?.total || 0)
 
-    const expensesPeriodResult = await query<{ total: number }>(
+    // Gastos del período: suma de transacciones negativas en el rango de fechas
+    const expensesResult = await query<{ total: number }>(
       `SELECT COALESCE(ABS(SUM(amount)), 0) as total
        FROM bank_transactions
        WHERE date >= $1 AND date <= $2 AND amount < 0`,
       [startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]]
     )
-    const expensesPeriod = Number(expensesPeriodResult.rows[0]?.total || 0)
+    const expenses = Number(expensesResult.rows[0]?.total || 0)
 
-    const profit = incomePeriod - expensesPeriod
+    // Beneficio del período: ingresos - gastos
+    const profit = income - expenses
 
     // Impuesto de sociedades estimado (15% del beneficio)
     const estimatedCorporateTax = (profit * 15) / 100
