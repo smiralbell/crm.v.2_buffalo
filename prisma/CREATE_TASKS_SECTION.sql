@@ -27,6 +27,11 @@ ALTER TABLE "public"."tasks"
   ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP DEFAULT now(),
   ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP DEFAULT now();
 
+-- La columna antigua "tarea" era NOT NULL, pero ya no la usamos.
+-- La dejamos nullable para que no rompa los INSERT nuevos.
+ALTER TABLE "public"."tasks"
+  ALTER COLUMN "tarea" DROP NOT NULL;
+
 -- Foreign keys (se asume que solo se ejecuta una vez)
 ALTER TABLE "public"."tasks"
   ADD CONSTRAINT "tasks_client_id_fkey"

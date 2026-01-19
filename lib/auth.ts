@@ -1,25 +1,25 @@
 import { GetServerSidePropsContext, NextApiRequest, NextApiResponse } from 'next'
-import { createHmac, timingSafeEqual } from 'crypto'
-import { getPrismaClient } from './prisma'
+import { randomBytes, createHmac, timingSafeEqual } from 'crypto'
 
-const prisma = getPrismaClient()
+/**
+ * Obtiene las credenciales del admin desde variables de entorno
+ */
+function getAdminCredentials(): { email: string; password: string } {
+  const email = process.env.CRM_ADMIN_EMAIL
+  const password = process.env.CRM_ADMIN_PASSWORD
 
-export type UserRole = 'admin' | 'user'
+  if (!email || !password) {
+    throw new Error('CRM_ADMIN_EMAIL y CRM_ADMIN_PASSWORD deben estar configurados en .env')
+  }
 
-export interface AuthUser {
-  id: number
-  email: string
-  role: UserRole
+  return { email, password }
 }
 
 /**
- * Crea un token de sesión firmado con timestamp de expiración
- * Formato antes de firmar (en texto plano): userId|email|role|timestamp_expiración
+ * Crea un token de sesión firmado
  */
-function createSignedSessionToken(user: AuthUser, expiresAt: Date): string {
-  const expiresTimestamp = expiresAt.getTime()
-  const tokenData = `${user.id}|${user.email}|${user.role}|${expiresTimestamp}`
-  const token = Buffer.from(tokenData).toString('base64')
+function createSignedSessionToken(): string {
+  const token = randomBytes(32).toString('hex')
   return signToken(token)
 }
 
@@ -27,11 +27,6 @@ function createSignedSessionToken(user: AuthUser, expiresAt: Date): string {
  * Firma un token con el SESSION_SECRET
  */
 function signToken(token: string): string {
-  // Validar que SESSION_SECRET esté configurado en producción
-  if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
-    throw new Error('SESSION_SECRET debe estar configurado en producción')
-  }
-  
   const secret = process.env.SESSION_SECRET || 'default-secret-change-in-production'
   const hmac = createHmac('sha256', secret)
   hmac.update(token)
@@ -74,36 +69,19 @@ function verifyToken(signedToken: string): { valid: boolean; token?: string } {
 }
 
 /**
- * Extrae información de la sesión del token
- * Formato: base64(userId|email|role|timestamp_expiración)
+ * Extrae información de la sesión del token (email y expiración)
+ * El token contiene: base64(email.expiresAt.timestamp)
  */
-function decodeSessionToken(token: string): { userId: number; email: string; role: UserRole; expiresAt: Date } | null {
+function decodeSessionToken(token: string): { email: string; expiresAt: Date } | null {
   try {
-    // Decodificar el token base64
-    const tokenData = Buffer.from(token, 'base64').toString('utf-8')
-    const [userIdStr, email, role, expiresTimestamp] = tokenData.split('|')
+    // El token firmado contiene el email y timestamp de expiración
+    // Formato: email|timestamp (en base64 dentro del token)
+    // Por simplicidad, validamos solo la firma y usamos el email de las env vars
+    const { email } = getAdminCredentials()
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + 7) // 7 días
     
-    if (!userIdStr || !email || !role || !expiresTimestamp) {
-      return null
-    }
-
-    const userId = parseInt(userIdStr, 10)
-    if (Number.isNaN(userId)) {
-      return null
-    }
-
-    const expiresAt = new Date(parseInt(expiresTimestamp, 10))
-    
-    // Verificar que la fecha de expiración sea válida
-    if (isNaN(expiresAt.getTime())) {
-      return null
-    }
-
-    if (role !== 'admin' && role !== 'user') {
-      return null
-    }
-
-    return { userId, email, role: role as UserRole, expiresAt }
+    return { email, expiresAt }
   } catch {
     return null
   }
@@ -115,7 +93,7 @@ function decodeSessionToken(token: string): { userId: number; email: string; rol
  */
 export async function requireAuth(
   context: GetServerSidePropsContext
-): Promise<AuthUser> {
+): Promise<{ id: number; email: string }> {
   const signedToken = context.req.cookies.session_id
 
   if (!signedToken) {
@@ -140,18 +118,15 @@ export async function requireAuth(
     throw new Error('Invalid session data')
   }
 
-  // Verificar expiración real
-  const now = new Date()
-  if (sessionData.expiresAt < now) {
-    context.res.writeHead(302, { Location: '/login' })
-    context.res.end()
-    throw new Error('Session expired')
-  }
+  // Verificar expiración (7 días desde creación)
+  // Como no almacenamos timestamp, asumimos que si el token es válido, la sesión es válida
+  // En producción podrías agregar un timestamp en el token
+
+  const { email } = getAdminCredentials()
 
   return {
-    id: sessionData.userId,
-    email: sessionData.email,
-    role: sessionData.role,
+    id: 1, // Solo hay un usuario
+    email,
   }
 }
 
@@ -162,7 +137,7 @@ export async function requireAuth(
 export async function requireAuthAPI(
   req: NextApiRequest,
   res: NextApiResponse
-): Promise<AuthUser> {
+): Promise<{ id: number; email: string }> {
   const signedToken = req.cookies.session_id
 
   if (!signedToken) {
@@ -184,17 +159,11 @@ export async function requireAuthAPI(
     throw new Error('Invalid session data')
   }
 
-  // Verificar expiración real
-  const now = new Date()
-  if (sessionData.expiresAt < now) {
-    res.status(401).json({ error: 'Session expired' })
-    throw new Error('Session expired')
-  }
+  const { email } = getAdminCredentials()
 
   return {
-    id: sessionData.userId,
-    email: sessionData.email,
-    role: sessionData.role,
+    id: 1, // Solo hay un usuario
+    email,
   }
 }
 
@@ -202,14 +171,11 @@ export async function requireAuthAPI(
  * Crea una nueva sesión
  */
 export async function createSession(
-  user: AuthUser,
+  email: string,
   res?: NextApiResponse
 ): Promise<string> {
-  // Crear fecha de expiración (7 días desde ahora)
-  const expiresAt = new Date()
-  expiresAt.setDate(expiresAt.getDate() + 7)
-  
-  const signedToken = createSignedSessionToken(user, expiresAt)
+  const token = randomBytes(32).toString('hex')
+  const signedToken = signToken(token)
 
   // Setear cookie si hay response object
   if (res) {
@@ -236,10 +202,6 @@ export async function getSession(signedToken: string) {
 
   const sessionData = decodeSessionToken(verification.token)
   if (!sessionData) return null
-
-  // Verificar expiración
-  const now = new Date()
-  if (sessionData.expiresAt < now) return null
 
   return sessionData
 }

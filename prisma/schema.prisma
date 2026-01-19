@@ -10,25 +10,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// SISTEMA DE USUARIOS Y ROLES
-// ============================================
-// Autenticación basada en tabla users con roles:
-// - admin
-// - user
-// El registro de administradores requiere una clave secreta en .env
-
-model User {
-  id            Int      @id @default(autoincrement())
-  email         String   @unique
-  name          String?
-  password_hash String
-  role          String   // 'admin' | 'user'
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
-
-  @@map("users")
-}
+// NOTA: La autenticación ahora usa variables de entorno (CRM_ADMIN_EMAIL y CRM_ADMIN_PASSWORD)
+// No se necesitan tablas users ni sessions en la base de datos
 
 // Modelo Contact - coincide con la estructura existente
 model Contact {
@@ -159,7 +142,6 @@ model Invoice {
   status            String    @default("draft") // draft, sent, cancelled
   pdf_drive_file_id String?
   pdf_drive_url     String?   @db.Text
-  sent_to_drive     Boolean   @default(false)
   deleted_at        DateTime?
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
