@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import Layout from '@/components/Layout'
-import { Plus, CheckCircle2, Edit, Filter } from 'lucide-react'
+import { Plus, CheckCircle2, Edit, Filter, Trash2, LayoutGrid, List } from 'lucide-react'
 
 type Task = {
   id: number
@@ -128,11 +128,14 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
     priority: 'all',
     orderByDue: 'asc',
   })
+  const [sortBy, setSortBy] = useState<'due_date' | 'priority' | 'status'>('due_date')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [newMemberName, setNewMemberName] = useState('')
   const [creatingMember, setCreatingMember] = useState(false)
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
 
   const [form, setForm] = useState<{
     title: string
@@ -182,6 +185,34 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
 
   const pendingCount = useMemo(() => tasks.filter((t) => t.status !== 'done').length, [tasks])
   const completedCount = useMemo(() => tasks.filter((t) => t.status === 'done').length, [tasks])
+  const sortedTasks = useMemo(() => {
+    const arr = [...tasks]
+    arr.sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1
+      if (sortBy === 'due_date') {
+        const da = a.due_date ? new Date(a.due_date).getTime() : Infinity
+        const db = b.due_date ? new Date(b.due_date).getTime() : Infinity
+        if (da === db) return 0
+        return da < db ? dir : -dir
+      }
+      if (sortBy === 'priority') {
+        const order: Record<string, number> = { high: 0, medium: 1, low: 2 }
+        const pa = order[a.priority] ?? 1
+        const pb = order[b.priority] ?? 1
+        if (pa === pb) return 0
+        return pa < pb ? dir : -dir
+      }
+      if (sortBy === 'status') {
+        const order: Record<string, number> = { todo: 0, doing: 1, done: 2 }
+        const sa = order[a.status] ?? 0
+        const sb = order[b.status] ?? 0
+        if (sa === sb) return 0
+        return sa < sb ? dir : -dir
+      }
+      return 0
+    })
+    return arr
+  }, [tasks, sortBy, sortDir])
 
   const openNewTask = () => {
     setEditingTask(null)
@@ -294,6 +325,17 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
     }
   }
 
+  const deleteTask = async (task: Task) => {
+    const ok = window.confirm(`¿Eliminar la tarea "${task.title}"?`)
+    if (!ok) return
+    const res = await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      alert('Error al eliminar la tarea')
+      return
+    }
+    await loadTasks()
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -305,6 +347,24 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center rounded-lg border bg-white p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 ${viewMode === 'table' ? 'bg-gray-100 text-gray-900' : 'text-gray-500'}`}
+              >
+                <List className="h-3 w-3" />
+                Tabla
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 ${viewMode === 'cards' ? 'bg-gray-100 text-gray-900' : 'text-gray-500'}`}
+              >
+                <LayoutGrid className="h-3 w-3" />
+                Tarjetas
+              </button>
+            </div>
             <Button variant="outline" size="sm" onClick={() => loadTasks()} disabled={loading}>
               <Filter className="h-4 w-4 mr-2" />
               Actualizar
@@ -426,75 +486,188 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
             <CardTitle>Lista de tareas</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-gray-50 text-left text-xs font-semibold text-gray-500">
-                    <th className="px-3 py-2">Título</th>
-                    <th className="px-3 py-2">Persona</th>
-                    <th className="px-3 py-2">Cliente</th>
-                    <th className="px-3 py-2">Proyecto</th>
-                    <th className="px-3 py-2">Prioridad</th>
-                    <th className="px-3 py-2">Fecha límite</th>
-                    <th className="px-3 py-2">Estado</th>
-                    <th className="px-3 py-2 text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tasks.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-3 py-6 text-center text-gray-500">
-                        No hay tareas con los filtros actuales.
-                      </td>
+            {viewMode === 'table' ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50 text-left text-xs font-semibold text-gray-500">
+                      <th className="px-3 py-2">Título</th>
+                      <th className="px-3 py-2">Persona</th>
+                      <th className="px-3 py-2">Cliente</th>
+                      <th className="px-3 py-2">Proyecto</th>
+                      <th
+                        className="px-3 py-2 cursor-pointer select-none"
+                        onClick={() => {
+                          setSortBy('priority')
+                          setSortDir((d) => (sortBy === 'priority' && d === 'asc' ? 'desc' : 'asc'))
+                        }}
+                      >
+                        Prioridad
+                      </th>
+                      <th
+                        className="px-3 py-2 cursor-pointer select-none"
+                        onClick={() => {
+                          setSortBy('due_date')
+                          setSortDir((d) => (sortBy === 'due_date' && d === 'asc' ? 'desc' : 'asc'))
+                        }}
+                      >
+                        Fecha límite
+                      </th>
+                      <th
+                        className="px-3 py-2 cursor-pointer select-none"
+                        onClick={() => {
+                          setSortBy('status')
+                          setSortDir((d) => (sortBy === 'status' && d === 'asc' ? 'desc' : 'asc'))
+                        }}
+                      >
+                        Estado
+                      </th>
+                      <th className="px-3 py-2 text-right">Acciones</th>
                     </tr>
-                  ) : (
-                    tasks.map((task) => (
-                      <tr key={task.id} className="border-b last:border-none hover:bg-gray-50">
-                        <td className="px-3 py-2">
-                          <div className="font-medium text-gray-900">{task.title}</div>
-                          {task.description && (
-                            <div className="text-xs text-gray-500 line-clamp-2">{task.description}</div>
-                          )}
+                  </thead>
+                  <tbody>
+                    {sortedTasks.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-6 text-center text-gray-500">
+                          No hay tareas con los filtros actuales.
                         </td>
-                        <td className="px-3 py-2 text-gray-700">{task.assignee_name}</td>
-                        <td className="px-3 py-2 text-gray-700">{task.client_name || `#${task.client_id}`}</td>
-                        <td className="px-3 py-2 text-gray-700">{task.project}</td>
-                        <td className="px-3 py-2">
-                          <PriorityBadge priority={task.priority} />
-                        </td>
-                        <td className="px-3 py-2 text-gray-700">{formatDate(task.due_date)}</td>
-                        <td className="px-3 py-2">
-                          <StatusBadge status={task.status} />
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <div className="flex justify-end gap-2">
-                            {task.status !== 'done' && (
+                      </tr>
+                    ) : (
+                      sortedTasks.map((task) => (
+                        <tr key={task.id} className="border-b last:border-none hover:bg-gray-50">
+                          <td className="px-3 py-2">
+                            <div className="font-medium text-gray-900">{task.title}</div>
+                            {task.description && (
+                              <div className="text-xs text-gray-500 line-clamp-2">{task.description}</div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-gray-700">{task.assignee_name || '-'}</td>
+                          <td className="px-3 py-2 text-gray-700">
+                            {task.client_name || (task.client_id ? `#${task.client_id}` : '-')}
+                          </td>
+                          <td className="px-3 py-2 text-gray-700">{task.project || '-'}</td>
+                          <td className="px-3 py-2">
+                            <PriorityBadge priority={task.priority} />
+                          </td>
+                          <td className="px-3 py-2 text-gray-700">{formatDate(task.due_date)}</td>
+                          <td className="px-3 py-2">
+                            <StatusBadge status={task.status} />
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex justify-end gap-2">
+                              {task.status !== 'done' && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="text-green-600 hover:text-green-700"
+                                  onClick={() => markDone(task)}
+                                  title="Marcar como hecha"
+                                >
+                                  <CheckCircle2 className="h-4 w-4" />
+                                </Button>
+                              )}
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="text-green-600 hover:text-green-700"
-                                onClick={() => markDone(task)}
-                                title="Marcar como hecha"
+                                onClick={() => openEditTask(task)}
+                                title="Editar tarea"
                               >
-                                <CheckCircle2 className="h-4 w-4" />
+                                <Edit className="h-4 w-4" />
                               </Button>
-                            )}
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="text-red-600 hover:text-red-700"
+                                onClick={() => deleteTask(task)}
+                                title="Eliminar tarea"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {sortedTasks.length === 0 ? (
+                  <div className="col-span-full py-6 text-center text-gray-500 text-sm">
+                    No hay tareas con los filtros actuales.
+                  </div>
+                ) : (
+                  sortedTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="flex flex-col justify-between rounded-xl border bg-white p-4 shadow-sm"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-xs text-gray-500 uppercase tracking-wide">
+                              {task.project || 'Sin proyecto'}
+                            </div>
+                            <h3 className="text-sm font-semibold text-gray-900">{task.title}</h3>
+                          </div>
+                          <StatusBadge status={task.status} />
+                        </div>
+                        {task.description && (
+                          <p className="text-xs text-gray-600 line-clamp-3">{task.description}</p>
+                        )}
+                        <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+                          <span>
+                            <span className="font-medium">Persona:</span>{' '}
+                            {task.assignee_name || 'Sin asignar'}
+                          </span>
+                          <span>
+                            <span className="font-medium">Cliente:</span>{' '}
+                            {task.client_name || (task.client_id ? `#${task.client_id}` : 'Sin cliente')}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <PriorityBadge priority={task.priority} />
+                          <span className="text-xs text-gray-500">{formatDate(task.due_date)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {task.status !== 'done' && (
                             <Button
                               size="icon"
                               variant="ghost"
-                              onClick={() => openEditTask(task)}
-                              title="Editar tarea"
+                              className="text-green-600 hover:text-green-700"
+                              onClick={() => markDone(task)}
+                              title="Marcar como hecha"
                             >
-                              <Edit className="h-4 w-4" />
+                              <CheckCircle2 className="h-4 w-4" />
                             </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+                          )}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => openEditTask(task)}
+                            title="Editar tarea"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-red-600 hover:text-red-700"
+                            onClick={() => deleteTask(task)}
+                            title="Eliminar tarea"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
