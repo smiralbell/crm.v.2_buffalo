@@ -114,6 +114,7 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
   const router = useRouter()
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [loading, setLoading] = useState(false)
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(meta.teamMembers || [])
 
   const [filters, setFilters] = useState<{
     assigneeId?: string
@@ -130,6 +131,8 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [newMemberName, setNewMemberName] = useState('')
+  const [creatingMember, setCreatingMember] = useState(false)
 
   const [form, setForm] = useState<{
     title: string
@@ -258,6 +261,37 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
     await loadTasks()
   }
 
+  const handleCreateMember = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newMemberName.trim()) return
+    setCreatingMember(true)
+    try {
+      const res = await fetch('/api/team-members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newMemberName.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Error al crear persona')
+        return
+      }
+      // Volver a cargar lista de personas
+      const resMembers = await fetch('/api/team-members')
+      const dataMembers = await resMembers.json()
+      if (resMembers.ok && dataMembers.members) {
+        setTeamMembers(dataMembers.members)
+        // seleccionar automáticamente la nueva persona en el formulario
+        if (data.id) {
+          setForm((f) => ({ ...f, assigneeId: String(data.id) }))
+        }
+      }
+      setNewMemberName('')
+    } finally {
+      setCreatingMember(false)
+    }
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -296,7 +330,7 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
-                  {meta.teamMembers.map((m) => (
+                  {teamMembers.map((m) => (
                     <SelectItem key={m.id} value={String(m.id)}>
                       {m.name}
                     </SelectItem>
@@ -505,12 +539,29 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                       required
                     >
                       <option value="">Selecciona persona</option>
-                      {meta.teamMembers.map((m) => (
+                      {teamMembers.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name}
                         </option>
                       ))}
                     </select>
+                    <form onSubmit={handleCreateMember} className="mt-2 flex gap-2">
+                      <Input
+                        placeholder="Nueva persona (ej. Sergi)"
+                        value={newMemberName}
+                        onChange={(e) => setNewMemberName(e.target.value)}
+                        className="h-8 text-xs"
+                      />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        variant="outline"
+                        disabled={creatingMember}
+                        className="h-8 text-xs"
+                      >
+                        Añadir
+                      </Button>
+                    </form>
                   </div>
                   <div className="space-y-1">
                     <Label>Cliente</Label>
