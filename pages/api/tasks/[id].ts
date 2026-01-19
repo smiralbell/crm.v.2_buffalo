@@ -16,6 +16,7 @@ const updateTaskSchema = z.object({
 
 const patchTaskSchema = z.object({
   status: z.enum(['todo', 'doing', 'done']).optional(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
   markDone: z.boolean().optional(),
 })
 
@@ -85,24 +86,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const markDone = data.markDone === true
       const newStatus = data.status || (markDone ? 'done' : undefined)
+      const newPriority = data.priority
 
-      if (!newStatus) {
+      if (!newStatus && !newPriority) {
         return res.status(400).json({ error: 'Nada que actualizar' })
       }
 
-      const params = [newStatus, id]
+      const params = [newStatus || null, newPriority || null, id]
 
       await query(
         `
         UPDATE tasks
         SET
-          status = $1,
+          status = COALESCE($1, status),
+          priority = COALESCE($2, priority),
           updated_at = now(),
           completed_at = CASE
-            WHEN $1 = 'done' THEN COALESCE(completed_at, now())
+            WHEN COALESCE($1, status) = 'done' THEN COALESCE(completed_at, now())
             ELSE NULL
           END
-        WHERE id = $2
+        WHERE id = $3
         `,
         params
       )

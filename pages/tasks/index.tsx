@@ -91,13 +91,15 @@ function formatDate(dateStr: string | null) {
 }
 
 function PriorityBadge({ priority }: { priority: Task['priority'] }) {
-  const map: Record<Task['priority'], { label: string; className: string }> = {
-    low: { label: 'Low', className: 'bg-gray-100 text-gray-700' },
-    medium: { label: 'Medium', className: 'bg-yellow-100 text-yellow-800' },
-    high: { label: 'High', className: 'bg-red-100 text-red-800' },
-  }
+  const map = PRIORITY_STYLES
   const p = map[priority] || map.medium
   return <Badge className={p.className}>{p.label}</Badge>
+}
+
+const PRIORITY_STYLES: Record<Task['priority'], { label: string; className: string }> = {
+  low: { label: 'Low', className: 'bg-gray-100 text-gray-700' },
+  medium: { label: 'Medium', className: 'bg-yellow-100 text-yellow-800' },
+  high: { label: 'High', className: 'bg-red-100 text-red-800' },
 }
 
 const STATUS_STYLES: Record<Task['status'], { label: string; className: string }> = {
@@ -143,6 +145,45 @@ function TaskStatusSelect({
         <SelectItem value="done">
           <span className={STATUS_STYLES.done.className + ' rounded-full px-2 py-0.5'}>
             {STATUS_STYLES.done.label}
+          </span>
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  )
+}
+
+function TaskPrioritySelect({
+  task,
+  onChange,
+}: {
+  task: Task
+  onChange: (newPriority: Task['priority']) => void
+}) {
+  const current = PRIORITY_STYLES[task.priority]
+  return (
+    <Select
+      value={task.priority}
+      onValueChange={(value) => onChange(value as Task['priority'])}
+    >
+      <SelectTrigger
+        className={`h-7 w-[100px] border-0 text-xs font-medium ${current.className}`}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="high">
+          <span className={PRIORITY_STYLES.high.className + ' rounded-full px-2 py-0.5'}>
+            {PRIORITY_STYLES.high.label}
+          </span>
+        </SelectItem>
+        <SelectItem value="medium">
+          <span className={PRIORITY_STYLES.medium.className + ' rounded-full px-2 py-0.5'}>
+            {PRIORITY_STYLES.medium.label}
+          </span>
+        </SelectItem>
+        <SelectItem value="low">
+          <span className={PRIORITY_STYLES.low.className + ' rounded-full px-2 py-0.5'}>
+            {PRIORITY_STYLES.low.label}
           </span>
         </SelectItem>
       </SelectContent>
@@ -391,6 +432,20 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
     })
     if (!res.ok) {
       alert('Error al actualizar el estado')
+      return
+    }
+    await loadTasks()
+  }
+
+  const updatePriority = async (task: Task, newPriority: Task['priority']) => {
+    if (task.priority === newPriority) return
+    const res = await fetch(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priority: newPriority }),
+    })
+    if (!res.ok) {
+      alert('Error al actualizar la prioridad')
       return
     }
     await loadTasks()
@@ -682,7 +737,10 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                           </td>
                           <td className="px-3 py-2 text-gray-700">{task.project || '-'}</td>
                           <td className="px-3 py-2">
-                            <PriorityBadge priority={task.priority} />
+                            <TaskPrioritySelect
+                              task={task}
+                              onChange={(p) => updatePriority(task, p)}
+                            />
                           </td>
                           <td className="px-3 py-2 text-gray-700">{formatDate(task.due_date)}</td>
                           <td className="px-3 py-2">
