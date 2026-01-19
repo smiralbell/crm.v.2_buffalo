@@ -100,13 +100,14 @@ function PriorityBadge({ priority }: { priority: Task['priority'] }) {
   return <Badge className={p.className}>{p.label}</Badge>
 }
 
+const STATUS_STYLES: Record<Task['status'], { label: string; className: string }> = {
+  todo: { label: 'To do', className: 'bg-gray-100 text-gray-700' },
+  doing: { label: 'Doing', className: 'bg-blue-100 text-blue-800' },
+  done: { label: 'Done', className: 'bg-green-100 text-green-800' },
+}
+
 function StatusBadge({ status }: { status: Task['status'] }) {
-  const map: Record<Task['status'], { label: string; className: string }> = {
-    todo: { label: 'To do', className: 'bg-gray-100 text-gray-700' },
-    doing: { label: 'Doing', className: 'bg-blue-100 text-blue-800' },
-    done: { label: 'Done', className: 'bg-green-100 text-green-800' },
-  }
-  const s = map[status]
+  const s = STATUS_STYLES[status] || STATUS_STYLES.todo
   return <Badge className={s.className}>{s.label}</Badge>
 }
 
@@ -336,6 +337,20 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
     await loadTasks()
   }
 
+  const updateStatus = async (task: Task, newStatus: Task['status']) => {
+    if (task.status === newStatus) return
+    const res = await fetch(`/api/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    if (!res.ok) {
+      alert('Error al actualizar el estado')
+      return
+    }
+    await loadTasks()
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -461,19 +476,41 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
               </Select>
             </div>
             <div>
-              <Label>Orden fecha límite</Label>
+              <Label>Ordenar</Label>
               <Select
-                value={filters.orderByDue}
-                onValueChange={(value) =>
-                  setFilters((f) => ({ ...f, orderByDue: value as 'asc' | 'desc' }))
+                value={
+                  sortBy === 'due_date'
+                    ? sortDir === 'asc'
+                      ? 'due_asc'
+                      : 'due_desc'
+                    : sortBy === 'priority'
+                    ? 'priority'
+                    : 'status'
                 }
+                onValueChange={(value) => {
+                  if (value === 'due_asc') {
+                    setSortBy('due_date')
+                    setSortDir('asc')
+                  } else if (value === 'due_desc') {
+                    setSortBy('due_date')
+                    setSortDir('desc')
+                  } else if (value === 'priority') {
+                    setSortBy('priority')
+                    setSortDir('asc')
+                  } else if (value === 'status') {
+                    setSortBy('status')
+                    setSortDir('asc')
+                  }
+                }}
               >
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="asc">Más urgentes primero</SelectItem>
-                  <SelectItem value="desc">Más lejanas primero</SelectItem>
+                  <SelectItem value="due_asc">Fecha: más urgentes primero</SelectItem>
+                  <SelectItem value="due_desc">Fecha: más lejanas primero</SelectItem>
+                  <SelectItem value="priority">Prioridad: alta primero</SelectItem>
+                  <SelectItem value="status">Estado: todo → doing → done</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -551,7 +588,17 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                           </td>
                           <td className="px-3 py-2 text-gray-700">{formatDate(task.due_date)}</td>
                           <td className="px-3 py-2">
-                            <StatusBadge status={task.status} />
+                            <select
+                              className={`rounded-full px-2 py-1 text-xs font-medium border-0 ${STATUS_STYLES[task.status].className}`}
+                              value={task.status}
+                              onChange={(e) =>
+                                updateStatus(task, e.target.value as Task['status'])
+                              }
+                            >
+                              <option value="todo">To do</option>
+                              <option value="doing">Doing</option>
+                              <option value="done">Done</option>
+                            </select>
                           </td>
                           <td className="px-3 py-2 text-right">
                             <div className="flex justify-end gap-2">
@@ -633,17 +680,17 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                           <span className="text-xs text-gray-500">{formatDate(task.due_date)}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          {task.status !== 'done' && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="text-green-600 hover:text-green-700"
-                              onClick={() => markDone(task)}
-                              title="Marcar como hecha"
-                            >
-                              <CheckCircle2 className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <select
+                            className={`rounded-full px-2 py-1 text-xs font-medium border-0 ${STATUS_STYLES[task.status].className}`}
+                            value={task.status}
+                            onChange={(e) =>
+                              updateStatus(task, e.target.value as Task['status'])
+                            }
+                          >
+                            <option value="todo">To do</option>
+                            <option value="doing">Doing</option>
+                            <option value="done">Done</option>
+                          </select>
                           <Button
                             size="icon"
                             variant="ghost"
