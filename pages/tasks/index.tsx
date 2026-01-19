@@ -96,7 +96,7 @@ function PriorityBadge({ priority }: { priority: Task['priority'] }) {
     medium: { label: 'Medium', className: 'bg-yellow-100 text-yellow-800' },
     high: { label: 'High', className: 'bg-red-100 text-red-800' },
   }
-  const p = map[priority]
+  const p = map[priority] || map.medium
   return <Badge className={p.className}>{p.label}</Badge>
 }
 
