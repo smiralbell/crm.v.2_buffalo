@@ -142,6 +142,7 @@ model Invoice {
   status            String    @default("draft") // draft, sent, cancelled
   pdf_drive_file_id String?
   pdf_drive_url     String?   @db.Text
+  sent_to_drive     Boolean?  @default(false)
   deleted_at        DateTime?
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
