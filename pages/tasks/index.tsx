@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Layout } from '@/components/Layout'
+import Layout from '@/components/Layout'
 import { Plus, CheckCircle2, Edit, Filter } from 'lucide-react'
 
 type Task = {
