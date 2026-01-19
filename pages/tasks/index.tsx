@@ -111,6 +111,45 @@ function StatusBadge({ status }: { status: Task['status'] }) {
   return <Badge className={s.className}>{s.label}</Badge>
 }
 
+function TaskStatusSelect({
+  task,
+  onChange,
+}: {
+  task: Task
+  onChange: (newStatus: Task['status']) => void
+}) {
+  const current = STATUS_STYLES[task.status]
+  return (
+    <Select
+      value={task.status}
+      onValueChange={(value) => onChange(value as Task['status'])}
+    >
+      <SelectTrigger
+        className={`h-7 w-[110px] border-0 text-xs font-medium ${current.className}`}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="todo">
+          <span className={STATUS_STYLES.todo.className + ' rounded-full px-2 py-0.5'}>
+            {STATUS_STYLES.todo.label}
+          </span>
+        </SelectItem>
+        <SelectItem value="doing">
+          <span className={STATUS_STYLES.doing.className + ' rounded-full px-2 py-0.5'}>
+            {STATUS_STYLES.doing.label}
+          </span>
+        </SelectItem>
+        <SelectItem value="done">
+          <span className={STATUS_STYLES.done.className + ' rounded-full px-2 py-0.5'}>
+            {STATUS_STYLES.done.label}
+          </span>
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  )
+}
+
 export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
   const router = useRouter()
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
@@ -134,6 +173,7 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [confirmDeleteTask, setConfirmDeleteTask] = useState<Task | null>(null)
   const [newMemberName, setNewMemberName] = useState('')
   const [creatingMember, setCreatingMember] = useState(false)
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
@@ -327,13 +367,18 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
   }
 
   const deleteTask = async (task: Task) => {
-    const ok = window.confirm(`¿Eliminar la tarea "${task.title}"?`)
-    if (!ok) return
+    setConfirmDeleteTask(task)
+  }
+
+  const confirmDelete = async () => {
+    if (!confirmDeleteTask) return
+    const task = confirmDeleteTask
     const res = await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' })
     if (!res.ok) {
       alert('Error al eliminar la tarea')
       return
     }
+    setConfirmDeleteTask(null)
     await loadTasks()
   }
 
@@ -517,6 +562,59 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
           </CardContent>
         </Card>
 
+        {/* Modal bonito de confirmación de borrado */}
+        {confirmDeleteTask && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-1 rounded-full bg-red-100 p-2">
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      ¿Eliminar esta tarea?
+                    </h2>
+                    <p className="mt-1 text-sm text-gray-600">
+                      <span className="font-medium text-gray-900">
+                        {confirmDeleteTask.title}
+                      </span>
+                      {confirmDeleteTask.project && (
+                        <>
+                          {' '}
+                          · <span className="text-gray-500">{confirmDeleteTask.project}</span>
+                        </>
+                      )}
+                    </p>
+                    {confirmDeleteTask.description && (
+                      <p className="mt-2 text-xs text-gray-500 line-clamp-3">
+                        {confirmDeleteTask.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => setConfirmDeleteTask(null)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={confirmDelete}
+                  >
+                    Sí, eliminar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Lista de tareas */}
         <Card>
           <CardHeader>
@@ -588,17 +686,7 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                           </td>
                           <td className="px-3 py-2 text-gray-700">{formatDate(task.due_date)}</td>
                           <td className="px-3 py-2">
-                            <select
-                              className={`rounded-full px-2 py-1 text-xs font-medium border-0 ${STATUS_STYLES[task.status].className}`}
-                              value={task.status}
-                              onChange={(e) =>
-                                updateStatus(task, e.target.value as Task['status'])
-                              }
-                            >
-                              <option value="todo">To do</option>
-                              <option value="doing">Doing</option>
-                              <option value="done">Done</option>
-                            </select>
+                            <TaskStatusSelect task={task} onChange={(s) => updateStatus(task, s)} />
                           </td>
                           <td className="px-3 py-2 text-right">
                             <div className="flex justify-end gap-2">
@@ -680,17 +768,7 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                           <span className="text-xs text-gray-500">{formatDate(task.due_date)}</span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <select
-                            className={`rounded-full px-2 py-1 text-xs font-medium border-0 ${STATUS_STYLES[task.status].className}`}
-                            value={task.status}
-                            onChange={(e) =>
-                              updateStatus(task, e.target.value as Task['status'])
-                            }
-                          >
-                            <option value="todo">To do</option>
-                            <option value="doing">Doing</option>
-                            <option value="done">Done</option>
-                          </select>
+                          <TaskStatusSelect task={task} onChange={(s) => updateStatus(task, s)} />
                           <Button
                             size="icon"
                             variant="ghost"
