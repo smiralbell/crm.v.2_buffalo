@@ -38,7 +38,7 @@ function createPrismaClient(): PrismaClient {
 }
 
 // Obtener o crear el cliente Prisma
-function getPrismaClient(): PrismaClient {
+export function getPrismaClient(): PrismaClient {
   // Durante el build, si DATABASE_URL no está disponible, retornar un objeto mock
   if (!process.env.DATABASE_URL && process.env.NEXT_PHASE === 'phase-production-build') {
     return {} as PrismaClient
