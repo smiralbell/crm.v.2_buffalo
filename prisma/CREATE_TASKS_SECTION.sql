@@ -12,31 +12,29 @@ CREATE TABLE IF NOT EXISTS "public"."team_members" (
   "updated_at" TIMESTAMP NOT NULL DEFAULT now()
 );
 
--- Tabla de tareas
--- Regla: todas las tareas deben estar ligadas a un cliente (contact) y a un proyecto (texto)
-CREATE TABLE IF NOT EXISTS "public"."tasks" (
-  "id" SERIAL PRIMARY KEY,
+-- Ampliar tabla de tareas existente para nueva sección de Tareas
+-- (en @bases.md ya existe "public"."tasks" con columnas antiguas)
+ALTER TABLE "public"."tasks"
+  ADD COLUMN IF NOT EXISTS "client_id" INTEGER,
+  ADD COLUMN IF NOT EXISTS "assignee_id" INTEGER,
+  ADD COLUMN IF NOT EXISTS "title" TEXT,
+  ADD COLUMN IF NOT EXISTS "description" TEXT,
+  ADD COLUMN IF NOT EXISTS "project" TEXT,
+  ADD COLUMN IF NOT EXISTS "priority" TEXT,
+  ADD COLUMN IF NOT EXISTS "status" TEXT DEFAULT 'todo',
+  ADD COLUMN IF NOT EXISTS "due_date" DATE,
+  ADD COLUMN IF NOT EXISTS "completed_at" TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP DEFAULT now();
 
-  -- Relaciones
-  "client_id" INTEGER NOT NULL,
-  "assignee_id" INTEGER NOT NULL,
+-- Foreign keys (se asume que solo se ejecuta una vez)
+ALTER TABLE "public"."tasks"
+  ADD CONSTRAINT "tasks_client_id_fkey"
+    FOREIGN KEY ("client_id") REFERENCES "public"."contacts" ("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 
-  -- Datos de negocio
-  "title" TEXT NOT NULL,
-  "description" TEXT NULL,
-  "project" TEXT NOT NULL, -- Nombre del proyecto (texto libre pero consistente)
-  "priority" TEXT NOT NULL, -- low | medium | high
-  "status" TEXT NOT NULL DEFAULT 'todo', -- todo | doing | done
-  "due_date" DATE NULL,
-  "completed_at" TIMESTAMP NULL,
-
-  -- Metadatos
-  "created_at" TIMESTAMP NOT NULL DEFAULT now(),
-  "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
-
-  CONSTRAINT "tasks_client_id_fkey" FOREIGN KEY ("client_id") REFERENCES "public"."contacts" ("id") ON DELETE CASCADE ON UPDATE NO ACTION,
-  CONSTRAINT "tasks_assignee_id_fkey" FOREIGN KEY ("assignee_id") REFERENCES "public"."team_members" ("id") ON DELETE RESTRICT ON UPDATE NO ACTION
-);
+ALTER TABLE "public"."tasks"
+  ADD CONSTRAINT "tasks_assignee_id_fkey"
+    FOREIGN KEY ("assignee_id") REFERENCES "public"."team_members" ("id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 
 -- Índices para filtros rápidos
 CREATE INDEX IF NOT EXISTS "idx_tasks_client_id"

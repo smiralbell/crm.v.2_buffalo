@@ -6,11 +6,11 @@ import { query } from '@/lib/db'
 const updateTaskSchema = z.object({
   title: z.string().min(1, 'El título es obligatorio'),
   description: z.string().optional().nullable(),
-  assigneeId: z.number().int(),
-  clientId: z.number().int(),
-  project: z.string().min(1, 'El proyecto es obligatorio'),
-  priority: z.enum(['low', 'medium', 'high']),
-  status: z.enum(['todo', 'doing', 'done']),
+  assigneeId: z.number().int().optional().nullable(),
+  clientId: z.number().int().optional().nullable(),
+  project: z.string().optional().nullable(),
+  priority: z.enum(['low', 'medium', 'high']).optional(),
+  status: z.enum(['todo', 'doing', 'done']).optional(),
   dueDate: z.string().optional().nullable(),
 })
 
@@ -36,13 +36,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const data = updateTaskSchema.parse(req.body)
 
       const params = [
-        data.clientId,
-        data.assigneeId,
+        data.clientId ?? null,
+        data.assigneeId ?? null,
         data.title,
         data.description || null,
-        data.project,
-        data.priority,
-        data.status,
+        data.project || null,
+        data.priority || 'medium',
+        data.status || 'todo',
         data.dueDate ? data.dueDate : null,
         id,
       ]

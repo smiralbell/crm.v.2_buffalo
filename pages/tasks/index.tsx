@@ -202,9 +202,9 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
     setForm({
       title: task.title,
       description: task.description || '',
-      assigneeId: String(task.assignee_id),
-      clientId: String(task.client_id),
-      project: task.project,
+      assigneeId: task.assignee_id ? String(task.assignee_id) : '',
+      clientId: task.client_id ? String(task.client_id) : '',
+      project: task.project || '',
       priority: task.priority,
       dueDate: task.due_date ? task.due_date.slice(0, 10) : '',
     })
@@ -213,17 +213,17 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
 
   const handleSaveTask = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.title || !form.assigneeId || !form.clientId || !form.project) {
-      alert('Título, persona, cliente y proyecto son obligatorios')
+    if (!form.title) {
+      alert('El título es obligatorio')
       return
     }
 
     const payload = {
       title: form.title,
       description: form.description || null,
-      assigneeId: Number(form.assigneeId),
-      clientId: Number(form.clientId),
-      project: form.project,
+      assigneeId: form.assigneeId ? Number(form.assigneeId) : null,
+      clientId: form.clientId ? Number(form.clientId) : null,
+      project: form.project || null,
       priority: form.priority,
       status: editingTask ? editingTask.status : 'todo',
       dueDate: form.dueDate || null,
@@ -261,8 +261,10 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
     await loadTasks()
   }
 
-  const handleCreateMember = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleCreateMember = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault()
+    }
     if (!newMemberName.trim()) return
     setCreatingMember(true)
     try {
@@ -545,7 +547,7 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                         </option>
                       ))}
                     </select>
-                    <form onSubmit={handleCreateMember} className="mt-2 flex gap-2">
+                    <div className="mt-2 flex gap-2">
                       <Input
                         placeholder="Nueva persona (ej. Sergi)"
                         value={newMemberName}
@@ -553,15 +555,16 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                         className="h-8 text-xs"
                       />
                       <Button
-                        type="submit"
+                        type="button"
                         size="sm"
                         variant="outline"
                         disabled={creatingMember}
+                        onClick={() => handleCreateMember()}
                         className="h-8 text-xs"
                       >
                         Añadir
                       </Button>
-                    </form>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <Label>Cliente</Label>

@@ -34,6 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         `
         INSERT INTO team_members (name, color)
         VALUES ($1, $2)
+        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
         RETURNING id
         `,
         [data.name, data.color || null]
@@ -41,9 +42,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const newId = result.rows[0]?.id
       return res.status(201).json({ id: newId })
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors[0].message })
+      }
+      // Clave única duplicada (nombre ya existe)
+      if (error?.code === '23505') {
+        return res.status(409).json({ error: 'Ya existe una persona con ese nombre' })
       }
       console.error('[TeamMembers API] Error creating member:', error)
       return res.status(500).json({ error: 'Error al crear persona' })

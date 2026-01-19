@@ -6,11 +6,11 @@ import { query } from '@/lib/db'
 const createTaskSchema = z.object({
   title: z.string().min(1, 'El título es obligatorio'),
   description: z.string().optional().nullable(),
-  assigneeId: z.number().int(),
-  clientId: z.number().int(),
-  project: z.string().min(1, 'El proyecto es obligatorio'),
-  priority: z.enum(['low', 'medium', 'high']),
-  status: z.enum(['todo', 'doing', 'done']).default('todo'),
+  assigneeId: z.number().int().optional().nullable(),
+  clientId: z.number().int().optional().nullable(),
+  project: z.string().optional().nullable(),
+  priority: z.enum(['low', 'medium', 'high']).optional().default('medium'),
+  status: z.enum(['todo', 'doing', 'done']).optional().default('todo'),
   dueDate: z.string().optional().nullable(), // ISO date
 })
 
@@ -81,10 +81,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         status: string
         due_date: string | null
         completed_at: string | null
-        client_id: number
+        client_id: number | null
         client_name: string | null
-        assignee_id: number
-        assignee_name: string
+        assignee_id: number | null
+        assignee_name: string | null
       }>(
         `
         SELECT
@@ -101,8 +101,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           t.assignee_id,
           tm.name AS assignee_name
         FROM tasks t
-        JOIN contacts c ON c.id = t.client_id
-        JOIN team_members tm ON tm.id = t.assignee_id
+        LEFT JOIN contacts c ON c.id = t.client_id
+        LEFT JOIN team_members tm ON tm.id = t.assignee_id
         ${whereSql}
         ORDER BY
           (t.due_date IS NULL) ASC,
@@ -149,12 +149,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const data = createTaskSchema.parse(req.body)
 
       const params = [
-        data.clientId,
-        data.assigneeId,
+        data.clientId ?? null,
+        data.assigneeId ?? null,
         data.title,
         data.description || null,
-        data.project,
-        data.priority,
+        data.project || null,
+        data.priority || 'medium',
         data.status || 'todo',
         data.dueDate ? data.dueDate : null,
       ]
