@@ -1,8 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { createSession } from '@/lib/auth'
+import { createSession, type AuthUser } from '@/lib/auth'
 import { z } from 'zod'
 import { checkRateLimit, getClientIP } from '@/lib/rate-limit'
 import { handleApiError } from '@/lib/api-helpers'
+import { getPrismaClient } from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido').max(255),
@@ -31,28 +33,31 @@ export default async function handler(
 
     const { email, password } = loginSchema.parse(req.body)
 
-    // Obtener credenciales del admin desde variables de entorno
-    const adminEmail = process.env.CRM_ADMIN_EMAIL
-    const adminPassword = process.env.CRM_ADMIN_PASSWORD
+    const prisma = getPrismaClient()
 
-    if (!adminEmail || !adminPassword) {
-      // Error crítico de configuración - siempre loguear
-      console.error('[CRITICAL] CRM_ADMIN_EMAIL o CRM_ADMIN_PASSWORD no están configurados')
-      return res.status(500).json({ error: 'Configuración de servidor incorrecta' })
-    }
+    // Buscar usuario por email
+    const user = await prisma.user.findUnique({
+      where: { email },
+    })
 
-    // Verificar credenciales (usar timing-safe comparison)
-    // Nota: Para mayor seguridad, usar bcrypt para comparar contraseñas
-    const emailMatch = email === adminEmail
-    const passwordMatch = password === adminPassword
-    
-    if (!emailMatch || !passwordMatch) {
-      // No revelar cuál campo es incorrecto
+    if (!user) {
       return res.status(401).json({ error: 'Credenciales inválidas' })
     }
 
+    const passwordOk = await bcrypt.compare(password, user.password_hash)
+
+    if (!passwordOk) {
+      return res.status(401).json({ error: 'Credenciales inválidas' })
+    }
+
+    const authUser: AuthUser = {
+      id: user.id,
+      email: user.email,
+      role: user.role === 'admin' ? 'admin' : 'user',
+    }
+
     // Crear sesión
-    await createSession(email, res)
+    await createSession(authUser, res)
 
     return res.status(200).json({ success: true })
   } catch (error) {
