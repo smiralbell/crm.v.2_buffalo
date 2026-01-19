@@ -19,6 +19,7 @@ export default function Sidebar() {
     { href: '/invoices', label: 'Facturas', icon: FileText },
     { href: '/pipelines', label: 'Pipelines', icon: Workflow },
     { href: '/finances', label: 'Finanzas', icon: DollarSign },
+    { href: '/tasks', label: 'Tareas', icon: FileText },
   ]
 
   return (
