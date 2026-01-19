@@ -538,7 +538,6 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                       className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                       value={form.assigneeId}
                       onChange={(e) => setForm((f) => ({ ...f, assigneeId: e.target.value }))}
-                      required
                     >
                       <option value="">Selecciona persona</option>
                       {teamMembers.map((m) => (
@@ -572,7 +571,6 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                       className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                       value={form.clientId}
                       onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
-                      required
                     >
                       <option value="">Selecciona cliente</option>
                       {meta.clients.map((c) => (
@@ -590,7 +588,6 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
                       value={form.project}
                       onChange={(e) => setForm((f) => ({ ...f, project: e.target.value }))}
                       placeholder="Nombre del proyecto"
-                      required
                     />
                   </div>
                   <div className="space-y-1">
