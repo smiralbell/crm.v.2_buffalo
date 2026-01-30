@@ -190,7 +190,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       return {
         ...i,
         matched: !!linked,
-        linkedInvoice: linked ?? null,
+        linkedInvoice: linked ?? undefined,
       }
     })
 
