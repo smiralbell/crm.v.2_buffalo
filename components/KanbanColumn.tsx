@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, X, Edit2, MoreVertical, Search } from 'lucide-react'
+import { Plus, X, Edit2, MoreVertical, Search, Trash2, Palette } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -9,6 +9,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
   Dialog,
@@ -63,6 +66,7 @@ interface KanbanColumnProps {
   onCardClick?: (card: PipelineCard) => void
   onCardCreate?: (data: Omit<PipelineCard, 'id' | 'position' | 'created_at' | 'updated_at'> & { stage_color?: string }) => Promise<void>
   onCardUpdate?: (cardId: string, data: Partial<PipelineCard>) => Promise<void>
+  onCardDelete?: (cardId: string) => Promise<void>
   headerOnly?: boolean
 }
 
@@ -90,6 +94,7 @@ export default function KanbanColumn({
   onCardClick,
   onCardCreate,
   onCardUpdate,
+  onCardDelete,
   headerOnly = false,
 }: KanbanColumnProps) {
   const [isEditing, setIsEditing] = useState(false)
@@ -135,7 +140,7 @@ export default function KanbanColumn({
     return diffDays
   }
 
-  const columnValue = 0
+  const columnValue = cards.reduce((sum, card) => sum + (card.amount ? Number(card.amount) : 0), 0)
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-ES', {
       style: 'currency',
@@ -154,7 +159,7 @@ export default function KanbanColumn({
             <div className="flex items-center gap-2.5 flex-1 min-w-0">
               <div
                 className="w-1 h-5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: stage.color }}
+                style={{ backgroundColor: '#3B82F6' }}
               />
               <div className="flex-1 min-w-0">
                 {isEditing ? (
@@ -253,6 +258,20 @@ export default function KanbanColumn({
               const cardValue = card.amount ? Number(card.amount) : 0
               const cardTags = card.tags || []
 
+              const cardColor = card.stage_color || '#FFFFFF'
+              const isWhiteCard = cardColor === '#FFFFFF' || cardColor.toUpperCase() === '#FFFFFF'
+              const CARD_COLORS: { value: string; label: string }[] = [
+                { value: '#FFFFFF', label: 'Blanco' },
+                { value: '#3B82F6', label: 'Azul' },
+                { value: '#10B981', label: 'Verde' },
+                { value: '#F59E0B', label: 'Ámbar' },
+                { value: '#EF4444', label: 'Rojo' },
+                { value: '#8B5CF6', label: 'Violeta' },
+                { value: '#EC4899', label: 'Rosa' },
+                { value: '#06B6D4', label: 'Cian' },
+                { value: '#F97316', label: 'Naranja' },
+              ]
+
               return (
                 <div
                   key={card.id}
@@ -267,24 +286,72 @@ export default function KanbanColumn({
                     setShowCardModal(true)
                   }}
                   className={cn(
-                    'bg-white rounded-lg p-4 border border-gray-200',
+                    'rounded-lg p-4 border relative',
+                    isWhiteCard ? 'bg-white border-gray-200' : 'border-gray-200/50',
                     'cursor-grab active:cursor-grabbing',
-                    'hover:shadow-md hover:border-gray-300 hover:-translate-y-0.5 transition-all duration-200',
+                    'hover:shadow-md hover:-translate-y-0.5 transition-all duration-200',
                     'select-none',
                     isDragging && 'opacity-30 scale-95 rotate-1 z-50',
                     onCardClick && 'cursor-pointer'
                   )}
-                  style={{ 
-                    boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-                  }}
+                  style={isWhiteCard ? { boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' } : { backgroundColor: cardColor, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.1)' }}
                 >
+                  {/* Menú 3 puntos - arriba a la derecha */}
+                  <div className="absolute top-2 right-2 z-10" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className={cn(
+                            'h-7 w-7 flex items-center justify-center rounded transition-colors',
+                            isWhiteCard ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-100' : 'text-white/80 hover:text-white hover:bg-white/20'
+                          )}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Palette className="h-4 w-4 mr-2" />
+                            Poner color a la tarjeta
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            {CARD_COLORS.map(({ value, label }) => (
+                              <DropdownMenuItem
+                                key={value}
+                                onClick={() => onCardUpdate?.(card.id, { stage_color: value })}
+                              >
+                                <span
+                                  className="w-4 h-4 rounded border border-gray-300 mr-2 inline-block"
+                                  style={{ backgroundColor: value }}
+                                />
+                                {label}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                        {onCardDelete && (
+                          <DropdownMenuItem
+                            onClick={() => onCardDelete(card.id)}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Eliminar tarjeta
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
                   {/* Nombre principal */}
-                  <div className="font-bold text-[15px] text-gray-900 mb-1 leading-tight">
+                  <div className={cn('font-bold text-[15px] mb-1 leading-tight pr-8', isWhiteCard ? 'text-gray-900' : 'text-white drop-shadow-sm')}>
                     {entityName}
                   </div>
 
                   {/* Sub-nombre */}
-                  <div className="text-xs text-gray-500 mb-2 leading-tight">
+                  <div className={cn('text-xs mb-2 leading-tight', isWhiteCard ? 'text-gray-500' : 'text-white/80')}>
                     {entityName}
                   </div>
 
@@ -294,13 +361,19 @@ export default function KanbanColumn({
                       {cardTags.slice(0, 3).map((tag, tagIndex) => (
                         <span
                           key={tagIndex}
-                          className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700"
+                          className={cn(
+                            'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium',
+                            isWhiteCard ? 'bg-blue-100 text-blue-700' : 'bg-white/25 text-white'
+                          )}
                         >
                           {tag}
                         </span>
                       ))}
                       {cardTags.length > 3 && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+                        <span className={cn(
+                          'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium',
+                          isWhiteCard ? 'bg-gray-100 text-gray-600' : 'bg-white/25 text-white'
+                        )}>
                           +{cardTags.length - 3}
                         </span>
                       )}
@@ -308,22 +381,23 @@ export default function KanbanColumn({
                   )}
 
                   {/* Footer con badge, valor y logo */}
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <div className={cn('flex items-center justify-between pt-3', isWhiteCard ? 'border-t border-gray-100' : 'border-t border-white/30')}>
                     <span 
-                      className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold leading-none"
-                      style={{ 
-                        backgroundColor: '#FEE2E2',
-                        color: '#DC2626'
-                      }}
+                      className={cn(
+                        'inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold leading-none',
+                        isWhiteCard ? 'bg-red-100 text-red-700' : 'bg-white/25 text-white'
+                      )}
                     >
                       {daysAgo}d
                     </span>
-                    <span className="text-sm font-semibold text-gray-900">
+                    <span className={cn('text-sm font-semibold', isWhiteCard ? 'text-gray-900' : 'text-white')}>
                       {formatCurrency(card.amount ? Number(card.amount) : 0)}
                     </span>
                     <div 
-                      className="flex items-center justify-center w-5 h-5 text-white rounded text-[10px] font-bold leading-none"
-                      style={{ backgroundColor: '#10B981' }}
+                      className={cn(
+                        'flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold leading-none',
+                        isWhiteCard ? 'bg-emerald-500 text-white' : 'bg-white/30 text-white'
+                      )}
                     >
                       {cardTags.length > 0 ? cardTags.length : '0'}
                     </div>

@@ -143,11 +143,13 @@ model Invoice {
   pdf_drive_file_id String?
   pdf_drive_url     String?   @db.Text
   sent_to_drive     Boolean?  @default(false)
+  bank_transaction_id String?  @db.Uuid // Movimiento bancario (cobro) vinculado a esta factura
   deleted_at        DateTime?
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
 
   @@index([invoice_number])
+  @@index([bank_transaction_id])
   @@index([status])
   @@index([deleted_at])
   @@index([issue_date])

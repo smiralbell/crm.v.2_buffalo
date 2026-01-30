@@ -1,15 +1,54 @@
 import { useState } from 'react'
 import { useRouter } from 'next/router'
+import { GetServerSideProps } from 'next'
+import { requireAuth } from '@/lib/auth'
+import { query } from '@/lib/db'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
-export default function NewExpense() {
+interface NewExpenseProps {
+  concepts: string[]
+}
+
+export const getServerSideProps: GetServerSideProps<NewExpenseProps> = async (context) => {
+  try {
+    await requireAuth(context)
+  } catch {
+    return {
+      redirect: {
+        destination: '/login',
+        permanent: false,
+      },
+    }
+  }
+
+  const result = await query<{ description: string | null }>(
+    `SELECT DISTINCT description
+       FROM bank_transactions
+       WHERE amount < 0
+         AND description IS NOT NULL
+         AND description <> ''
+       ORDER BY description ASC
+       LIMIT 500`
+  )
+
+  const concepts = result.rows
+    .map((row) => row.description || '')
+    .filter((d) => d && d.trim().length > 0)
+
+  return {
+    props: {
+      concepts,
+    },
+  }
+}
+
+export default function NewExpense({ concepts }: NewExpenseProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -18,11 +57,15 @@ export default function NewExpense() {
     date: new Date().toISOString().split('T')[0],
     base_amount: '',
     iva_percent: '21',
-    person_name: '',
-    project: '',
-    client_name: '',
-    notes: '',
   })
+  const [file, setFile] = useState<File | null>(null)
+  const [showConceptSuggestions, setShowConceptSuggestions] = useState(false)
+
+  const filteredConcepts = formData.name
+    ? concepts
+        .filter((c) => c.toLowerCase().includes(formData.name.toLowerCase()))
+        .slice(0, 10)
+    : concepts.slice(0, 10)
 
   const calculateTotal = () => {
     const base = parseFloat(formData.base_amount) || 0
@@ -36,25 +79,57 @@ export default function NewExpense() {
     setError('')
     setLoading(true)
 
+    if (!file) {
+      setError('Debes adjuntar la factura del gasto (archivo).')
+      setLoading(false)
+      return
+    }
+
     const baseAmount = parseFloat(formData.base_amount) || 0
     const ivaPercent = parseFloat(formData.iva_percent) || 0
     const ivaAmount = baseAmount * (ivaPercent / 100)
     const totalAmount = baseAmount + ivaAmount
 
     try {
+      // 1) Enviar la factura al webhook externo
+      const uploadData = new FormData()
+      uploadData.append('file', file)
+      uploadData.append('concept', formData.name)
+      uploadData.append('date', formData.date)
+      uploadData.append('base_amount', String(baseAmount))
+      uploadData.append('iva_amount', String(ivaAmount))
+      uploadData.append('total_amount', String(totalAmount))
+
+      const uploadRes = await fetch(
+        'https://n8n.agenciabuffalo.es/webhook/c102607d-57a2-43fe-a8c1-55f2e24fc5c0',
+        {
+          method: 'POST',
+          body: uploadData,
+        }
+      )
+
+      if (!uploadRes.ok) {
+        setError('No se ha podido enviar la factura al sistema externo.')
+        setLoading(false)
+        return
+      }
+
+      // 2) Registrar el gasto manual en nuestra BD
       const res = await fetch('/api/finances/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: formData.name,
-          date: formData.date,
+          date_start: formData.date,
+          date_end: formData.date,
           base_amount: baseAmount,
           iva_amount: ivaAmount,
           total_amount: totalAmount,
-          person_name: formData.person_name || null,
-          project: formData.project || null,
-          client_name: formData.client_name || null,
-          notes: formData.notes || null,
+          tags: [],
+          person_name: null,
+          project: null,
+          client_name: null,
+          notes: null,
         }),
       })
 
@@ -75,140 +150,144 @@ export default function NewExpense() {
 
   return (
     <Layout>
-      <div className="space-y-6 max-w-2xl">
-        <div className="flex items-center gap-4">
-          <Link href="/finances/expenses">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Nuevo Gasto Variable</h1>
-            <p className="text-sm text-gray-500 mt-1">Gasto puntual con fecha específica (freelancers, proveedores, etc.)</p>
+      <div className="min-h-[calc(100vh-80px)] flex flex-col items-center pt-8">
+        <div className="w-full max-w-xl space-y-6">
+          <div className="flex items-center gap-4">
+            <Link href="/finances/expenses">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">Colgar factura de gasto</h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Registra un gasto puntual con concepto claro y fecha específica.
+              </p>
+            </div>
           </div>
-        </div>
 
-        <Card className="border border-gray-200 shadow-sm">
-          <CardHeader>
-            <CardTitle>Datos del Gasto</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nombre *</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                    placeholder="Ej: Desarrollo web, Diseño..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="date">Fecha *</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="base_amount">Base (€) *</Label>
-                  <Input
-                    id="base_amount"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formData.base_amount}
-                    onChange={(e) => setFormData({ ...formData, base_amount: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="iva_percent">IVA %</Label>
-                  <Input
-                    id="iva_percent"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    value={formData.iva_percent}
-                    onChange={(e) => setFormData({ ...formData, iva_percent: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Total</Label>
-                  <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm font-medium">
-                    €{calculateTotal().toFixed(2)}
+          <Card className="border border-gray-200 shadow-sm">
+            <CardHeader>
+              <CardTitle>Datos del gasto</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Concepto *</Label>
+                    <div className="relative">
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          setFormData({ ...formData, name: value })
+                          setShowConceptSuggestions(true)
+                        }}
+                        onFocus={() => setShowConceptSuggestions(true)}
+                        required
+                        placeholder="Ej: SUSCRIPCIÓN SOFTWARE, ALQUILER..."
+                      />
+                      {showConceptSuggestions && filteredConcepts.length > 0 && (
+                        <div className="absolute z-20 mt-1 w-full max-h-60 overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                          {filteredConcepts.map((concept) => (
+                            <button
+                              type="button"
+                              key={concept}
+                              className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                setFormData({ ...formData, name: concept })
+                                setShowConceptSuggestions(false)
+                              }}
+                            >
+                              {concept}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="date">Fecha *</Label>
+                    <Input
+                      id="date"
+                      type="date"
+                      value={formData.date}
+                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                      required
+                    />
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="person_name">Persona/Proveedor</Label>
-                  <Input
-                    id="person_name"
-                    value={formData.person_name}
-                    onChange={(e) => setFormData({ ...formData, person_name: e.target.value })}
-                    placeholder="Nombre del freelancer o proveedor"
-                  />
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="base_amount">Base (€) *</Label>
+                    <Input
+                      id="base_amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.base_amount}
+                      onChange={(e) => setFormData({ ...formData, base_amount: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="iva_percent">IVA %</Label>
+                    <Input
+                      id="iva_percent"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={formData.iva_percent}
+                      onChange={(e) => setFormData({ ...formData, iva_percent: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Total</Label>
+                    <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm font-medium">
+                      €{calculateTotal().toFixed(2)}
+                    </div>
+                  </div>
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="client_name">Cliente</Label>
+                  <Label htmlFor="invoice_file">Factura adjunta (archivo)</Label>
                   <Input
-                    id="client_name"
-                    value={formData.client_name}
-                    onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
-                    placeholder="Cliente asociado (opcional)"
+                    id="invoice_file"
+                    type="file"
+                    accept="application/pdf,image/*"
+                    onChange={(e) => {
+                      const selected = e.target.files?.[0] || null
+                      setFile(selected)
+                    }}
                   />
+                  <p className="text-xs text-gray-500">
+                    Sube el PDF o imagen de la factura de este gasto. Se enviará automáticamente al
+                    sistema externo.
+                  </p>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="project">Proyecto</Label>
-                <Input
-                  id="project"
-                  value={formData.project}
-                  onChange={(e) => setFormData({ ...formData, project: e.target.value })}
-                  placeholder="Proyecto asociado (opcional)"
-                />
-              </div>
+                {error && (
+                  <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">{error}</div>
+                )}
 
-              <div className="space-y-2">
-                <Label htmlFor="notes">Notas</Label>
-                <Textarea
-                  id="notes"
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3}
-                  placeholder="Notas adicionales..."
-                />
-              </div>
-
-              {error && (
-                <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">{error}</div>
-              )}
-
-              <div className="flex justify-end gap-3">
-                <Link href="/finances/expenses">
-                  <Button type="button" variant="outline" disabled={loading}>
-                    Cancelar
+                <div className="flex justify-end gap-3">
+                  <Link href="/finances/expenses">
+                    <Button type="button" variant="outline" disabled={loading}>
+                      Cancelar
+                    </Button>
+                  </Link>
+                  <Button type="submit" disabled={loading}>
+                    {loading ? 'Creando...' : 'Crear Gasto'}
                   </Button>
-                </Link>
-                <Button type="submit" disabled={loading}>
-                  {loading ? 'Creando...' : 'Crear Gasto'}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </Layout>
   )

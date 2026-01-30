@@ -93,7 +93,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           entity_id: card.entity_id,
           entity_type: card.entity_type as 'client' | 'contact',
           stage: card.stage,
-          stage_color: card.stage_color || '#3B82F6',
+          stage_color: card.stage_color || '#FFFFFF',
           position: card.position,
           tags: card.tags,
           capture_date: card.capture_date?.toISOString() || null,
@@ -197,7 +197,7 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
           entity_id: String(data.entity_id).trim(),
           entity_type: data.entity_type,
           stage: data.stage,
-          stage_color: data.stage_color || '#3B82F6',
+          stage_color: data.stage_color || '#FFFFFF',
           tags: data.tags || [],
           capture_date: data.capture_date || null,
           amount: data.amount || null,
@@ -254,6 +254,31 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
       }
     } catch (error) {
       console.error('Error updating card:', error)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCardDelete = async (cardId: string) => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/pipelines/${pipeline.id}/cards/${cardId}`, {
+        method: 'DELETE',
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }))
+        throw new Error(errorData.error || 'Error al eliminar tarjeta')
+      }
+
+      const cardsRes = await fetch(`/api/pipelines/${pipeline.id}/cards`)
+      if (cardsRes.ok) {
+        const data = await cardsRes.json()
+        setCards(data.cards || [])
+      }
+    } catch (error) {
+      console.error('Error deleting card:', error)
       throw error
     } finally {
       setLoading(false)
@@ -494,6 +519,7 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
         onCardMove={handleCardMove}
         onCardCreate={handleCardCreate}
         onCardUpdate={handleCardUpdate}
+        onCardDelete={handleCardDelete}
         onStageEdit={handleStageEdit}
         onStageDelete={handleStageDelete}
         onStageCreate={handleStageCreate}

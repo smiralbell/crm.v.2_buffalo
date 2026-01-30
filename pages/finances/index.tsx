@@ -35,7 +35,9 @@ interface DashboardProps {
     expenses: number
     profit: number
     estimatedCorporateTax: number
-    ebitda: number
+    ivaToPay: number
+    netProfit: number
+    netProfitAfterCorporateTax: number
   }
 }
 
@@ -55,7 +57,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           expenses: 0,
           profit: 0,
           estimatedCorporateTax: 0,
-          ebitda: 0,
+          ivaToPay: 0,
+          netProfit: 0,
+          netProfitAfterCorporateTax: 0,
         },
       },
     }
@@ -91,6 +95,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     }
 
     // Calcular desde bank_transactions (datos reales) con filtro de fechas
+    const startStr = format(startDate, 'yyyy-MM-dd')
+    const endStr = format(endDate, 'yyyy-MM-dd')
+
     // Dinero actual en cuenta: saldo del último movimiento dentro del período (más reciente)
     const balanceResult = await query<{ balance: number }>(
       `SELECT balance
@@ -99,7 +106,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
          AND date >= $1 AND date <= $2
        ORDER BY date DESC, created_at DESC
        LIMIT 1`,
-      [startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]]
+      [startStr, endStr]
     )
     const currentBalance = balanceResult.rows[0]?.balance 
       ? Number(balanceResult.rows[0].balance) 
@@ -110,7 +117,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       `SELECT COALESCE(SUM(amount), 0) as total
        FROM bank_transactions
        WHERE date >= $1 AND date <= $2 AND amount > 0`,
-      [startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]]
+      [startStr, endStr]
     )
     const income = Number(incomeResult.rows[0]?.total || 0)
 
@@ -119,18 +126,64 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       `SELECT COALESCE(ABS(SUM(amount)), 0) as total
        FROM bank_transactions
        WHERE date >= $1 AND date <= $2 AND amount < 0`,
-      [startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]]
+      [startStr, endStr]
     )
     const expenses = Number(expensesResult.rows[0]?.total || 0)
 
     // Beneficio del período: ingresos - gastos
     const profit = income - expenses
 
-    // Impuesto de sociedades estimado (15% del beneficio)
-    const estimatedCorporateTax = (profit * 15) / 100
+    // IVA de ingresos (facturas emitidas) en el período
+    const incomesIvaAgg = await prisma.financialIncome.aggregate({
+      _sum: {
+        iva_amount: true,
+      },
+      where: {
+        deleted_at: null,
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+        // Consideramos solo facturas reales (no estimadas)
+        status: {
+          in: ['pending', 'paid'],
+        },
+      },
+    })
+    const incomesIva = Number(incomesIvaAgg._sum.iva_amount || 0)
 
-    // EBITDA = Beneficio + Impuestos (simplificado)
-    const ebitda = profit + estimatedCorporateTax
+    // IVA de gastos en el período
+    const expensesIvaAgg = await prisma.expense.aggregate({
+      _sum: {
+        iva_amount: true,
+      },
+      where: {
+        deleted_at: null,
+        OR: [
+          { date_start: { gte: startDate, lte: endDate } },
+          { date_end: { gte: startDate, lte: endDate } },
+          {
+            AND: [
+              { date_start: { lte: startDate } },
+              { date_end: { gte: endDate } },
+            ],
+          },
+        ],
+      },
+    })
+    const expensesIva = Number(expensesIvaAgg._sum.iva_amount || 0)
+
+    // IVA a deber: IVA de ingresos - IVA de gastos
+    const ivaToPay = incomesIva - expensesIva
+
+    // Beneficio neto: beneficio - IVA a deber
+    const netProfit = profit - ivaToPay
+
+    // Impuesto de sociedades: 15% del beneficio neto (después del IVA)
+    const estimatedCorporateTax = (netProfit * 15) / 100
+
+    // Beneficio neto después de impuesto de sociedades
+    const netProfitAfterCorporateTax = netProfit - estimatedCorporateTax
 
     return {
       props: {
@@ -144,7 +197,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           expenses,
           profit,
           estimatedCorporateTax,
-          ebitda,
+          ivaToPay,
+          netProfit,
+          netProfitAfterCorporateTax,
         },
       },
     }
@@ -165,7 +220,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           expenses: 0,
           profit: 0,
           estimatedCorporateTax: 0,
-          ebitda: 0,
+          ivaToPay: 0,
+          netProfit: 0,
+          netProfitAfterCorporateTax: 0,
         },
       },
     }
@@ -328,8 +385,8 @@ export default function FinancesDashboard({ dateRange: initialDateRange, stats }
           <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={dateRange} />
         </div>
 
-        {/* Stats Cards - Estilo minimalista */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        {/* Stats Cards - Fila 1: 4 tarjetas */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="pt-6">
               <p className="text-sm font-medium text-gray-500 mb-2">Dinero Actual en Cuenta</p>
@@ -369,6 +426,37 @@ export default function FinancesDashboard({ dateRange: initialDateRange, stats }
               <p className="text-xs text-gray-400">Ingresos - Gastos</p>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Stats Cards - Fila 2: 4 tarjetas (IVA, beneficio neto, Imp. Soc., beneficio después imp.) */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <CardContent className="pt-6">
+              <p className="text-sm font-medium text-gray-500 mb-2">IVA a deber</p>
+              <div
+                className={`text-2xl font-semibold mb-1 ${
+                  stats.ivaToPay >= 0 ? 'text-gray-900' : 'text-emerald-600'
+                }`}
+              >
+                {formatCurrency(stats.ivaToPay)}
+              </div>
+              <p className="text-xs text-gray-400">IVA ingresos - IVA gastos</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+            <CardContent className="pt-6">
+              <p className="text-sm font-medium text-gray-500 mb-2">Beneficio neto</p>
+              <div
+                className={`text-2xl font-semibold mb-1 ${
+                  stats.netProfit >= 0 ? 'text-gray-900' : 'text-red-600'
+                }`}
+              >
+                {formatCurrency(stats.netProfit)}
+              </div>
+              <p className="text-xs text-gray-400">Beneficio - IVA a deber</p>
+            </CardContent>
+          </Card>
 
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="pt-6">
@@ -376,20 +464,23 @@ export default function FinancesDashboard({ dateRange: initialDateRange, stats }
               <div className="text-2xl font-semibold text-gray-900 mb-1">
                 {formatCurrency(stats.estimatedCorporateTax)}
               </div>
-              <p className="text-xs text-gray-400">15% del beneficio</p>
+              <p className="text-xs text-gray-400">15% del beneficio neto</p>
             </CardContent>
           </Card>
-        </div>
 
-        {/* EBITDA Card */}
-        <div className="grid gap-4 md:grid-cols-1">
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">EBITDA</p>
-              <div className="text-2xl font-semibold text-gray-900 mb-1">
-                {formatCurrency(stats.ebitda)}
+              <p className="text-sm font-medium text-gray-500 mb-2">
+                Beneficio neto después de Imp. Sociedades
+              </p>
+              <div
+                className={`text-2xl font-semibold mb-1 ${
+                  stats.netProfitAfterCorporateTax >= 0 ? 'text-gray-900' : 'text-red-600'
+                }`}
+              >
+                {formatCurrency(stats.netProfitAfterCorporateTax)}
               </div>
-              <p className="text-xs text-gray-400">Beneficio + Impuestos</p>
+              <p className="text-xs text-gray-400">Beneficio neto - Imp. sociedades</p>
             </CardContent>
           </Card>
         </div>

@@ -90,3 +90,7 @@ El endpoint de actualización de contactos solo actualiza los campos que realmen
 - ⚠️ Advertencias de collation son normales (no críticas)
 - 💡 Opcional: Ejecutar `ALTER DATABASE ... REFRESH COLLATION VERSION` para eliminar advertencias
 
+
+
+
+

@@ -28,6 +28,7 @@ interface KanbanBoardProps {
   onCardMove: (cardId: string, newStage: string, newPosition: number, newColor?: string) => Promise<void>
   onCardCreate: (data: Omit<PipelineCard, 'id' | 'created_at' | 'updated_at' | 'position'>) => Promise<void>
   onCardUpdate?: (cardId: string, data: Partial<PipelineCard>) => Promise<void>
+  onCardDelete?: (cardId: string) => Promise<void>
   onStageEdit: (oldStage: string, newStage: string, newColor: string) => Promise<void>
   onStageDelete: (stage: string) => Promise<void>
   onStageCreate: (stageName: string, color: string) => Promise<void>
@@ -48,6 +49,7 @@ export default function KanbanBoard({
   onCardMove,
   onCardCreate,
   onCardUpdate,
+  onCardDelete,
   onStageEdit,
   onStageDelete,
   onStageCreate,
@@ -386,6 +388,7 @@ export default function KanbanBoard({
                     }}
                     onCardCreate={onCardCreate}
                     onCardUpdate={onCardUpdate}
+                    onCardDelete={onCardDelete}
                     onAddCardCancel={() => {
                       setShowAddCard(null)
                       setNewCardEntityIdState('')
@@ -511,6 +514,7 @@ export default function KanbanBoard({
                     onTagRemove={onTagRemove}
                     onCardCreate={onCardCreate}
                     onCardUpdate={onCardUpdate}
+                    onCardDelete={onCardDelete}
                     headerOnly={false}
                   />
                 </div>

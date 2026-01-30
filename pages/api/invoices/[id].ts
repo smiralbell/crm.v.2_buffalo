@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { query } from '@/lib/db'
 import { z } from 'zod'
 
 const invoiceUpdateSchema = z.object({
@@ -25,6 +26,7 @@ const invoiceUpdateSchema = z.object({
   iva: z.number().min(0).optional(),
   total: z.number().positive().optional(),
   status: z.enum(['draft', 'sent', 'cancelled']).optional(),
+  bank_transaction_id: z.string().uuid().nullable().optional(),
 })
 
 export default async function handler(
@@ -86,10 +88,31 @@ export default async function handler(
       if (data.total !== undefined) updateData.total = data.total
       if (data.status !== undefined) updateData.status = data.status
 
-      const updated = await prisma.invoice.update({
-        where: { id },
-        data: updateData,
-      })
+      if (data.bank_transaction_id !== undefined) {
+        if (data.bank_transaction_id) {
+          await query(
+            `UPDATE invoices SET bank_transaction_id = NULL WHERE bank_transaction_id = $1 AND id != $2`,
+            [data.bank_transaction_id, id]
+          )
+        }
+        await query(
+          `UPDATE invoices SET bank_transaction_id = $1, updated_at = NOW() WHERE id = $2`,
+          [data.bank_transaction_id, id]
+        )
+      }
+
+      const updated = Object.keys(updateData).length > 0
+        ? await prisma.invoice.update({
+            where: { id },
+            data: updateData,
+          })
+        : await prisma.invoice.findUnique({
+            where: { id, deleted_at: null },
+          })
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Factura no encontrada' })
+      }
 
       return res.status(200).json({
         ...updated,

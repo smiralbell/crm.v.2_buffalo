@@ -22,13 +22,19 @@ export default async function handler(
     const startDate = req.query.start_date as string
     const endDate = req.query.end_date as string
 
-    // Construir query con filtro de fechas si está presente
+    // Construir query con filtro de fechas si está presente (sin fecha mínima)
     let dateFilter = ''
     const queryParams: any[] = []
-    
+
     if (startDate && endDate) {
       dateFilter = 'WHERE bt.date >= $1 AND bt.date <= $2'
       queryParams.push(startDate, endDate)
+    } else if (startDate) {
+      dateFilter = 'WHERE bt.date >= $1'
+      queryParams.push(startDate)
+    } else if (endDate) {
+      dateFilter = 'WHERE bt.date <= $1'
+      queryParams.push(endDate)
     }
 
     // Obtener transacciones más recientes de todas las cuentas
@@ -60,10 +66,7 @@ export default async function handler(
     )
 
     // Obtener el total de transacciones para saber si hay más
-    const countQuery = dateFilter 
-      ? `SELECT COUNT(*) as count FROM bank_transactions bt ${dateFilter}`
-      : `SELECT COUNT(*) as count FROM bank_transactions`
-    
+    const countQuery = `SELECT COUNT(*) as count FROM bank_transactions bt ${dateFilter}`
     const countResult = await query<{ count: string }>(countQuery, queryParams)
     const total = parseInt(countResult.rows[0].count)
 
