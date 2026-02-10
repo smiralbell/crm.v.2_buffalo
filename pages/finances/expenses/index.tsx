@@ -408,7 +408,8 @@ export default function ExpensesPage({
   // Valores por defecto si initialDateRange no está definido
   const now = new Date()
   const defaultRange: DateRangePickerResult = {
-    start: startOfMonth(now),
+    // Desde el 1 de enero del año actual hasta fin de mes actual
+    start: startOfYear(now),
     end: endOfMonth(now),
   }
   

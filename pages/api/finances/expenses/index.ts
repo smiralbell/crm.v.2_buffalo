@@ -70,6 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const data = createExpenseSchema.parse(req.body)
 
       const expense = await prisma.expense.create({
+        // Cast a any para evitar desfase temporal de tipos si aún no se ha regenerado Prisma
         data: {
           name: data.name,
           date_start: new Date(data.date_start),
@@ -83,7 +84,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           project: data.project,
           client_name: data.client_name,
           notes: data.notes,
-        },
+        } as any,
       })
 
       return res.status(201).json({
