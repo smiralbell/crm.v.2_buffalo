@@ -239,7 +239,8 @@ model Expense {
   date_end    DateTime @db.Date // Fecha fin del rango
   base_amount Decimal  @db.Decimal(10, 2) // Base sin IVA
   iva_amount  Decimal  @default(0) @db.Decimal(10, 2) // IVA
-  total_amount Decimal @db.Decimal(10, 2) // Total con IVA
+  irpf_amount Decimal  @default(0) @db.Decimal(10, 2) // IRPF (retención)
+  total_amount Decimal @db.Decimal(10, 2) // Total del gasto (puede incluir IRPF)
   tags        String[] // Array de etiquetas
   person_name String?  // Nombre de la persona/proveedor
   project     String?  // Proyecto asociado (opcional)

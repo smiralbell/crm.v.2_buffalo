@@ -57,6 +57,7 @@ interface ExpensesPageProps {
     end: string | null
   }
   totalVat: number
+  totalIrpf: number
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -330,6 +331,11 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       return sum + ivaNum
     }, 0)
 
+    const totalIrpf = manualExpenses.reduce((sum, m) => {
+      const irpf = (m as any).irpf_amount !== undefined ? Number((m as any).irpf_amount) || 0 : 0
+      return sum + irpf
+    }, 0)
+
     // Alertas: gastos bancarios que aún no tienen gasto manual asociado
     const unmatchedExpenses = normalizedExpenses.filter((expense) => !expense.matched)
 
@@ -340,6 +346,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         invoices,
         unmatchedExpenses,
         totalVat,
+        totalIrpf,
         dateRange: {
           start: startDate.toISOString(),
           end: endDate.toISOString(),
@@ -359,6 +366,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         invoices: [],
         unmatchedExpenses: [],
         totalVat: 0,
+        totalIrpf: 0,
         dateRange: {
           start: startOfMonth(now).toISOString(),
           end: endOfMonth(now).toISOString(),
@@ -375,6 +383,7 @@ export default function ExpensesPage({
   unmatchedExpenses,
   dateRange: initialDateRange,
   totalVat,
+  totalIrpf,
 }: ExpensesPageProps) {
   const router = useRouter()
   const [displayExpenses, setDisplayExpenses] = useState(expenses)
@@ -387,6 +396,7 @@ export default function ExpensesPage({
   const [uploadDate, setUploadDate] = useState('')
   const [uploadTotalAmount, setUploadTotalAmount] = useState('')
   const [uploadIvaPercent, setUploadIvaPercent] = useState('21')
+  const [uploadIrpfAmount, setUploadIrpfAmount] = useState('0')
   const [amountIncludesVat, setAmountIncludesVat] = useState(true)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
 
@@ -440,6 +450,7 @@ export default function ExpensesPage({
     setUploadDate(expense.date.split('T')[0])
     setUploadTotalAmount(expense.amount.toFixed(2))
     setUploadIvaPercent('21')
+    setUploadIrpfAmount('0')
     setAmountIncludesVat(true)
     setUploadFile(null)
     setUploadError(null)
@@ -459,6 +470,7 @@ export default function ExpensesPage({
 
     const rawAmount = parseFloat(uploadTotalAmount) || 0
     const ivaPercent = parseFloat(uploadIvaPercent) || 0
+    const irpfAmount = parseFloat(uploadIrpfAmount) || 0
 
     // El importe introducido SIEMPRE es el gasto total real
     // Solo descomponemos en base + IVA cuando "importe con IVA" está activo
@@ -486,6 +498,7 @@ export default function ExpensesPage({
           date_end: uploadDate,
           base_amount: baseAmount,
           iva_amount: ivaAmount,
+          irpf_amount: irpfAmount,
           total_amount: totalAmount,
           tags: [],
           person_name: null,
@@ -589,7 +602,7 @@ export default function ExpensesPage({
         </div>
 
         {/* Resumen de totales - Estilo profesional */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <Card className="border border-gray-200 shadow-sm">
             <CardContent className="pt-6">
               <p className="text-sm font-medium text-gray-500 mb-2">Total Gastos del Período</p>
@@ -622,6 +635,13 @@ export default function ExpensesPage({
               <p className="text-sm font-medium text-gray-500 mb-2">IVA Acumulado (Gastos)</p>
               <p className="text-2xl font-semibold text-gray-900">{formatCurrency(totalVat)}</p>
               <p className="text-xs text-gray-400 mt-1">Suma de IVA de todas las facturas de gasto</p>
+            </CardContent>
+          </Card>
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="pt-6">
+              <p className="text-sm font-medium text-gray-500 mb-2">IRPF Acumulado (Gastos)</p>
+              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(totalIrpf)}</p>
+              <p className="text-xs text-gray-400 mt-1">Suma de IRPF de todas las facturas de gasto</p>
             </CardContent>
           </Card>
         </div>
@@ -783,7 +803,7 @@ export default function ExpensesPage({
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {/* Base a la izquierda */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">Base (€)</label>
@@ -798,7 +818,7 @@ export default function ExpensesPage({
                     })()}
                   </div>
                 </div>
-                {/* IVA en el centro */}
+                {/* IVA % */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700" htmlFor="upload_iva_percent">
                     IVA %
@@ -814,6 +834,22 @@ export default function ExpensesPage({
                     onChange={(e) => setUploadIvaPercent(e.target.value)}
                     disabled={!amountIncludesVat}
                   />
+                </div>
+                {/* IRPF */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700" htmlFor="upload_irpf_amount">
+                    IRPF (€)
+                  </label>
+                  <input
+                    id="upload_irpf_amount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    value={uploadIrpfAmount}
+                    onChange={(e) => setUploadIrpfAmount(e.target.value)}
+                  />
+                  <p className="text-xs text-gray-400">Por defecto 0</p>
                 </div>
                 {/* Total a la derecha */}
                 <div className="space-y-2">

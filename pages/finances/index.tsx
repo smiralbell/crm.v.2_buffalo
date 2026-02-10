@@ -48,7 +48,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         dateRange: {
-          start: startOfMonth(now).toISOString(),
+          // Por defecto: desde el 1 de enero hasta fin de mes actual
+          start: startOfYear(now).toISOString(),
           end: endOfMonth(now).toISOString(),
         },
         stats: {
@@ -88,9 +89,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       startDate = startOfDay(new Date(startParam))
       endDate = endOfDay(new Date(endParam))
     } else {
-      // Por defecto: mes actual
+      // Por defecto: desde el 1 de enero hasta fin de mes actual
       const now = new Date()
-      startDate = startOfMonth(now)
+      startDate = startOfYear(now)
       endDate = endOfMonth(now)
     }
 

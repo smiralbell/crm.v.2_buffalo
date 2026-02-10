@@ -57,6 +57,7 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
     date: new Date().toISOString().split('T')[0],
     base_amount: '',
     iva_percent: '21',
+    irpf_amount: '0',
   })
   const [file, setFile] = useState<File | null>(null)
   const [showConceptSuggestions, setShowConceptSuggestions] = useState(false)
@@ -71,7 +72,8 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
     const base = parseFloat(formData.base_amount) || 0
     const ivaPercent = parseFloat(formData.iva_percent) || 0
     const iva = base * (ivaPercent / 100)
-    return base + iva
+    const irpf = parseFloat(formData.irpf_amount) || 0
+    return base + iva - irpf
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -88,7 +90,8 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
     const baseAmount = parseFloat(formData.base_amount) || 0
     const ivaPercent = parseFloat(formData.iva_percent) || 0
     const ivaAmount = baseAmount * (ivaPercent / 100)
-    const totalAmount = baseAmount + ivaAmount
+    const irpfAmount = parseFloat(formData.irpf_amount) || 0
+    const totalAmount = baseAmount + ivaAmount - irpfAmount
 
     try {
       // 1) Enviar la factura al webhook externo
@@ -98,6 +101,7 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
       uploadData.append('date', formData.date)
       uploadData.append('base_amount', String(baseAmount))
       uploadData.append('iva_amount', String(ivaAmount))
+      uploadData.append('irpf_amount', String(irpfAmount))
       uploadData.append('total_amount', String(totalAmount))
 
       const uploadRes = await fetch(
@@ -124,6 +128,7 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
           date_end: formData.date,
           base_amount: baseAmount,
           iva_amount: ivaAmount,
+          irpf_amount: irpfAmount,
           total_amount: totalAmount,
           tags: [],
           person_name: null,
@@ -220,7 +225,7 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="base_amount">Base (€) *</Label>
                     <Input
@@ -244,6 +249,18 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
                       value={formData.iva_percent}
                       onChange={(e) => setFormData({ ...formData, iva_percent: e.target.value })}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="irpf_amount">IRPF (€)</Label>
+                    <Input
+                      id="irpf_amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.irpf_amount}
+                      onChange={(e) => setFormData({ ...formData, irpf_amount: e.target.value })}
+                    />
+                    <p className="text-xs text-gray-400">Por defecto 0</p>
                   </div>
                   <div className="space-y-2">
                     <Label>Total</Label>
