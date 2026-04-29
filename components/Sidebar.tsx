@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { LayoutDashboard, Users, TrendingUp, FileText, LogOut, Workflow, DollarSign } from 'lucide-react'
+import { LayoutDashboard, Users, TrendingUp, FileText, LogOut, Workflow, DollarSign, Briefcase } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -18,6 +18,7 @@ export default function Sidebar() {
     { href: '/leads', label: 'Leads', icon: TrendingUp },
     { href: '/invoices', label: 'Facturas', icon: FileText },
     { href: '/pipelines', label: 'Pipelines', icon: Workflow },
+    { href: '/proyectos', label: 'Proyectos', icon: Briefcase },
     { href: '/finances', label: 'Finanzas', icon: DollarSign },
     { href: '/tasks', label: 'Tareas', icon: FileText },
   ]

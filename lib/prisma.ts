@@ -46,7 +46,18 @@ export function getPrismaClient(): PrismaClient {
 
   // Reutilizar el cliente existente si ya existe (tanto en desarrollo como en producción)
   if (globalForPrisma.prisma) {
-    return globalForPrisma.prisma
+    const existing = globalForPrisma.prisma
+    // Tras `prisma generate` con modelos nuevos, el proceso puede seguir con una instancia antigua
+    // sin delegados (p. ej. evaluationProject). Forzar recreación.
+    if (
+      process.env.NODE_ENV === 'development' &&
+      typeof (existing as unknown as { evaluationProject?: unknown }).evaluationProject === 'undefined'
+    ) {
+      void existing.$disconnect().catch(() => {})
+      globalForPrisma.prisma = undefined
+    } else {
+      return existing
+    }
   }
 
   const client = createPrismaClient()

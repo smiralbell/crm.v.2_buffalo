@@ -303,3 +303,54 @@ model FinancialSettings {
 
   @@map("financial_settings")
 }
+
+// ============================================
+// EVALUACIÓN DE PROYECTOS (seguimiento + IA)
+// ============================================
+// Proyectos reales (activos o cerrados), bitácora periódica y análisis OpenRouter
+
+model EvaluationProject {
+  id          Int       @id @default(autoincrement())
+  name        String
+  client_name String?
+  is_active   Boolean   @default(true)
+  tags        String[]
+  opened_at   DateTime  @default(now())
+  closed_at   DateTime?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  deleted_at  DateTime?
+
+  entries   ProjectJournalEntry[]
+  analyses  ProjectAiAnalysis[]
+
+  @@index([deleted_at])
+  @@index([is_active])
+  @@map("evaluation_projects")
+}
+
+model ProjectJournalEntry {
+  id         Int      @id @default(autoincrement())
+  project_id Int
+  body       String   @db.Text
+  rating     Int?     // 1–5 opcional (nota del periodo para media del proyecto)
+  created_at DateTime @default(now())
+
+  project EvaluationProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_id])
+  @@map("project_journal_entries")
+}
+
+model ProjectAiAnalysis {
+  id           Int      @id @default(autoincrement())
+  project_id   Int
+  summary_json Json     @db.JsonB
+  model        String?
+  created_at   DateTime @default(now())
+
+  project EvaluationProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_id])
+  @@map("project_ai_analyses")
+}
