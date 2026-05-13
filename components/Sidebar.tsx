@@ -1,6 +1,16 @@
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { LayoutDashboard, Users, TrendingUp, FileText, LogOut, Workflow, DollarSign, Briefcase } from 'lucide-react'
+import {
+  LayoutDashboard,
+  Users,
+  TrendingUp,
+  FileText,
+  LogOut,
+  Workflow,
+  DollarSign,
+  Briefcase,
+  MessageSquare,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -15,6 +25,7 @@ export default function Sidebar() {
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/contacts', label: 'Contacts', icon: Users },
+    { href: '/agent-chats', label: 'Chats IA', icon: MessageSquare },
     { href: '/leads', label: 'Leads', icon: TrendingUp },
     { href: '/invoices', label: 'Facturas', icon: FileText },
     { href: '/pipelines', label: 'Pipelines', icon: Workflow },
