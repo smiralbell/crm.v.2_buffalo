@@ -5,10 +5,10 @@ import { z } from 'zod'
 
 const serviceSchema = z.object({
   description: z.string().min(1, 'La descripción es requerida'),
-  quantity: z.number().positive('La cantidad debe ser positiva'),
-  price: z.number().positive('El precio debe ser positivo'),
+  quantity: z.number(),                      // puede ser negativo (descuentos)
+  price: z.number(),                         // puede ser negativo (descuentos)
   tax: z.number().min(0).max(100).default(21),
-  total: z.number().positive(),
+  total: z.number(),                         // puede ser negativo (descuentos)
 })
 
 const invoiceSchema = z.object({

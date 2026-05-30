@@ -8,7 +8,6 @@ import {
   LogOut,
   Workflow,
   DollarSign,
-  Briefcase,
   MessageSquare,
   ClipboardList,
 } from 'lucide-react'
@@ -30,10 +29,8 @@ export default function Sidebar() {
     { href: '/leads', label: 'Leads', icon: TrendingUp },
     { href: '/invoices', label: 'Facturas', icon: FileText },
     { href: '/pipelines', label: 'Pipelines', icon: Workflow },
-    { href: '/proyectos', label: 'Proyectos', icon: Briefcase },
     { href: '/onboarding', label: 'Onboarding', icon: ClipboardList },
     { href: '/finances', label: 'Finanzas', icon: DollarSign },
-    { href: '/tasks', label: 'Tareas', icon: FileText },
   ]
 
   return (

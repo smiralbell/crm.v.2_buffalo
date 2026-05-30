@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
-import { ChevronLeft, User, CheckCircle, ArrowRight } from 'lucide-react'
+import { ChevronLeft, User, CheckCircle, ArrowRight, FileText } from 'lucide-react'
 import Link from 'next/link'
 
 interface Contact {
@@ -11,6 +11,18 @@ interface Contact {
   telefono: string | null
   empresa: string | null
   ciudad: string | null
+}
+
+interface InvoiceData {
+  client_name: string
+  client_company_name?: string
+  client_email?: string
+  client_address?: string
+  services: Array<{ description: string; quantity: number; price: number; tax: number; total: number }>
+  subtotal: number
+  iva: number
+  total: number
+  status?: string
 }
 
 // Pipeline stage auto-advance map
@@ -87,36 +99,66 @@ export default function OnboardingPage() {
   useEffect(() => {
     const handler = async (event: MessageEvent) => {
       if (!event.data || event.data.type !== 'buffalo_configurador_action') return
-      const { action, cardId: evCardId, pipelineId: evPipelineId } = event.data
+      const { action, cardId: evCardId, pipelineId: evPipelineId, invoiceData } = event.data
       const targetStage = STAGE_ADVANCE[action]
 
-      if (targetStage && evCardId && evPipelineId) {
+      // ── 1. Si es factura, crear en el sistema de facturas ──
+      if (action === 'emitir_factura' && invoiceData) {
         try {
-          // Move pipeline card to the next stage
-          const res = await fetch(`/api/pipelines/${evPipelineId}/cards`, {
-            method: 'PUT',
+          const invRes = await fetch('/api/invoices', {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              card_id: evCardId,
-              stage: targetStage,
-              position: 0,
-            }),
+            body: JSON.stringify(invoiceData as InvoiceData),
           })
-          if (res.ok) {
-            showNotification(`✅ Pipeline movido a "${targetStage}"`)
+
+          if (invRes.ok) {
+            const created = await invRes.json()
+            showNotification(`✅ Factura ${created.invoice_number} creada`)
+
+            // Move pipeline card to FACTURA EMITIDA
+            if (evCardId && evPipelineId) {
+              await movePipelineCard(evPipelineId, evCardId, 'FACTURA EMITIDA')
+            }
+
+            // Navigate to the new invoice after a short delay
+            setTimeout(() => {
+              router.push(`/invoices/${created.id}`)
+            }, 1500)
+          } else {
+            const err = await invRes.json().catch(() => ({}))
+            showNotification(`❌ Error creando factura: ${err.error || 'desconocido'}`)
           }
         } catch (err) {
-          console.error('Error moving pipeline card:', err)
+          console.error('Error creating invoice:', err)
+          showNotification('❌ Error al guardar la factura')
         }
+        return
+      }
+
+      // ── 2. Resto de acciones: mover tarjeta de pipeline ──
+      if (targetStage && evCardId && evPipelineId) {
+        await movePipelineCard(evPipelineId, evCardId, targetStage)
+        showNotification(`✅ Pipeline movido a "${targetStage}"`)
       } else if (targetStage) {
-        // No card ID available, just show a notification
-        showNotification(`✅ Acción: ${action.replace(/_/g, ' ')}`)
+        showNotification(`✅ ${action.replace(/_/g, ' ')}`)
       }
     }
 
     window.addEventListener('message', handler)
     return () => window.removeEventListener('message', handler)
   }, [])
+
+  const movePipelineCard = async (pipelineId: string, cardId: string, stage: string) => {
+    try {
+      await fetch(`/api/pipelines/${pipelineId}/cards`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ card_id: cardId, stage, position: 0 }),
+      })
+    } catch (err) {
+      console.error('Error moving pipeline card:', err)
+    }
+  }
 
   const showNotification = (msg: string) => {
     setNotification(msg)

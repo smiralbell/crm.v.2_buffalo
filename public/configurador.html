@@ -1147,58 +1147,102 @@ recalc();
     document.head.appendChild(style);
   }
 
-  // Emit postMessage to parent when action buttons are clicked
-  // We patch the key action functions to also notify the parent CRM
-  const _original = {};
+  // ── Patch functions to emit postMessage to CRM parent ──
+  const leadId_pm    = p.get('leadId')     || '';
+  const cardId_pm    = p.get('cardId')     || '';
+  const pipelineId_pm = p.get('pipelineId') || '';
 
-  function patchFn(name, eventType) {
-    if (typeof window[name] === 'function') {
-      _original[name] = window[name];
-      window[name] = function() {
-        // Send event to parent before running original
-        if (window.parent && window.parent !== window) {
-          const name_val   = document.getElementById('f-name')?.value    || '';
-          const email_val  = document.getElementById('f-email')?.value   || '';
-          const ref_val    = document.getElementById('f-ref')?.value     || '';
-          window.parent.postMessage({
-            type: 'buffalo_configurador_action',
-            action: eventType,
-            leadId: p.get('leadId') || '',
-            cardId: p.get('cardId') || '',
-            pipelineId: p.get('pipelineId') || '',
-            data: { nombre: name_val, email: email_val, ref: ref_val }
-          }, '*');
-        }
-        return _original[name].apply(this, arguments);
-      };
-    }
+  // Helper: base payload
+  function crmPayload(action, extra) {
+    return Object.assign({
+      type: 'buffalo_configurador_action',
+      action,
+      leadId: leadId_pm,
+      cardId: cardId_pm,
+      pipelineId: pipelineId_pm,
+    }, extra || {});
   }
 
-  // Patch after DOM is ready (functions are defined globally at parse time)
-  patchFn('sendOnboarding', 'enviar_onboarding');
+  // ── Patch generateFactura: in CRM mode, save to CRM instead of print window ──
+  const _origFactura = window.generateFactura;
+  window.generateFactura = function() {
+    if (window.parent && window.parent !== window) {
+      // Collect invoice data
+      const name_f    = document.getElementById('f-name')?.value    || 'Cliente';
+      const company_f = document.getElementById('f-company')?.value || name_f;
+      const email_f   = document.getElementById('f-email')?.value   || '';
+      const city_f    = document.getElementById('f-city')?.value    || '';
 
-  // Patch the "send proposal" email button - look for onclick
+      const { voz, chat, dash, disc, total: totalBruto } = calcSetup();
+      const half = Math.ceil(totalBruto / 2);
+      const ivaAmt = Math.round(half * 0.21);
+      const totalConIva = half + ivaAmt;
+
+      const services = [];
+      if (S.voz.on) {
+        services.push({
+          description: 'Agente de Voz con Inteligencia Artificial (50% s/contrato)',
+          quantity: 1, price: Math.ceil(voz / 2), tax: 21, total: Math.ceil(voz / 2)
+        });
+      }
+      if (S.chat.on) {
+        services.push({
+          description: 'Agente de Chat con Inteligencia Artificial (50% s/contrato)',
+          quantity: 1, price: Math.ceil(chat / 2), tax: 21, total: Math.ceil(chat / 2)
+        });
+      }
+      if (S.dash.on) {
+        const t = document.querySelector('#dashTiers .dash-tier.sel .dash-name');
+        services.push({
+          description: 'Dashboard / Aplicación' + (t ? ' ' + t.textContent : '') + ' (50% s/contrato)',
+          quantity: 1, price: Math.ceil(dash / 2), tax: 21, total: Math.ceil(dash / 2)
+        });
+      }
+      if (disc > 0) {
+        const discLine = Math.floor(disc / 2);
+        services.push({
+          description: 'Descuento Pack Voz + Chat (−10%)',
+          quantity: 1, price: -discLine, tax: 0, total: -discLine
+        });
+      }
+
+      window.parent.postMessage(crmPayload('emitir_factura', {
+        invoiceData: {
+          client_name:         name_f,
+          client_company_name: company_f !== name_f ? company_f : undefined,
+          client_email:        email_f   || undefined,
+          client_address:      city_f    || undefined,
+          services,
+          subtotal: half,
+          iva:      ivaAmt,
+          total:    totalConIva,
+          status:   'draft',
+        }
+      }), '*');
+
+      showToast('Factura guardada en el CRM ✓', 'green');
+      // Don't open print window in CRM mode — CRM handles the PDF
+    } else {
+      // Standalone mode: original behavior (print window)
+      _origFactura.apply(this, arguments);
+    }
+  };
+
+  // ── Patch click listener for proposal / contract / onboarding buttons ──
   document.addEventListener('click', function(e) {
+    if (!window.parent || window.parent === window) return;
     const btn = e.target.closest('button, [onclick]');
     if (!btn) return;
-    if (window.parent && window.parent !== window) {
-      const txt = (btn.textContent || '').trim().toLowerCase();
-      const oc  = (btn.getAttribute('onclick') || '').toLowerCase();
-      const leadId = p.get('leadId') || '';
-      const cardId = p.get('cardId') || '';
-      const pipelineId = p.get('pipelineId') || '';
-      if (txt.includes('propuesta') || oc.includes('propuesta') || oc.includes('generatepropuesta')) {
-        window.parent.postMessage({ type: 'buffalo_configurador_action', action: 'enviar_propuesta', leadId, cardId, pipelineId }, '*');
-      }
-      if (txt.includes('contrato') || oc.includes('contrato') || oc.includes('generatecontrato')) {
-        window.parent.postMessage({ type: 'buffalo_configurador_action', action: 'enviar_contrato', leadId, cardId, pipelineId }, '*');
-      }
-      if (txt.includes('onboarding') || oc.includes('onboarding') || oc.includes('sendonboarding')) {
-        window.parent.postMessage({ type: 'buffalo_configurador_action', action: 'enviar_onboarding', leadId, cardId, pipelineId }, '*');
-      }
-      if (txt.includes('factura') || oc.includes('factura') || oc.includes('generatefactura')) {
-        window.parent.postMessage({ type: 'buffalo_configurador_action', action: 'emitir_factura', leadId, cardId, pipelineId }, '*');
-      }
+    const txt = (btn.textContent || '').trim().toLowerCase();
+    const oc  = (btn.getAttribute('onclick') || '').toLowerCase();
+    if (txt.includes('propuesta') || oc.includes('propuesta') || oc.includes('generatepropuesta')) {
+      window.parent.postMessage(crmPayload('enviar_propuesta'), '*');
+    }
+    if (txt.includes('contrato') || oc.includes('contrato') || oc.includes('generatecontrato')) {
+      window.parent.postMessage(crmPayload('enviar_contrato'), '*');
+    }
+    if (txt.includes('onboarding') || oc.includes('onboarding') || oc.includes('sendonboarding')) {
+      window.parent.postMessage(crmPayload('enviar_onboarding'), '*');
     }
   }, true);
 
