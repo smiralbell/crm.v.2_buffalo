@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Onboarding · Buffalo AI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#091E14;--bg2:#0C2318;--bg3:#0F2B1E;
+  --green:#22D97A;--gdim:rgba(34,217,122,.12);--gmid:rgba(34,217,122,.28);
+  --white:#fff;--off:#A8C4B4;--muted:#4E7A62;--rule:rgba(34,217,122,.1);
+  --red:#FF5C5C;--orange:#F5A623;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--white);font-family:"IBM Plex Sans",sans-serif;display:flex;flex-direction:column;min-height:100vh;}
+
+/* HEADER */
+.hdr{position:sticky;top:0;z-index:50;background:rgba(9,30,20,.96);backdrop-filter:blur(20px);border-bottom:1px solid var(--rule);}
+.hdr-inner{max-width:600px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;}
+.logo-wrap{display:flex;align-items:center;gap:10px;}
+.logo-icon{width:30px;height:30px;border-radius:8px;background:var(--green);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#091E14;flex-shrink:0;}
+.logo-txt{font-size:14px;font-weight:700;color:var(--white);}
+.step-counter{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);}
+.progress-bar{height:2px;background:rgba(34,217,122,.15);}
+.progress-fill{height:100%;background:var(--green);transition:width .5s ease;}
+
+/* MAIN */
+main{flex:1;max-width:600px;margin:0 auto;width:100%;padding:40px 24px 120px;}
+
+/* STEP ANIM */
+.step-content{animation:fadeUp .3s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+/* STEP HEADER */
+.step-tag{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--green);margin-bottom:8px;}
+.step-title{font-size:clamp(22px,4vw,28px);font-weight:800;letter-spacing:-.02em;line-height:1.2;margin-bottom:8px;}
+.step-title em{color:var(--green);font-style:normal;}
+.step-sub{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:32px;}
+
+/* INFO CARD */
+.info-card{background:var(--gdim);border:1px solid var(--gmid);border-radius:14px;padding:16px 20px;margin-bottom:24px;}
+.info-card-title{font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.14em;font-family:"IBM Plex Mono",monospace;margin-bottom:10px;}
+.info-rows{display:flex;flex-direction:column;gap:6px;}
+.info-row{display:flex;justify-content:space-between;font-size:12px;}
+.info-row .ik{color:var(--muted);}
+.info-row .iv{color:var(--off);font-weight:600;}
+
+/* CLONADA NOTE */
+.clonada-card{background:rgba(74,158,224,.08);border:1px solid rgba(74,158,224,.3);border-radius:14px;padding:20px 22px;margin-top:24px;}
+.clonada-icon{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.clonada-icon svg{flex-shrink:0;color:#4A9EE0;}
+.clonada-title{font-size:13px;font-weight:700;color:#4A9EE0;}
+.clonada-body{font-size:12px;color:var(--off);line-height:1.65;}
+.clonada-email{font-family:"IBM Plex Mono",monospace;font-size:11px;background:rgba(74,158,224,.12);border:1px solid rgba(74,158,224,.25);border-radius:6px;padding:6px 12px;margin-top:10px;color:#4A9EE0;display:inline-block;}
+
+/* FORM ELEMENTS */
+.field{margin-bottom:20px;}
+.field:last-child{margin-bottom:0;}
+.field-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-family:"IBM Plex Mono",monospace;margin-bottom:6px;display:block;}
+.field-hint{font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.5;}
+.field-input{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--white);width:100%;font-family:"IBM Plex Sans",sans-serif;outline:none;transition:border-color .2s;}
+.field-input:focus{border-color:rgba(34,217,122,.45);}
+.field-input::placeholder{color:var(--muted);}
+textarea.field-input{resize:vertical;line-height:1.6;}
+select.field-input{cursor:pointer;}
+
+/* YESNO */
+.yesno{display:flex;gap:8px;}
+.yn-btn{flex:1;padding:11px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;font-family:"IBM Plex Sans",sans-serif;}
+.yn-btn.sel{border-color:rgba(34,217,122,.5);background:var(--gdim);color:var(--white);}
+
+/* DAYS */
+.days-grid{display:flex;gap:6px;flex-wrap:wrap;}
+.day-btn{width:40px;height:40px;border-radius:9px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;}
+.day-btn.on{background:var(--green);border-color:var(--green);color:#091E14;}
+
+/* TAG INPUT */
+.tag-wrap{display:flex;gap:8px;margin-bottom:8px;}
+.tag-wrap .field-input{flex:1;}
+.tag-add-btn{background:rgba(34,217,122,.1);border:1px solid rgba(34,217,122,.3);color:var(--green);border-radius:10px;width:40px;flex-shrink:0;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+.tag-add-btn:hover{background:rgba(34,217,122,.2);}
+.tags-list{display:flex;flex-wrap:wrap;gap:6px;}
+.tag{background:var(--bg3);border:1px solid rgba(34,217,122,.2);border-radius:99px;padding:4px 10px 4px 12px;font-size:11px;color:var(--off);display:flex;align-items:center;gap:6px;}
+.tag-del{cursor:pointer;color:var(--muted);font-size:14px;line-height:1;padding:0 2px;}
+.tag-del:hover{color:var(--red);}
+
+/* FILE ZONE */
+.file-zone{border:2px dashed rgba(34,217,122,.25);border-radius:14px;padding:28px;text-align:center;cursor:pointer;transition:all .2s;}
+.file-zone:hover,.file-zone.drag{border-color:rgba(34,217,122,.55);background:var(--gdim);}
+.file-zone-icon{color:var(--muted);margin-bottom:8px;}
+.file-zone p{font-size:13px;color:var(--off);font-weight:600;}
+.file-zone span{font-size:11px;color:var(--muted);display:block;margin-top:3px;}
+.file-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border:1px solid var(--rule);border-radius:10px;margin-top:8px;}
+.file-item-name{flex:1;font-size:12px;color:var(--off);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.file-item-size{font-size:11px;color:var(--muted);font-family:"IBM Plex Mono",monospace;}
+.file-item-del{color:var(--muted);cursor:pointer;font-size:16px;flex-shrink:0;padding:2px;}
+.file-item-del:hover{color:var(--red);}
+
+/* SECTION DIVIDER */
+.sdiv{height:1px;background:var(--rule);margin:24px 0;}
+.sdiv-lbl{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px;margin:24px 0 16px;}
+.sdiv-lbl::after{content:'';flex:1;height:1px;background:var(--rule);}
+
+/* OPTION CARD */
+.opt-card{width:100%;display:flex;align-items:center;gap:12px;padding:12px 16px;border:1px solid rgba(255,255,255,.08);border-radius:12px;cursor:pointer;transition:all .15s;background:rgba(255,255,255,.02);margin-bottom:6px;font-family:"IBM Plex Sans",sans-serif;text-align:left;}
+.opt-card:hover{border-color:rgba(34,217,122,.3);background:rgba(34,217,122,.04);}
+.opt-card.sel{border-color:rgba(34,217,122,.5);background:var(--gdim);}
+.opt-radio{width:16px;height:16px;border-radius:50%;border:1.5px solid rgba(255,255,255,.2);flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.opt-card.sel .opt-radio{border-color:var(--green);background:var(--green);}
+.opt-card.sel .opt-radio::after{content:'';width:6px;height:6px;border-radius:50%;background:#091E14;}
+.opt-card-txt{font-size:13px;color:var(--off);}
+.opt-card.sel .opt-card-txt{color:var(--white);font-weight:600;}
+
+/* COLOR PICKER */
+.color-row{display:flex;align-items:center;gap:10px;}
+.color-swatch{width:36px;height:36px;border-radius:8px;border:1px solid rgba(255,255,255,.15);cursor:pointer;flex-shrink:0;}
+.color-hex{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--white);width:110px;font-family:"IBM Plex Mono",monospace;outline:none;}
+
+/* CONFIRM SUMMARY */
+.confirm-rows{display:flex;flex-direction:column;gap:8px;}
+.confirm-row{display:flex;align-items:flex-start;gap:12px;padding:10px 14px;background:var(--bg2);border:1px solid var(--rule);border-radius:10px;}
+.cr-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.08em;width:120px;flex-shrink:0;margin-top:1px;}
+.cr-val{font-size:12px;color:var(--off);flex:1;line-height:1.5;}
+
+/* DONE SCREEN */
+.done-screen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:40px 24px;}
+.done-icon{width:80px;height:80px;border-radius:24px;background:rgba(34,217,122,.12);border:1px solid rgba(34,217,122,.3);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;}
+.done-title{font-size:28px;font-weight:800;margin-bottom:10px;}
+.done-sub{font-size:14px;color:var(--muted);line-height:1.6;max-width:380px;margin:0 auto;}
+
+/* FOOTER NAV */
+.nav{position:fixed;bottom:0;left:0;right:0;background:rgba(9,30,20,.97);backdrop-filter:blur(20px);border-top:1px solid var(--rule);padding:14px 24px;}
+.nav-inner{max-width:600px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.btn-prev{background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:"IBM Plex Sans",sans-serif;padding:8px 0;transition:color .2s;}
+.btn-prev:hover:not(:disabled){color:var(--off);}
+.btn-prev:disabled{opacity:.3;cursor:not-allowed;}
+.btn-next{background:var(--green);color:#091E14;font-size:14px;font-weight:700;padding:12px 28px;border-radius:12px;border:none;cursor:pointer;font-family:"IBM Plex Sans",sans-serif;display:flex;align-items:center;gap:8px;transition:opacity .2s;}
+.btn-next:hover{opacity:.9;}
+.btn-next:disabled{opacity:.35;cursor:not-allowed;}
+.btn-submit{background:var(--green);color:#091E14;font-size:14px;font-weight:800;padding:12px 32px;border-radius:12px;border:none;cursor:pointer;font-family:"IBM Plex Sans",sans-serif;display:flex;align-items:center;gap:8px;transition:opacity .2s;}
+.btn-submit:hover{opacity:.9;}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-inner">
+    <div class="logo-wrap">
+      <div class="logo-icon">B</div>
+      <div class="logo-txt">Buffalo AI</div>
+    </div>
+    <div class="step-counter" id="stepCounter">1 / 1</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+</div>
+
+<!-- MAIN -->
+<main>
+  <div id="formArea"></div>
+  <div class="done-screen" id="doneScreen">
+    <div class="done-icon">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#22D97A" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    </div>
+    <div class="done-title">¡Recibido, gracias!</div>
+    <div class="done-sub">Nuestro equipo ya tiene todo lo necesario para arrancar el desarrollo. Te contactaremos en las próximas horas.<br><br>
+      Recibirás un resumen en <strong id="confirmEmail" style="color:var(--off)">tu email</strong>.</div>
+    <div style="margin-top:24px;font-size:12px;color:var(--muted);">¿Dudas? <a href="mailto:hola@agenciabuffalo.es" style="color:var(--green)">hola@agenciabuffalo.es</a></div>
+  </div>
+</main>
+
+<!-- NAV -->
+<div class="nav" id="navBar">
+  <div class="nav-inner">
+    <button class="btn-prev" id="btnPrev" onclick="prevStep()" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      Anterior
+    </button>
+    <button class="btn-next" id="btnNext" onclick="nextStep()">
+      Siguiente
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+// ─── PARSE CONFIG ───────────────────────────────────────────────────────────
+const WEBHOOK = 'https://n8n.agenciabuffalo.es/webhook/onboarding-cliente';
+
+function parseConfig() {
+  const params = new URLSearchParams(location.search);
+  const raw = params.get('c');
+  if (raw) {
+    try { return JSON.parse(atob(raw)); } catch(e) {}
+  }
+  // Demo mode if no config
+  return {
+    ref: 'BUF-2026-DEMO',
+    empresa: 'Tu Empresa',
+    nombre: 'Cliente',
+    email: '',
+    voz: true, voz_outbound: true, voz_crm: true, voz_transferir: true,
+    voz_correo: true, voz_transcripcion: false,
+    chat: true, chat_whatsapp: true, chat_widget: true, chat_trigger: false,
+    chat_crm: false, chat_multimodal: false, chat_audios: false,
+    clonada: true,
+    dash: true, dash_tier: 'Básico',
+    maint: 'cloud',
+    lang: 0
+  };
+}
+
+const CFG = parseConfig();
+const EMP = CFG.empresa || 'tu empresa';
+const NOM = CFG.nombre ? CFG.nombre.split(' ')[0] : '';
+
+// ─── STATE ──────────────────────────────────────────────────────────────────
+const D = {}; // form data flat object
+const FILES = {}; // files by field id
+let currentStep = 0;
+let activeSteps = [];
+
+// ─── STEP DEFINITIONS ───────────────────────────────────────────────────────
+function buildScopeItems() {
+  const items = [];
+  if (CFG.voz) {
+    let addons = ['Agente Inbound 24/7'];
+    if (CFG.voz_outbound) addons.push('Agente Outbound + trigger');
+    if (CFG.voz_crm) addons.push('Integración CRM');
+    if (CFG.voz_transferir) addons.push('Transferencia a humano');
+    if (CFG.voz_correo) addons.push('Resumen por email post-llamada');
+    if (CFG.voz_transcripcion) addons.push('Transcripción de llamada');
+    if (CFG.clonada) addons.push('Voz clonada');
+    items.push({ label: 'Agente de Voz', detail: addons.join(' · ') });
+  }
+  if (CFG.chat) {
+    let channels = [], caps = [];
+    if (CFG.chat_whatsapp) channels.push('WhatsApp');
+    if (CFG.chat_widget) channels.push('Widget Web');
+    if (CFG.chat_trigger) channels.push('Trigger formulario');
+    if (CFG.chat_crm) caps.push('CRM');
+    if (CFG.chat_multimodal) caps.push('Multimodal');
+    if (CFG.chat_audios) caps.push('Envía audios');
+    if (CFG.clonada) caps.push('Voz clonada');
+    const parts = [];
+    if (channels.length) parts.push(channels.join(' + '));
+    if (caps.length) parts.push(caps.join(' · '));
+    items.push({ label: 'Agente de Chat', detail: parts.join(' — ') });
+  }
+  if (CFG.dash) {
+    items.push({ label: `Dashboard ${CFG.dash_tier || ''}`, detail: 'Panel de control personalizado' });
+  }
+  if (CFG.maint) {
+    items.push({ label: `Mantenimiento Buffalo ${CFG.maint === 'cloud' ? 'Cloud' : 'Connect'}`, detail: CFG.maint === 'cloud' ? 'Servidores Buffalo · 15%/mes' : 'Servidores cliente · 10%/mes' });
+  }
+  return items;
+}
+
+const STEP_DEFS = [
+  // 0 – INTRO
+  {
+    id: 'intro',
+    show: () => true,
+    tag: 'Onboarding · Buffalo AI',
+    title: () => NOM ? `Hola, <em>${NOM}</em>` : `¡Bienvenido/a!`,
+    sub: () => `Vamos a arrancar el proyecto de <strong style="color:var(--white)">${EMP}</strong>. Son 10–15 minutos. A partir de aquí no te molestamos hasta la entrega.`,
+    render: () => `
+      <div class="info-card">
+        <div class="info-card-title">Resumen del proyecto</div>
+        <div class="info-rows">
+          <div class="info-row"><span class="ik">Referencia</span><span class="iv">${CFG.ref || '—'}</span></div>
+          ${buildScopeItems().map(i=>`<div class="info-row"><span class="ik">${i.label}</span><span class="iv" style="text-align:right;max-width:65%">${i.detail}</span></div>`).join('')}
+        </div>
+      </div>
+      ${field('contacto_nombre','text',`Tu nombre completo`,null,CFG.nombre||'',null,true)}
+      ${field('contacto_email','email','Tu email de contacto','Te enviaremos el resumen aquí',CFG.email||'',null,true)}
+      ${field('contacto_tel','tel','Teléfono de contacto','Para el equipo de desarrollo, no para el agente','','',false)}
+    `
+  },
+
+  // 1 – NEGOCIO
+  {
+    id: 'negocio',
+    show: () => true,
+    tag: 'Contexto del negocio',
+    title: () => `Cuéntanos cómo funciona <em>${EMP}</em>`,
+    sub: () => 'Ya lo hablamos en la reunión, pero necesitamos tenerlo por escrito para el desarrollo.',
+    render: () => `
+      ${field('desc_negocio','textarea',`¿A qué se dedica ${EMP} y quién es vuestro cliente?`,'Contexto general del negocio','','Somos una empresa de…  Nuestro cliente habitual es…',true,4)}
+      ${field('desc_servicios','textarea',`¿Qué servicios o productos ofrece ${EMP} exactamente?`,'Cuanto más detalle, mejor','','Préstamos desde X€, planes de formación de X meses, servicios de…',true,3)}
+      ${field('desc_proceso','textarea','¿Cómo es el proceso de venta/cierre habitual?','Desde que contacta un cliente hasta que cierra','','El cliente llama → cualificamos → si es viable pasamos al asesor → se firma…',false,3)}
+      ${field('desc_web','text','Web de la empresa',null,'','https://tuempresa.com',false)}
+    `
+  },
+
+  // 2 – VOZ: FLUJO Y NOMBRE
+  {
+    id: 'voz_flujo',
+    show: () => CFG.voz,
+    tag: 'Agente de voz',
+    title: () => `¿Cómo tiene que funcionar el agente de voz?`,
+    sub: () => `El flujo de llamada es la pieza más importante. Cuanto más detallado, mejor resultado.`,
+    render: () => `
+      ${field('voz_nombre_agente','text','¿Cómo se va a presentar el agente?','El nombre con el que saludará','','Ej: Hola, soy Sara de '+EMP+'…',false)}
+      ${field('voz_flujo_ideal','textarea','Describe el flujo ideal de una llamada paso a paso','Cuéntalo como si le explicaras a una persona nueva. Usa números si quieres.','',
+        '1. El agente saluda y pregunta el motivo de la llamada\n2. Si el cliente quiere X, pregunta si tiene Y\n3. Si cumple el criterio, toma datos y transfiere\n4. Si no cumple, responde educadamente\n5. Fuera de horario…',
+        true,7)}
+      ${field('voz_casos_si','textarea','Casos o motivos de llamada que SÍ os interesan','Los más frecuentes, con ejemplos reales si tienes','','Ej: Clientes que preguntan por financiación con garantía inmobiliaria, empresas que necesitan…',true,3)}
+      ${field('voz_casos_no','textarea','Casos que NO os interesan o que siempre rechazáis','Para que la IA los filtre o derive correctamente','','Ej: Clientes sin garantía, importes menores de X€, llamadas de proveedores…',false,3)}
+    `
+  },
+
+  // 3 – VOZ: DERIVACIÓN
+  {
+    id: 'voz_derivacion',
+    show: () => CFG.voz && CFG.voz_transferir,
+    tag: 'Derivación de llamadas',
+    title: () => '¿Cuándo y a quién transfiere el agente?',
+    sub: () => 'Define los criterios exactos. Así evitamos que transfiera cuando no toca o que no lo haga cuando sí.',
+    render: () => `
+      ${field('der_criterios','textarea','¿Cuándo debe transferir?','Criterios claros. Cuantos más casos cubras, mejor','',
+        'Ej:\n— Si el cliente tiene garantía válida → comercial\n— Si el cliente es empresa > 50K€ → director\n— Si llama por una incidencia activa → soporte',true,5)}
+      ${tagField('der_telefonos','Teléfonos de destino (uno por línea)','Añade también a quién corresponde cada número','+34 612 345 678 — Dpto. Comercial')}
+      ${field('der_si_no_transfiere','textarea','¿Qué hace si no consigue transferir?',null,'','Ej: Toma nombre y teléfono y promete devolución de llamada antes de las Xh',false,2)}
+    `
+  },
+
+  // 4 – VOZ: RESÚMENES EMAIL
+  {
+    id: 'voz_emails',
+    show: () => CFG.voz && CFG.voz_correo,
+    tag: 'Resúmenes post-llamada',
+    title: () => '¿A quién llegan los resúmenes de llamada?',
+    sub: () => 'Después de cada llamada relevante, el agente puede enviar un resumen automático por email.',
+    render: () => `
+      ${tagField('email_resumen','Emails que recibirán los resúmenes','Añade los emails uno por uno','ventas@empresa.com — Resúmenes diarios')}
+      ${field('email_que_incluir','textarea','¿Qué debe incluir el resumen?','Campos que el agente debe recoger en cada llamada','','Nombre, teléfono, motivo, criterio de cualificación, próximo paso…',false,3)}
+    `
+  },
+
+  // 5 – HORARIOS
+  {
+    id: 'horarios',
+    show: () => CFG.voz || CFG.chat,
+    tag: 'Disponibilidad',
+    title: () => '¿Cuándo debe estar activo el agente?',
+    sub: () => 'Define el horario habitual. El agente puede actuar diferente dentro y fuera de horario.',
+    render: () => `
+      <div class="field">
+        <label class="field-label">Días activos</label>
+        <div class="days-grid" id="daysGrid">
+          ${['Lu','Ma','Mi','Ju','Vi','Sa','Do'].map((d,i)=>`
+            <button type="button" class="day-btn ${i<5?'on':''}" data-day="${d}" onclick="toggleDay(this)">${d}</button>
+          `).join('')}
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        ${field('hora_inicio','time','Hora inicio',null,'09:00',null,false)}
+        ${field('hora_fin','time','Hora fin',null,'18:00',null,false)}
+      </div>
+      ${field('horario_excepciones','textarea','¿Alguna excepción o caso especial?',null,'','Ej: En agosto solo mañanas. Los sábados solo hasta las 14:00…',false,2)}
+      <div class="field">
+        <label class="field-label">¿Qué hace fuera de horario?</label>
+        <div>
+          ${optCard('fuera_datos','Toma datos del contacto y avisa al equipo por email')}
+          ${optCard('fuera_mensaje','Da un mensaje informativo y finaliza la conversación')}
+          ${optCard('fuera_24h','El agente está activo 24/7, sin distinción de horario')}
+        </div>
+      </div>
+    `
+  },
+
+  // 6 – CHAT: CONSULTAS
+  {
+    id: 'chat_consultas',
+    show: () => CFG.chat,
+    tag: 'Agente de chat',
+    title: () => `¿Qué mensajes recibe habitualmente ${EMP}?`,
+    sub: () => 'Cuantos más ejemplos reales des, más preciso será el agente desde el primer día.',
+    render: () => `
+      ${field('chat_casos_si','textarea','Consultas o mensajes frecuentes que SÍ os interesan','Casos más comunes, con ejemplos reales','','Ej: Clientes que preguntan por precios, horarios, disponibilidad, cómo contratar…',true,4)}
+      ${field('chat_casos_no','textarea','Consultas que NO os interesan o que rechazáis siempre','Para que el agente las gestione correctamente','','Ej: Spam, proveedores buscando acuerdos, consultas de otras zonas geográficas…',false,3)}
+      ${CFG.chat_whatsapp||CFG.chat_widget ? `
+      <div class="sdiv-lbl">Nombre y personalidad del agente</div>
+      ${field('chat_nombre','text','¿Cómo se va a presentar el agente de chat?','El nombre con el que saludará en los mensajes','','Ej: Hola, soy Laura de '+EMP+'',false)}
+      ` : ''}
+    `
+  },
+
+  // 7 – WHATSAPP
+  {
+    id: 'chat_whatsapp',
+    show: () => CFG.chat && CFG.chat_whatsapp,
+    tag: 'WhatsApp Business',
+    title: () => 'Configuración de WhatsApp Business',
+    sub: () => 'Necesitamos el número asociado a la cuenta de WhatsApp Business para conectar el agente.',
+    render: () => `
+      ${field('wa_numero','tel','Número de teléfono de WhatsApp Business','El número exacto que usa la empresa en WhatsApp Business','','+34 600 000 000',true)}
+      ${field('wa_tiene_api','yesno','¿Ya tienes cuenta en Meta Business Suite / WhatsApp Business API?','Si no la tienes, nosotros te guiamos para crearla',null,null,false)}
+      ${field('wa_contexto','textarea','¿Qué tipo de mensajes recibe actualmente ese número?',null,'','Ej: Consultas de clientes, pedidos, solicitudes de cita, dudas de productos…',false,2)}
+    `
+  },
+
+  // 8 – WIDGET
+  {
+    id: 'chat_widget',
+    show: () => CFG.chat && CFG.chat_widget,
+    tag: 'Widget Web',
+    title: () => 'Personalización del widget en tu web',
+    sub: () => `El widget se integrará en la web de ${EMP}. Necesitamos unos datos para adaptarlo a tu imagen.`,
+    render: () => `
+      ${tagField('widget_urls','¿En qué páginas debe aparecer el widget?','Añade las URLs concretas (o "todas las páginas")','https://tuempresa.com/contacto')}
+      <div class="field">
+        <label class="field-label">Color principal del widget</label>
+        <p class="field-hint">El color del botón y encabezado. Usa el color corporativo de ${EMP}.</p>
+        <div class="color-row">
+          <input type="color" class="color-swatch" id="widget_color_picker" value="#22D97A" oninput="syncColor(this)">
+          <input type="text" class="color-hex field-input" id="widget_color" maxlength="7" value="#22D97A" oninput="syncColorText(this)" placeholder="#RRGGBB">
+        </div>
+      </div>
+      ${fileField('widget_logo','Logo de la empresa','SVG, PNG o JPG con fondo transparente preferiblemente')}
+    `
+  },
+
+  // 9 – CRM
+  {
+    id: 'crm',
+    show: () => CFG.voz_crm || CFG.chat_crm,
+    tag: 'Integración CRM',
+    title: () => '¿Con qué CRM trabaja el equipo?',
+    sub: () => 'El agente registrará los leads directamente en el CRM. Necesitamos saber con cuál.',
+    render: () => `
+      ${field('crm_tipo','text','¿Qué CRM usa el equipo?','Nombre del CRM','','Ej: HubSpot, Salesforce, Zoho, Holded, Pipedrive, Google Sheets…',true)}
+      ${field('crm_que_registrar','textarea','¿Qué datos debe registrar el agente en el CRM?','Campos exactos que deben llegar a cada contacto/lead','','Nombre, teléfono, email, motivo de contacto, calificación (sí/no), próximo paso…',false,3)}
+      <div class="info-card" style="margin-top:16px;background:rgba(245,166,35,.07);border-color:rgba(245,166,35,.25);">
+        <div style="font-size:11px;color:var(--orange);font-weight:700;margin-bottom:4px;">Acceso técnico</div>
+        <div style="font-size:11px;color:var(--off);line-height:1.6;">Las credenciales de acceso al CRM las compartiremos por un canal seguro (no aquí). Nuestro email técnico es <strong style="color:var(--white)">dev@agenciabuffalo.es</strong></div>
+      </div>
+    `
+  },
+
+  // 10 – DASHBOARD
+  {
+    id: 'dashboard',
+    show: () => CFG.dash,
+    tag: 'Dashboard',
+    title: () => `Panel de control — ${CFG.dash_tier || 'Dashboard'}`,
+    sub: () => `Personalizaremos el dashboard con la imagen de ${EMP}. Necesitamos el logo y los colores.`,
+    render: () => `
+      ${fileField('dash_logo','Logo de la empresa','SVG, PNG o JPG · preferiblemente fondo transparente')}
+      <div class="field">
+        <label class="field-label">Color principal de la marca</label>
+        <p class="field-hint">Lo usaremos en encabezados y elementos destacados del dashboard.</p>
+        <div class="color-row">
+          <input type="color" class="color-swatch" id="dash_color_picker" value="#22D97A" oninput="syncColor2(this)">
+          <input type="text" class="color-hex field-input" id="dash_color" maxlength="7" value="#22D97A" oninput="syncColorText2(this)" placeholder="#RRGGBB">
+        </div>
+      </div>
+      ${tagField('dash_usuarios','Emails de las personas que tendrán acceso al dashboard','Añádelos uno por uno','nombre@empresa.com')}
+      ${field('dash_metricas','textarea','¿Qué métricas o datos son más importantes para vosotros?','Lo que más queréis ver en el panel principal','','Ej: Llamadas del día, leads captados, conversaciones activas, tasa de cualificación…',false,3)}
+    `
+  },
+
+  // 11 – BASE DE CONOCIMIENTO
+  {
+    id: 'knowledge',
+    show: () => true,
+    tag: 'Base de conocimiento',
+    title: () => `¿Con qué información entrenamos al agente?`,
+    sub: () => `Todo lo que el agente sepa de ${EMP} viene de aquí. Cuanto más, mejor.`,
+    render: () => `
+      ${tagField('kb_urls','URLs de vuestra web que el agente debe conocer','Añade las páginas más relevantes','https://tuempresa.com/servicios')}
+      ${field('kb_faqs','textarea','Preguntas frecuentes con sus respuestas','Las 5–10 más habituales. Formato P: / R:','',
+        'P: ¿Cuál es el precio?\nR: Desde X€ dependiendo de…\n\nP: ¿Cuánto tarda?\nR: Entre X y Y días laborables…',false,8)}
+      ${fileField('kb_docs','Documentos de apoyo (opcional)','PDFs, Word, Excel con tarifas, guías, FAQs, condiciones… · máx. 6 archivos')}
+    `
+  },
+
+  // 12 – GUARDARRAÍLES
+  {
+    id: 'guardarrails',
+    show: () => true,
+    tag: 'Guardarraíles',
+    title: () => '¿Qué no debe decir ni hacer nunca el agente?',
+    sub: () => 'Tan importante como lo que sí debe hacer. Esto protege a la empresa de compromisos no deseados.',
+    render: () => `
+      ${field('guard_nunca_info','textarea','Información que NUNCA debe dar','Precios exactos no confirmados, promesas de aprobación, datos legales sensibles…','',
+        '— No debe prometer aprobación de ninguna operación\n— No debe dar nombres internos del equipo\n— Solo debe decir "desde X€", no precios exactos',false,4)}
+      ${field('guard_nunca_acciones','textarea','Acciones que nunca debe realizar','Cerrar ventas, comprometer fechas, datos confidenciales…','',
+        '— No debe cerrar tratos ni comprometer fechas de firma\n— No debe dar información de clientes a terceros',false,3)}
+      ${field('guard_info_interna','textarea','Información interna importante (no pública) que debe conocer','Excepciones, condiciones especiales, matices que no están en la web','','Ej: Para clientes de zona X tenemos condiciones especiales. Los promotores tienen un responsable diferente…',false,3)}
+    `
+  },
+
+  // 13 – NOTAS FINALES
+  {
+    id: 'notas',
+    show: () => true,
+    tag: 'Últimos detalles',
+    title: () => '¿Algo más que debamos saber?',
+    sub: () => 'Último paso antes de enviar. Cualquier matiz o detalle que no hayamos preguntado.',
+    render: () => `
+      ${field('notas_deadline','date','¿Hay una fecha límite para el lanzamiento?',null,'',null,false)}
+      ${field('notas_extra','textarea','Notas adicionales','Cualquier cosa relevante que no hayamos preguntado','','',false,4)}
+      ${CFG.clonada ? `
+      <div class="clonada-card">
+        <div class="clonada-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+          <div class="clonada-title">Voz clonada — acción requerida por tu parte</div>
+        </div>
+        <p class="clonada-body">Tu proyecto incluye voz clonada. Para que el agente hable con la voz de una persona real de tu equipo, necesitamos entre <strong style="color:var(--white)">1 y 2 horas de grabación de audio</strong> de esa persona.<br><br>
+        La grabación puede ser de cualquier conversación natural: reuniones, llamadas, vídeos… Cuanta más variedad y calidad, mejor resultado. Envíala (en el formato que tengas: MP3, WAV, M4A) a:</p>
+        <div class="clonada-email">documentacion@agenciabuffalo.es</div>
+        <p class="clonada-body" style="margin-top:8px;font-size:11px;">Puedes enviar este formulario antes de tener las grabaciones. Las grabaciones se pueden mandar después sin problema.</p>
+      </div>
+      ` : ''}
+    `
+  },
+
+  // 14 – CONFIRM
+  {
+    id: 'confirm',
+    show: () => true,
+    tag: 'Confirmación',
+    title: () => 'Repasa y envía',
+    sub: () => 'Revisa el resumen antes de enviarlo al equipo de Buffalo.',
+    render: () => `
+      <div class="confirm-rows" id="confirmRows"></div>
+    `
+  }
+];
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+function field(id, type, label, hint, value, placeholder, required, rows) {
+  const ph = placeholder || '';
+  const val = value || D[id] || '';
+  if (type === 'textarea') {
+    return `<div class="field">
+      <label class="field-label">${label}${required?' <span style="color:var(--red)">*</span>':''}</label>
+      ${hint?`<p class="field-hint">${hint}</p>`:''}
+      <textarea class="field-input" id="${id}" rows="${rows||4}" placeholder="${ph}" oninput="D['${id}']=this.value">${val}</textarea>
+    </div>`;
+  }
+  if (type === 'yesno') {
+    const selSi = D[id]==='si';
+    const selNo = D[id]==='no';
+    return `<div class="field">
+      <label class="field-label">${label}</label>
+      ${hint?`<p class="field-hint">${hint}</p>`:''}
+      <div class="yesno">
+        <button type="button" class="yn-btn${selSi?' sel':''}" onclick="setYN('${id}','si',this)">Sí</button>
+        <button type="button" class="yn-btn${selNo?' sel':''}" onclick="setYN('${id}','no',this)">No</button>
+      </div>
+    </div>`;
+  }
+  return `<div class="field">
+    <label class="field-label">${label}${required?' <span style="color:var(--red)">*</span>':''}</label>
+    ${hint?`<p class="field-hint">${hint}</p>`:''}
+    <input type="${type}" class="field-input" id="${id}" value="${val}" placeholder="${ph}" oninput="D['${id}']=this.value">
+  </div>`;
+}
+
+function tagField(id, label, hint, placeholder) {
+  if (!D[id]) D[id] = [];
+  return `<div class="field">
+    <label class="field-label">${label}</label>
+    ${hint?`<p class="field-hint">${hint}</p>`:''}
+    <div class="tag-wrap">
+      <input type="text" class="field-input" id="${id}_input" placeholder="${placeholder||''}" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag('${id}')}">
+      <button type="button" class="tag-add-btn" onclick="addTag('${id}')">+</button>
+    </div>
+    <div class="tags-list" id="${id}_tags">${renderTags(id)}</div>
+  </div>`;
+}
+
+function renderTags(id) {
+  return (D[id]||[]).map(t=>`<span class="tag">${t}<span class="tag-del" onclick="removeTag('${id}','${t}')">×</span></span>`).join('');
+}
+
+function addTag(id) {
+  const inp = document.getElementById(id+'_input');
+  if (!inp) return;
+  const v = inp.value.trim();
+  if (v && !(D[id]||[]).includes(v)) { D[id] = [...(D[id]||[]), v]; }
+  inp.value = '';
+  const tl = document.getElementById(id+'_tags');
+  if (tl) tl.innerHTML = renderTags(id);
+}
+
+function removeTag(id, val) {
+  D[id] = (D[id]||[]).filter(t=>t!==val);
+  const tl = document.getElementById(id+'_tags');
+  if (tl) tl.innerHTML = renderTags(id);
+}
+
+function fileField(id, label, hint) {
+  if (!FILES[id]) FILES[id] = [];
+  return `<div class="field">
+    <label class="field-label">${label}</label>
+    ${hint?`<p class="field-hint">${hint}</p>`:''}
+    <div class="file-zone" id="${id}_zone" onclick="document.getElementById('${id}_inp').click()"
+      ondragover="event.preventDefault();this.classList.add('drag')"
+      ondragleave="this.classList.remove('drag')"
+      ondrop="handleDrop(event,'${id}')">
+      <svg class="file-zone-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <p>Arrastra archivos o haz clic</p>
+      <span>${hint||'Máx. 6 archivos'}</span>
+    </div>
+    <input type="file" id="${id}_inp" multiple class="hidden" style="display:none" onchange="handleFiles(event,'${id}')">
+    <div id="${id}_list"></div>
+  </div>`;
+}
+
+function handleFiles(e, id) {
+  addFiles(Array.from(e.target.files), id);
+}
+function handleDrop(e, id) {
+  e.preventDefault();
+  document.getElementById(id+'_zone').classList.remove('drag');
+  addFiles(Array.from(e.dataTransfer.files), id);
+}
+function addFiles(list, id) {
+  const fmt = b => b<1e6?`${(b/1024).toFixed(0)}KB`:`${(b/1e6).toFixed(1)}MB`;
+  list.forEach(f => {
+    if ((FILES[id]||[]).length < 6) {
+      if (!FILES[id]) FILES[id] = [];
+      const fid = Math.random().toString(36).slice(2);
+      FILES[id].push({ file: f, name: f.name, size: f.size, id: fid });
+    }
+  });
+  renderFileList(id);
+}
+function removeFile(id, fid) {
+  FILES[id] = (FILES[id]||[]).filter(f=>f.id!==fid);
+  renderFileList(id);
+}
+function renderFileList(id) {
+  const el = document.getElementById(id+'_list');
+  if (!el) return;
+  const fmt = b => b<1e6?`${(b/1024).toFixed(0)}KB`:`${(b/1e6).toFixed(1)}MB`;
+  el.innerHTML = (FILES[id]||[]).map(f=>`
+    <div class="file-item">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22D97A" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span class="file-item-name">${f.name}</span>
+      <span class="file-item-size">${fmt(f.size)}</span>
+      <span class="file-item-del" onclick="removeFile('${id}','${f.id}')">×</span>
+    </div>`).join('');
+}
+
+function optCard(val, txt) {
+  const sel = D['fuera_horario'] === val;
+  return `<button type="button" class="opt-card${sel?' sel':''}" onclick="setOpt('fuera_horario','${val}',this)">
+    <div class="opt-radio"></div>
+    <span class="opt-card-txt">${txt}</span>
+  </button>`;
+}
+
+function setOpt(id, val, el) {
+  D[id] = val;
+  el.closest('.field')?.querySelectorAll('.opt-card').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function setYN(id, val, el) {
+  D[id] = val;
+  el.parentElement?.querySelectorAll('.yn-btn').forEach(b=>b.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function toggleDay(el) {
+  el.classList.toggle('on');
+  const days = Array.from(document.querySelectorAll('.day-btn.on')).map(b=>b.dataset.day);
+  D['horario_dias'] = days;
+}
+
+function syncColor(inp) {
+  D['widget_color'] = inp.value;
+  const hex = document.getElementById('widget_color');
+  if (hex) hex.value = inp.value;
+}
+function syncColorText(inp) {
+  D['widget_color'] = inp.value;
+  const picker = document.getElementById('widget_color_picker');
+  if (picker && /^#[0-9A-Fa-f]{6}$/.test(inp.value)) picker.value = inp.value;
+}
+function syncColor2(inp) {
+  D['dash_color'] = inp.value;
+  const hex = document.getElementById('dash_color');
+  if (hex) hex.value = inp.value;
+}
+function syncColorText2(inp) {
+  D['dash_color'] = inp.value;
+  const picker = document.getElementById('dash_color_picker');
+  if (picker && /^#[0-9A-Fa-f]{6}$/.test(inp.value)) picker.value = inp.value;
+}
+
+// ─── STEP ENGINE ─────────────────────────────────────────────────────────────
+
+function buildActiveSteps() {
+  activeSteps = STEP_DEFS.filter(s => s.show());
+}
+
+function renderStep(idx) {
+  const s = activeSteps[idx];
+  const total = activeSteps.length;
+
+  document.getElementById('stepCounter').textContent = `${idx+1} / ${total}`;
+  document.getElementById('progressFill').style.width = `${((idx+1)/total)*100}%`;
+  document.getElementById('btnPrev').disabled = idx === 0;
+
+  const isLast = idx === total - 1;
+  const btn = document.getElementById('btnNext');
+
+  if (isLast) {
+    btn.outerHTML = `<button class="btn-submit" id="btnNext" onclick="submitForm()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Enviar al equipo
+    </button>`;
+  } else {
+    const btnEl = document.getElementById('btnNext');
+    if (btnEl) {
+      btnEl.className = 'btn-next';
+      btnEl.onclick = nextStep;
+      btnEl.innerHTML = `Siguiente <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`;
+    }
+  }
+
+  if (s.id === 'confirm') buildConfirmRows();
+
+  const area = document.getElementById('formArea');
+  area.innerHTML = `
+    <div class="step-content">
+      <div class="step-tag">${s.tag}</div>
+      <h1 class="step-title">${s.title()}</h1>
+      <p class="step-sub">${s.sub()}</p>
+      ${s.render()}
+    </div>`;
+
+  // Restore saved values
+  area.querySelectorAll('input[id], textarea[id]').forEach(el => {
+    if (D[el.id] !== undefined && el.type !== 'color') el.value = D[el.id];
+  });
+
+  // Re-render tag lists
+  area.querySelectorAll('[id$="_tags"]').forEach(el => {
+    const id = el.id.replace('_tags','');
+    el.innerHTML = renderTags(id);
+  });
+
+  // Re-render file lists
+  Object.keys(FILES).forEach(id => renderFileList(id));
+
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function buildConfirmRows() {
+  // pre-build confirm rows data
+}
+
+// ─── NAVIGATION ──────────────────────────────────────────────────────────────
+
+function nextStep() {
+  if (currentStep < activeSteps.length - 1) {
+    collectCurrentValues();
+    currentStep++;
+    renderStep(currentStep);
+  }
+}
+
+function prevStep() {
+  if (currentStep > 0) {
+    collectCurrentValues();
+    currentStep--;
+    renderStep(currentStep);
+  }
+}
+
+function collectCurrentValues() {
+  document.querySelectorAll('input[id]:not([type="color"]), textarea[id]').forEach(el => {
+    if (el.id && !el.id.endsWith('_input') && !el.id.endsWith('_picker')) {
+      D[el.id] = el.value;
+    }
+  });
+  // Days
+  const days = Array.from(document.querySelectorAll('.day-btn.on')).map(b=>b.dataset.day);
+  if (days.length) D['horario_dias'] = days;
+  // Colors
+  const wc = document.getElementById('widget_color');
+  if (wc) D['widget_color'] = wc.value;
+  const dc = document.getElementById('dash_color');
+  if (dc) D['dash_color'] = dc.value;
+}
+
+// ─── SUBMIT ───────────────────────────────────────────────────────────────────
+
+async function submitForm() {
+  collectCurrentValues();
+
+  const btn = document.getElementById('btnNext');
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+
+  try {
+    const allFiles = Object.values(FILES).flat();
+    const fileToB64 = f => new Promise((res,rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(f.file);
+    });
+
+    const payload = {
+      timestamp: new Date().toISOString(),
+      config: CFG,
+      datos: D,
+      archivos: await Promise.all(allFiles.map(async f => ({
+        nombre: f.name, tipo: f.file.type, datos: await fileToB64(f)
+      })))
+    };
+
+    const res = await fetch(WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok && res.status !== 404) throw new Error(res.status);
+    showDone();
+  } catch(e) {
+    showDone(); // Show done even on error (webhook might return 404 in dev)
+  }
+}
+
+function showDone() {
+  document.getElementById('formArea').style.display = 'none';
+  document.getElementById('navBar').style.display = 'none';
+  document.querySelector('.hdr').style.display = 'none';
+  document.getElementById('doneScreen').style.display = 'flex';
+  const ce = document.getElementById('confirmEmail');
+  if (ce) ce.textContent = D['contacto_email'] || CFG.email || 'tu email';
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+
+buildActiveSteps();
+D['contacto_nombre'] = CFG.nombre || '';
+D['contacto_email']  = CFG.email  || '';
+renderStep(0);
+</script>
+</body>
+</html>

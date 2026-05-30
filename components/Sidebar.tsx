@@ -10,6 +10,7 @@ import {
   DollarSign,
   Briefcase,
   MessageSquare,
+  ClipboardList,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -30,6 +31,7 @@ export default function Sidebar() {
     { href: '/invoices', label: 'Facturas', icon: FileText },
     { href: '/pipelines', label: 'Pipelines', icon: Workflow },
     { href: '/proyectos', label: 'Proyectos', icon: Briefcase },
+    { href: '/onboarding', label: 'Onboarding', icon: ClipboardList },
     { href: '/finances', label: 'Finanzas', icon: DollarSign },
     { href: '/tasks', label: 'Tareas', icon: FileText },
   ]

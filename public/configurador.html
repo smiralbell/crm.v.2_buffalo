@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Configurador · Buffalo IA</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,600;0,800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#091E14; --bg2:#0C2318; --bg3:#0F2B1E;
+  --green:#22D97A; --gdim:rgba(34,217,122,0.12); --gmid:rgba(34,217,122,0.3);
+  --white:#FFFFFF; --off:#A8C4B4; --muted:#4E7A62; --rule:rgba(34,217,122,0.1);
+  --red:#FF5C5C; --orange:#F5A623; --blue:#4A9EE0;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--white);font-family:"IBM Plex Sans",sans-serif;min-height:100vh;padding-bottom:100px;}
+
+header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-items:center;justify-content:space-between;}
+.logo{font-weight:800;font-size:18px;color:var(--green);letter-spacing:.04em;}
+.header-right{display:flex;align-items:center;gap:32px;}
+
+.progress{display:flex;align-items:center;gap:0;}
+.prog-step{display:flex;align-items:center;gap:8px;padding:6px 16px;border-radius:99px;font-size:11px;font-family:"IBM Plex Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);transition:all .3s;cursor:default;}
+.prog-step.active{background:var(--gdim);color:var(--green);}
+.prog-step.done{color:var(--off);}
+.prog-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.prog-arrow{color:var(--muted);font-size:12px;padding:0 4px;}
+
+.step{display:none;max-width:1200px;margin:0 auto;padding:32px 24px 0;}
+.step.active{display:block;}
+
+.agents-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}
+@media(max-width:900px){.agents-grid{grid-template-columns:1fr;}}
+
+.card{background:var(--bg2);border:1px solid var(--rule);border-radius:20px;overflow:hidden;transition:border-color .2s;}
+.card.active{border-color:rgba(34,217,122,.35);}
+.card-header{padding:18px 22px 16px;border-bottom:1px solid var(--rule);display:flex;align-items:center;justify-content:space-between;}
+.card-title{font-size:16px;font-weight:800;letter-spacing:-.01em;display:flex;align-items:center;gap:8px;}
+.card-title span{color:var(--green);}
+.card-icon{color:var(--muted);transition:color .2s;}
+.card.active .card-icon{color:var(--green);}
+.card-body{padding:18px 22px 22px;}
+
+.toggle-wrap{display:flex;align-items:center;gap:8px;cursor:pointer;}
+.toggle-lbl{font-size:10px;color:var(--muted);font-family:"IBM Plex Mono",monospace;text-transform:uppercase;letter-spacing:.1em;}
+.toggle{width:40px;height:22px;border-radius:99px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);position:relative;cursor:pointer;transition:background .2s,border-color .2s;}
+.toggle.on{background:var(--green);border-color:var(--green);}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.5);transition:transform .2s,background .2s;}
+.toggle.on::after{transform:translateX(18px);background:#091E14;}
+
+.base-row{display:flex;align-items:center;justify-content:space-between;background:var(--gdim);border:1px solid rgba(34,217,122,.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;opacity:.4;transition:opacity .2s;}
+.card.active .base-row{opacity:1;}
+.base-lbl{font-size:12px;font-weight:600;}
+.base-sub{font-size:10px;color:var(--muted);margin-top:2px;}
+.base-badge{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.08em;color:var(--green);background:rgba(34,217,122,.1);padding:2px 7px;border-radius:5px;text-transform:uppercase;}
+.base-price{font-weight:700;font-size:13px;color:var(--green);}
+
+.slbl{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;display:flex;align-items:center;gap:6px;}
+.slbl::after{content:'';flex:1;height:1px;background:var(--rule);}
+
+.opts{display:flex;flex-direction:column;gap:5px;}
+.opt{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;cursor:pointer;transition:background .15s,border-color .15s,opacity .2s;opacity:.35;user-select:none;}
+.card.active .opt{opacity:1;}
+.card.active .opt:hover{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.12);}
+.opt.sel{background:var(--gdim)!important;border-color:rgba(34,217,122,.4)!important;}
+.opt-l{display:flex;align-items:center;gap:8px;}
+.chk{width:16px;height:16px;border-radius:4px;border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:9px;color:transparent;transition:all .15px;flex-shrink:0;}
+.opt.sel .chk{background:var(--green);border-color:var(--green);color:#091E14;font-weight:800;}
+.opt-name{font-size:12px;color:var(--off);transition:color .15s;}
+.opt.sel .opt-name{color:var(--white);font-weight:600;}
+.opt-price{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);transition:color .15s;}
+.opt.sel .opt-price{color:var(--green);}
+.card:not(.active) .opt{pointer-events:none;}
+.opt-clonada .opt-name::after{content:" · shared";font-size:9px;color:var(--muted);font-weight:400;font-style:italic;}
+.opt-clonada.sel .opt-name::after{color:rgba(34,217,122,.6);}
+
+.lang-row{display:flex;gap:5px;}
+.lang-opt{flex:1;padding:8px 6px;border:1px solid rgba(255,255,255,.06);border-radius:9px;cursor:pointer;text-align:center;transition:all .15s;opacity:.35;user-select:none;}
+.card.active .lang-opt{opacity:1;}
+.lang-opt.sel{background:var(--gdim);border-color:rgba(34,217,122,.4);}
+.lang-n{font-size:11px;color:var(--off);font-weight:600;}
+.lang-opt.sel .lang-n{color:var(--white);}
+.lang-p{font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--muted);margin-top:2px;}
+.lang-opt.sel .lang-p{color:var(--green);}
+.card:not(.active) .lang-opt{pointer-events:none;}
+
+.dash-tiers{display:flex;flex-direction:column;gap:5px;}
+.dash-tier{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid rgba(255,255,255,.06);border-radius:9px;cursor:pointer;transition:all .15s;opacity:.35;user-select:none;}
+.card.active .dash-tier{opacity:1;}
+.card.active .dash-tier:hover{background:rgba(255,255,255,.03);}
+.dash-tier.sel{background:var(--gdim)!important;border-color:rgba(34,217,122,.4)!important;}
+.dash-radio{width:16px;height:16px;border-radius:50%;border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;}
+.dash-tier.sel .dash-radio{border-color:var(--green);background:var(--green);}
+.dash-tier.sel .dash-radio::after{content:'';width:6px;height:6px;border-radius:50%;background:#091E14;}
+.dash-info{flex:1;margin-left:10px;}
+.dash-name{font-size:12px;color:var(--off);font-weight:600;transition:color .15s;}
+.dash-tier.sel .dash-name{color:var(--white);}
+.dash-sub{font-size:10px;color:var(--muted);margin-top:1px;}
+.dash-amt{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);transition:color .15s;}
+.dash-tier.sel .dash-amt{color:var(--green);}
+.card:not(.active) .dash-tier{pointer-events:none;}
+
+.s1-bottom{display:flex;flex-direction:column;gap:10px;margin-top:16px;}
+
+.pack-card{border:1px dashed rgba(34,217,122,.3);border-radius:14px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;opacity:.3;pointer-events:none;transition:opacity .3s;cursor:pointer;user-select:none;}
+.pack-card.avail{opacity:1;pointer-events:auto;}
+.pack-card.applied{background:var(--gdim);border-color:rgba(34,217,122,.5);border-style:solid;}
+.pack-l{display:flex;align-items:center;gap:10px;}
+.pack-badge{background:var(--green);color:#091E14;font-size:11px;font-weight:800;padding:3px 10px;border-radius:99px;opacity:.4;transition:opacity .2s;}
+.pack-card.applied .pack-badge{opacity:1;}
+
+.maint-card{border:1px solid var(--rule);border-radius:14px;overflow:hidden;}
+.maint-hdr{padding:10px 18px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:8px;}
+.maint-hdr-t{font-size:12px;font-weight:600;color:var(--off);}
+.maint-hdr-s{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--muted);margin-left:auto;}
+.maint-grid{display:grid;grid-template-columns:1fr 1fr;}
+.maint-opt{padding:14px 18px;cursor:pointer;transition:background .15s;position:relative;border-right:1px solid var(--rule);}
+.maint-opt:last-child{border-right:none;}
+.maint-opt.sel{background:var(--gdim);}
+.maint-opt.sel::after{content:'';position:absolute;top:10px;right:12px;width:16px;height:16px;border-radius:50%;background:var(--green);}
+.maint-plan{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-family:"IBM Plex Mono",monospace;margin-bottom:3px;}
+.maint-opt.sel .maint-plan{color:var(--green);}
+.maint-nm{font-size:13px;font-weight:700;}
+.maint-pr{font-size:22px;font-weight:800;color:var(--white);margin:4px 0 2px;}
+.maint-pct{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--muted);}
+.maint-empty{grid-column:1/-1;padding:16px;text-align:center;font-size:11px;color:var(--muted);font-style:italic;}
+
+.action-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(9,30,20,.97);backdrop-filter:blur(20px);border-top:1px solid var(--rule);padding:12px 40px;display:flex;align-items:center;justify-content:space-between;z-index:100;gap:16px;}
+.price-summary{display:flex;align-items:center;gap:24px;flex:1;flex-wrap:wrap;}
+.ps-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-family:"IBM Plex Mono",monospace;}
+.ps-item .v{color:var(--off);font-weight:500;}
+.ps-item.disc .v{color:var(--red);}
+.ps-sep{color:var(--muted);font-size:14px;}
+.totals{display:flex;align-items:center;gap:24px;}
+.tot-block{text-align:right;}
+.tot-lbl{font-size:9px;color:var(--muted);font-family:"IBM Plex Mono",monospace;text-transform:uppercase;letter-spacing:.12em;margin-bottom:1px;}
+.tot-val{font-size:24px;font-weight:800;letter-spacing:-.02em;color:var(--white);transition:color .3s;}
+.tot-val.g{color:var(--green);}
+.tot-val.b{color:var(--blue);}
+.vdiv{width:1px;height:32px;background:var(--rule);}
+.bar-btns{display:flex;align-items:center;gap:10px;}
+.btn-reset{background:none;border:1px solid rgba(255,255,255,.1);color:var(--muted);font-size:11px;padding:7px 14px;border-radius:8px;cursor:pointer;font-family:"IBM Plex Sans",sans-serif;transition:all .2s;}
+.btn-reset:hover{border-color:rgba(255,255,255,.2);color:var(--off);}
+.btn-next{background:var(--green);color:#091E14;font-size:13px;font-weight:700;padding:9px 24px;border-radius:10px;cursor:pointer;border:none;font-family:"IBM Plex Sans",sans-serif;transition:opacity .2s;white-space:nowrap;}
+.btn-next:disabled{opacity:.3;cursor:not-allowed;}
+.btn-back{background:rgba(255,255,255,.06);color:var(--off);font-size:12px;font-weight:600;padding:9px 18px;border-radius:10px;cursor:pointer;border:none;font-family:"IBM Plex Sans",sans-serif;transition:background .2s;}
+.btn-back:hover{background:rgba(255,255,255,.1);}
+
+/* ══ STEP 2 — CLIENTE ══ */
+.step2-layout{display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:1000px;margin:0 auto;}
+@media(max-width:800px){.step2-layout{grid-template-columns:1fr;}}
+.form-card{background:var(--bg2);border:1px solid var(--rule);border-radius:16px;padding:24px;margin-bottom:16px;}
+.form-card:last-child{margin-bottom:0;}
+.form-title{font-size:14px;font-weight:700;margin-bottom:16px;color:var(--off);display:flex;align-items:center;gap:8px;}
+.form-group{margin-bottom:14px;}
+.form-group:last-child{margin-bottom:0;}
+.form-label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-family:"IBM Plex Mono",monospace;margin-bottom:6px;display:block;}
+.form-input{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:10px 14px;font-size:13px;color:var(--white);width:100%;font-family:"IBM Plex Sans",sans-serif;outline:none;transition:border-color .2s;}
+.form-input:focus{border-color:rgba(34,217,122,.4);}
+.form-input::placeholder{color:var(--muted);}
+
+/* RESUMEN */
+.summary-lines{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
+.sum-line{display:flex;justify-content:space-between;font-size:12px;}
+.sum-line .sl{color:var(--muted);}
+.sum-line .sv{font-family:"IBM Plex Mono",monospace;color:var(--off);}
+.sum-line.sum-total{border-top:1px solid var(--rule);padding-top:8px;margin-top:4px;}
+.sum-line.sum-total .sl{font-weight:700;color:var(--white);font-size:13px;}
+.sum-line.sum-total .sv{color:var(--green);font-weight:700;font-size:13px;}
+.sum-maint{background:var(--gdim);border:1px solid rgba(34,217,122,.2);border-radius:9px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+.sm-lbl{font-size:11px;color:var(--off);}
+.sm-val{font-family:"IBM Plex Mono",monospace;font-size:14px;font-weight:700;color:var(--green);}
+
+/* CTA GRID */
+.cta-grid{display:flex;flex-direction:column;gap:8px;}
+.cta-row{display:flex;align-items:center;gap:8px;padding:14px 16px;background:var(--bg3);border:1px solid var(--rule);border-radius:12px;}
+.cta-info{flex:1;}
+.cta-title{font-size:13px;font-weight:700;color:var(--white);}
+.cta-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+.cta-btns{display:flex;gap:6px;flex-shrink:0;}
+.btn-action{background:var(--gdim);border:1px solid rgba(34,217,122,.3);color:var(--green);font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;cursor:pointer;border-radius:8px;font-family:"IBM Plex Sans",sans-serif;display:flex;align-items:center;gap:5px;transition:background .15s;white-space:nowrap;}
+.btn-action:hover{background:rgba(34,217,122,.2);}
+.btn-send{background:rgba(74,158,224,.12);border:1px solid rgba(74,158,224,.3);color:var(--blue);font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:"IBM Plex Sans",sans-serif;display:flex;align-items:center;gap:5px;transition:background .15s;white-space:nowrap;}
+.btn-send:hover{background:rgba(74,158,224,.22);}
+.toast-msg{font-size:11px;color:var(--green);font-family:"IBM Plex Mono",monospace;padding:8px 12px;background:rgba(34,217,122,.08);border:1px solid rgba(34,217,122,.2);border-radius:8px;margin-top:6px;display:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">BUFFALO IA</div>
+  <div class="header-right">
+    <div class="progress" id="progressBar">
+      <div class="prog-step active" id="ps1"><div class="prog-dot"></div>Configuración</div>
+      <div class="prog-arrow">›</div>
+      <div class="prog-step" id="ps2"><div class="prog-dot"></div>Propuesta</div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ STEP 1 ══════════════ -->
+<div class="step active" id="step1">
+  <div class="agents-grid">
+
+    <!-- VOZ -->
+    <div class="card" id="cVoz">
+      <div class="card-header">
+        <div class="card-title">
+          <svg class="card-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+          Agente de <span>Voz</span>
+        </div>
+        <div class="toggle-wrap" onclick="toggleAgent('voz')">
+          <span class="toggle-lbl">Activar</span>
+          <div class="toggle" id="tVoz"></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="base-row">
+          <div><div class="base-lbl">Agente Inbound 24/7</div><div class="base-sub">Flujo + integración telefónica + pruebas</div></div>
+          <div style="display:flex;align-items:center;gap:8px;"><div class="base-badge">Base</div><div class="base-price">2.200 €</div></div>
+        </div>
+        <div class="slbl">Idiomas</div>
+        <div class="lang-row" id="lVoz">
+          <div class="lang-opt sel" data-price="0" onclick="selLang('voz',this)"><div class="lang-n">1 idioma</div><div class="lang-p">Incluido</div></div>
+          <div class="lang-opt" data-price="400" onclick="selLang('voz',this)"><div class="lang-n">Hasta 3</div><div class="lang-p">+400 €</div></div>
+          <div class="lang-opt" data-price="700" onclick="selLang('voz',this)"><div class="lang-n">Hasta 5</div><div class="lang-p">+700 €</div></div>
+        </div>
+        <div class="slbl">Add-ons</div>
+        <div class="opts">
+          <div class="opt" data-price="700" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Agente Outbound + trigger</div></div><div class="opt-price">+700 €</div></div>
+          <div class="opt" data-price="800" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Integración CRM</div></div><div class="opt-price">+800 €</div></div>
+          <div class="opt" data-price="300" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Transferir llamada a humano</div></div><div class="opt-price">+300 €</div></div>
+          <div class="opt" data-price="250" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Enviar correo con resumen</div></div><div class="opt-price">+250 €</div></div>
+          <div class="opt" data-price="300" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Transcripción de llamada</div></div><div class="opt-price">+300 €</div></div>
+          <div class="opt opt-clonada" id="clonadaVoz" data-price="600" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Voz clonada</div></div><div class="opt-price">+600 €</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAT -->
+    <div class="card" id="cChat">
+      <div class="card-header">
+        <div class="card-title">
+          <svg class="card-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Agente de <span>Chat</span>
+        </div>
+        <div class="toggle-wrap" onclick="toggleAgent('chat')">
+          <span class="toggle-lbl">Activar</span>
+          <div class="toggle" id="tChat"></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="slbl">Idiomas</div>
+        <div class="lang-row" id="lChat">
+          <div class="lang-opt sel" data-price="0" onclick="selLang('chat',this)"><div class="lang-n">1 idioma</div><div class="lang-p">Incluido</div></div>
+          <div class="lang-opt" data-price="400" onclick="selLang('chat',this)"><div class="lang-n">Hasta 3</div><div class="lang-p">+400 €</div></div>
+          <div class="lang-opt" data-price="700" onclick="selLang('chat',this)"><div class="lang-n">Hasta 5</div><div class="lang-p">+700 €</div></div>
+        </div>
+        <div class="slbl">Canales — mín. 1</div>
+        <div class="opts">
+          <div class="opt" data-price="900" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">WhatsApp Meta Official</div></div><div class="opt-price">+900 €</div></div>
+          <div class="opt" data-price="500" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Widget Web</div></div><div class="opt-price">+500 €</div></div>
+          <div class="opt" data-price="400" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Trigger formulario</div></div><div class="opt-price">+400 €</div></div>
+        </div>
+        <div class="slbl">Capacidades</div>
+        <div class="opts">
+          <div class="opt" data-price="800" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Integración CRM</div></div><div class="opt-price">+800 €</div></div>
+          <div class="opt" data-price="600" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Capacidades multimodales</div></div><div class="opt-price">+600 €</div></div>
+          <div class="opt" data-price="300" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Envía audios</div></div><div class="opt-price">+300 €</div></div>
+          <div class="opt opt-clonada" id="clonadaChat" data-price="600" onclick="togOpt(this)"><div class="opt-l"><div class="chk">✓</div><div class="opt-name">Voz clonada</div></div><div class="opt-price">+600 €</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="card" id="cDash">
+      <div class="card-header">
+        <div class="card-title">
+          <svg class="card-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Dashboard / <span>App</span>
+        </div>
+        <div class="toggle-wrap" onclick="toggleAgent('dash')">
+          <span class="toggle-lbl">Activar</span>
+          <div class="toggle" id="tDash"></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="slbl">Selecciona el tier</div>
+        <div class="dash-tiers" id="dashTiers">
+          <div class="dash-tier" data-price="1000" onclick="selDash(this)">
+            <div class="dash-radio"></div>
+            <div class="dash-info"><div class="dash-name">Básico</div><div class="dash-sub">Métricas en tiempo real + panel de leads</div></div>
+            <div class="dash-amt">1.000 €</div>
+          </div>
+          <div class="dash-tier" data-price="1800" onclick="selDash(this)">
+            <div class="dash-radio"></div>
+            <div class="dash-info"><div class="dash-name">Avanzado</div><div class="dash-sub">+ Panel de conversaciones + acciones</div></div>
+            <div class="dash-amt">1.800 €</div>
+          </div>
+          <div class="dash-tier" data-price="3000" onclick="selDash(this)">
+            <div class="dash-radio"></div>
+            <div class="dash-info"><div class="dash-name">Completo</div><div class="dash-sub">+ Integraciones + control operativo total</div></div>
+            <div class="dash-amt">3.000 €</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /agents-grid -->
+
+  <div style="max-width:1200px;margin:16px auto 0;padding:0 24px;">
+    <div class="s1-bottom">
+      <div class="pack-card" id="packCard" onclick="togPack()">
+        <div class="pack-l">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <div><div style="font-size:12px;font-weight:600;">Pack Voz + Chat — descuento combinado</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">Disponible al activar ambos agentes</div></div>
+        </div>
+        <div class="pack-badge">−10 %</div>
+      </div>
+      <div class="maint-card">
+        <div class="maint-hdr">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+          <span class="maint-hdr-t">Mantenimiento mensual</span>
+          <span class="maint-hdr-s">% sobre setup total</span>
+        </div>
+        <div class="maint-grid" id="maintGrid"><div class="maint-empty">Configura el setup para ver opciones</div></div>
+      </div>
+    </div>
+  </div>
+</div><!-- /step1 -->
+
+<!-- ══════════════ STEP 2 — PROPUESTA ══════════════ -->
+<div class="step" id="step2">
+  <div class="step2-layout">
+
+    <!-- LEFT: datos cliente -->
+    <div>
+      <div class="form-card">
+        <div class="form-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          Cliente
+        </div>
+        <div class="form-group"><label class="form-label">Nombre completo</label><input class="form-input" id="f-name" placeholder="Alex Melero García"></div>
+        <div class="form-group"><label class="form-label">Empresa</label><input class="form-input" id="f-company" placeholder="M7 Consulting SLU"></div>
+        <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" type="email" placeholder="alex@empresa.com"></div>
+        <div class="form-group"><label class="form-label">Ciudad</label><input class="form-input" id="f-city" placeholder="Barcelona"></div>
+      </div>
+      <div class="form-card">
+        <div class="form-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Proyecto
+        </div>
+        <div class="form-group"><label class="form-label">Plazo estimado de entrega</label>
+          <select class="form-input" id="f-plazo" style="cursor:pointer;">
+            <option value="2–3 semanas">2–3 semanas</option>
+            <option value="3–4 semanas">3–4 semanas</option>
+            <option value="4–6 semanas" selected>4–6 semanas</option>
+            <option value="6–8 semanas">6–8 semanas</option>
+            <option value="8–12 semanas">8–12 semanas</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Referencia interna</label><input class="form-input" id="f-ref" placeholder="BUF-2026-XXX-001"></div>
+        <div class="form-group">
+          <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+            URL base del onboarding
+            <span style="font-size:9px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">(vacío = misma carpeta)</span>
+          </label>
+          <input class="form-input" id="f-baseurl" placeholder="https://tools.agenciabuffalo.es">
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: resumen + CTAs -->
+    <div>
+      <!-- Resumen económico -->
+      <div class="form-card">
+        <div class="form-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Resumen económico
+        </div>
+        <div class="summary-lines" id="summaryLines"></div>
+        <div class="sum-maint" id="summaryMaint" style="display:none;">
+          <div class="sm-lbl" id="sm-lbl">Mantenimiento mensual</div>
+          <div class="sm-val" id="sm-val">0 €/mes</div>
+        </div>
+        <!-- Pagos -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;">
+          <div style="background:var(--bg3);border-radius:9px;padding:12px 14px;">
+            <div style="font-size:10px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-bottom:4px;">1ER PAGO · INICIO</div>
+            <div style="font-size:18px;font-weight:800;color:var(--green);" id="pay1">0 €</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:9px;padding:12px 14px;">
+            <div style="font-size:10px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-bottom:4px;">2DO PAGO · PRODUCCIÓN</div>
+            <div style="font-size:18px;font-weight:800;color:var(--green);" id="pay2">0 €</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTAs -->
+      <div class="form-card">
+        <div class="form-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          Documentos
+        </div>
+        <div class="cta-grid">
+
+          <!-- Propuesta -->
+          <div class="cta-row">
+            <div class="cta-info">
+              <div class="cta-title">Propuesta comercial</div>
+              <div class="cta-sub">PDF explicativo para el cliente</div>
+            </div>
+            <div class="cta-btns">
+              <button class="btn-action" onclick="generateProposal()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Generar
+              </button>
+              <button class="btn-send" onclick="sendDoc('propuesta')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Enviar
+              </button>
+            </div>
+          </div>
+
+          <!-- Onboarding -->
+          <div class="cta-row">
+            <div class="cta-info">
+              <div class="cta-title">Formulario de onboarding</div>
+              <div class="cta-sub">Link dinámico personalizado · sin backend</div>
+            </div>
+            <div class="cta-btns">
+              <button class="btn-action" onclick="copyOnboardingLink()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                Copiar link
+              </button>
+              <button class="btn-send" onclick="sendDoc('onboarding')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Enviar
+              </button>
+            </div>
+          </div>
+
+          <!-- Contrato -->
+          <div class="cta-row">
+            <div class="cta-info">
+              <div class="cta-title">Contrato de servicios</div>
+              <div class="cta-sub">Documento PDF listo para firma</div>
+            </div>
+            <div class="cta-btns">
+              <button class="btn-action" onclick="generateContrato()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Generar
+              </button>
+              <button class="btn-send" onclick="sendDoc('contrato')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Enviar
+              </button>
+            </div>
+          </div>
+
+          <!-- Factura -->
+          <div class="cta-row">
+            <div class="cta-info">
+              <div class="cta-title">Factura — 1er pago (50%)</div>
+              <div class="cta-sub">Con IVA · lista para enviar</div>
+            </div>
+            <div class="cta-btns">
+              <button class="btn-action" onclick="generateFactura()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Generar
+              </button>
+              <button class="btn-send" onclick="sendDoc('factura')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Enviar
+              </button>
+            </div>
+          </div>
+
+        </div>
+        <div class="toast-msg" id="toastMsg"></div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /step2 -->
+
+<!-- ACTION BAR -->
+<div class="action-bar">
+  <div class="price-summary" id="priceSummary">
+    <div class="ps-item" style="color:var(--muted);font-size:11px;">Activa un agente para empezar</div>
+  </div>
+  <div class="totals">
+    <div class="tot-block">
+      <div class="tot-lbl">Setup</div>
+      <div class="tot-val g" id="barSetup" data-val="0">0 €</div>
+    </div>
+    <div class="vdiv" id="barMaintDiv" style="opacity:0"></div>
+    <div class="tot-block" id="barMaintBlock" style="opacity:0;transition:opacity .3s;">
+      <div class="tot-lbl" id="barMaintLbl">Mantenimiento</div>
+      <div class="tot-val b" id="barMaint" data-val="0">0 €/mes</div>
+    </div>
+  </div>
+  <div class="bar-btns" id="barBtns">
+    <button class="btn-reset" onclick="resetAll()">Resetear</button>
+    <button class="btn-next" id="btnNext" onclick="goStep(2)" disabled>Datos del cliente →</button>
+  </div>
+</div>
+
+<script>
+const S = {
+  voz:  { on:false, base:2200, lang:0, opts:[] },
+  chat: { on:false, base:0,    lang:0, opts:[] },
+  dash: { on:false, price:0 },
+  pack: false, maint: null,
+  currentStep: 1
+};
+
+function cap(s){ return s[0].toUpperCase()+s.slice(1); }
+function fmtSp(n){ return n.toLocaleString('es-ES')+' €'; }
+
+const ICONS = {
+  mic:  `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>`,
+  chat: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
+  dash: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`,
+  zap:  `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+};
+
+// ── TOGGLES ──
+function toggleAgent(a) {
+  S[a].on = !S[a].on;
+  document.getElementById('c'+cap(a)).classList.toggle('active', S[a].on);
+  document.getElementById('t'+cap(a)).classList.toggle('on', S[a].on);
+  if (!S[a].on) {
+    document.getElementById('c'+cap(a)).querySelectorAll('.opt.sel,.dash-tier.sel').forEach(o=>o.classList.remove('sel'));
+    if (!S.voz.on && !S.chat.on) document.querySelectorAll('.opt-clonada').forEach(o=>o.classList.remove('sel'));
+  }
+  updatePack(); recalc();
+}
+
+function togOpt(el) {
+  const card = el.closest('.card');
+  if (!card.classList.contains('active')) return;
+  if (el.classList.contains('opt-clonada')) {
+    const willSel = !el.classList.contains('sel');
+    document.querySelectorAll('.opt-clonada').forEach(o=>o.classList.toggle('sel', willSel));
+  } else {
+    el.classList.toggle('sel');
+  }
+  recalc();
+}
+
+function selLang(agent, el) {
+  if (!S[agent].on) return;
+  document.querySelectorAll(`#l${cap(agent)} .lang-opt`).forEach(o=>o.classList.remove('sel'));
+  el.classList.add('sel');
+  S[agent].lang = +el.dataset.price;
+  recalc();
+}
+
+function selDash(el) {
+  if (!S.dash.on) return;
+  document.querySelectorAll('#dashTiers .dash-tier').forEach(o=>o.classList.remove('sel'));
+  el.classList.add('sel');
+  S.dash.price = +el.dataset.price;
+  recalc();
+}
+
+function togPack() {
+  if (!document.getElementById('packCard').classList.contains('avail')) return;
+  S.pack = !S.pack;
+  document.getElementById('packCard').classList.toggle('applied', S.pack);
+  recalc();
+}
+
+function updatePack() {
+  const both = S.voz.on && S.chat.on;
+  document.getElementById('packCard').classList.toggle('avail', both);
+  if (!both) { S.pack = false; document.getElementById('packCard').classList.remove('applied'); }
+}
+
+function selMaint(type) {
+  S.maint = S.maint === type ? null : type;
+  document.querySelectorAll('.maint-opt').forEach(o=>o.classList.toggle('sel', o.dataset.type===S.maint));
+  recalc();
+}
+
+// ── CALC ──
+function calcSetup() {
+  let voz=0, chat=0, dash=0;
+  if (S.voz.on) {
+    voz = S.voz.base + S.voz.lang;
+    document.querySelectorAll('#cVoz .opt.sel:not(.opt-clonada)').forEach(o=>voz+=+o.dataset.price);
+  }
+  if (S.chat.on) {
+    chat = S.chat.lang;
+    document.querySelectorAll('#cChat .opt.sel:not(.opt-clonada)').forEach(o=>chat+=+o.dataset.price);
+  }
+  const clonadaSel = document.querySelector('.opt-clonada.sel') !== null;
+  if (clonadaSel) {
+    if (S.voz.on) voz += 600;
+    else if (S.chat.on) chat += 600;
+  }
+  if (S.dash.on) dash = S.dash.price;
+  let sub = voz+chat+dash;
+  let disc = S.pack ? Math.round(sub*0.1) : 0;
+  return { voz, chat, dash, sub, disc, total: sub-disc, clonadaSel };
+}
+
+function recalc() {
+  const { voz, chat, dash, sub, disc, total } = calcSetup();
+  const hasAny = S.voz.on || S.chat.on || S.dash.on;
+
+  const bd = document.getElementById('priceSummary');
+  let html = '';
+  if (!hasAny) {
+    html='<div class="ps-item" style="color:var(--muted);font-size:11px;">Activa un agente para empezar</div>';
+  } else {
+    if (S.voz.on)  html+=`<div class="ps-item">${ICONS.mic}<span>Voz</span><span class="ps-sep">·</span><span class="v">${fmtSp(voz)}</span></div>`;
+    if (S.chat.on) { if(S.voz.on) html+='<div class="ps-sep">+</div>'; html+=`<div class="ps-item">${ICONS.chat}<span>Chat</span><span class="ps-sep">·</span><span class="v">${fmtSp(chat)}</span></div>`; }
+    if (S.dash.on) { html+='<div class="ps-sep">+</div>'; html+=`<div class="ps-item">${ICONS.dash}<span>Dashboard</span><span class="ps-sep">·</span><span class="v">${fmtSp(dash)}</span></div>`; }
+    if (disc>0)    { html+='<div class="ps-sep">=</div>'; html+=`<div class="ps-item disc">${ICONS.zap}<span>Pack −10%</span><span class="ps-sep">·</span><span class="v">−${fmtSp(disc)}</span></div>`; }
+  }
+  bd.innerHTML = html;
+
+  animVal('barSetup', total, false);
+  document.getElementById('barSetup').classList.toggle('g', total>0);
+
+  renderMaint(total);
+  const mAmt = S.maint ? Math.round(total*(S.maint==='connect'?0.10:0.15)) : 0;
+  const showM = S.maint && total>0;
+  document.getElementById('barMaintBlock').style.opacity = showM?'1':'0';
+  document.getElementById('barMaintDiv').style.opacity  = showM?'1':'0';
+  if (showM) {
+    document.getElementById('barMaintLbl').textContent = S.maint==='connect'?'Connect 10%':'Cloud 15%';
+    animVal('barMaint', mAmt, true);
+  }
+
+  document.getElementById('btnNext').disabled = !hasAny;
+  updateStep2Summary(total);
+}
+
+function renderMaint(setup) {
+  const g = document.getElementById('maintGrid');
+  if (setup===0) { g.innerHTML='<div class="maint-empty">Configura el setup para ver opciones</div>'; return; }
+  const c = Math.round(setup*0.10), b = Math.round(setup*0.15);
+  g.innerHTML = `
+    <div class="maint-opt ${S.maint==='connect'?'sel':''}" data-type="connect" onclick="selMaint('connect')">
+      <div class="maint-plan">Buffalo Connect</div><div class="maint-nm">Servidores cliente</div>
+      <div class="maint-pr">${fmtSp(c)}</div><div class="maint-pct">10% del setup</div>
+    </div>
+    <div class="maint-opt ${S.maint==='cloud'?'sel':''}" data-type="cloud" onclick="selMaint('cloud')">
+      <div class="maint-plan">Buffalo Cloud</div><div class="maint-nm">Servidores Buffalo</div>
+      <div class="maint-pr">${fmtSp(b)}</div><div class="maint-pct">15% del setup</div>
+    </div>`;
+}
+
+function updateStep2Summary(total) {
+  const { voz, chat, dash, disc } = calcSetup();
+  const lines = document.getElementById('summaryLines');
+  if (!lines) return;
+  let html = '';
+  const addLine = (l,v,isD=false) => html+=`<div class="sum-line"><span class="sl">${l}</span><span class="sv" style="${isD?'color:var(--red)':''}">${v}</span></div>`;
+  if (S.voz.on)  addLine('Agente de Voz',   fmtSp(voz));
+  if (S.chat.on) addLine('Agente de Chat',  fmtSp(chat));
+  if (S.dash.on) addLine('Dashboard / App', fmtSp(dash));
+  if (disc>0)    addLine('Pack Voz+Chat −10%', '−'+fmtSp(disc), true);
+  html += `<div class="sum-line sum-total"><span class="sl">Total setup</span><span class="sv">${fmtSp(total)}</span></div>`;
+  lines.innerHTML = html;
+
+  const half = Math.ceil(total/2);
+  const p1 = document.getElementById('pay1'), p2 = document.getElementById('pay2');
+  if (p1) p1.textContent = fmtSp(half);
+  if (p2) p2.textContent = fmtSp(total-half);
+
+  const sm = document.getElementById('summaryMaint');
+  if (sm) {
+    if (S.maint && total>0) {
+      const mAmt = Math.round(total*(S.maint==='connect'?0.10:0.15));
+      document.getElementById('sm-lbl').textContent = S.maint==='connect' ? 'Buffalo Connect (10%/mes)' : 'Buffalo Cloud (15%/mes)';
+      document.getElementById('sm-val').textContent = fmtSp(mAmt)+'/mes';
+      sm.style.display='flex';
+    } else sm.style.display='none';
+  }
+}
+
+// ── NAVIGATION ──
+function goStep(n) {
+  S.currentStep = n;
+  document.querySelectorAll('.step').forEach((s,i)=>s.classList.toggle('active',i+1===n));
+  ['ps1','ps2'].forEach((id,i)=>{
+    const el=document.getElementById(id);
+    el.classList.remove('active','done');
+    if (i+1===n) el.classList.add('active');
+    else if (i+1<n) el.classList.add('done');
+  });
+  const btns = document.getElementById('barBtns');
+  if (n===1) {
+    btns.innerHTML = `<button class="btn-reset" onclick="resetAll()">Resetear</button><button class="btn-next" id="btnNext" onclick="goStep(2)" ${calcSetup().total===0?'disabled':''}>Datos del cliente →</button>`;
+  } else if (n===2) {
+    btns.innerHTML = `<button class="btn-back" onclick="goStep(1)">← Volver</button>`;
+    updateStep2Summary(calcSetup().total);
+  }
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── ONBOARDING LINK ──
+function buildOnboardingConfig() {
+  const name    = document.getElementById('f-name')?.value    || '';
+  const company = document.getElementById('f-company')?.value || '';
+  const email   = document.getElementById('f-email')?.value   || '';
+  const ref     = document.getElementById('f-ref')?.value     || ('BUF-2026-'+Date.now().toString().slice(-4));
+
+  const getOpt = (cardId, txt) => !!document.querySelector(`#${cardId} .opt.sel .opt-name`)
+    ? Array.from(document.querySelectorAll(`#${cardId} .opt.sel .opt-name`)).some(n=>n.textContent.toLowerCase().includes(txt.toLowerCase()))
+    : false;
+
+  const dashTier = document.querySelector('#dashTiers .dash-tier.sel');
+
+  return {
+    ref, empresa: company, nombre: name, email,
+    voz: S.voz.on,
+    voz_outbound:     getOpt('cVoz','outbound'),
+    voz_crm:          getOpt('cVoz','crm'),
+    voz_transferir:   getOpt('cVoz','transferir'),
+    voz_correo:       getOpt('cVoz','correo'),
+    voz_transcripcion:getOpt('cVoz','transcripci'),
+    voz_lang: S.voz.lang,
+    chat: S.chat.on,
+    chat_whatsapp:    getOpt('cChat','whatsapp'),
+    chat_widget:      getOpt('cChat','widget'),
+    chat_trigger:     getOpt('cChat','trigger'),
+    chat_crm:         getOpt('cChat','crm'),
+    chat_multimodal:  getOpt('cChat','multimodal'),
+    chat_audios:      getOpt('cChat','audios'),
+    chat_lang: S.chat.lang,
+    clonada: document.querySelector('.opt-clonada.sel') !== null,
+    dash: S.dash.on,
+    dash_tier: dashTier ? dashTier.querySelector('.dash-name')?.textContent : null,
+    maint: S.maint
+  };
+}
+
+function getOnboardingUrl() {
+  const config = buildOnboardingConfig();
+  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(config))));
+  const base = (document.getElementById('f-baseurl')?.value || '').replace(/\/$/, '');
+  return (base ? base + '/Buffalo_Onboarding.html' : 'Buffalo_Onboarding.html') + '?c=' + encoded;
+}
+
+function copyOnboardingLink() {
+  const url = getOnboardingUrl();
+  navigator.clipboard.writeText(url).then(() => {
+    showToast('Link copiado al portapapeles', 'green');
+  }).catch(() => {
+    showToast('Link: '+url.substring(0,60)+'…', 'green');
+  });
+}
+
+function showToast(msg, color='green') {
+  const t = document.getElementById('toastMsg');
+  if (!t) return;
+  t.style.display = 'block';
+  t.style.color = color==='blue' ? 'var(--blue)' : 'var(--green)';
+  t.style.borderColor = color==='blue' ? 'rgba(74,158,224,.3)' : 'rgba(34,217,122,.25)';
+  t.style.background = color==='blue' ? 'rgba(74,158,224,.08)' : 'rgba(34,217,122,.08)';
+  t.textContent = msg;
+  clearTimeout(t._t);
+  t._t = setTimeout(()=>t.style.display='none', 4000);
+}
+
+// ── SEND BY EMAIL ──
+function sendDoc(type) {
+  const email   = document.getElementById('f-email')?.value   || '';
+  const name    = document.getElementById('f-name')?.value    || 'Cliente';
+  const company = document.getElementById('f-company')?.value || '';
+  const ref     = document.getElementById('f-ref')?.value     || 'BUF-2026';
+  const firstName = name.split(' ')[0];
+
+  let subject = '', body = '';
+
+  if (type === 'propuesta') {
+    subject = `Propuesta de servicios Buffalo AI — ${company||name}`;
+    body = `Hola ${firstName},\n\nAdjunto encontrarás la propuesta de servicios que hemos preparado para ${company||'vosotros'}.\n\nSi tienes cualquier duda o quieres ajustar algo, estamos disponibles.\n\nUn saludo,\nEquipo Buffalo AI\nhola@agenciabuffalo.es`;
+
+  } else if (type === 'onboarding') {
+    const url = getOnboardingUrl();
+    subject = `Formulario de inicio de proyecto — ${company||name} (${ref})`;
+    body = `Hola ${firstName},\n\n¡Todo listo para arrancar! Para que nuestro equipo pueda empezar el desarrollo, necesitamos que rellenes este formulario (10–15 minutos):\n\n${url}\n\nCuando lo hayas enviado, el equipo recibirá todo lo necesario para empezar. No necesitas preparar nada más por tu parte.\n\nCualquier duda: hola@agenciabuffalo.es\n\nUn saludo,\nEquipo Buffalo AI`;
+
+  } else if (type === 'contrato') {
+    subject = `Contrato de servicios Buffalo AI — ${company||name} (${ref})`;
+    body = `Hola ${firstName},\n\nAdjunto el contrato de servicios correspondiente al proyecto ${ref}.\n\nRevísalo con calma. Cuando estés de acuerdo, podemos firmarlo digitalmente o en persona según prefieras.\n\nCualquier modificación o consulta, dímela y lo gestionamos.\n\nUn saludo,\nEquipo Buffalo AI\nhola@agenciabuffalo.es`;
+
+  } else if (type === 'factura') {
+    const { total } = calcSetup();
+    const half = Math.ceil(total/2);
+    subject = `Factura ${ref}-F01 — Buffalo AI — ${fmtSp(half)} + IVA`;
+    body = `Hola ${firstName},\n\nAdjunto la factura correspondiente al primer pago del proyecto ${ref}.\n\nImporte: ${fmtSp(half)} + IVA 21% = ${fmtSp(Math.round(half*1.21))}\n\nFormas de pago:\n— Transferencia bancaria: ES12 3456 7890 1234 5678 9012\n— Concepto: ${ref}-F01\n\nUna vez confirmado el pago, arrancamos.\n\nUn saludo,\nEquipo Buffalo AI\nhola@agenciabuffalo.es`;
+  }
+
+  if (email) {
+    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  } else {
+    showToast('Rellena primero el email del cliente', 'orange');
+  }
+}
+
+// ── PROPOSAL GENERATION ──
+function generateProposal() {
+  const name    = document.getElementById('f-name')?.value    || 'Cliente';
+  const company = document.getElementById('f-company')?.value || '';
+  const email   = document.getElementById('f-email')?.value   || '';
+  const city    = document.getElementById('f-city')?.value    || 'Barcelona';
+  const plazo   = document.getElementById('f-plazo')?.value;
+  const ref     = document.getElementById('f-ref')?.value     || ('BUF-2026-'+Date.now().toString().slice(-4));
+  const { voz, chat, dash, disc, total, clonadaSel } = calcSetup();
+  const half = Math.ceil(total/2);
+  const mAmt = S.maint ? Math.round(total*(S.maint==='connect'?0.10:0.15)) : 0;
+  const today = new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'});
+
+  let serviceBlocks = '', pricingRows = '';
+
+  if (S.voz.on) {
+    const addons = [];
+    document.querySelectorAll('#cVoz .opt.sel').forEach(o => addons.push(o.querySelector('.opt-name').textContent.replace(' · shared','').trim()));
+    if (clonadaSel) addons.push('Voz clonada');
+    const langTxt = S.voz.lang===700?'hasta 5 idiomas':S.voz.lang===400?'hasta 3 idiomas':'1 idioma';
+    serviceBlocks += `<div class="service-block">
+      <div class="service-header"><div class="service-tag">Agente de Inteligencia Artificial</div>
+      <div class="service-title-row"><span class="service-title-txt">Agente de Voz</span><span class="service-price">${fmtSp(voz)}</span></div></div>
+      <p class="service-desc">Un agente conversacional de voz que atiende a tus clientes de forma completamente autónoma, las 24 horas del día, los 7 días de la semana. Gestiona llamadas entrantes, responde preguntas frecuentes, recoge información y puede escalar conversaciones complejas a un agente humano cuando sea necesario. Sin tiempos de espera, con la misma calidad en cada interacción. Configurado en ${langTxt}.</p>
+      ${addons.length?`<div class="addon-label">Funcionalidades incluidas</div><ul class="service-items">${addons.map(a=>`<li>${a}</li>`).join('')}</ul>`:''}</div>`;
+    pricingRows += `<tr><td>Agente de Voz</td><td style="text-align:right;font-weight:600;">${fmtSp(voz)}</td></tr>`;
+  }
+
+  if (S.chat.on) {
+    const channels=[], caps=[];
+    document.querySelectorAll('#cChat .opt.sel').forEach(o=>{
+      const txt=o.querySelector('.opt-name').textContent.replace(' · shared','').trim();
+      const p=+o.dataset.price;
+      if([900,500,400].includes(p)) channels.push(txt); else caps.push(txt);
+    });
+    if(clonadaSel) caps.push('Voz clonada');
+    const langTxt = S.chat.lang===700?'hasta 5 idiomas':S.chat.lang===400?'hasta 3 idiomas':'1 idioma';
+    const channelStr = channels.length?channels.join(', '):'canal web';
+    let addonHtml = '';
+    if(channels.length) addonHtml+=`<div class="addon-label">Canales</div><ul class="service-items">${channels.map(c=>`<li>${c}</li>`).join('')}</ul>`;
+    if(caps.length) addonHtml+=`<div class="addon-label">Capacidades</div><ul class="service-items">${caps.map(c=>`<li>${c}</li>`).join('')}</ul>`;
+    serviceBlocks += `<div class="service-block">
+      <div class="service-header"><div class="service-tag">Agente de Inteligencia Artificial</div>
+      <div class="service-title-row"><span class="service-title-txt">Agente de Chat</span><span class="service-price">${fmtSp(chat)}</span></div></div>
+      <p class="service-desc">Un agente de chat con inteligencia artificial que atiende, cualifica y convierte a tus clientes a través de los canales de mensajería más utilizados (${channelStr}). Responde de forma instantánea, recoge datos de contacto y activa flujos automáticos. Disponible 24/7 sin coste por conversación. Configurado en ${langTxt}.</p>
+      ${addonHtml}</div>`;
+    pricingRows += `<tr><td>Agente de Chat</td><td style="text-align:right;font-weight:600;">${fmtSp(chat)}</td></tr>`;
+  }
+
+  if (S.dash.on) {
+    const tier = document.querySelector('#dashTiers .dash-tier.sel');
+    const tName = tier?tier.querySelector('.dash-name').textContent:'Básico';
+    const descs = {
+      'Básico':'Panel de control que centraliza en tiempo real las métricas más relevantes: volumen de interacciones, leads captados y estado operativo de los agentes.',
+      'Avanzado':'Panel avanzado con métricas en tiempo real, historial de conversaciones y acciones directas desde el panel (etiquetar, reasignar, activar flujos).',
+      'Completo':'Dashboard completo con métricas, conversaciones, acciones operativas e integraciones nativas con las herramientas del cliente. Control total centralizado.'
+    };
+    serviceBlocks += `<div class="service-block">
+      <div class="service-header"><div class="service-tag">Panel de control</div>
+      <div class="service-title-row"><span class="service-title-txt">Dashboard ${tName}</span><span class="service-price">${fmtSp(dash)}</span></div></div>
+      <p class="service-desc">${descs[tName]||''}</p></div>`;
+    pricingRows += `<tr><td>Dashboard ${tName}</td><td style="text-align:right;font-weight:600;">${fmtSp(dash)}</td></tr>`;
+  }
+
+  let maintSection = '';
+  if (S.maint) {
+    const isCloud = S.maint==='cloud';
+    const connectFeat=[
+      ['Monitorización remota continua','Supervisión del agente 24/7 con alertas automáticas.'],
+      ['Revisión mensual del sistema','Análisis de logs para detectar errores y mejoras.'],
+      ['Corrección de errores y ajustes','Hasta 2 horas de trabajo incluidas al mes.'],
+      ['Informe mensual de rendimiento','Métricas clave: volumen, tasa de derivación, coste por conversación.'],
+      ['Optimización de modelos de IA','Revisión trimestral. Migración a modelos más eficientes si aplica.'],
+      ['Soporte prioritario','Respuesta garantizada en menos de 24 horas hábiles.'],
+    ];
+    const cloudExtra=[
+      ['Copias de seguridad diarias','Backup automático con retención de 30 días. Restauración en <24h.'],
+      ['Monitorización de seguridad activa','Detección en tiempo real de accesos no autorizados.'],
+      ['Gestión completa de infraestructura','Actualizaciones, parches, SSL y variables de entorno.'],
+      ['SLA 99,5% de disponibilidad','Compromiso contractual con compensación por incumplimiento.'],
+    ];
+    const mkRows = f => f.map(([t,d])=>`<tr><td style="padding:7px 12px;font-weight:600;font-size:10pt;width:36%;vertical-align:top;">${t}</td><td style="padding:7px 12px;font-size:10pt;color:#555;">${d}</td></tr>`).join('');
+    maintSection = `<h2>Plan de Mantenimiento — Buffalo ${isCloud?'Cloud':'Connect'}</h2>
+      <p style="font-size:10.5pt;color:#444;margin-bottom:14px;">${isCloud?'El sistema se aloja en servidores de Buffalo. Gestionamos toda la infraestructura técnica.':'El sistema se aloja en servidores del cliente. Buffalo gestiona el seguimiento y optimización continua.'}</p>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #e0f0e8;margin-bottom:8px;"><thead><tr style="background:#f0faf5"><th colspan="2" style="padding:9px 12px;text-align:left;font-size:9pt;font-weight:700;color:#1a7a5a;letter-spacing:.06em;text-transform:uppercase;">Servicios incluidos</th></tr></thead><tbody>${mkRows(connectFeat)}</tbody></table>
+      ${isCloud?`<table style="width:100%;border-collapse:collapse;border:1px solid #c8e8d8;margin-bottom:8px;"><thead><tr style="background:#e0f5ec"><th colspan="2" style="padding:9px 12px;text-align:left;font-size:9pt;font-weight:700;color:#1a7a5a;letter-spacing:.06em;text-transform:uppercase;">Exclusivo Cloud</th></tr></thead><tbody>${mkRows(cloudExtra)}</tbody></table>`:''}
+      <div style="background:#f0faf5;border:1px solid #c0e8d0;border-radius:8px;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+        <div style="font-size:10pt;font-weight:600;color:#1a7a5a;">Buffalo ${isCloud?'Cloud':'Connect'} · ${isCloud?'15':'10'}% del setup</div>
+        <div style="font-size:20pt;font-weight:800;color:#111;">${fmtSp(mAmt)}<span style="font-size:11pt;font-weight:400;color:#666;">/mes</span></div>
+      </div>`;
+  }
+
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Propuesta · ${company||name}</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:"IBM Plex Sans",Arial,sans-serif;color:#111;background:#fff;font-size:11pt;line-height:1.65}.page{max-width:820px;margin:0 auto;padding:44px 52px 60px}.hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:24px;border-bottom:3px solid #1a7a5a;margin-bottom:36px}.hdr-logo{font-size:24pt;font-weight:800;color:#1a7a5a}.hdr-sub{font-size:9pt;color:#888;margin-top:3px}.hdr-right{text-align:right}.hdr-doc{font-size:8.5pt;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}.hdr-company{font-size:12pt;font-weight:700}.hdr-meta{font-size:9pt;color:#888;margin-top:3px}.intro-title{font-size:22pt;font-weight:800;color:#111;line-height:1.2;margin-bottom:8px}.intro-title span{color:#1a7a5a}.intro-sub{font-size:11pt;color:#555;font-weight:300;margin-bottom:16px}.intro-body{font-size:10.5pt;color:#444;line-height:1.7;margin-bottom:36px}h2{font-size:12pt;font-weight:700;color:#1a7a5a;margin:32px 0 14px;padding-bottom:8px;border-bottom:1px solid #e0f0e8;text-transform:uppercase;letter-spacing:.04em}.service-block{margin-bottom:22px;border:1px solid #e8f5ee;border-left:4px solid #22D97A;border-radius:8px;overflow:hidden}.service-header{padding:14px 20px 12px;background:#fafffe}.service-tag{font-size:8.5pt;color:#1a7a5a;text-transform:uppercase;letter-spacing:.12em;font-weight:600;margin-bottom:5px}.service-title-row{display:flex;justify-content:space-between;align-items:baseline}.service-title-txt{font-size:14pt;font-weight:800}.service-price{font-size:14pt;font-weight:700;color:#1a7a5a}.service-desc{font-size:10.5pt;color:#444;line-height:1.7;padding:12px 20px;border-top:1px solid #eef7f2}.addon-label{font-size:8.5pt;font-weight:700;color:#1a7a5a;text-transform:uppercase;letter-spacing:.1em;padding:8px 20px 4px;border-top:1px solid #eef7f2}.service-items{list-style:none;padding:0 20px 12px}.service-items li{font-size:10pt;color:#444;padding:2px 0 2px 16px;position:relative}.service-items li::before{content:"→";position:absolute;left:0;color:#22D97A;font-size:9pt}.price-table{width:100%;border-collapse:collapse;margin:16px 0}.price-table td{padding:9px 14px;font-size:10.5pt;border-bottom:1px solid #f0f0f0}.price-table tr.total-row td{font-weight:700;font-size:13pt;padding-top:14px;border-top:2px solid #1a7a5a;border-bottom:none}.price-table tr.total-row td:last-child{color:#1a7a5a}.price-table tr.disc-row td:last-child{color:#c03}.pay-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}.pay-box{border:1px solid #e0f0e8;border-radius:10px;padding:16px 20px}.pay-n{font-size:8.5pt;font-weight:700;color:#1a7a5a;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}.pay-d{font-size:9pt;color:#888;margin-bottom:8px}.pay-a{font-size:20pt;font-weight:800}.terms-box{background:#f8f8f8;border-radius:8px;padding:14px 20px;margin:20px 0;font-size:9.5pt;color:#555;line-height:1.7}.footer{margin-top:44px;padding-top:14px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:9pt;color:#aaa}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{padding:32px 40px}}</style></head>
+<body><div class="page">
+<div class="hdr"><div><div class="hdr-logo">Buffalo AI</div><div class="hdr-sub">Soluciones de Inteligencia Artificial · agenciabuffalo.es</div></div>
+<div class="hdr-right"><div class="hdr-doc">Propuesta de servicios</div><div class="hdr-company">${company||name}</div><div class="hdr-meta">${ref} · ${today}</div></div></div>
+<div class="intro-title">Propuesta de Servicios de<br><span>Inteligencia Artificial</span></div>
+<div class="intro-sub">Preparada para ${name}${company?' — '+company:''}${city?' · '+city:''}</div>
+<p class="intro-body">Buffalo AI diseña e implementa agentes de inteligencia artificial que trabajan de forma autónoma para atender a tus clientes, automatizar procesos repetitivos y mejorar la eficiencia operativa. Cada agente se construye a medida: entrenado con el conocimiento de tu empresa, integrado en tus herramientas y listo para operar desde el primer día.</p>
+<h2>Solución propuesta</h2>${serviceBlocks}
+<h2>Resumen económico</h2>
+<table class="price-table">${pricingRows}${disc>0?`<tr class="disc-row"><td>Descuento Pack Voz + Chat (−10%)</td><td style="text-align:right;">−${fmtSp(disc)}</td></tr>`:''}<tr class="total-row"><td>TOTAL SETUP Y DESARROLLO</td><td style="text-align:right;">${fmtSp(total)}</td></tr></table>
+${maintSection}
+<h2>Condiciones de pago</h2>
+<p style="font-size:10.5pt;color:#444;margin-bottom:14px;">El proyecto se estructura en dos pagos del 50%. El primero confirma el inicio. El segundo se efectúa antes de la puesta en producción.</p>
+<div class="pay-grid">
+  <div class="pay-box"><div class="pay-n">1.er pago — 50%</div><div class="pay-d">Al inicio · Confirma el encargo</div><div class="pay-a">${fmtSp(half)}</div></div>
+  <div class="pay-box"><div class="pay-n">2.do pago — 50%</div><div class="pay-d">Antes de puesta en producción</div><div class="pay-a">${fmtSp(total-half)}</div></div>
+</div>
+<div class="terms-box"><strong>Plazo estimado:</strong> ${plazo} desde la recepción del primer pago y accesos necesarios.<br>
+<strong>Plataformas externas:</strong> Los servicios de terceros (Twilio, OpenAI, WhatsApp API, etc.) se facturan directamente por cada proveedor al cliente.<br>
+<strong>Propiedad:</strong> Una vez completado el pago, el cliente tiene plena propiedad del sistema.</div>
+<div class="footer"><span>Buffalo IA Global Digital Solutions S.L. · agenciabuffalo.es</span><span>Documento confidencial · ${today}</span></div>
+</div><script>window.onload=()=>setTimeout(()=>window.print(),600);<\/script></body></html>`;
+
+  const w = window.open('','_blank'); w.document.write(html); w.document.close();
+}
+
+// ── CONTRATO ──
+function generateContrato() {
+  const name    = document.getElementById('f-name')?.value    || '_______________';
+  const company = document.getElementById('f-company')?.value || '_______________';
+  const email   = document.getElementById('f-email')?.value   || '';
+  const city    = document.getElementById('f-city')?.value    || 'Barcelona';
+  const ref     = document.getElementById('f-ref')?.value     || ('BUF-2026-'+Date.now().toString().slice(-4));
+  const { voz, chat, dash, total, clonadaSel } = calcSetup();
+  const half = Math.ceil(total/2);
+  const mAmt = S.maint ? Math.round(total*(S.maint==='connect'?0.10:0.15)) : 0;
+  const today = new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'});
+
+  let serviciosDesc = [];
+  if (S.voz.on) { serviciosDesc.push('Agente de voz con inteligencia artificial (Inbound 24/7' + (document.querySelector('#cVoz .opt.sel .opt-name')?.textContent?' + add-ons seleccionados':'')+')'); }
+  if (S.chat.on) { serviciosDesc.push('Agente de chat con inteligencia artificial' + (document.querySelector('#cChat .opt.sel .opt-name')?.textContent?' + canales y capacidades seleccionados':'')); }
+  if (S.dash.on) { const t=document.querySelector('#dashTiers .dash-tier.sel .dash-name'); serviciosDesc.push('Dashboard / Aplicación de control'+(t?' ('+t.textContent+')':'')); }
+  if (S.maint) { serviciosDesc.push('Plan de mantenimiento mensual Buffalo '+(S.maint==='cloud'?'Cloud (15%)':'Connect (10%)')); }
+
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Contrato ${ref}</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:"IBM Plex Sans",Arial,sans-serif;color:#111;background:#fff;font-size:11pt;line-height:1.7}.page{max-width:800px;margin:0 auto;padding:52px 60px}.watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:80pt;font-weight:900;color:rgba(34,217,122,.06);pointer-events:none;z-index:0;letter-spacing:-.02em;white-space:nowrap}h1{font-size:18pt;font-weight:700;text-align:center;margin:28px 0 8px;color:#111}h2{font-size:11.5pt;font-weight:700;margin:28px 0 6px;color:#111}.sub{font-size:9.5pt;text-align:center;color:#666;margin-bottom:36px}p{margin-bottom:10px}ul{margin:8px 0 10px 20px}.ref-box{background:#f5f5f5;border-radius:6px;padding:12px 20px;text-align:center;font-size:9.5pt;color:#666;margin-bottom:32px}.parties{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:20px 0}.party-box{background:#f8f8f8;border-radius:8px;padding:14px 18px}.party-title{font-size:9pt;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#888;margin-bottom:8px}.party-name{font-size:12pt;font-weight:700;color:#111;margin-bottom:4px}.party-data{font-size:9.5pt;color:#555;line-height:1.6}.sign-area{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:48px}.sign-block{text-align:center}.sign-line{border-top:1px solid #bbb;margin-top:56px;padding-top:10px;font-size:9.5pt;color:#666}.clausula{margin-bottom:20px}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head>
+<body>
+<div class="watermark">BUFFALO</div>
+<div class="page">
+<h1>CONTRATO DE PRESTACIÓN DE SERVICIOS</h1>
+<div class="sub">Buffalo IA Global Digital Solutions S.L. — ${company}</div>
+<div class="ref-box">Referencia: ${ref} · Fecha: En ${city}, a ___ de _______________ de 2026</div>
+
+<div class="parties">
+  <div class="party-box">
+    <div class="party-title">Prestador</div>
+    <div class="party-name">Buffalo IA Global Digital Solutions S.L.</div>
+    <div class="party-data">CIF: B22944599<br>Calle Provença, Pta. 2 Esc. B – 08025 Barcelona<br>hola@agenciabuffalo.es</div>
+  </div>
+  <div class="party-box">
+    <div class="party-title">Cliente</div>
+    <div class="party-name">${company}</div>
+    <div class="party-data">Representado/a por: ${name}<br>Email: ${email||'_______________'}<br>Ciudad: ${city}</div>
+  </div>
+</div>
+
+<div class="clausula"><h2>Primera. Objeto del contrato</h2>
+<p>El presente contrato tiene por objeto la prestación de servicios de desarrollo, configuración e implementación de soluciones de inteligencia artificial por parte de Buffalo IA Global Digital Solutions S.L. (en adelante, el Prestador) al Cliente, en los términos descritos a continuación.</p>
+<p><strong>Servicios contratados:</strong></p>
+<ul>${serviciosDesc.map(s=>`<li>${s}</li>`).join('')}</ul>
+<p>El alcance técnico detallado y las especificaciones de cada componente quedarán documentados en el briefing de desarrollo que se generará tras el proceso de onboarding.</p></div>
+
+<div class="clausula"><h2>Segunda. Precio y condiciones de pago</h2>
+<p>El precio total acordado para el desarrollo e implementación del sistema asciende a <strong>${fmtSp(total)} + IVA (21%)</strong>, lo que supone un total de <strong>${fmtSp(Math.round(total*1.21))}</strong> con impuestos incluidos.</p>
+<p>El pago se estructura en dos partes iguales:</p>
+<ul>
+  <li><strong>Primer pago: ${fmtSp(half)}</strong> — A la firma del presente contrato. Da inicio al desarrollo.</li>
+  <li><strong>Segundo pago: ${fmtSp(total-half)}</strong> — Antes de la puesta en producción del sistema, una vez el Cliente haya validado el funcionamiento.</li>
+</ul>
+${S.maint?`<p>Adicionalmente, el Cliente contrata el plan de mantenimiento mensual <strong>Buffalo ${S.maint==='cloud'?'Cloud':'Connect'}</strong> por importe de <strong>${fmtSp(mAmt)} + IVA/mes</strong>, que comenzará a facturarse a partir del mes siguiente a la puesta en producción.</p>`:''}
+</div>
+
+<div class="clausula"><h2>Tercera. Plazo de ejecución</h2>
+<p>El plazo estimado de entrega es de <strong>${document.getElementById('f-plazo')?.value||'4–6 semanas'}</strong> desde la recepción del primer pago y de todos los accesos e información necesarios por parte del Cliente (vía formulario de onboarding). Dicho plazo podrá ajustarse en función de la complejidad de las integraciones o de retrasos en la entrega de información por parte del Cliente.</p></div>
+
+<div class="clausula"><h2>Cuarta. Obligaciones del Cliente</h2>
+<p>El Cliente se compromete a: (i) facilitar toda la información y accesos requeridos en el proceso de onboarding dentro de los 5 días hábiles siguientes a la firma; (ii) designar una persona de contacto técnico y comercial; (iii) realizar los pagos en los plazos establecidos; (iv) participar en las sesiones de validación y feedback necesarias para el correcto desarrollo del proyecto.</p></div>
+
+<div class="clausula"><h2>Quinta. Propiedad intelectual</h2>
+<p>Una vez realizado el pago completo establecido en la cláusula Segunda, el Cliente adquiere la plena propiedad del sistema desarrollado. El Prestador conserva el derecho de utilizar tecnologías, metodologías y componentes propios en el desarrollo, así como de referenciar el proyecto como caso de uso en sus comunicaciones comerciales, salvo indicación expresa en contrario por parte del Cliente.</p></div>
+
+<div class="clausula"><h2>Sexta. Plataformas y servicios de terceros</h2>
+<p>El sistema puede integrar servicios de terceros (Twilio, Retell AI, OpenAI, WhatsApp Business API, etc.). Los costes de uso y suscripción de dichas plataformas no están incluidos en el precio del presente contrato y serán contratados y facturados directamente por cada proveedor al Cliente. El Prestador asistirá al Cliente en la configuración e integración de dichos servicios.</p></div>
+
+<div class="clausula"><h2>Séptima. Confidencialidad</h2>
+<p>Ambas partes se comprometen a mantener la confidencialidad de toda información sensible, know-how, datos de clientes y procesos internos a los que accedan con motivo de este contrato, durante la vigencia del mismo y por un período de dos años tras su finalización.</p></div>
+
+<div class="clausula"><h2>Octava. Limitación de responsabilidad</h2>
+<p>El Prestador no será responsable de interrupciones o fallos en servicios de terceros, ni de daños indirectos derivados del uso o mal uso del sistema. La responsabilidad máxima del Prestador quedará limitada al importe total abonado por el Cliente en el marco del presente contrato.</p></div>
+
+<div class="clausula"><h2>Novena. Resolución del contrato</h2>
+<p>Cualquiera de las partes podrá resolver el contrato con 15 días de preaviso por escrito. En caso de resolución por parte del Cliente, los importes ya abonados no serán reembolsables. El Prestador entregará al Cliente todos los materiales y código desarrollados hasta la fecha de resolución.</p></div>
+
+<div class="clausula"><h2>Décima. Jurisdicción</h2>
+<p>Para cualquier controversia derivada del presente contrato, las partes se someten a los Juzgados y Tribunales de la ciudad de Barcelona, con renuncia expresa a cualquier otro fuero que pudiera corresponderles.</p></div>
+
+<div class="sign-area">
+  <div class="sign-block">
+    <div class="sign-line">Por Buffalo IA Global Digital Solutions S.L.<br>Santiago Miralbell Costa / Sergi Masoliver López</div>
+  </div>
+  <div class="sign-block">
+    <div class="sign-line">Por ${company}<br>${name}</div>
+  </div>
+</div>
+</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),600);<\/script>
+</body></html>`;
+
+  const w = window.open('','_blank'); w.document.write(html); w.document.close();
+}
+
+// ── FACTURA ──
+function generateFactura() {
+  const name    = document.getElementById('f-name')?.value    || 'Cliente';
+  const company = document.getElementById('f-company')?.value || name;
+  const email   = document.getElementById('f-email')?.value   || '';
+  const city    = document.getElementById('f-city')?.value    || '';
+  const ref     = document.getElementById('f-ref')?.value     || ('BUF-2026-'+Date.now().toString().slice(-4));
+  const { voz, chat, dash, disc, total, clonadaSel } = calcSetup();
+  const half = Math.ceil(total/2);
+  const iva = Math.round(half*0.21);
+  const totalConIva = half + iva;
+  const today = new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'});
+  const invoiceNum = ref+'-F01';
+
+  const lines = [];
+  if (S.voz.on) lines.push({ desc:'Agente de Voz con Inteligencia Artificial (50% s/contrato)', amt: Math.ceil(voz/2) });
+  if (S.chat.on) lines.push({ desc:'Agente de Chat con Inteligencia Artificial (50% s/contrato)', amt: Math.ceil(chat/2) });
+  if (S.dash.on) { const t=document.querySelector('#dashTiers .dash-tier.sel .dash-name'); lines.push({ desc:'Dashboard / Aplicación'+(t?' '+t.textContent:'')+ ' (50% s/contrato)', amt: Math.ceil(dash/2) }); }
+  if (disc>0) lines.push({ desc:'Descuento Pack Voz + Chat (−10%)', amt: -Math.floor(disc/2) });
+
+  const lineRows = lines.map(l=>`<tr><td style="padding:10px 16px;border-bottom:1px solid #f0f0f0;">${l.desc}</td><td style="padding:10px 16px;text-align:right;border-bottom:1px solid #f0f0f0;font-family:'IBM Plex Mono',monospace;font-weight:600;">${fmtSp(l.amt)}</td></tr>`).join('');
+
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Factura ${invoiceNum}</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:"IBM Plex Sans",Arial,sans-serif;color:#111;background:#fff;font-size:11pt;line-height:1.6}.page{max-width:780px;margin:0 auto;padding:52px 56px}.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;padding-bottom:24px;border-bottom:3px solid #22D97A}.logo{font-size:22pt;font-weight:800;color:#1a7a5a}.logo-sub{font-size:9pt;color:#888;margin-top:3px}.inv-label{font-size:24pt;font-weight:800;color:#111;text-align:right;letter-spacing:-.02em}.inv-num{font-size:10pt;color:#888;text-align:right;margin-top:4px;font-family:"IBM Plex Mono",monospace}.parties{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:36px}.p-title{font-size:8.5pt;color:#888;text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:8px}.p-name{font-size:12pt;font-weight:700;margin-bottom:4px}.p-data{font-size:9.5pt;color:#555;line-height:1.65}table{width:100%;border-collapse:collapse}.table-hdr tr{background:#f0faf5}.table-hdr th{padding:10px 16px;text-align:left;font-size:9pt;font-weight:700;color:#1a7a5a;text-transform:uppercase;letter-spacing:.08em}.totals-block{margin-top:24px;margin-left:auto;width:280px}.tot-row{display:flex;justify-content:space-between;padding:6px 0;font-size:10.5pt}.tot-row.base{color:#555}.tot-row.iva{color:#555;border-bottom:1px solid #eee;padding-bottom:10px;margin-bottom:6px}.tot-row.final{font-weight:800;font-size:14pt;padding-top:8px}.tot-row.final span:last-child{color:#1a7a5a}.notice{margin-top:28px;background:#f0faf5;border-radius:8px;padding:14px 20px;font-size:9.5pt;color:#555;line-height:1.65}.footer{margin-top:40px;padding-top:14px;border-top:1px solid #ddd;display:flex;justify-content:space-between;font-size:9pt;color:#aaa}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head>
+<body><div class="page">
+<div class="hdr">
+  <div><div class="logo">Buffalo AI</div><div class="logo-sub">Buffalo IA Global Digital Solutions S.L.<br>CIF B22944599 · Calle Provença, Pta. 2 Esc. B, 08025 Barcelona<br>hola@agenciabuffalo.es · agenciabuffalo.es</div></div>
+  <div><div class="inv-label">FACTURA</div><div class="inv-num">${invoiceNum}<br>${today}</div></div>
+</div>
+
+<div class="parties">
+  <div><div class="p-title">Emisor</div><div class="p-name">Buffalo IA Global Digital Solutions S.L.</div><div class="p-data">CIF: B22944599<br>Calle Provença, Pta. 2 Esc. B<br>08025 Barcelona</div></div>
+  <div><div class="p-title">Receptor</div><div class="p-name">${company}</div><div class="p-data">${name?name+'<br>':''}${email?email+'<br>':''}${city||''}</div></div>
+</div>
+
+<table><thead class="table-hdr"><tr><th>Concepto</th><th style="text-align:right">Importe</th></tr></thead>
+<tbody>${lineRows}</tbody></table>
+
+<div class="totals-block">
+  <div class="tot-row base"><span>Base imponible</span><span style="font-family:'IBM Plex Mono',monospace">${fmtSp(half)}</span></div>
+  <div class="tot-row iva"><span>IVA (21%)</span><span style="font-family:'IBM Plex Mono',monospace">${fmtSp(iva)}</span></div>
+  <div class="tot-row final"><span>Total factura</span><span style="font-family:'IBM Plex Mono',monospace">${fmtSp(totalConIva)}</span></div>
+</div>
+
+<div class="notice">
+  <strong>Forma de pago:</strong> Transferencia bancaria · Concepto: ${invoiceNum}<br>
+  Esta factura corresponde al <strong>primer pago del 50%</strong> del proyecto ${ref}. El segundo pago (${fmtSp(total-half)} + IVA) se emitirá antes de la puesta en producción del sistema.<br><br>
+  <strong>Nota:</strong> Los costes de plataformas externas (Twilio, OpenAI, WhatsApp API, etc.) se facturan directamente por cada proveedor al cliente y no están incluidos en esta factura.
+</div>
+
+<div class="footer"><span>Buffalo IA Global Digital Solutions S.L. · CIF B22944599</span><span>Factura ${invoiceNum} · ${today}</span></div>
+</div><script>window.onload=()=>setTimeout(()=>window.print(),600);<\/script>
+</body></html>`;
+
+  const w = window.open('','_blank'); w.document.write(html); w.document.close();
+}
+
+// ── ANIMATE ──
+let aF={};
+function animVal(id,target,monthly){
+  cancelAnimationFrame(aF[id]);
+  const el=document.getElementById(id);
+  const cur=+(el.dataset.val||0);
+  const diff=target-cur; const steps=16; let step=0;
+  function tick(){ step++; const v=Math.round(cur+diff*(step/steps));
+    el.textContent=monthly?fmtSp(v)+'/mes':fmtSp(v); el.dataset.val=v;
+    if(step<steps) aF[id]=requestAnimationFrame(tick);
+    else { el.textContent=monthly?fmtSp(target)+'/mes':fmtSp(target); el.dataset.val=target; } } tick();
+}
+
+// ── RESET ──
+function resetAll(){
+  ['voz','chat','dash'].forEach(a=>{ if(S[a].on) toggleAgent(a); });
+  S.pack=false; S.maint=null;
+  document.getElementById('packCard').classList.remove('applied','avail');
+  ['Voz','Chat'].forEach(a=>{
+    document.querySelectorAll(`#l${a} .lang-opt`).forEach((o,i)=>o.classList.toggle('sel',i===0));
+    S[a.toLowerCase()].lang=0;
+  });
+  recalc();
+}
+
+recalc();
+</script>
+</body>
+</html>
