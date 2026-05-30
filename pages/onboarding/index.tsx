@@ -38,31 +38,31 @@ export default function OnboardingPage() {
   const pipelineId = router.query.pipeline as string | undefined
   const cardId     = router.query.card     as string | undefined
 
-  // Load contacts
+  // Auto-select from URL param on load
   useEffect(() => {
-    fetch('/api/contacts')
+    if (!leadId) return
+    setLoadingContact(true)
+    fetch(`/api/contacts/${leadId}`)
       .then(r => r.json())
-      .then(data => {
-        const list: Contact[] = Array.isArray(data) ? data : (data.contacts || [])
-        setContacts(list)
-        // Auto-select from URL param
-        if (leadId) {
-          const match = list.find(c => String(c.id) === String(leadId))
-          if (match) {
-            setSelected(match)
-            setSearchTerm(match.nombre || match.email || '')
-          } else {
-            // Fetch individually if not in the initial list
-            setLoadingContact(true)
-            fetch(`/api/contacts/${leadId}`)
-              .then(r => r.json())
-              .then(c => { setSelected(c); setSearchTerm(c.nombre || c.email || '') })
-              .finally(() => setLoadingContact(false))
-          }
-        }
-      })
+      .then(c => { setSelected(c); setSearchTerm(c.nombre || c.email || '') })
       .catch(console.error)
+      .finally(() => setLoadingContact(false))
   }, [leadId])
+
+  // Search contacts when typing
+  useEffect(() => {
+    if (searchTerm.length < 2) { setContacts([]); return }
+    const timer = setTimeout(() => {
+      fetch(`/api/contacts?search=${encodeURIComponent(searchTerm)}&page=1`)
+        .then(r => r.json())
+        .then(data => {
+          const list: Contact[] = Array.isArray(data) ? data : (data.contacts || [])
+          setContacts(list)
+        })
+        .catch(console.error)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
   // Build iframe URL when contact changes
   useEffect(() => {
@@ -123,15 +123,8 @@ export default function OnboardingPage() {
     setTimeout(() => setNotification(null), 4000)
   }
 
-  // Filtered contacts for dropdown
-  const filtered = contacts.filter(c => {
-    const q = searchTerm.toLowerCase()
-    return (
-      (c.nombre || '').toLowerCase().includes(q) ||
-      (c.email  || '').toLowerCase().includes(q) ||
-      (c.empresa|| '').toLowerCase().includes(q)
-    )
-  }).slice(0, 8)
+  // Server-side filtered contacts (already limited)
+  const filtered = contacts.slice(0, 8)
 
   const handleSelect = (c: Contact) => {
     setSelected(c)
