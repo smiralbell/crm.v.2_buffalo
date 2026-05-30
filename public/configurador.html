@@ -1107,6 +1107,102 @@ function resetAll(){
 }
 
 recalc();
+
+// ── CRM MODE: pre-fill from URL params & postMessage events ──
+(function(){
+  const p = new URLSearchParams(window.location.search);
+
+  // Pre-fill client fields from URL params
+  if (p.get('nombre'))  { const el = document.getElementById('f-name');    if(el) el.value = decodeURIComponent(p.get('nombre')); }
+  if (p.get('empresa')) { const el = document.getElementById('f-company'); if(el) el.value = decodeURIComponent(p.get('empresa')); }
+  if (p.get('email'))   { const el = document.getElementById('f-email');   if(el) el.value = decodeURIComponent(p.get('email')); }
+  if (p.get('ciudad'))  { const el = document.getElementById('f-city');    if(el) el.value = decodeURIComponent(p.get('ciudad')); }
+  if (p.get('ref'))     { const el = document.getElementById('f-ref');     if(el) el.value = decodeURIComponent(p.get('ref')); }
+  if (p.get('baseurl')) { const el = document.getElementById('f-baseurl'); if(el) el.value = decodeURIComponent(p.get('baseurl')); }
+
+  // CRM mode: white minimal theme overrides
+  if (p.get('crm') === '1') {
+    const style = document.createElement('style');
+    style.textContent = `
+      body { background: #f9fafb !important; }
+      .header { background: #fff !important; border-bottom: 1px solid #e5e7eb !important; padding: 16px 24px !important; }
+      .header h1 { color: #111827 !important; font-size: 18px !important; }
+      .header p { color: #6b7280 !important; }
+      :root {
+        --bg: #f9fafb !important;
+        --surface: #ffffff !important;
+        --border: #e5e7eb !important;
+        --text: #111827 !important;
+        --muted: #6b7280 !important;
+        --green: #16a34a !important;
+        --green-dim: #dcfce7 !important;
+        --green-text: #15803d !important;
+      }
+      .agent-card { border-color: #e5e7eb !important; }
+      .agent-card.sel { border-color: #16a34a !important; background: #f0fdf4 !important; }
+      .agent-name { color: #111827 !important; }
+      .btn-primary { background: #111827 !important; }
+      .step-header { background: #fff !important; border-bottom: 1px solid #e5e7eb !important; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  // Emit postMessage to parent when action buttons are clicked
+  // We patch the key action functions to also notify the parent CRM
+  const _original = {};
+
+  function patchFn(name, eventType) {
+    if (typeof window[name] === 'function') {
+      _original[name] = window[name];
+      window[name] = function() {
+        // Send event to parent before running original
+        if (window.parent && window.parent !== window) {
+          const name_val   = document.getElementById('f-name')?.value    || '';
+          const email_val  = document.getElementById('f-email')?.value   || '';
+          const ref_val    = document.getElementById('f-ref')?.value     || '';
+          window.parent.postMessage({
+            type: 'buffalo_configurador_action',
+            action: eventType,
+            leadId: p.get('leadId') || '',
+            cardId: p.get('cardId') || '',
+            pipelineId: p.get('pipelineId') || '',
+            data: { nombre: name_val, email: email_val, ref: ref_val }
+          }, '*');
+        }
+        return _original[name].apply(this, arguments);
+      };
+    }
+  }
+
+  // Patch after DOM is ready (functions are defined globally at parse time)
+  patchFn('sendOnboarding', 'enviar_onboarding');
+
+  // Patch the "send proposal" email button - look for onclick
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('button, [onclick]');
+    if (!btn) return;
+    if (window.parent && window.parent !== window) {
+      const txt = (btn.textContent || '').trim().toLowerCase();
+      const oc  = (btn.getAttribute('onclick') || '').toLowerCase();
+      const leadId = p.get('leadId') || '';
+      const cardId = p.get('cardId') || '';
+      const pipelineId = p.get('pipelineId') || '';
+      if (txt.includes('propuesta') || oc.includes('propuesta') || oc.includes('generatepropuesta')) {
+        window.parent.postMessage({ type: 'buffalo_configurador_action', action: 'enviar_propuesta', leadId, cardId, pipelineId }, '*');
+      }
+      if (txt.includes('contrato') || oc.includes('contrato') || oc.includes('generatecontrato')) {
+        window.parent.postMessage({ type: 'buffalo_configurador_action', action: 'enviar_contrato', leadId, cardId, pipelineId }, '*');
+      }
+      if (txt.includes('onboarding') || oc.includes('onboarding') || oc.includes('sendonboarding')) {
+        window.parent.postMessage({ type: 'buffalo_configurador_action', action: 'enviar_onboarding', leadId, cardId, pipelineId }, '*');
+      }
+      if (txt.includes('factura') || oc.includes('factura') || oc.includes('generatefactura')) {
+        window.parent.postMessage({ type: 'buffalo_configurador_action', action: 'emitir_factura', leadId, cardId, pipelineId }, '*');
+      }
+    }
+  }, true);
+
+})();
 </script>
 </body>
 </html>

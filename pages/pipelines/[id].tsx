@@ -5,6 +5,21 @@ import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import PipelineLayout from '@/components/PipelineLayout'
 import KanbanBoard from '@/components/KanbanBoard'
+import PipelineCardDrawer, { BUFFALO_STAGE_COLORS } from '@/components/PipelineCardDrawer'
+
+// Etapas por defecto del pipeline comercial de Buffalo
+const DEFAULT_BUFFALO_STAGES = [
+  'LEAD',
+  'CONTACTO',
+  'REUNIÓN',
+  'PROPUESTA ENVIADA',
+  'NEGOCIANDO',
+  'CONTRATO FIRMADO',
+  'FACTURA EMITIDA',
+  'ONBOARDING',
+  'EN DESARROLLO',
+  'ACTIVO',
+]
 
 interface PipelineCard {
   id: string
@@ -115,14 +130,17 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
   const router = useRouter()
   const [cards, setCards] = useState<PipelineCard[]>(initialCards)
   const [loading, setLoading] = useState(false)
+  const [drawerCard, setDrawerCard] = useState<PipelineCard | null>(null)
+
   // Inicializar stageOrder sin localStorage para evitar error de hidratación
   const [stageOrder, setStageOrder] = useState<string[]>(() => {
-    // Orden por defecto: stages únicos de las cards
+    // Si hay cards, usar sus stages como base; si no, usar los defaults de Buffalo
     const stages = Array.from(new Set(initialCards.map((c) => c.stage)))
-    return stages
+    return stages.length > 0 ? stages : DEFAULT_BUFFALO_STAGES
   })
 
   // Cargar desde localStorage después de la hidratación
+  // Si no hay nada guardado y no hay cards, sembrar con los stages por defecto de Buffalo
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`pipeline_${pipeline.id}_stage_order`)
@@ -135,6 +153,16 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
         } catch (error) {
           console.error('Error parsing stage order from localStorage:', error)
         }
+      } else {
+        // Sin datos guardados: sembrar con los defaults y persistirlos
+        const defaultOrder = initialCards.length > 0
+          ? Array.from(new Set([
+              ...DEFAULT_BUFFALO_STAGES,
+              ...initialCards.map((c) => c.stage),
+            ]))
+          : DEFAULT_BUFFALO_STAGES
+        setStageOrder(defaultOrder)
+        localStorage.setItem(`pipeline_${pipeline.id}_stage_order`, JSON.stringify(defaultOrder))
       }
     }
   }, [pipeline.id])
@@ -491,8 +519,7 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
   }
 
   const handleCardClick = (card: PipelineCard) => {
-    // TODO: Abrir modal/drawer con detalles de la tarjeta
-    console.log('Card clicked:', card)
+    setDrawerCard(card)
   }
 
   const totalCards = cards.length
@@ -512,6 +539,18 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
           Guardando cambios...
         </div>
       )}
+
+      {/* Card detail drawer */}
+      <PipelineCardDrawer
+        card={drawerCard}
+        pipelineId={pipeline.id}
+        stageOrder={stageOrder}
+        getEntityName={getEntityName}
+        getEntityDetails={getEntityDetails}
+        onCardMove={handleCardMove}
+        onClose={() => setDrawerCard(null)}
+      />
+
       <KanbanBoard
         pipelineId={pipeline.id}
         cards={cards}

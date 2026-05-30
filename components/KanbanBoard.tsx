@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Search, X } from 'lucide-react'
+import { BUFFALO_STAGE_COLORS } from './PipelineCardDrawer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import KanbanColumn from './KanbanColumn'
@@ -189,10 +190,10 @@ export default function KanbanBoard({
         if (existingStage) {
           ordered.push(existingStage)
         } else {
-          // Stage en el orden pero sin cards aún - agregarlo igual
+          // Stage en el orden pero sin cards aún - usar color Buffalo si existe
           ordered.push({
             name: stageName,
-            color: '#3B82F6',
+            color: BUFFALO_STAGE_COLORS[stageName] || '#3B82F6',
           })
         }
       })

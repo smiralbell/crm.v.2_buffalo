@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, X, Edit2, MoreVertical, Search, Trash2, Palette } from 'lucide-react'
+import { Plus, X, Edit2, MoreVertical, Search, Trash2, Palette, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -159,7 +159,7 @@ export default function KanbanColumn({
             <div className="flex items-center gap-2.5 flex-1 min-w-0">
               <div
                 className="w-1 h-5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: '#3B82F6' }}
+                style={{ backgroundColor: stage.color || '#3B82F6' }}
               />
               <div className="flex-1 min-w-0">
                 {isEditing ? (
@@ -312,6 +312,15 @@ export default function KanbanColumn({
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {onCardClick && (
+                          <DropdownMenuItem
+                            onClick={() => onCardClick(card)}
+                            className="font-medium"
+                          >
+                            <Settings className="h-4 w-4 mr-2" />
+                            Configurar proyecto
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <Palette className="h-4 w-4 mr-2" />
