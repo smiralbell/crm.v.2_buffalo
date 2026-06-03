@@ -2,7 +2,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/router'
 import {
   LayoutDashboard,
-  Users,
   TrendingUp,
   FileText,
   LogOut,
@@ -10,6 +9,7 @@ import {
   DollarSign,
   MessageSquare,
   ClipboardList,
+  Megaphone,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -24,13 +24,13 @@ export default function Sidebar() {
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/contacts', label: 'Contacts', icon: Users },
-    { href: '/agent-chats', label: 'Chats IA', icon: MessageSquare },
     { href: '/leads', label: 'Leads', icon: TrendingUp },
+    { href: '/agent-chats', label: 'Chats IA', icon: MessageSquare },
     { href: '/invoices', label: 'Facturas', icon: FileText },
     { href: '/pipelines', label: 'Pipelines', icon: Workflow },
     { href: '/onboarding', label: 'Onboarding', icon: ClipboardList },
     { href: '/finances', label: 'Finanzas', icon: DollarSign },
+    { href: '/marketing', label: 'Marketing', icon: Megaphone },
   ]
 
   return (

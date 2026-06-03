@@ -51,6 +51,8 @@ model Lead {
   pipeline_id       Int?
   pipeline_stage_id Int?
   valor             Decimal? @db.Decimal(10, 2)
+  notas             String?  @db.Text
+  configuracion     String?  @db.Text
   position          Int?
   contact           Contact  @relation(fields: [contact_id], references: [id], onDelete: Cascade)
   // pipeline          Pipeline? @relation(fields: [pipeline_id], references: [id], onDelete: SetNull)
@@ -353,4 +355,49 @@ model ProjectAiAnalysis {
 
   @@index([project_id])
   @@map("project_ai_analyses")
+}
+
+// ============================================
+// MARKETING — ENGRANAJE 1
+// ============================================
+
+// Métricas mensuales por canal (mix de webhook + input manual)
+model MarketingMetric {
+  id              Int      @id @default(autoincrement())
+  channel         String   // 'email_outreach' | 'meta_ads' | 'google_ads' | 'organic'
+  period          String   // 'YYYY-MM'
+
+  // Inversión (manual para ads; fija para email)
+  spend           Decimal  @default(0) @db.Decimal(10, 2)
+
+  // Email outreach — rellenado automáticamente por Instantly webhook
+  emails_sent     Int      @default(0)
+  contacts_sent   Int      @default(0)  // únicos (deduplicado por email+period)
+  replies         Int      @default(0)
+  interested      Int      @default(0)
+  not_interested  Int      @default(0)
+  bounced         Int      @default(0)
+  unsubscribed    Int      @default(0)
+  meetings_booked Int      @default(0)
+
+  // Ads — input manual o webhook futuro
+  impressions     Int?
+  clicks          Int?
+
+  notes           String?  @db.Text
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@unique([channel, period])
+  @@map("marketing_metrics")
+}
+
+// Contactos únicos alcanzados por email outreach (para deduplicar email_sent)
+model MarketingOutreachContact {
+  id      Int    @id @default(autoincrement())
+  email   String
+  period  String  // 'YYYY-MM'
+
+  @@unique([email, period])
+  @@map("marketing_outreach_contacts")
 }
