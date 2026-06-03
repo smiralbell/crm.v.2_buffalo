@@ -479,6 +479,13 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
           </div>
 
         </div>
+        <!-- CRM save button (only shown in CRM mode) -->
+        <div id="crm-save-wrap" style="display:none;margin-top:10px;">
+          <button id="crm-save-btn" onclick="crmSaveNow()" style="width:100%;background:rgba(34,217,122,.1);border:1px solid rgba(34,217,122,.35);color:#22D97A;font-size:12px;font-weight:700;padding:10px 16px;border-radius:10px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:7px;transition:background .15s;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span id="crm-save-label">Guardar en CRM</span>
+          </button>
+        </div>
         <div class="toast-msg" id="toastMsg"></div>
       </div>
     </div>
@@ -584,6 +591,89 @@ function selMaint(type) {
   S.maint = S.maint === type ? null : type;
   document.querySelectorAll('.maint-opt').forEach(o=>o.classList.toggle('sel', o.dataset.type===S.maint));
   recalc();
+}
+
+// ── RESTORE saved config (used when CRM reopens the configurator) ──
+function restoreFromConfig(cfg) {
+  if (!cfg) return;
+  try {
+    // ── Voz ──────────────────────────────────────────────────────────────
+    if (cfg.voz) {
+      S.voz.on = true;
+      document.getElementById('cVoz').classList.add('active');
+      document.getElementById('tVoz').classList.add('on');
+      S.voz.lang = cfg.voz_lang || 0;
+      document.querySelectorAll('#lVoz .lang-opt').forEach(function(el) {
+        el.classList.toggle('sel', +el.dataset.price === S.voz.lang);
+      });
+      document.querySelectorAll('#cVoz .opt:not(.opt-clonada)').forEach(function(el) {
+        var n = (el.querySelector('.opt-name')?.textContent||'').toLowerCase();
+        var sel = (cfg.voz_outbound && n.includes('outbound')) ||
+                  (cfg.voz_crm && n.includes('crm')) ||
+                  (cfg.voz_transferir && n.includes('transferir')) ||
+                  (cfg.voz_correo && n.includes('correo')) ||
+                  (cfg.voz_transcripcion && n.includes('transcripci'));
+        el.classList.toggle('sel', !!sel);
+      });
+    }
+    // ── Chat ─────────────────────────────────────────────────────────────
+    if (cfg.chat) {
+      S.chat.on = true;
+      document.getElementById('cChat').classList.add('active');
+      document.getElementById('tChat').classList.add('on');
+      S.chat.lang = cfg.chat_lang || 0;
+      document.querySelectorAll('#lChat .lang-opt').forEach(function(el) {
+        el.classList.toggle('sel', +el.dataset.price === S.chat.lang);
+      });
+      document.querySelectorAll('#cChat .opt:not(.opt-clonada)').forEach(function(el) {
+        var n = (el.querySelector('.opt-name')?.textContent||'').toLowerCase();
+        var sel = (cfg.chat_whatsapp && n.includes('whatsapp')) ||
+                  (cfg.chat_widget && n.includes('widget')) ||
+                  (cfg.chat_trigger && n.includes('trigger')) ||
+                  (cfg.chat_crm && n.includes('crm')) ||
+                  (cfg.chat_multimodal && n.includes('multimodal')) ||
+                  (cfg.chat_audios && n.includes('audios'));
+        el.classList.toggle('sel', !!sel);
+      });
+    }
+    // ── Voz clonada ───────────────────────────────────────────────────────
+    if (cfg.clonada) {
+      document.querySelectorAll('.opt-clonada').forEach(function(el) { el.classList.add('sel'); });
+    }
+    // ── Dashboard ─────────────────────────────────────────────────────────
+    if (cfg.dash) {
+      S.dash.on = true;
+      document.getElementById('cDash').classList.add('active');
+      document.getElementById('tDash').classList.add('on');
+      if (cfg.dash_tier) {
+        document.querySelectorAll('#dashTiers .dash-tier').forEach(function(el) {
+          var name = el.querySelector('.dash-name')?.textContent || '';
+          if (name === cfg.dash_tier) {
+            el.classList.add('sel');
+            S.dash.price = +el.dataset.price;
+          }
+        });
+      }
+    }
+    // ── Pack (−10%) ──────────────────────────────────────────────────────
+    updatePack();
+    if (cfg.pack) {
+      S.pack = true;
+      document.getElementById('packCard').classList.add('applied');
+    }
+    // ── Mantenimiento ────────────────────────────────────────────────────
+    if (cfg.maint) {
+      S.maint = cfg.maint;
+      // maint options are rendered by recalc → renderMaint, so just set the value
+    }
+    recalc();
+    // After recalc renders maint options, highlight the selected one
+    setTimeout(function() {
+      document.querySelectorAll('.maint-opt').forEach(function(o) {
+        o.classList.toggle('sel', o.dataset.type === S.maint);
+      });
+    }, 50);
+  } catch(e) { console.warn('restoreFromConfig error:', e); }
 }
 
 // ── CALC ──
@@ -738,7 +828,8 @@ function buildOnboardingConfig() {
     clonada: document.querySelector('.opt-clonada.sel') !== null,
     dash: S.dash.on,
     dash_tier: dashTier ? dashTier.querySelector('.dash-name')?.textContent : null,
-    maint: S.maint
+    maint: S.maint,
+    pack: S.pack,
   };
 }
 
@@ -746,7 +837,7 @@ function getOnboardingUrl() {
   const config = buildOnboardingConfig();
   const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(config))));
   const base = (document.getElementById('f-baseurl')?.value || '').replace(/\/$/, '');
-  return (base ? base + '/Buffalo_Onboarding.html' : 'Buffalo_Onboarding.html') + '?c=' + encoded;
+  return (base ? base + '/onboarding.html' : 'onboarding.html') + '?c=' + encoded;
 }
 
 function copyOnboardingLink() {
@@ -1120,37 +1211,198 @@ recalc();
   if (p.get('ref'))     { const el = document.getElementById('f-ref');     if(el) el.value = decodeURIComponent(p.get('ref')); }
   if (p.get('baseurl')) { const el = document.getElementById('f-baseurl'); if(el) el.value = decodeURIComponent(p.get('baseurl')); }
 
-  // CRM mode: white minimal theme overrides
+  // CRM mode: complete white/black theme override
   if (p.get('crm') === '1') {
     const style = document.createElement('style');
     style.textContent = `
-      body { background: #f9fafb !important; }
-      .header { background: #fff !important; border-bottom: 1px solid #e5e7eb !important; padding: 16px 24px !important; }
-      .header h1 { color: #111827 !important; font-size: 18px !important; }
-      .header p { color: #6b7280 !important; }
+      /* ── CSS variable overrides ── */
       :root {
-        --bg: #f9fafb !important;
-        --surface: #ffffff !important;
-        --border: #e5e7eb !important;
-        --text: #111827 !important;
-        --muted: #6b7280 !important;
-        --green: #16a34a !important;
-        --green-dim: #dcfce7 !important;
-        --green-text: #15803d !important;
+        --bg:    #ffffff;
+        --bg2:   #f9fafb;
+        --bg3:   #f3f4f6;
+        --green: #111827;
+        --gdim:  rgba(17,24,39,0.06);
+        --gmid:  rgba(17,24,39,0.15);
+        --white: #111827;
+        --off:   #374151;
+        --muted: #9ca3af;
+        --rule:  #e5e7eb;
       }
-      .agent-card { border-color: #e5e7eb !important; }
-      .agent-card.sel { border-color: #16a34a !important; background: #f0fdf4 !important; }
-      .agent-name { color: #111827 !important; }
-      .btn-primary { background: #111827 !important; }
-      .step-header { background: #fff !important; border-bottom: 1px solid #e5e7eb !important; }
+      /* ── Base ── */
+      body { background:#ffffff !important; color:#111827 !important; padding-bottom:80px !important; min-height:0 !important; }
+      /* Hide Buffalo branding in CRM context */
+      header { display:none !important; }
+      .step { padding-top:24px !important; }
+
+      /* ── Cards ── */
+      .card { background:#ffffff !important; border-color:#e5e7eb !important; box-shadow:0 1px 3px rgba(0,0,0,.06) !important; }
+      .card.active { border-color:#111827 !important; }
+      .card-title span { color:#111827 !important; }
+      .card.active .card-icon { color:#111827 !important; }
+
+      /* ── Toggle ── */
+      .toggle { background:#e5e7eb !important; border-color:#d1d5db !important; }
+      .toggle::after { background:#fff !important; }
+      .toggle.on { background:#111827 !important; border-color:#111827 !important; }
+      .toggle.on::after { background:#f3f4f6 !important; }
+
+      /* ── Base row ── */
+      .base-row { background:#f9fafb !important; border-color:#e5e7eb !important; }
+      .base-badge { color:#374151 !important; background:#e5e7eb !important; }
+
+      /* ── Option rows ── */
+      .opt { border-color:#e5e7eb !important; }
+      .card.active .opt:hover { background:#f9fafb !important; border-color:#d1d5db !important; }
+      .opt.sel { background:#f3f4f6 !important; border-color:#374151 !important; }
+      .chk { border-color:#d1d5db !important; }
+      .opt.sel .chk { background:#111827 !important; border-color:#111827 !important; color:#fff !important; }
+      .opt.sel .opt-price { color:#111827 !important; }
+
+      /* ── Language options ── */
+      .lang-opt { border-color:#e5e7eb !important; }
+      .lang-opt.sel { background:#f3f4f6 !important; border-color:#374151 !important; }
+      .lang-opt.sel .lang-p { color:#374151 !important; }
+
+      /* ── Dashboard tiers ── */
+      .dash-tier { border-color:#e5e7eb !important; }
+      .card.active .dash-tier:hover { background:#f9fafb !important; }
+      .dash-tier.sel { background:#f3f4f6 !important; border-color:#374151 !important; }
+      .dash-radio { border-color:#d1d5db !important; }
+      .dash-tier.sel .dash-radio::after { background:#ffffff !important; }
+      .dash-tier.sel .dash-amt { color:#111827 !important; }
+
+      /* ── Pack card ── */
+      .pack-card { border-color:#d1d5db !important; }
+      .pack-card.applied { background:#f3f4f6 !important; border-color:#374151 !important; border-style:solid !important; }
+      .pack-badge { background:#111827 !important; color:#fff !important; opacity:1 !important; }
+
+      /* ── Maintenance ── */
+      .maint-card { border-color:#e5e7eb !important; }
+      .maint-hdr { border-bottom-color:#e5e7eb !important; }
+      .maint-opt.sel { background:#f3f4f6 !important; }
+      .maint-opt.sel::after { background:#111827 !important; }
+      .maint-pr { color:#111827 !important; }
+      .maint-empty { color:#9ca3af !important; }
+
+      /* ── Action bar: sticky (not fixed) in CRM ── */
+      .action-bar {
+        position:sticky !important;
+        bottom:0 !important;
+        background:rgba(255,255,255,0.97) !important;
+        border-top:1px solid #e5e7eb !important;
+        backdrop-filter:blur(20px) !important;
+      }
+      .tot-val { color:#111827 !important; }
+      .tot-val.g { color:#111827 !important; }
+      .btn-reset { border-color:#e5e7eb !important; color:#6b7280 !important; background:transparent !important; }
+      .btn-reset:hover { border-color:#d1d5db !important; color:#374151 !important; }
+      .btn-next { background:#111827 !important; color:#fff !important; }
+      .btn-back { background:#f3f4f6 !important; color:#374151 !important; }
+      .btn-back:hover { background:#e5e7eb !important; }
+
+      /* ── Forms ── */
+      .form-card { background:#ffffff !important; border-color:#e5e7eb !important; }
+      .form-title { color:#374151 !important; }
+      .form-input { background:#ffffff !important; border-color:#e5e7eb !important; color:#111827 !important; }
+      .form-input:focus { border-color:#374151 !important; outline:none !important; box-shadow:none !important; }
+      .form-input::placeholder { color:#9ca3af !important; }
+
+      /* ── Summary ── */
+      .sum-maint { background:#f3f4f6 !important; border-color:#e5e7eb !important; }
+      .cta-row { background:#f9fafb !important; border-color:#e5e7eb !important; }
+      .btn-action { background:#f3f4f6 !important; border-color:#e5e7eb !important; color:#111827 !important; }
+      .btn-action:hover { background:#e5e7eb !important; }
+      .toast-msg { color:#374151 !important; border-color:#e5e7eb !important; background:#f9fafb !important; }
     `;
     document.head.appendChild(style);
+
+    // ── Report iframe height to parent for auto-resize ──
+    function reportHeight() {
+      if (window.parent !== window) {
+        // Use offsetHeight of the innermost content wrapper (not scrollHeight which
+        // is inflated by min-height) to prevent the grow-forever feedback loop.
+        const step = document.querySelector('.step.active');
+        const bar  = document.querySelector('.action-bar');
+        const contentH = step ? step.getBoundingClientRect().bottom + window.scrollY : document.body.offsetHeight;
+        const barH     = bar  ? bar.offsetHeight : 60;
+        const h = Math.ceil(contentH + barH + 16); // 16px breathing room
+        window.parent.postMessage({ type: 'buffalo_iframe_height', height: h }, '*');
+      }
+    }
+    setTimeout(reportHeight, 150);
+    setTimeout(reportHeight, 600);
+    try {
+      const ro = new ResizeObserver(() => setTimeout(reportHeight, 80));
+      ro.observe(document.body);
+    } catch(e) {}
+  }
+
+  // ── Restore saved configuration if present ──────────────────────────
+  const savedCfgRaw = p.get('cfg');
+  if (savedCfgRaw) {
+    try {
+      var savedCfg = JSON.parse(decodeURIComponent(escape(atob(savedCfgRaw))));
+      restoreFromConfig(savedCfg);
+      // Auto-advance to step 2 (documents) so the user lands directly on
+      // propuesta / contrato / onboarding link — they can still go back to step 1
+      setTimeout(function() {
+        if (calcSetup().total > 0) goStep(2);
+      }, 80);
+    } catch(e) { console.warn('Could not restore config:', e); }
   }
 
   // ── Patch functions to emit postMessage to CRM parent ──
   const leadId_pm    = p.get('leadId')     || '';
   const cardId_pm    = p.get('cardId')     || '';
   const pipelineId_pm = p.get('pipelineId') || '';
+
+  // Helper: collect current project data from the configurator
+  function buildProjectData() {
+    try {
+      const { voz, chat, dash, sub, disc, total } = calcSetup();
+      const mAmt = S.maint ? Math.round(total * (S.maint === 'connect' ? 0.10 : 0.15)) : 0;
+      const lines = [];
+      if (S.voz.on) {
+        var vozOpts = [];
+        document.querySelectorAll('#cVoz .opt.sel:not(.opt-clonada)').forEach(function(o) {
+          var n = o.querySelector('.opt-name'); if (n) vozOpts.push(n.textContent.replace(' · shared','').trim());
+        });
+        if (document.querySelector('#cVoz .opt-clonada.sel')) vozOpts.push('Voz clonada');
+        var vozLangEl = document.querySelector('#lVoz .lang-opt.sel .lang-n');
+        var vozLangTxt = vozLangEl ? vozLangEl.textContent.trim() : '';
+        var vozLine = '• Agente de Voz: ' + fmtSp(voz);
+        if (vozLangTxt) vozLine += '  |  ' + vozLangTxt;
+        if (vozOpts.length) vozLine += '\n  + ' + vozOpts.join(', ');
+        lines.push(vozLine);
+      }
+      if (S.chat.on) {
+        var chatOpts = [];
+        document.querySelectorAll('#cChat .opt.sel:not(.opt-clonada)').forEach(function(o) {
+          var n = o.querySelector('.opt-name'); if (n) chatOpts.push(n.textContent.replace(' · shared','').trim());
+        });
+        var chatLangEl = document.querySelector('#lChat .lang-opt.sel .lang-n');
+        var chatLangTxt = chatLangEl ? chatLangEl.textContent.trim() : '';
+        var chatLine = '• Agente de Chat: ' + fmtSp(chat);
+        if (chatLangTxt) chatLine += '  |  ' + chatLangTxt;
+        if (chatOpts.length) chatLine += '\n  + ' + chatOpts.join(', ');
+        lines.push(chatLine);
+      }
+      if (S.dash.on) {
+        const tier = document.querySelector('#dashTiers .dash-tier.sel .dash-name');
+        lines.push('• Dashboard' + (tier ? ' · ' + tier.textContent : '') + ': ' + fmtSp(dash));
+      }
+      if (disc > 0) lines.push('• Descuento Pack (−10%): −' + fmtSp(disc));
+      lines.push('Total setup: ' + fmtSp(total));
+      if (S.maint && mAmt > 0) {
+        lines.push('Mantenimiento: Buffalo ' + (S.maint === 'cloud' ? 'Cloud (15%)' : 'Connect (10%)') + ' → ' + fmtSp(mAmt) + '/mes');
+      }
+      var configObj = buildOnboardingConfig();
+      var projectConfig = btoa(unescape(encodeURIComponent(JSON.stringify(configObj))));
+      return { projectTotal: total, projectNotes: lines.join('\n'), projectMaint: mAmt, projectConfig: projectConfig };
+    } catch(e) {
+      return {};
+    }
+  }
 
   // Helper: base payload
   function crmPayload(action, extra) {
@@ -1160,8 +1412,120 @@ recalc();
       leadId: leadId_pm,
       cardId: cardId_pm,
       pipelineId: pipelineId_pm,
-    }, extra || {});
+    }, buildProjectData(), extra || {});
   }
+
+  // ── Auto-save: debounced draft save every time the config changes ──
+  // Fires 1.5 s after the last change; silently updates valor + notas on the lead.
+  var _autoSaveTimer = null;
+  function scheduleDraftSave() {
+    if (!leadId_pm) return;                     // only in CRM mode with a lead
+    if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(function() {
+      var data = buildProjectData();
+      if (!data.projectTotal && !data.projectNotes) return;  // nothing configured yet
+      window.parent.postMessage(Object.assign({
+        type: 'buffalo_configurador_action',
+        action: 'guardar_borrador',
+        leadId: leadId_pm,
+      }, data), '*');
+    }, 1500);
+  }
+
+  // Hook auto-save into recalc (runs on every config change)
+  var _origRecalc = window.recalc;
+  window.recalc = function() {
+    if (_origRecalc) _origRecalc.apply(this, arguments);
+    scheduleDraftSave();
+  };
+
+  // Re-report height when step changes (step 2 is taller/shorter than step 1)
+  var _origGoStep = window.goStep;
+  window.goStep = function(n) {
+    if (_origGoStep) _origGoStep.apply(this, arguments);
+    setTimeout(reportHeight, 120);
+    setTimeout(reportHeight, 400);
+  };
+
+  // ── Show save button + wire up crmSaveNow ────────────────────────────
+  var _saveWrap = document.getElementById('crm-save-wrap');
+  if (_saveWrap) _saveWrap.style.display = 'block';
+
+  window.crmSaveNow = function() {
+    var data = buildProjectData();
+    var lbl  = document.getElementById('crm-save-label');
+    if (!data.projectTotal && !data.projectNotes) {
+      showToast('Activa al menos un agente para guardar', 'orange');
+      return;
+    }
+    window.parent.postMessage(Object.assign({
+      type:     'buffalo_configurador_action',
+      action:   'guardar_borrador',
+      leadId:   leadId_pm,
+      cardId:   cardId_pm,
+      pipelineId: pipelineId_pm,
+    }, data), '*');
+    if (lbl) lbl.textContent = 'Guardado ✓';
+    setTimeout(function() { if (lbl) lbl.textContent = 'Guardar en CRM'; }, 2500);
+    showToast('Proyecto guardado en el CRM ✓', 'green');
+  };
+
+  // ── Helper: open a document in a new tab as Blob (no auto-print block) ──────
+  function openDocBlobTab(buildFn) {
+    // Temporarily hijack window.open to capture the HTML string instead of writing
+    // it to a new window (which would trigger window.print() and freeze the CRM).
+    var capturedHtml = '';
+    var origOpen = window.open;
+    window.open = function() {
+      return {
+        document: {
+          write:  function(h) { capturedHtml += h; },
+          close:  function()  {}
+        },
+        focus:  function() {},
+        print:  function() {}
+      };
+    };
+    try { buildFn(); } catch(e) { console.warn('buildFn error', e); }
+    window.open = origOpen;
+
+    if (!capturedHtml) return;
+
+    // Strip the auto-print script so it does NOT freeze the parent when opened
+    capturedHtml = capturedHtml.replace(/<script[^>]*>[\s\S]*?window\.print[\s\S]*?<\/script>/gi, '');
+
+    // Inject a sticky "Imprimir / PDF" button at the top of the document
+    var printBtn = '<div style="position:fixed;top:16px;right:20px;z-index:9999;display:flex;gap:8px;">' +
+      '<button onclick="window.print()" style="background:#1a7a5a;color:#fff;border:none;padding:9px 18px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;font-family:sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.18);">🖨 Imprimir / PDF</button>' +
+      '<button onclick="window.close()" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;padding:9px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:sans-serif;">✕</button>' +
+      '</div>';
+    capturedHtml = capturedHtml.replace('</body>', printBtn + '</body>');
+
+    var blob = new Blob([capturedHtml], { type: 'text/html;charset=utf-8' });
+    var url  = URL.createObjectURL(blob);
+    (window.top || window).open(url, '_blank');
+    setTimeout(function() { URL.revokeObjectURL(url); }, 60000);
+  }
+
+  // ── Patch generateProposal: open as Blob tab in CRM mode ─────────────────
+  var _origProposal = window.generateProposal;
+  window.generateProposal = function() {
+    if (window.parent && window.parent !== window) {
+      openDocBlobTab(_origProposal);
+    } else {
+      _origProposal.apply(this, arguments);
+    }
+  };
+
+  // ── Patch generateContrato: open as Blob tab in CRM mode ─────────────────
+  var _origContrato = window.generateContrato;
+  window.generateContrato = function() {
+    if (window.parent && window.parent !== window) {
+      openDocBlobTab(_origContrato);
+    } else {
+      _origContrato.apply(this, arguments);
+    }
+  };
 
   // ── Patch generateFactura: in CRM mode, save to CRM instead of print window ──
   const _origFactura = window.generateFactura;
@@ -1228,21 +1592,29 @@ recalc();
     }
   };
 
-  // ── Patch click listener for proposal / contract / onboarding buttons ──
+  // ── Patch click listener: move pipeline card on every relevant action ──
   document.addEventListener('click', function(e) {
     if (!window.parent || window.parent === window) return;
     const btn = e.target.closest('button, [onclick]');
     if (!btn) return;
     const txt = (btn.textContent || '').trim().toLowerCase();
     const oc  = (btn.getAttribute('onclick') || '').toLowerCase();
-    if (txt.includes('propuesta') || oc.includes('propuesta') || oc.includes('generatepropuesta')) {
+
+    // Propuesta — "generateProposal()" (English fn name) or "sendDoc('propuesta')"
+    if (txt.includes('propuesta') || oc.includes('propuesta') || oc.includes('proposal')) {
       window.parent.postMessage(crmPayload('enviar_propuesta'), '*');
     }
-    if (txt.includes('contrato') || oc.includes('contrato') || oc.includes('generatecontrato')) {
+    // Contrato — "generateContrato()" or "sendDoc('contrato')"
+    if (txt.includes('contrato') || oc.includes('contrato')) {
       window.parent.postMessage(crmPayload('enviar_contrato'), '*');
     }
-    if (txt.includes('onboarding') || oc.includes('onboarding') || oc.includes('sendonboarding')) {
+    // Onboarding — "copyOnboardingLink()" or "sendDoc('onboarding')"
+    if (txt.includes('onboarding') || oc.includes('onboarding')) {
       window.parent.postMessage(crmPayload('enviar_onboarding'), '*');
+    }
+    // Factura — handled by the patched generateFactura(), but also catch sendDoc('factura')
+    if (oc === "senddoc('factura')" || oc.includes("senddoc('factura')")) {
+      window.parent.postMessage(crmPayload('emitir_factura'), '*');
     }
   }, true);
 

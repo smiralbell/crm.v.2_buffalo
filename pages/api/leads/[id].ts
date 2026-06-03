@@ -10,6 +10,8 @@ const leadUpdateSchema = z.object({
   origen_principal: z.string().optional().nullable(),
   prioridad: z.string().optional().nullable(),
   score: z.number().optional().nullable(),
+  notas: z.string().optional().nullable(),
+  configuracion: z.string().optional().nullable(),
 })
 
 export default async function handler(
@@ -52,6 +54,8 @@ export default async function handler(
       if (data.origen_principal !== undefined) updateData.origen_principal = data.origen_principal
       if (data.prioridad !== undefined) updateData.prioridad = data.prioridad
       if (data.score !== undefined) updateData.score = data.score
+      if (data.notas !== undefined) updateData.notas = data.notas
+      if (data.configuracion !== undefined) updateData.configuracion = data.configuracion
 
       const lead = await prisma.lead.update({
         where: { id },

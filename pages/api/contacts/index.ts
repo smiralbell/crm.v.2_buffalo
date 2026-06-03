@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client'
 
 const contactSchema = z.object({
   nombre: z.string().min(1, 'El nombre es requerido'),
-  email: z.string().email('Email inválido'),
+  email: z.union([z.string().email('Email inválido'), z.literal(''), z.null()]).optional(),
   telefono: z.string().optional(),
   empresa: z.string().optional(),
   instagram_user: z.string().optional(),
@@ -67,7 +67,10 @@ export default async function handler(
 
       try {
         const contact = await prisma.contact.create({
-          data,
+          data: {
+            ...data,
+            email: data.email || null,
+          },
         })
 
         return res.status(201).json(contact)
@@ -78,10 +81,12 @@ export default async function handler(
             const target = createError.meta?.target as string[] | undefined
             if (target && target.includes('email')) {
               // Buscar el contacto existente con ese email
-              const existingContact = await prisma.contact.findUnique({
-                where: { email: data.email },
-                select: { id: true },
-              })
+              const existingContact = data.email
+                ? await prisma.contact.findUnique({
+                    where: { email: data.email as string },
+                    select: { id: true },
+                  })
+                : null
               
               return res.status(409).json({ 
                 error: 'Ya existe un contacto con este email',

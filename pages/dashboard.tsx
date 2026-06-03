@@ -7,7 +7,7 @@ import Layout from '@/components/Layout'
 import {
   TrendingUp, TrendingDown, Minus,
   FileText, Users, Zap, CheckCircle2,
-  ArrowRight, AlertCircle,
+  ArrowRight, AlertCircle, Target, RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -22,17 +22,18 @@ interface MonthRow  { month: string; revenue: number }
 
 interface DashboardProps {
   kpis: {
-    invoicedThisMonth:     number
-    invoicedLastMonth:     number
-    invoicedYTD:           number
-    pipelineValue:         number
-    pipelineDeals:         number
-    pendingInvoices:       number
-    pendingAmount:         number
-    dealsClosedThisMonth:  number
-    leadsThisMonth:        number
-    leadsTotal:            number
-    contactsTotal:         number
+    invoicedThisMonth:    number
+    invoicedLastMonth:    number
+    invoicedYTD:          number
+    pipelineValue:        number
+    pipelineDeals:        number
+    pendingInvoices:      number  // draft invoices count (= "sin cobrar")
+    pendingAmount:        number  // draft invoices total
+    mrrAmount:            number  // monthly recurring revenue (maintenance)
+    dealsClosedThisMonth: number
+    leadsThisMonth:       number
+    leadsTotal:           number
+    contactsTotal:        number
   }
   pipelineStages: StageRow[]
   recentInvoices:  InvRow[]
@@ -40,7 +41,9 @@ interface DashboardProps {
   monthlyRevenue:  MonthRow[]
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────
+// ── Config ─────────────────────────────────────────────────────────────
+const ANNUAL_TARGET = 250_000
+
 const fmt = (v: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
@@ -50,16 +53,17 @@ const pct = (curr: number, prev: number) => {
 }
 
 const STAGE_COLORS: Record<string, string> = {
-  'LEAD':               '#6B7280',
-  'CONTACTO':           '#3B82F6',
-  'REUNIÓN':            '#8B5CF6',
-  'PROPUESTA ENVIADA':  '#F59E0B',
-  'NEGOCIANDO':         '#F97316',
-  'CONTRATO FIRMADO':   '#10B981',
-  'FACTURA EMITIDA':    '#06B6D4',
-  'ONBOARDING':         '#6366F1',
-  'EN DESARROLLO':      '#2563EB',
-  'ACTIVO':             '#22C55E',
+  'LEAD':              '#6B7280',
+  'CONTACTO':          '#3B82F6',
+  'REUNIÓN':           '#8B5CF6',
+  'PROPUESTA ENVIADA': '#F59E0B',
+  'NEGOCIANDO':        '#F97316',
+  'CONTRATO FIRMADO':  '#10B981',
+  'FACTURA EMITIDA':   '#06B6D4',
+  'ONBOARDING':        '#6366F1',
+  'EN DESARROLLO':     '#2563EB',
+  'ACTIVO':            '#22C55E',
+  'REMARKETING':       '#EC4899',
 }
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
@@ -74,9 +78,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
     await requireAuth(context)
 
-    const now      = new Date()
-    const y        = now.getFullYear()
-    const m        = now.getMonth()
+    const now = new Date()
+    const y   = now.getFullYear()
+    const m   = now.getMonth()
 
     const startThisMonth = new Date(y, m, 1)
     const startLastMonth = new Date(y, m - 1, 1)
@@ -85,7 +89,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     const sixMonthsAgo   = new Date(y, m - 5, 1)
 
     // ── Invoices ──────────────────────────────────────────────────────
-    const [invThisMonth, invLastMonth, invYTD, invPending, recentInvRaw] = await Promise.all([
+    const [invThisMonth, invLastMonth, invYTD, draftInvoices, recentInvRaw] = await Promise.all([
       prisma.invoice.aggregate({
         where: { deleted_at: null, issue_date: { gte: startThisMonth } },
         _sum: { total: true },
@@ -98,8 +102,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         where: { deleted_at: null, issue_date: { gte: startYTD } },
         _sum: { total: true },
       }),
+      // "Sin cobrar" = solo borradores (status: draft)
       prisma.invoice.findMany({
-        where: { deleted_at: null, status: { in: ['draft', 'sent'] } },
+        where: { deleted_at: null, status: 'draft' },
         select: { id: true, total: true },
       }),
       prisma.invoice.findMany({
@@ -113,13 +118,13 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     // ── Pipeline ──────────────────────────────────────────────────────
     const allCards = await prisma.pipelineCard.findMany({
       where: { deleted_at: null },
-      select: { stage: true, amount: true, created_at: true },
+      select: { stage: true, amount: true, created_at: true, entity_id: true },
     })
 
     const stageMap: Record<string, { count: number; amount: number }> = {}
     const pipelineActiveStages = ['CONTACTO', 'REUNIÓN', 'PROPUESTA ENVIADA', 'NEGOCIANDO']
-    let pipelineValue  = 0
-    let pipelineDeals  = 0
+    let pipelineValue   = 0
+    let pipelineDeals   = 0
     let closedThisMonth = 0
 
     allCards.forEach(c => {
@@ -134,23 +139,40 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       if (s === 'CONTRATO FIRMADO' && c.created_at >= startThisMonth) closedThisMonth++
     })
 
-    const stageOrder = ['LEAD','CONTACTO','REUNIÓN','PROPUESTA ENVIADA','NEGOCIANDO','CONTRATO FIRMADO','FACTURA EMITIDA','ONBOARDING','EN DESARROLLO','ACTIVO']
+    const stageOrder = ['LEAD','CONTACTO','REUNIÓN','PROPUESTA ENVIADA','NEGOCIANDO','CONTRATO FIRMADO','FACTURA EMITIDA','ONBOARDING','EN DESARROLLO','ACTIVO','REMARKETING']
     const pipelineStages: StageRow[] = stageOrder
       .filter(s => stageMap[s])
       .map(s => ({ stage: s, count: stageMap[s].count, amount: stageMap[s].amount }))
 
+    // ── MRR: suma del amount de todas las tarjetas del pipeline de mantenimientos ──
+    const mrrPipelines = await prisma.pipelineKanban.findMany({
+      where: { name: { contains: 'mantenimiento', mode: 'insensitive' } },
+      include: {
+        cards: {
+          where: { deleted_at: null },
+          select: { amount: true },
+        },
+      },
+    })
+    const mrrAmount = mrrPipelines
+      .flatMap(p => p.cards)
+      .reduce((sum, c) => sum + (c.amount ? Number(c.amount) : 0), 0)
+
     // ── Leads ─────────────────────────────────────────────────────────
+    // Leads "activos" = los que tienen tarjeta en el pipeline (cualquier stage)
+    // Si no hay suficientes, completamos con los más recientes.
+    const pipelineEntityIds = allCards
+      .map(c => parseInt(c.entity_id))
+      .filter(n => !isNaN(n))
+
     const [leadsTotal, leadsThisMonth, hotLeadsRaw] = await Promise.all([
       prisma.lead.count(),
       prisma.lead.count({ where: { created_at: { gte: startThisMonth } } }),
       prisma.lead.findMany({
-        where: {
-          OR: [
-            { estado: { in: ['caliente', 'reunion', 'propuesta', 'negociando'] } },
-            { valor: { gt: 0 } },
-          ],
-        },
-        orderBy: [{ valor: 'desc' }, { created_at: 'desc' }],
+        where: pipelineEntityIds.length > 0
+          ? { contact_id: { in: pipelineEntityIds } }
+          : {},
+        orderBy: [{ valor: 'desc' }, { updated_at: 'desc' }],
         take: 8,
         include: { contact: { select: { nombre: true, empresa: true } } },
       }),
@@ -179,13 +201,14 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         kpis: {
-          invoicedThisMonth:   Number(invThisMonth._sum.total  || 0),
-          invoicedLastMonth:   Number(invLastMonth._sum.total  || 0),
-          invoicedYTD:         Number(invYTD._sum.total        || 0),
+          invoicedThisMonth:    Number(invThisMonth._sum.total || 0),
+          invoicedLastMonth:    Number(invLastMonth._sum.total || 0),
+          invoicedYTD:          Number(invYTD._sum.total       || 0),
           pipelineValue,
           pipelineDeals,
-          pendingInvoices:     invPending.length,
-          pendingAmount:       invPending.reduce((s, i) => s + Number(i.total), 0),
+          pendingInvoices:      draftInvoices.length,
+          pendingAmount:        draftInvoices.reduce((s, i) => s + Number(i.total), 0),
+          mrrAmount,
           dealsClosedThisMonth: closedThisMonth,
           leadsThisMonth,
           leadsTotal,
@@ -217,14 +240,14 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     console.error('Dashboard error:', error)
     return {
       props: {
-        kpis: { invoicedThisMonth:0, invoicedLastMonth:0, invoicedYTD:0, pipelineValue:0, pipelineDeals:0, pendingInvoices:0, pendingAmount:0, dealsClosedThisMonth:0, leadsThisMonth:0, leadsTotal:0, contactsTotal:0 },
+        kpis: { invoicedThisMonth:0, invoicedLastMonth:0, invoicedYTD:0, pipelineValue:0, pipelineDeals:0, pendingInvoices:0, pendingAmount:0, mrrAmount:0, dealsClosedThisMonth:0, leadsThisMonth:0, leadsTotal:0, contactsTotal:0 },
         pipelineStages: [], recentInvoices: [], hotLeads: [], monthlyRevenue: [],
       },
     }
   }
 }
 
-// ── KPI card component ─────────────────────────────────────────────────
+// ── KPI Card ───────────────────────────────────────────────────────────
 function KpiCard({
   title, value, sub, trend, icon: Icon, href, accent,
 }: {
@@ -261,12 +284,139 @@ function KpiCard({
   return href ? <Link href={href} className="block">{inner}</Link> : inner
 }
 
+// ── Objetivo anual card ────────────────────────────────────────────────
+function ObjetivoCard({ invoicedYTD, mrrAmount }: { invoicedYTD: number; mrrAmount: number }) {
+  const now  = new Date()
+  const year = now.getFullYear()
+
+  // Solo meses ESTRICTAMENTE futuros (tras el mes en curso).
+  // El mes actual se asume facturado (o en proceso de serlo) → cae en invoicedYTD.
+  // Esto evita doble conteo: mant. ya emitida → invoicedYTD; mant. futura → proyección.
+  // Ej: Junio (getMonth()=5) → 11-5 = 6 meses futuros (Jul–Dic)
+  const futureMonths   = Math.max(0, 11 - now.getMonth())
+  const currentMonthName = now.toLocaleDateString('es-ES', { month: 'long' })
+
+  // Proyección MRR: importe mensual × meses futuros + IVA 21%
+  const mrrProjected   = Math.round(mrrAmount * futureMonths * 1.21)
+  const totalProjected = invoicedYTD + mrrProjected
+
+  // Porcentajes para la barra segmentada
+  const billedPct = Math.min(100, (invoicedYTD / ANNUAL_TARGET) * 100)
+  const mrrPct    = Math.min(100 - billedPct, (mrrProjected / ANNUAL_TARGET) * 100)
+  const totalPct  = Math.min(100, (totalProjected / ANNUAL_TARGET) * 100)
+
+  const remaining = Math.max(0, ANNUAL_TARGET - totalProjected)
+  const exceeded  = totalProjected > ANNUAL_TARGET
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5">
+
+      {/* ── Cabecera ── */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 flex-shrink-0">
+            <Target className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-gray-900">Objetivo anual {year}</div>
+            <div className="text-xs text-gray-400">Meta: {fmt(ANNUAL_TARGET)}</div>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold text-gray-900 leading-none tracking-tight">{fmt(totalProjected)}</div>
+          <div className="text-xs text-gray-400 mt-1">{totalPct.toFixed(1)}% del objetivo</div>
+        </div>
+      </div>
+
+      {/* ── Barra segmentada: facturado YTD (negro) + MRR futuro (gris) ── */}
+      <div className="w-full bg-gray-100 rounded-full h-2.5 mb-1.5 overflow-hidden flex">
+        {billedPct > 0 && (
+          <div
+            className="h-full flex-shrink-0 transition-all duration-700"
+            style={{
+              width: `${billedPct}%`,
+              background: exceeded ? '#22C55E' : '#111827',
+              borderRadius: billedPct >= 100 ? '9999px' : '9999px 0 0 9999px',
+            }}
+          />
+        )}
+        {mrrPct > 0 && (
+          <div
+            className="h-full flex-shrink-0 transition-all duration-700"
+            style={{
+              width: `${mrrPct}%`,
+              background: '#9CA3AF',
+              borderRadius: billedPct + mrrPct >= 100 ? '0 9999px 9999px 0' : '0',
+            }}
+          />
+        )}
+      </div>
+
+      {/* ── Leyenda ── */}
+      <div className="flex items-center gap-5 mb-4 text-[10px] text-gray-400">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-sm bg-gray-900 inline-block flex-shrink-0" />
+          Facturado hasta {currentMonthName}
+        </span>
+        {mrrAmount > 0 && futureMonths > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm bg-gray-400 inline-block flex-shrink-0" />
+            MRR ×{futureMonths} meses futuros
+          </span>
+        )}
+      </div>
+
+      {/* ── Desglose 3 columnas ── */}
+      <div className="grid grid-cols-3 gap-4 border-t border-gray-100 pt-3.5">
+
+        {/* Facturado YTD */}
+        <div>
+          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">YTD facturado</div>
+          <div className="text-sm font-bold text-gray-900">{fmt(invoicedYTD)}</div>
+          <div className="text-[10px] text-gray-400 mt-0.5">setup + mant. emitido</div>
+        </div>
+
+        {/* MRR meses futuros */}
+        <div>
+          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+            MRR {futureMonths > 0 ? `×${futureMonths} meses` : '(dic cerrado)'}
+          </div>
+          <div className="text-sm font-bold text-gray-700">
+            {mrrAmount > 0 && futureMonths > 0 ? fmt(mrrProjected) : '—'}
+          </div>
+          <div className="text-[10px] text-gray-400 mt-0.5">
+            {mrrAmount > 0
+              ? futureMonths > 0
+                ? `${fmt(mrrAmount)}/mes + IVA`
+                : 'año completado'
+              : 'sin contratos activos'}
+          </div>
+        </div>
+
+        {/* Falta / Superado */}
+        <div className="text-right">
+          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+            {exceeded ? 'Superado' : 'Falta'}
+          </div>
+          <div className={`text-sm font-bold ${exceeded ? 'text-green-600' : 'text-gray-900'}`}>
+            {exceeded ? `+${fmt(totalProjected - ANNUAL_TARGET)}` : fmt(remaining)}
+          </div>
+          <div className="text-[10px] text-gray-400 mt-0.5">
+            {exceeded ? '¡objetivo alcanzado!' : 'para llegar al objetivo'}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
 // ══════════════════════════════════════════════════════════════════════
 export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLeads, monthlyRevenue }: DashboardProps) {
-  const now = new Date()
-  const monthName = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  const now        = new Date()
+  const monthName  = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
   const trendMonth = pct(kpis.invoicedThisMonth, kpis.invoicedLastMonth)
-  const maxStageAmt = Math.max(...pipelineStages.map(s => s.amount), 1)
+  const maxCount   = Math.max(...pipelineStages.map(s => s.count), 1)
 
   const estadoLabel: Record<string, string> = {
     frio:'Frío', caliente:'Caliente', reunion:'Reunión',
@@ -275,7 +425,7 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
 
   return (
     <Layout>
-      <div className="space-y-6 max-w-7xl">
+      <div className="space-y-6 max-w-7xl mx-auto">
 
         {/* ── Header ── */}
         <div>
@@ -283,7 +433,10 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
           <p className="text-sm text-gray-400 mt-0.5 capitalize">{monthName}</p>
         </div>
 
-        {/* ── KPIs row 1: billing ── */}
+        {/* ── Objetivo anual ── */}
+        <ObjetivoCard invoicedYTD={kpis.invoicedYTD} mrrAmount={kpis.mrrAmount} />
+
+        {/* ── KPIs fila 1: facturación ── */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard
             title="Facturado este mes"
@@ -302,6 +455,30 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
             href="/invoices"
           />
           <KpiCard
+            title="Sin cobrar"
+            value={kpis.pendingAmount > 0 ? fmt(kpis.pendingAmount) : '—'}
+            sub={
+              kpis.pendingInvoices > 0
+                ? `${kpis.pendingInvoices} factura${kpis.pendingInvoices !== 1 ? 's' : ''} en borrador`
+                : 'Sin borradores pendientes'
+            }
+            icon={kpis.pendingInvoices > 0 ? AlertCircle : CheckCircle2}
+            accent={kpis.pendingInvoices > 0 ? 'bg-amber-500' : 'bg-green-500'}
+            href="/invoices"
+          />
+          <KpiCard
+            title="MRR · Mantenimientos"
+            value={kpis.mrrAmount > 0 ? fmt(kpis.mrrAmount) : '—'}
+            sub={kpis.mrrAmount > 0 ? 'ingresos recurrentes / mes' : 'Sin contratos activos'}
+            icon={RefreshCw}
+            accent={kpis.mrrAmount > 0 ? 'bg-indigo-600' : 'bg-gray-200'}
+            href="/invoices"
+          />
+        </div>
+
+        {/* ── KPIs fila 2: pipeline / leads ── */}
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KpiCard
             title="Pipeline activo"
             value={fmt(kpis.pipelineValue)}
             sub={`${kpis.pipelineDeals} deal${kpis.pipelineDeals !== 1 ? 's' : ''} en curso`}
@@ -309,28 +486,15 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
             accent="bg-amber-500"
             href="/pipelines"
           />
-          <KpiCard
-            title="Sin cobrar"
-            value={String(kpis.pendingInvoices)}
-            sub={kpis.pendingAmount > 0 ? `${fmt(kpis.pendingAmount)} pendientes` : 'Todo al día'}
-            icon={kpis.pendingInvoices > 0 ? AlertCircle : CheckCircle2}
-            accent={kpis.pendingInvoices > 0 ? 'bg-red-500' : 'bg-green-500'}
-            href="/invoices"
-          />
+          <KpiCard title="Total leads"          value={String(kpis.leadsTotal)}            sub={`+${kpis.leadsThisMonth} este mes`} icon={Users}         href="/leads" />
+          <KpiCard title="Contratos firmados"   value={String(kpis.dealsClosedThisMonth)} sub="este mes"                          icon={CheckCircle2}  href="/pipelines" />
+          <KpiCard title="Contactos"            value={String(kpis.contactsTotal)}                                                icon={Users}         href="/contacts" />
         </div>
 
-        {/* ── KPIs row 2: pipeline / leads ── */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <KpiCard title="Total leads"       value={String(kpis.leadsTotal)}            sub={`+${kpis.leadsThisMonth} este mes`} icon={Users}         href="/leads" />
-          <KpiCard title="Contactos"         value={String(kpis.contactsTotal)}                                                 icon={Users}         href="/contacts" />
-          <KpiCard title="Contratos firmados" value={String(kpis.dealsClosedThisMonth)} sub="este mes"                         icon={CheckCircle2}  href="/pipelines" />
-          <KpiCard title="Leads nuevos"      value={String(kpis.leadsThisMonth)}        sub="este mes"                         icon={TrendingUp}    href="/leads" />
-        </div>
-
-        {/* ── Chart + Pipeline ── */}
+        {/* ── Gráfico + Embudo ── */}
         <div className="grid gap-6 lg:grid-cols-2">
 
-          {/* Revenue bar chart */}
+          {/* Revenue chart */}
           <div className="rounded-2xl border border-gray-200 bg-white p-5">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-sm font-bold text-gray-900">Facturación mensual (6 meses)</h2>
@@ -341,7 +505,7 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
             <RevenueChart data={monthlyRevenue} />
           </div>
 
-          {/* Pipeline funnel */}
+          {/* Pipeline funnel — count-based */}
           <div className="rounded-2xl border border-gray-200 bg-white p-5">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-sm font-bold text-gray-900">Embudo de ventas</h2>
@@ -355,37 +519,49 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
                 <Link href="/pipelines" className="text-xs text-gray-400 hover:text-gray-600 underline transition-colors">Ir al pipeline →</Link>
               </div>
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {pipelineStages.map(s => {
                   const color    = STAGE_COLORS[s.stage] || '#6B7280'
-                  const widthPct = s.amount > 0
-                    ? Math.max(6, Math.round((s.amount / maxStageAmt) * 100))
-                    : 4
+                  const widthPct = Math.max(4, Math.round((s.count / maxCount) * 100))
                   return (
                     <div key={s.stage} className="flex items-center gap-3">
-                      <div className="w-[138px] flex-shrink-0 text-[11px] font-semibold text-gray-600 truncate">{s.stage}</div>
-                      <div className="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
+                      {/* Stage name */}
+                      <div className="w-36 flex-shrink-0 text-[11px] font-semibold text-gray-500 truncate">{s.stage}</div>
+                      {/* Bar */}
+                      <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
                         <div
-                          className="h-full rounded-full"
+                          className="h-full rounded-full flex items-center justify-end pr-2 transition-all"
                           style={{ width: `${widthPct}%`, backgroundColor: color }}
-                        />
+                        >
+                          {s.count >= 2 && (
+                            <span className="text-[9px] font-bold text-white leading-none">{s.count}</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="w-14 flex-shrink-0 text-right text-[11px] font-bold text-gray-700">{s.count}</div>
-                      <div className="w-20 flex-shrink-0 text-right text-[11px] font-semibold text-gray-400">
+                      {/* Count badge */}
+                      <div className="w-6 flex-shrink-0 text-center">
+                        <span className="text-xs font-bold text-gray-700">{s.count}</span>
+                      </div>
+                      {/* Amount */}
+                      <div className="w-20 flex-shrink-0 text-right text-[11px] font-medium text-gray-400 tabular-nums">
                         {s.amount > 0 ? fmt(s.amount) : ''}
                       </div>
                     </div>
                   )
                 })}
+                {/* Legend */}
+                <div className="flex items-center justify-end gap-1 pt-1 text-[10px] text-gray-300">
+                  <span>nº tarjetas · importe estimado</span>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* ── Invoices + Hot leads ── */}
+        {/* ── Facturas + Leads activos ── */}
         <div className="grid gap-6 lg:grid-cols-2">
 
-          {/* Recent invoices */}
+          {/* Últimas facturas */}
           <div className="rounded-2xl border border-gray-200 bg-white p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-bold text-gray-900">Últimas facturas</h2>
@@ -430,10 +606,10 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
             )}
           </div>
 
-          {/* Hot leads */}
+          {/* Leads activos */}
           <div className="rounded-2xl border border-gray-200 bg-white p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold text-gray-900">Leads activos</h2>
+              <h2 className="text-sm font-bold text-gray-900">Leads en pipeline</h2>
               <Link href="/leads" className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 transition-colors">
                 Ver todos <ArrowRight className="h-3 w-3" />
               </Link>
@@ -462,7 +638,7 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
                     </div>
                     <div className="flex-shrink-0 flex items-center gap-2">
                       {lead.valor && <span className="text-sm font-bold text-gray-700">{fmt(lead.valor)}</span>}
-                      <span className="w-2 h-2 rounded-full bg-amber-400" />
+                      <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
                     </div>
                   </Link>
                 ))}
@@ -471,7 +647,7 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
           </div>
         </div>
 
-        {/* ── Quick actions ── */}
+        {/* ── Acciones rápidas ── */}
         <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
           <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Acciones rápidas</p>
           <div className="flex flex-wrap gap-2">

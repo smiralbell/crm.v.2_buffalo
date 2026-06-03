@@ -112,7 +112,7 @@ export default function PipelineLayout({
             {/* Izquierda: Botón volver + Desplegable de pipelines */}
             <div className="flex items-center gap-3">
               {/* Botón volver */}
-              <Link href="/dashboard">
+              <Link href="/pipelines">
                 <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-gray-100">
                   <ArrowLeft className="h-4 w-4" />
                 </Button>

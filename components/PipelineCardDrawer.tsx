@@ -31,16 +31,17 @@ interface PipelineCard {
 }
 
 export const BUFFALO_STAGE_COLORS: Record<string, string> = {
-  'LEAD':               '#6B7280',
-  'CONTACTO':           '#3B82F6',
-  'REUNIÓN':            '#8B5CF6',
-  'PROPUESTA ENVIADA':  '#F59E0B',
-  'NEGOCIANDO':         '#F97316',
-  'CONTRATO FIRMADO':   '#10B981',
-  'FACTURA EMITIDA':    '#06B6D4',
-  'ONBOARDING':         '#6366F1',
-  'EN DESARROLLO':      '#2563EB',
-  'ACTIVO':             '#22C55E',
+  'LEAD':              '#6B7280',
+  'CONTACTO':          '#3B82F6',
+  'REUNIÓN':           '#8B5CF6',
+  'PROPUESTA ENVIADA': '#F59E0B',
+  'NEGOCIANDO':        '#F97316',
+  'CONTRATO FIRMADO':  '#10B981',
+  'FACTURA EMITIDA':   '#06B6D4',
+  'ONBOARDING':        '#6366F1',
+  'EN DESARROLLO':     '#2563EB',
+  'ACTIVO':            '#22C55E',
+  'REMARKETING':       '#EC4899',
 }
 
 interface PipelineCardDrawerProps {

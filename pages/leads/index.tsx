@@ -338,13 +338,15 @@ export default function LeadsPage({
                         <td className="p-4">
                           {lead.contact ? (
                             <Link
-                              href={`/contacts/${lead.contact.id}`}
-                              className="hover:underline"
+                              href={`/leads/${lead.id}`}
+                              className="font-medium hover:underline"
                             >
-                              {lead.contact.nombre || lead.contact.email || '-'}
+                              {lead.contact.nombre || lead.contact.email || `Lead #${lead.id}`}
                             </Link>
                           ) : (
-                            '-'
+                            <Link href={`/leads/${lead.id}`} className="text-gray-400 hover:underline">
+                              Lead #{lead.id}
+                            </Link>
                           )}
                         </td>
                         <td className="p-4">

@@ -2,10 +2,11 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 
 const leadSchema = z.object({
-  contact_id: z.number(), // Requerido según la estructura real
-  estado: z.string().optional(), // Puede ser cualquier string, no solo los enum
+  contact_id: z.number(),
+  estado: z.string().optional(),
   valor: z.number().optional().nullable(),
   origen_principal: z.string().optional().nullable(),
   prioridad: z.string().optional().nullable(),
@@ -74,18 +75,29 @@ export default async function handler(
     if (req.method === 'POST') {
       const data = leadSchema.parse(req.body)
 
-      const lead = await prisma.lead.create({
-        data: {
-          contact_id: data.contact_id,
-          estado: data.estado || 'frio',
-          valor: data.valor || null,
-          origen_principal: data.origen_principal || null,
-          prioridad: data.prioridad || 'media',
-          score: data.score || null,
-        },
-      })
-
-      return res.status(201).json(lead)
+      try {
+        const lead = await prisma.lead.create({
+          data: {
+            contact_id: data.contact_id,
+            estado: data.estado || 'frio',
+            valor: data.valor || null,
+            origen_principal: data.origen_principal || null,
+            prioridad: data.prioridad || 'media',
+            score: data.score || null,
+          },
+        })
+        return res.status(201).json(lead)
+      } catch (createError) {
+        if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === 'P2002') {
+          // Find the existing lead for this contact
+          const existing = await prisma.lead.findUnique({ where: { contact_id: data.contact_id } })
+          return res.status(409).json({
+            error: 'Este contacto ya tiene un lead asignado',
+            leadId: existing?.id || null,
+          })
+        }
+        throw createError
+      }
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

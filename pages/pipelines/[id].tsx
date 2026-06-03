@@ -19,6 +19,7 @@ const DEFAULT_BUFFALO_STAGES = [
   'ONBOARDING',
   'EN DESARROLLO',
   'ACTIVO',
+  'REMARKETING',
 ]
 
 interface PipelineCard {
@@ -140,30 +141,33 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
   })
 
   // Cargar desde localStorage después de la hidratación
-  // Si no hay nada guardado y no hay cards, sembrar con los stages por defecto de Buffalo
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`pipeline_${pipeline.id}_stage_order`)
+      // Stages that actually have cards — must always be visible
+      const cardStages = Array.from(new Set(initialCards.map((c) => c.stage)))
+
       if (saved) {
         try {
           const parsed = JSON.parse(saved)
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setStageOrder(parsed)
+            // Merge: keep saved order, but append any card stages not yet in the list
+            const merged = Array.from(new Set([...parsed, ...cardStages]))
+            setStageOrder(merged)
+            localStorage.setItem(`pipeline_${pipeline.id}_stage_order`, JSON.stringify(merged))
+            return
           }
         } catch (error) {
           console.error('Error parsing stage order from localStorage:', error)
         }
-      } else {
-        // Sin datos guardados: sembrar con los defaults y persistirlos
-        const defaultOrder = initialCards.length > 0
-          ? Array.from(new Set([
-              ...DEFAULT_BUFFALO_STAGES,
-              ...initialCards.map((c) => c.stage),
-            ]))
-          : DEFAULT_BUFFALO_STAGES
-        setStageOrder(defaultOrder)
-        localStorage.setItem(`pipeline_${pipeline.id}_stage_order`, JSON.stringify(defaultOrder))
       }
+      // Sin datos guardados: defaults + stages de tarjetas existentes
+      const defaultOrder = Array.from(new Set([
+        ...DEFAULT_BUFFALO_STAGES,
+        ...cardStages,
+      ]))
+      setStageOrder(defaultOrder)
+      localStorage.setItem(`pipeline_${pipeline.id}_stage_order`, JSON.stringify(defaultOrder))
     }
   }, [pipeline.id])
 

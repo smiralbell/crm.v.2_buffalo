@@ -29,6 +29,10 @@ const moveCardSchema = z.object({
   stage: z.string().min(1, 'El stage es requerido'),
   stage_color: z.string().optional(),
   position: z.number().int().min(0),
+  amount: z.union([z.string(), z.number()])
+    .transform((val) => val !== '' && val != null ? parseFloat(String(val)) : null)
+    .optional()
+    .nullable(),
 })
 
 export default async function handler(
@@ -275,9 +279,27 @@ export default async function handler(
           stage: data.stage,
           stage_color: data.stage_color || card.stage_color,
           position: data.position,
+          ...(data.amount != null ? { amount: data.amount } : {}),
         },
       })
 
+      return res.status(200).json(updated)
+    }
+
+    // PATCH: update only amount (without changing stage/position)
+    if (req.method === 'PATCH') {
+      const { card_id, amount } = req.body
+      if (!card_id) return res.status(400).json({ error: 'card_id es requerido' })
+
+      const card = await prisma.pipelineCard.findUnique({ where: { id: card_id } })
+      if (!card || card.deleted_at) return res.status(404).json({ error: 'Tarjeta no encontrada' })
+      if (card.pipeline_id !== pipelineId) return res.status(400).json({ error: 'La tarjeta no pertenece a este pipeline' })
+
+      const parsedAmount = amount != null ? parseFloat(String(amount)) : null
+      const updated = await prisma.pipelineCard.update({
+        where: { id: card_id },
+        data: { ...(parsedAmount != null ? { amount: parsedAmount } : {}) },
+      })
       return res.status(200).json(updated)
     }
 
