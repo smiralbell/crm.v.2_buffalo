@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { GetServerSideProps } from 'next'
+import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -203,11 +204,21 @@ const TABS = [
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+const VALID_TABS = ['global', 'email', 'coldcalling', 'meta', 'google'] as const
+type TabId = typeof VALID_TABS[number]
+
 export default function MarketingPage() {
-  const [tab, setTab] = useState<'global' | 'email' | 'coldcalling' | 'meta' | 'google'>('global')
+  const router = useRouter()
+  const tabFromUrl = VALID_TABS.includes(router.query.tab as TabId) ? router.query.tab as TabId : 'global'
+  const [tab, setTab] = useState<TabId>(tabFromUrl)
   const [data, setData] = useState<MarketingData | null>(null)
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState('')
+
+  // Sync tab with URL param
+  useEffect(() => {
+    if (tabFromUrl !== tab) setTab(tabFromUrl)
+  }, [tabFromUrl])
 
   const load = useCallback(async (p?: string) => {
     setLoading(true)
