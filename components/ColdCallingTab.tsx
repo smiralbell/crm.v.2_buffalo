@@ -69,64 +69,83 @@ const RESULTADOS = [
 
 const GUION_SIN_NOMBRE = [
   {
-    titulo: '📞 Paso 1 — Recepción / quien coja',
+    titulo: '📞 Paso 1 — Recepción',
     bg: 'bg-gray-50',
-    texto: `"Buenas, ¿me puede poner con el responsable del despacho o el socio director? De parte de Juan, de Buffalo AI."`,
+    texto: `"Buenas, ¿me puede poner con el responsable del despacho o el socio director? De parte de Sergi, de Buffalo AI."`,
     tip: 'Si pregunta de qué: "Es una llamada comercial, no le robo más de 2 minutos." — La honestidad funciona mejor que inventar excusas.',
   },
   {
-    titulo: '🎯 Paso 2 — Cuando coge el responsable (15 seg)',
+    titulo: '🎯 Paso 2 — Apertura',
     bg: 'bg-blue-50',
-    texto: `"Hola [nombre si lo dicen], soy Juan, CEO de Buffalo AI. Te llamo porque trabajamos con despachos de abogados ayudándoles a no perder ni una sola consulta fuera de horario. Tengo literalmente 15 segundos — ¿te lo cuento o te llamo en otro momento?"`,
-    tip: 'Dar la opción de llamar después = muestra respeto = más receptivos.',
+    texto: `"Hola, buenas tardes. ¿Con quién hablo?\n\nPerfecto, [Nombre], encantado.\n\nSoy Sergi Masoliver, de Buffalo AI. No sé si me tienes ubicado."`,
+    tip: 'Presentarse con nombre y apellido da seriedad. Preguntar "¿con quién hablo?" muestra respeto.',
   },
   {
-    titulo: '💡 Paso 3 — Si dice adelante (30 seg)',
+    titulo: '⏱ Paso 3 — Los 15 segundos',
+    bg: 'bg-yellow-50',
+    texto: `"No pasa nada. Mira, te robo únicamente 15 segundos y si no te interesa me lo dices sin ningún problema, ¿vale?"`,
+    tip: 'Dar permiso para decir que no = baja la guardia = más receptivos. Es contraintuitivo pero funciona.',
+  },
+  {
+    titulo: '💡 Paso 4 — Propuesta de valor',
     bg: 'bg-green-50',
-    texto: `"Básicamente implementamos un agente de IA que coge tus llamadas y WhatsApps cuando no estás. Califica la consulta, agenda la cita y responde las preguntas típicas — sin secretaria, 24 horas. Los despachos con los que trabajamos han dejado de perder entre 3 y 8 consultas nuevas al mes que antes se iban a la competencia. ¿Eso te duele o lo tienes resuelto?"`,
-    tip: 'Terminar con pregunta abierta. Que hablen ellos.',
+    texto: `"Te cuento súper rápido. Estamos ayudando a despachos como el vuestro a gestionar todas las consultas que llegan tanto dentro como fuera del horario laboral.\n\nLo que nos comentan muchos despachos es que reciben un volumen importante de llamadas y consultas, pero que no todas tienen sentido para el negocio y al final los abogados acaban dedicando mucho tiempo a filtrar casos que no son viables.\n\nPor eso hemos desarrollado un sistema de atención al cliente con inteligencia artificial que se encarga de atender esas consultas, hacer las preguntas necesarias y determinar cuáles tienen sentido pasar a un abogado y cuáles no.\n\nDe esta forma, al despacho solo le llegan los casos realmente interesantes y el equipo gana muchísimo tiempo."`,
+    tip: 'Hablar de un problema real que ya conocen ("filtrar casos no viables") antes de hablar de la solución.',
   },
   {
-    titulo: '🤝 Cierre',
+    titulo: '🔍 Paso 5 — Pregunta de cierre (en catalán)',
+    bg: 'bg-orange-50',
+    texto: `"Fins aquí, t'encaixa? Creus que podria tenir sentit en el vostre cas?"`,
+    tip: 'El cambio al catalán aquí es un golpe maestro — les dice "soy de aquí, os entiendo". Úsalo siempre con despachos de Cataluña.',
+  },
+  {
+    titulo: '✅ Paso 6 — Si muestra interés',
     bg: 'bg-purple-50',
-    texto: `"¿Tienes 20 minutos esta semana para una demo rápida? Te muestro exactamente cómo funcionaría en tu despacho. ¿El martes o el jueves?"`,
-    tip: 'Siempre dos opciones, nunca preguntar "¿cuándo tienes tiempo?"',
+    texto: `"Perfecte. De fet, hem preparat una demo completament gratuïta perquè pugueu veure en directe com funcionaria exactament per al vostre despatx.\n\nNo hi ha cap compromís. Simplement us l'ensenyem, valoreu si us aporta valor i decidiu si té encaix o no.\n\nQuè et sembla si busquem 20 minuts aquesta setmana i t'ho ensenyo?"`,
+    tip: '"Completament gratuïta" + "sense compromís" elimina el riesgo percibido. Siempre cerrar con fecha concreta.',
   },
 ]
 
 const GUION_CON_NOMBRE = [
   {
-    titulo: '🎯 Apertura CEO a CEO (15 seg)',
+    titulo: '🎯 Paso 1 — Apertura directa',
     bg: 'bg-blue-50',
-    texto: `"Hola [NOMBRE], soy Juan, CEO de Buffalo AI. No sé si me tienes fichado — te llamo porque trabajamos con despachos como el tuyo en Cataluña. Tengo 15 segundos, ¿te los regalo?"`,
-    tip: '"¿Te los regalo?" suena diferente a "¿tienes un momento?" — rompe el patrón y genera curiosidad.',
+    texto: `"Hola, buenas tardes, ¿hablo con [NOMBRE]?\n\nPerfecto, encantado.\n\nSoy Sergi Masoliver, de Buffalo AI. No sé si me tienes ubicado."`,
+    tip: 'Confirmar que hablas con la persona correcta antes de lanzar el pitch.',
   },
   {
-    titulo: '💡 Si dice sí (30 seg)',
-    bg: 'bg-green-50',
-    texto: `"Ayudamos a despachos a no perder consultas por culpa del horario. Un agente de IA que coge el teléfono y el WhatsApp cuando tú no puedes — califica, agenda y responde. Sin coste de secretaria adicional. Los que lo tienen me dicen que han dejado de perder entre 3 y 8 clientes nuevos al mes. ¿Eso te pasa a ti o lo tienes resuelto?"`,
-    tip: 'La pregunta final es clave: les obligas a reflexionar sobre el problema.',
-  },
-  {
-    titulo: '⏱ Si no tiene tiempo',
+    titulo: '⏱ Paso 2 — Los 15 segundos',
     bg: 'bg-yellow-50',
-    texto: `"Perfecto, ¿cuándo tienes 10 minutos esta semana? Solo 10."`,
-    tip: 'Nunca digas "ya te llamo yo". Consigue que ellos te den una hora concreta.',
+    texto: `"No pasa nada. Mira, te robo únicamente 15 segundos y si no te interesa me lo dices sin ningún problema, ¿vale?"`,
+    tip: 'Dar permiso para decir que no = baja la guardia. Contraintuitivo pero muy efectivo.',
   },
   {
-    titulo: '🤝 Cierre',
+    titulo: '💡 Paso 3 — Propuesta de valor',
+    bg: 'bg-green-50',
+    texto: `"Te cuento súper rápido. Estamos ayudando a despachos como el vuestro a gestionar todas las consultas que llegan tanto dentro como fuera del horario laboral.\n\nLo que nos comentan muchos despachos es que reciben un volumen importante de llamadas, pero que no todas tienen sentido y al final los abogados acaban filtrando casos que no son viables.\n\nHemos desarrollado un sistema de IA que atiende esas consultas, hace las preguntas necesarias y determina cuáles tienen sentido pasar a un abogado y cuáles no.\n\nAl despacho solo le llegan los casos realmente interesantes."`,
+    tip: 'Hablar en plural ("muchos despachos nos comentan") da credibilidad social.',
+  },
+  {
+    titulo: '🔍 Paso 4 — Pregunta de cierre (en catalán)',
+    bg: 'bg-orange-50',
+    texto: `"Fins aquí, t'encaixa? Creus que podria tenir sentit en el vostre cas?"`,
+    tip: 'El cambio al catalán rompe el patrón y conecta. Funciona especialmente bien con socios directores de despachos catalanes.',
+  },
+  {
+    titulo: '✅ Paso 5 — Si muestra interés',
     bg: 'bg-purple-50',
-    texto: `"¿El martes o el jueves para una demo de 20 minutos? Te muestro en vivo cómo funcionaría en tu despacho — sin compromiso."`,
-    tip: 'Siempre dos opciones concretas.',
+    texto: `"Perfecte. De fet, hem preparat una demo completament gratuïta perquè pugueu veure en directe com funcionaria exactament per al vostre despatx.\n\nNo hi ha cap compromís. Simplement us l'ensenyem, valoreu si us aporta valor i decidiu si té encaix o no.\n\nQuè et sembla si busquem 20 minuts aquesta setmana i t'ho ensenyo?"`,
+    tip: '"Gratuïta" + "sense compromís" + fecha concreta = la combinación perfecta de cierre.',
   },
 ]
 
 const OBJECIONES = [
-  { obj: '"Ya tenemos secretaria"', resp: '"Genial — ¿y fuera de horario? ¿Los sábados? El agente la complementa, no la sustituye."' },
-  { obj: '"No me interesa la IA"', resp: '"Entiendo. ¿Cuántas llamadas pierdes a la semana fuera de horario?"' },
-  { obj: '"¿Cuánto cuesta?"', resp: '"2.200€ de implementación y 90€/mes de mantenimiento. Si capturas 2 clientes extra al mes ya está pagado. ¿Cuánto te vale un cliente nuevo?"' },
-  { obj: '"Ahora no es momento"', resp: '"¿Cuándo sería? Dame una fecha concreta y te llamo ese día."' },
-  { obj: '"Mándame info por email"', resp: '"Claro, ¿a qué email? Y mientras te la mando — ¿qué es lo que más te preocupa de la gestión de consultas ahora mismo?"' },
+  { obj: '"Ya tenemos secretaria"', resp: '"Perfecte, i fora d\'horari? Els dissabtes? L\'agent la complementa, no la substitueix. De fet, els despatxos que ho tenen diuen que la seva secretària ara pot dedicar-se a tasques de molt més valor."' },
+  { obj: '"No me interesa la IA"', resp: '"Entiendo perfectamente. ¿Puedo preguntarte cuántas consultas recibes a la semana que al final no son casos para vosotros? ¿Cuánto tiempo os lleva filtrarlos?"' },
+  { obj: '"¿Cuánto cuesta?"', resp: '"La implementació és de 2.200€ i el manteniment 90€/mes. Si el sistema us filtra 3-4 casos no viables a la setmana i recupereu 2 clients nous al mes, s\'amortitza sol. Però això és el que us mostrarem a la demo — amb números reals del vostre despatx."' },
+  { obj: '"Ahora no es el momento"', resp: '"Ho entenc. Quan seria bon moment? Dóna\'m una data concreta i et truco aquell dia."' },
+  { obj: '"Mándame información por email"', resp: '"Per descomptat, a quin email t\'ho envio? I ja que ho faig — quina és la part que més et preocupa ara mateix, les consultes fora d\'horari o el temps que dediqueu a filtrar casos?"' },
+  { obj: '"Ya lo gestionamos bien"', resp: '"Me alegra escuchar eso. ¿Y los fines de semana y por las noches? ¿También lo tenéis cubierto? Porque la mayoría de despachos nos dicen que ahí es donde pierden más."' },
 ]
 
 // ── Message templates ────────────────────────────────────────────────────────
