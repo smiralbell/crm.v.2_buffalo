@@ -262,6 +262,12 @@ interface PlaceResult {
   reviews: number | null
 }
 
+// Places API (New) Text Search: $0.032 por request · límite 5€ = ~156 requests
+const COST_PER_REQUEST = 0.032  // USD
+const MAX_COST_EUR     = 5      // €
+const USD_TO_EUR       = 0.93
+const MAX_REQUESTS     = Math.floor((MAX_COST_EUR / USD_TO_EUR) / COST_PER_REQUEST) // ~168
+
 const CIUDADES_CATALUNA = [
   'Barcelona','Hospitalet de Llobregat','Badalona','Terrassa','Sabadell',
   'Lleida','Tarragona','Mataró','Santa Coloma de Gramenet','Reus',
@@ -284,11 +290,16 @@ function GoogleMapsSearch({ onImported }: { onImported: () => void }) {
   const [importedCount, setImportedCount] = useState(0)
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
+  const [requestCount, setRequestCount] = useState(0)
 
   const ciudadFinal = ciudad === '__custom__' ? ciudadCustom : ciudad
+  const costEur = (requestCount * COST_PER_REQUEST * USD_TO_EUR)
+  const limitReached = requestCount >= MAX_REQUESTS
+  const nearLimit = requestCount >= MAX_REQUESTS * 0.8
 
   const search = async (reset = true) => {
     if (!query.trim() || !ciudadFinal.trim()) return
+    if (limitReached) return
     setSearching(true)
     setError('')
     if (reset) { setResults([]); setSelected(new Set()); setPage(1) }
@@ -303,6 +314,7 @@ function GoogleMapsSearch({ onImported }: { onImported: () => void }) {
 
     setResults(prev => reset ? d.results : [...prev, ...d.results])
     setNextPage(d.nextPageToken || null)
+    setRequestCount(c => c + 1)
     if (!reset) setPage(p => p + 1)
     setSearching(false)
   }
@@ -360,6 +372,33 @@ function GoogleMapsSearch({ onImported }: { onImported: () => void }) {
         </div>
       </div>
 
+      {/* Cost meter */}
+      <div className={`flex items-center justify-between px-5 py-2 text-xs font-medium border-b ${
+        limitReached ? 'bg-red-50 border-red-200 text-red-700' :
+        nearLimit    ? 'bg-yellow-50 border-yellow-200 text-yellow-700' :
+                       'bg-gray-50 border-blue-100 text-gray-500'
+      }`}>
+        <span>
+          {limitReached
+            ? '🚫 Límite de 5€ alcanzado — reinicia la página para continuar'
+            : nearLimit
+            ? `⚠️ Cerca del límite — ${requestCount} búsquedas · ${costEur.toFixed(2)}€ estimado`
+            : `💳 Coste estimado: ${costEur.toFixed(3)}€ de ${MAX_COST_EUR}€ máx · ${requestCount} búsquedas`
+          }
+        </span>
+        {requestCount > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${limitReached ? 'bg-red-500' : nearLimit ? 'bg-yellow-500' : 'bg-blue-500'}`}
+                style={{ width: `${Math.min(100, (requestCount / MAX_REQUESTS) * 100)}%` }}
+              />
+            </div>
+            <span>{Math.round((requestCount / MAX_REQUESTS) * 100)}%</span>
+          </div>
+        )}
+      </div>
+
       {/* Search form */}
       <div className="p-4 bg-white">
         <div className="flex flex-wrap gap-2">
@@ -389,7 +428,7 @@ function GoogleMapsSearch({ onImported }: { onImported: () => void }) {
           <Button
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => search(true)}
-            disabled={searching}
+            disabled={searching || limitReached}
           >
             {searching ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             <span className="ml-1.5">{searching ? 'Buscando...' : 'Buscar'}</span>
@@ -412,7 +451,7 @@ function GoogleMapsSearch({ onImported }: { onImported: () => void }) {
             </div>
             <div className="flex items-center gap-2">
               {nextPage && (
-                <Button variant="outline" size="sm" onClick={() => search(false)} disabled={searching}>
+                <Button variant="outline" size="sm" onClick={() => search(false)} disabled={searching || limitReached}>
                   {searching ? 'Cargando...' : '+ Cargar más'}
                 </Button>
               )}
