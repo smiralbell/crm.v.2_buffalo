@@ -9,8 +9,9 @@ import {
   Megaphone, TrendingUp, Users, Calendar, DollarSign,
   Mail, MousePointerClick, BarChart3, RefreshCw,
   ChevronDown, ArrowUpRight, ArrowDownRight, Clock,
-  CheckCircle2, XCircle, AlertCircle, Zap,
+  CheckCircle2, XCircle, AlertCircle, Zap, Phone,
 } from 'lucide-react'
+import ColdCallingTab from '@/components/ColdCallingTab'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -193,16 +194,17 @@ function ComingSoon({ name }: { name: string }) {
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'global',   label: 'Métricas Globales', icon: TrendingUp },
-  { id: 'email',    label: 'Email Outreach',     icon: Mail },
-  { id: 'meta',     label: 'Meta Ads',           icon: Megaphone },
-  { id: 'google',   label: 'Google Ads',         icon: MousePointerClick },
+  { id: 'global',      label: 'Métricas Globales', icon: TrendingUp },
+  { id: 'email',       label: 'Email Outreach',     icon: Mail },
+  { id: 'coldcalling', label: 'Cold Calling',       icon: Phone },
+  { id: 'meta',        label: 'Meta Ads',           icon: Megaphone },
+  { id: 'google',      label: 'Google Ads',         icon: MousePointerClick },
 ]
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function MarketingPage() {
-  const [tab, setTab] = useState<'global' | 'email' | 'meta' | 'google'>('global')
+  const [tab, setTab] = useState<'global' | 'email' | 'coldcalling' | 'meta' | 'google'>('global')
   const [data, setData] = useState<MarketingData | null>(null)
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState('')
@@ -614,6 +616,11 @@ export default function MarketingPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ── COLD CALLING TAB ─────────────────────────────────────────────── */}
+        {tab === 'coldcalling' && (
+          <ColdCallingTab />
         )}
 
         {/* ── META ADS TAB ─────────────────────────────────────────────────── */}

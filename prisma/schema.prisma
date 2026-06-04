@@ -358,6 +358,57 @@ model ProjectAiAnalysis {
 }
 
 // ============================================
+// COLD CALLING
+// ============================================
+
+model ColdCallProspect {
+  id           Int      @id @default(autoincrement())
+  nombre       String
+  empresa      String?
+  telefono     String?
+  email        String?
+  zona         String?
+  sector       String?
+  cargo        String?
+  linkedin     String?
+  web          String?
+  estado       String   @default("pendiente") // pendiente | interesado | reunion_agendada | no_interesado | sin_respuesta | buzon_voz | no_contactar
+  notas        String?  @db.Text
+  assigned_to  String?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  deleted_at   DateTime?
+
+  calls        ColdCallCall[]
+
+  @@index([estado])
+  @@index([zona])
+  @@index([sector])
+  @@index([deleted_at])
+  @@map("coldcall_prospects")
+}
+
+model ColdCallCall {
+  id               Int       @id @default(autoincrement())
+  prospect_id      Int
+  fecha            DateTime  @default(now())
+  duracion         Int?
+  resultado        String    // interesado | no_interesado | sin_respuesta | buzon_voz | reunion_agendada | no_contactar
+  notas            String?   @db.Text
+  whatsapp_enviado Boolean   @default(false)
+  email_enviado    Boolean   @default(false)
+  reunion_fecha    DateTime?
+  created_at       DateTime  @default(now())
+
+  prospect         ColdCallProspect @relation(fields: [prospect_id], references: [id], onDelete: Cascade)
+
+  @@index([prospect_id])
+  @@index([fecha])
+  @@index([resultado])
+  @@map("coldcall_calls")
+}
+
+// ============================================
 // MARKETING — ENGRANAJE 1
 // ============================================
 
