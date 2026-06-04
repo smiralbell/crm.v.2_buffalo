@@ -67,30 +67,66 @@ const RESULTADOS = [
   { id: 'no_contactar',     label: 'No contactar',     color: 'bg-gray-500 hover:bg-gray-600 text-white',  emoji: '🚫' },
 ]
 
-const GUION = [
+const GUION_SIN_NOMBRE = [
   {
-    titulo: '🎯 Apertura (15 seg)',
-    texto: `"Buenas [días/tardes], soy [tu nombre] de Buffalo AI. Te llamo porque ayudamos a despachos de abogados en Cataluña a automatizar su atención al cliente con inteligencia artificial. ¿Tienes 2 minutitos ahora?"`,
+    titulo: '📞 Paso 1 — Recepción / quien coja',
+    bg: 'bg-gray-50',
+    texto: `"Buenas, ¿me puede poner con el responsable del despacho o el socio director? De parte de Juan, de Buffalo AI."`,
+    tip: 'Si pregunta de qué: "Es una llamada comercial, no le robo más de 2 minutos." — La honestidad funciona mejor que inventar excusas.',
   },
   {
-    titulo: '💡 Propuesta de valor (30 seg)',
-    texto: `"Lo que hacemos es implementar un agente de IA que atiende llamadas y WhatsApps de tus clientes las 24 horas. Gestiona primeras consultas, agenda citas y responde preguntas frecuentes. Los despachos con los que trabajamos ahorran entre 15 y 20 horas semanales de gestión administrativa."`,
+    titulo: '🎯 Paso 2 — Cuando coge el responsable (15 seg)',
+    bg: 'bg-blue-50',
+    texto: `"Hola [nombre si lo dicen], soy Juan, CEO de Buffalo AI. Te llamo porque trabajamos con despachos de abogados ayudándoles a no perder ni una sola consulta fuera de horario. Tengo literalmente 15 segundos — ¿te lo cuento o te llamo en otro momento?"`,
+    tip: 'Dar la opción de llamar después = muestra respeto = más receptivos.',
   },
   {
-    titulo: '❓ Pregunta de dolor',
-    texto: `"¿Cuántas llamadas o mensajes recibes a diario que podría gestionar alguien sin tu intervención directa?"`,
-  },
-  {
-    titulo: '💬 Objeciones frecuentes',
-    texto: `• "Ya tenemos secretaria" → "El agente la complementa. Cubre fuera de horario y libera a tu equipo para tareas de más valor."
-• "No me interesa la IA" → "¿Puedo preguntarte cuánto tiempo dedica tu equipo a gestionar primeras consultas?"
-• "¿Cuánto cuesta?" → "La implementación parte de 2.200€ y el mantenimiento es de 90-180€/mes. Si gestiona solo 3-4 consultas extra al mes, se amortiza solo."
-• "Ahora no es el momento" → "¿Cuándo sería buen momento? Solo necesito 20 minutos para una demo."`,
+    titulo: '💡 Paso 3 — Si dice adelante (30 seg)',
+    bg: 'bg-green-50',
+    texto: `"Básicamente implementamos un agente de IA que coge tus llamadas y WhatsApps cuando no estás. Califica la consulta, agenda la cita y responde las preguntas típicas — sin secretaria, 24 horas. Los despachos con los que trabajamos han dejado de perder entre 3 y 8 consultas nuevas al mes que antes se iban a la competencia. ¿Eso te duele o lo tienes resuelto?"`,
+    tip: 'Terminar con pregunta abierta. Que hablen ellos.',
   },
   {
     titulo: '🤝 Cierre',
-    texto: `"¿Te parece si hacemos una demo rápida de 20 minutos esta semana? Te muestro exactamente cómo funcionaría en tu despacho. ¿Mejor el martes o el jueves?"`,
+    bg: 'bg-purple-50',
+    texto: `"¿Tienes 20 minutos esta semana para una demo rápida? Te muestro exactamente cómo funcionaría en tu despacho. ¿El martes o el jueves?"`,
+    tip: 'Siempre dos opciones, nunca preguntar "¿cuándo tienes tiempo?"',
   },
+]
+
+const GUION_CON_NOMBRE = [
+  {
+    titulo: '🎯 Apertura CEO a CEO (15 seg)',
+    bg: 'bg-blue-50',
+    texto: `"Hola [NOMBRE], soy Juan, CEO de Buffalo AI. No sé si me tienes fichado — te llamo porque trabajamos con despachos como el tuyo en Cataluña. Tengo 15 segundos, ¿te los regalo?"`,
+    tip: '"¿Te los regalo?" suena diferente a "¿tienes un momento?" — rompe el patrón y genera curiosidad.',
+  },
+  {
+    titulo: '💡 Si dice sí (30 seg)',
+    bg: 'bg-green-50',
+    texto: `"Ayudamos a despachos a no perder consultas por culpa del horario. Un agente de IA que coge el teléfono y el WhatsApp cuando tú no puedes — califica, agenda y responde. Sin coste de secretaria adicional. Los que lo tienen me dicen que han dejado de perder entre 3 y 8 clientes nuevos al mes. ¿Eso te pasa a ti o lo tienes resuelto?"`,
+    tip: 'La pregunta final es clave: les obligas a reflexionar sobre el problema.',
+  },
+  {
+    titulo: '⏱ Si no tiene tiempo',
+    bg: 'bg-yellow-50',
+    texto: `"Perfecto, ¿cuándo tienes 10 minutos esta semana? Solo 10."`,
+    tip: 'Nunca digas "ya te llamo yo". Consigue que ellos te den una hora concreta.',
+  },
+  {
+    titulo: '🤝 Cierre',
+    bg: 'bg-purple-50',
+    texto: `"¿El martes o el jueves para una demo de 20 minutos? Te muestro en vivo cómo funcionaría en tu despacho — sin compromiso."`,
+    tip: 'Siempre dos opciones concretas.',
+  },
+]
+
+const OBJECIONES = [
+  { obj: '"Ya tenemos secretaria"', resp: '"Genial — ¿y fuera de horario? ¿Los sábados? El agente la complementa, no la sustituye."' },
+  { obj: '"No me interesa la IA"', resp: '"Entiendo. ¿Cuántas llamadas pierdes a la semana fuera de horario?"' },
+  { obj: '"¿Cuánto cuesta?"', resp: '"2.200€ de implementación y 90€/mes de mantenimiento. Si capturas 2 clientes extra al mes ya está pagado. ¿Cuánto te vale un cliente nuevo?"' },
+  { obj: '"Ahora no es momento"', resp: '"¿Cuándo sería? Dame una fecha concreta y te llamo ese día."' },
+  { obj: '"Mándame info por email"', resp: '"Claro, ¿a qué email? Y mientras te la mando — ¿qué es lo que más te preocupa de la gestión de consultas ahora mismo?"' },
 ]
 
 // ── Message templates ────────────────────────────────────────────────────────
@@ -533,6 +569,8 @@ function CallPanel({ prospect, onClose, onUpdate }: {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [guionOpen, setGuionOpen] = useState(false)
+  const [guionMode, setGuionMode] = useState<'sin' | 'con'>(prospect.nombre && !prospect.nombre.includes('&') && !prospect.nombre.includes('Abogados') ? 'con' : 'sin')
+  const [objecionesOpen, setObjecionesOpen] = useState(false)
   const [msgCopiado, setMsgCopiado] = useState(false)
   const [editNotas, setEditNotas] = useState(false)
   const [notasProspecto, setNotasProspecto] = useState(prospect.notas || '')
@@ -642,7 +680,7 @@ function CallPanel({ prospect, onClose, onUpdate }: {
         <div className="flex-1 p-4 space-y-4">
 
           {/* Guión de ventas */}
-          <div className="border border-gray-100 rounded-xl overflow-hidden">
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
             <button
               onClick={() => setGuionOpen(o => !o)}
               className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-semibold text-gray-700"
@@ -651,13 +689,64 @@ function CallPanel({ prospect, onClose, onUpdate }: {
               {guionOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </button>
             {guionOpen && (
-              <div className="p-4 space-y-3 bg-white">
-                {GUION.map((g, i) => (
-                  <div key={i} className="space-y-1">
-                    <p className="text-xs font-bold text-gray-600">{g.titulo}</p>
-                    <p className="text-xs text-gray-600 leading-relaxed whitespace-pre-line bg-gray-50 rounded-lg p-2.5">{g.texto}</p>
-                  </div>
-                ))}
+              <div className="bg-white">
+                {/* Toggle sin nombre / con nombre */}
+                <div className="flex border-b border-gray-100">
+                  {[
+                    { id: 'sin', label: '🔍 No sé con quién hablar' },
+                    { id: 'con', label: '👤 Sé con quién hablar' },
+                  ].map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => setGuionMode(t.id as 'sin' | 'con')}
+                      className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${
+                        guionMode === t.id
+                          ? 'bg-gray-900 text-white'
+                          : 'text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Pasos del guión */}
+                <div className="divide-y divide-gray-100">
+                  {(guionMode === 'sin' ? GUION_SIN_NOMBRE : GUION_CON_NOMBRE).map((g, i) => (
+                    <div key={i} className={`p-3 space-y-1.5 ${g.bg}`}>
+                      <p className="text-xs font-bold text-gray-700">{g.titulo}</p>
+                      <p className="text-xs text-gray-800 leading-relaxed bg-white rounded-lg p-2.5 border border-gray-100 italic">
+                        {g.texto}
+                      </p>
+                      {g.tip && (
+                        <p className="text-xs text-gray-500 flex items-start gap-1.5">
+                          <span className="shrink-0">💡</span>{g.tip}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Objeciones */}
+                <div className="border-t border-gray-200">
+                  <button
+                    onClick={() => setObjecionesOpen(o => !o)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+                  >
+                    <span>💬 Objeciones frecuentes</span>
+                    {objecionesOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+                  {objecionesOpen && (
+                    <div className="divide-y divide-gray-100">
+                      {OBJECIONES.map((o, i) => (
+                        <div key={i} className="px-3 py-2.5 space-y-1">
+                          <p className="text-xs font-semibold text-red-600">{o.obj}</p>
+                          <p className="text-xs text-gray-700 italic bg-green-50 rounded p-2">{o.resp}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
