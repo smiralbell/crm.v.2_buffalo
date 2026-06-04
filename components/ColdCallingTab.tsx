@@ -519,9 +519,14 @@ function CallPanel({ prospect, onClose, onUpdate }: {
   const [notasProspecto, setNotasProspecto] = useState(prospect.notas || '')
   const [convertingLead, setConvertingLead] = useState(false)
   const [leadCreado, setLeadCreado] = useState<{ lead_id: number; existing: boolean } | null>(null)
+  const [emailProspecto, setEmailProspecto] = useState(prospect.email || '')
+  const [schedulingMeeting, setSchedulingMeeting] = useState(false)
+  const [meetResult, setMeetResult] = useState<{ meetLink: string } | null>(null)
+  const [meetError, setMeetError] = useState('')
 
   const mensaje = resultado ? getMensaje(resultado, prospect) : null
   const showConvertToLead = saved && (resultado === 'interesado' || resultado === 'reunion_agendada')
+  const showScheduleMeeting = resultado === 'reunion_agendada' && reunionFecha && emailProspecto
 
   const llamar = () => { if (prospect.telefono) window.location.href = `tel:${prospect.telefono}` }
 
@@ -545,6 +550,25 @@ function CallPanel({ prospect, onClose, onUpdate }: {
     setSaving(false); setSaved(true)
     const pRes = await fetch(`/api/coldcall/prospects/${prospect.id}`)
     if (pRes.ok) onUpdate(await pRes.json())
+  }
+
+  const scheduleMeeting = async () => {
+    setSchedulingMeeting(true); setMeetError('')
+    const res = await fetch('/api/coldcall/schedule-meeting', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prospect_id:      prospect.id,
+        email_prospecto:  emailProspecto,
+        nombre_prospecto: prospect.nombre,
+        nombre_despacho:  prospect.empresa || prospect.nombre,
+        fecha_inicio:     reunionFecha,
+        duracion:         20,
+      }),
+    })
+    const d = await res.json()
+    if (!res.ok) { setMeetError(d.error || 'Error'); setSchedulingMeeting(false); return }
+    setMeetResult(d)
+    setSchedulingMeeting(false)
   }
 
   const convertirALead = async () => {
@@ -731,6 +755,58 @@ function CallPanel({ prospect, onClose, onUpdate }: {
                   </div>
                   {mensaje.asunto && <p className="text-xs text-gray-500">Asunto: {mensaje.asunto}</p>}
                   <p className="text-xs text-gray-600 whitespace-pre-line leading-relaxed">{mensaje.texto}</p>
+                </div>
+              )}
+
+              {/* Email del prospecto — siempre visible para reunión agendada */}
+              {resultado === 'reunion_agendada' && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Email del prospecto</label>
+                  <input type="email" value={emailProspecto} onChange={e => setEmailProspecto(e.target.value)}
+                    placeholder="nombre@despacho.com"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300" />
+                </div>
+              )}
+
+              {/* Crear evento + enviar email */}
+              {resultado === 'reunion_agendada' && reunionFecha && emailProspecto && !meetResult && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 border-b border-gray-100">
+                    <CalendarPlus className="h-4 w-4 text-gray-500" />
+                    <p className="text-xs font-semibold text-gray-700">Crear evento y enviar confirmación</p>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    <p className="text-xs text-gray-500">
+                      Crea el evento en Google Calendar con Meet link y envía el correo de confirmación a <strong>{emailProspecto}</strong>.
+                    </p>
+                    {meetError && <p className="text-xs text-red-500">{meetError}</p>}
+                    <button onClick={scheduleMeeting} disabled={schedulingMeeting}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-lg text-sm font-semibold transition-colors">
+                      <CalendarPlus className="h-4 w-4" />
+                      {schedulingMeeting ? 'Creando evento...' : 'Crear evento en Calendar y enviar email'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Meet link generado */}
+              {meetResult && (
+                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-gray-700" />
+                    <p className="text-xs font-semibold text-gray-700">Evento creado · Email enviado a {emailProspecto}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <a href={meetResult.meetLink} target="_blank" rel="noreferrer"
+                      className="flex items-center gap-1.5 text-xs font-medium text-gray-900 underline underline-offset-2">
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Abrir Google Meet
+                    </a>
+                    <button onClick={() => { navigator.clipboard.writeText(meetResult.meetLink) }}
+                      className="flex items-center gap-1 text-xs text-gray-500 border border-gray-200 rounded px-2 py-1 hover:bg-gray-100">
+                      <Copy className="h-3 w-3" /> Copiar link
+                    </button>
+                  </div>
                 </div>
               )}
 
