@@ -39,9 +39,21 @@ interface Prospect {
   calls: ColdCall[]
 }
 
+interface Funnel {
+  total_prospectos: number
+  llamadas_hechas:  number
+  sin_respuesta:    number
+  interesados:      number
+  reunion_agendada: number
+  no_interesado:    number
+  no_contactar:     number
+  pendientes:       number
+}
+
 interface Metrics {
   hoy: { llamadas: number; interesados: number; reuniones: number; tasaConversion: number }
-  totales: { prospectos: number }
+  totales: { prospectos: number; llamadas: number }
+  funnel: Funnel
   porEstado: Record<string, number>
   zonas: { zona: string | null; count: number }[]
   sectores: { sector: string | null; count: number }[]
@@ -218,6 +230,68 @@ function parseCSV(text: string): Record<string, string>[] {
     const vals = line.split(sep).map(v => v.trim().replace(/^"|"$/g, ''))
     return Object.fromEntries(headers.map((h, i) => [h, vals[i] || '']))
   }).filter(r => Object.values(r).some(v => v))
+}
+
+// ── Funnel ───────────────────────────────────────────────────────────────────
+
+function CallFunnel({ f }: { f: Funnel }) {
+  const steps = [
+    { label: 'Total prospectos',   value: f.total_prospectos, color: 'bg-gray-700',    emoji: '📋', sub: `${f.pendientes} sin llamar` },
+    { label: 'Llamadas hechas',    value: f.llamadas_hechas,  color: 'bg-blue-500',    emoji: '📞', sub: f.total_prospectos > 0 ? `${Math.round((f.llamadas_hechas/f.total_prospectos)*100)}% del total` : '—' },
+    { label: 'Sin respuesta',      value: f.sin_respuesta,    color: 'bg-yellow-500',  emoji: '📵', sub: f.llamadas_hechas > 0 ? `${Math.round((f.sin_respuesta/f.llamadas_hechas)*100)}% de llamadas` : '—' },
+    { label: 'Interesados',        value: f.interesados,      color: 'bg-green-500',   emoji: '✅', sub: f.llamadas_hechas > 0 ? `${Math.round((f.interesados/f.llamadas_hechas)*100)}% de llamadas` : '—' },
+    { label: 'Reunión agendada',   value: f.reunion_agendada, color: 'bg-purple-500',  emoji: '📅', sub: f.interesados > 0 ? `${Math.round((f.reunion_agendada/Math.max(f.interesados,1))*100)}% de interesados` : '—' },
+    { label: 'No interesado',      value: f.no_interesado,    color: 'bg-red-400',     emoji: '❌', sub: f.llamadas_hechas > 0 ? `${Math.round((f.no_interesado/f.llamadas_hechas)*100)}% de llamadas` : '—' },
+  ]
+
+  const max = Math.max(...steps.map(s => s.value), 1)
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-gray-500" />
+          Embudo de llamadas
+        </p>
+        <span className="text-xs text-gray-400">{f.llamadas_hechas} llamadas totales</span>
+      </div>
+      <div className="p-4 space-y-2.5">
+        {steps.map((s, i) => {
+          const w = max > 0 ? Math.max(4, (s.value / max) * 100) : 4
+          return (
+            <div key={i} className="flex items-center gap-3">
+              <span className="text-sm w-4 text-center shrink-0">{s.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-gray-700">{s.label}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400">{s.sub}</span>
+                    <span className="text-sm font-bold text-gray-900 w-8 text-right">{s.value}</span>
+                  </div>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${s.color} transition-all duration-500`}
+                    style={{ width: `${w}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Tasa de conversión final */}
+      {f.llamadas_hechas > 0 && (
+        <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 flex items-center justify-between">
+          <span className="text-xs text-gray-500">Conversión llamada → reunión</span>
+          <span className="text-sm font-bold text-purple-600">
+            {Math.round((f.reunion_agendada / f.llamadas_hechas) * 100)}%
+          </span>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Metric card ───────────────────────────────────────────────────────────────
@@ -1014,13 +1088,21 @@ export default function ColdCallingTab() {
   return (
     <div className="space-y-5">
 
-      {/* KPIs */}
+      {/* KPIs + Funnel */}
       {metrics && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <MetricBox label="Llamadas hoy"   value={metrics.hoy.llamadas}     icon={Phone}        color="bg-gray-900 text-white" />
-          <MetricBox label="Interesados hoy" value={metrics.hoy.interesados}  icon={TrendingUp}   color="bg-green-500 text-white" />
-          <MetricBox label="Reuniones hoy"  value={metrics.hoy.reuniones}    icon={CalendarCheck} color="bg-purple-500 text-white" />
-          <MetricBox label="Tasa conversión" value={`${metrics.hoy.tasaConversion}%`} sub={`${metrics.totales.prospectos} prospectos`} icon={Target} color="bg-blue-500 text-white" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* KPIs columna izquierda */}
+          <div className="lg:col-span-1 grid grid-cols-2 gap-3 content-start">
+            <MetricBox label="Llamadas hoy"    value={metrics.hoy.llamadas}               icon={Phone}         color="bg-gray-900 text-white" />
+            <MetricBox label="Interesados hoy" value={metrics.hoy.interesados}             icon={TrendingUp}    color="bg-green-500 text-white" />
+            <MetricBox label="Reuniones hoy"   value={metrics.hoy.reuniones}               icon={CalendarCheck} color="bg-purple-500 text-white" />
+            <MetricBox label="Tasa conversión" value={`${metrics.hoy.tasaConversion}%`}    icon={Target}        color="bg-blue-500 text-white"
+              sub={`${metrics.totales.prospectos} prospectos`} />
+          </div>
+          {/* Funnel columna derecha */}
+          <div className="lg:col-span-2">
+            <CallFunnel f={metrics.funnel} />
+          </div>
         </div>
       )}
 
