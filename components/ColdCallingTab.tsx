@@ -14,7 +14,7 @@ import Link from 'next/link'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ColdCall {
-  id: number; fecha: string; resultado: string; duracion: number | null; notas: string | null
+  id: number; fecha: string; resultado: string; duracion: number | null; notas: string | null; reunion_fecha: string | null
 }
 interface Prospect {
   id: number; nombre: string; empresa: string | null; telefono: string | null
@@ -23,9 +23,10 @@ interface Prospect {
   assigned_to: string | null; created_at: string; calls: ColdCall[]
 }
 interface Funnel {
-  total_prospectos: number; llamadas_hechas: number; sin_respuesta: number
-  interesados: number; reunion_agendada: number; no_interesado: number
-  no_contactar: number; pendientes: number
+  total_prospectos: number; llamadas_hechas: number; pendientes: number
+  sin_respuesta: number; llamar_tarde: number
+  interesados: number; reunion_agendada: number
+  no_interesado: number; no_contactar: number
 }
 interface Metrics {
   hoy: { llamadas: number; interesados: number; reuniones: number; tasaConversion: number }
@@ -40,6 +41,7 @@ interface Metrics {
 
 const ESTADOS = [
   { id: 'pendiente',        label: 'Pendiente',        icon: Clock },
+  { id: 'llamar_tarde',     label: 'Llamar más tarde', icon: CalendarPlus },
   { id: 'interesado',       label: 'Interesado',       icon: TrendingUp },
   { id: 'reunion_agendada', label: 'Reunión agendada', icon: CalendarPlus },
   { id: 'sin_respuesta',    label: 'Sin respuesta',    icon: PhoneMissed },
@@ -50,6 +52,7 @@ const ESTADOS = [
 const RESULTADOS = [
   { id: 'interesado',       label: 'Interesado',       icon: ThumbsUp },
   { id: 'reunion_agendada', label: 'Reunión agendada', icon: CalendarPlus },
+  { id: 'llamar_tarde',     label: 'Llamar más tarde', icon: Clock },
   { id: 'sin_respuesta',    label: 'Sin respuesta',    icon: PhoneMissed },
   { id: 'buzon_voz',        label: 'Buzón de voz',     icon: Voicemail },
   { id: 'no_interesado',    label: 'No interesado',    icon: ThumbsDown },
@@ -237,13 +240,15 @@ function KpiCard({ label, value, sub, icon: Icon }: {
 // ── Funnel ────────────────────────────────────────────────────────────────────
 
 function CallFunnel({ f }: { f: Funnel }) {
+  const llamados = f.total_prospectos - f.pendientes
   const steps = [
-    { label: 'Total prospectos', value: f.total_prospectos, icon: FileText,     sub: `${f.pendientes} sin llamar` },
-    { label: 'Llamadas hechas',  value: f.llamadas_hechas,  icon: Phone,         sub: f.total_prospectos > 0 ? `${Math.round((f.llamadas_hechas / f.total_prospectos) * 100)}% del total` : '—' },
-    { label: 'Sin respuesta',    value: f.sin_respuesta,    icon: PhoneMissed,   sub: f.llamadas_hechas > 0 ? `${Math.round((f.sin_respuesta / f.llamadas_hechas) * 100)}% de llamadas` : '—' },
-    { label: 'Interesados',      value: f.interesados,      icon: ThumbsUp,      sub: f.llamadas_hechas > 0 ? `${Math.round((f.interesados / f.llamadas_hechas) * 100)}% de llamadas` : '—' },
-    { label: 'Reunión agendada', value: f.reunion_agendada, icon: CalendarPlus,  sub: f.interesados > 0 ? `${Math.round((f.reunion_agendada / Math.max(f.interesados, 1)) * 100)}% de interesados` : '—' },
-    { label: 'No interesado',    value: f.no_interesado,    icon: ThumbsDown,    sub: f.llamadas_hechas > 0 ? `${Math.round((f.no_interesado / f.llamadas_hechas) * 100)}% de llamadas` : '—' },
+    { label: 'Total prospectos',  value: f.total_prospectos, icon: FileText,    sub: `${f.pendientes} sin llamar` },
+    { label: 'Llamadas hechas',   value: f.llamadas_hechas,  icon: Phone,        sub: f.total_prospectos > 0 ? `${Math.round((llamados / f.total_prospectos) * 100)}% del total` : '—' },
+    { label: 'Llamar más tarde',  value: f.llamar_tarde,     icon: Clock,        sub: 'Callback pendiente' },
+    { label: 'Sin respuesta',     value: f.sin_respuesta,    icon: PhoneMissed,  sub: llamados > 0 ? `${Math.round((f.sin_respuesta / Math.max(llamados, 1)) * 100)}% de llamados` : '—' },
+    { label: 'Interesados',       value: f.interesados,      icon: ThumbsUp,     sub: llamados > 0 ? `${Math.round((f.interesados / Math.max(llamados, 1)) * 100)}% de llamados` : '—' },
+    { label: 'Reunión agendada',  value: f.reunion_agendada, icon: CalendarPlus, sub: f.interesados > 0 ? `${Math.round((f.reunion_agendada / Math.max(f.interesados, 1)) * 100)}% de interesados` : '—' },
+    { label: 'No interesado',     value: f.no_interesado,    icon: ThumbsDown,   sub: llamados > 0 ? `${Math.round((f.no_interesado / Math.max(llamados, 1)) * 100)}% de llamados` : '—' },
   ]
   const max = Math.max(...steps.map(s => s.value), 1)
 
@@ -693,9 +698,11 @@ function CallPanel({ prospect, onClose, onUpdate }: {
                   <input type="number" min="0" placeholder="0" value={duracion} onChange={e => setDuracion(e.target.value)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300" />
                 </div>
-                {resultado === 'reunion_agendada' && (
+                {(resultado === 'reunion_agendada' || resultado === 'llamar_tarde') && (
                   <div>
-                    <label className="text-xs text-gray-500 mb-1 block">Fecha reunión</label>
+                    <label className="text-xs text-gray-500 mb-1 block">
+                      {resultado === 'llamar_tarde' ? 'Llamar el / a las' : 'Fecha reunión'}
+                    </label>
                     <input type="datetime-local" value={reunionFecha} onChange={e => setReunionFecha(e.target.value)}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300" />
                   </div>
@@ -985,7 +992,17 @@ export default function ColdCallingTab() {
                       {p.telefono && <div className="text-xs text-gray-400">{p.telefono}</div>}
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell text-sm text-gray-600">{p.zona || '—'}</td>
-                    <td className="px-4 py-3"><EstadoBadge estado={p.estado} /></td>
+                    <td className="px-4 py-3">
+                      <div className="space-y-1">
+                        <EstadoBadge estado={p.estado} />
+                        {p.estado === 'llamar_tarde' && lastCall?.reunion_fecha && (
+                          <div className="flex items-center gap-1 text-xs font-medium text-gray-900">
+                            <Clock className="h-3 w-3" />
+                            {new Date(lastCall.reunion_fecha).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
                       {lastCall && LastIcon ? (
                         <div className="flex items-center gap-1.5 text-xs text-gray-500">

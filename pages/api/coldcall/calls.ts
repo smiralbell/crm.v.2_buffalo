@@ -33,6 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       sin_respuesta:    'sin_respuesta',
       buzon_voz:        'sin_respuesta',
       no_contactar:     'no_contactar',
+      llamar_tarde:     'llamar_tarde',
     }
     if (estadoMap[resultado]) {
       await prisma.coldCallProspect.update({
