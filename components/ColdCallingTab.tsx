@@ -5,7 +5,7 @@ import {
   Search, Upload, Filter, RefreshCw, ChevronRight,
   MessageSquare, Mail, Copy, Check, X, ChevronDown,
   ChevronUp, Clock, TrendingUp, Target, Zap, Plus,
-  Trash2, Edit3, ExternalLink, AlertCircle,
+  Trash2, Edit3, ExternalLink, AlertCircle, Globe, Star,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -243,6 +243,239 @@ function NewProspectModal({ onClose, onCreated }: { onClose: () => void; onCreat
           </Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Google Maps Search ────────────────────────────────────────────────────────
+
+interface PlaceResult {
+  placeId: string
+  nombre: string
+  empresa: string
+  telefono: string
+  web: string
+  zona: string
+  sector: string
+  direccion: string
+  rating: number | null
+  reviews: number | null
+}
+
+const CIUDADES_CATALUNA = [
+  'Barcelona','Hospitalet de Llobregat','Badalona','Terrassa','Sabadell',
+  'Lleida','Tarragona','Mataró','Santa Coloma de Gramenet','Reus',
+  'Girona','Sant Cugat del Vallès','Cornellà de Llobregat','Manresa',
+  'Sant Boi de Llobregat','Rubí','Vilanova i la Geltrú','Viladecans',
+  'El Prat de Llobregat','Granollers','Castelldefels','Mollet del Vallès',
+  'Cerdanyola del Vallès','Gavà','Esplugues de Llobregat','Igualada',
+  'Figueres','Vic','Tortosa','Sitges',
+]
+
+function GoogleMapsSearch({ onImported }: { onImported: () => void }) {
+  const [query, setQuery] = useState('abogados')
+  const [ciudad, setCiudad] = useState('Barcelona')
+  const [ciudadCustom, setCiudadCustom] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [results, setResults] = useState<PlaceResult[]>([])
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [nextPage, setNextPage] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importedCount, setImportedCount] = useState(0)
+  const [error, setError] = useState('')
+  const [page, setPage] = useState(1)
+
+  const ciudadFinal = ciudad === '__custom__' ? ciudadCustom : ciudad
+
+  const search = async (reset = true) => {
+    if (!query.trim() || !ciudadFinal.trim()) return
+    setSearching(true)
+    setError('')
+    if (reset) { setResults([]); setSelected(new Set()); setPage(1) }
+
+    const res = await fetch('/api/coldcall/search-places', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, ciudad: ciudadFinal, pageToken: reset ? undefined : nextPage }),
+    })
+    const d = await res.json()
+    if (!res.ok) { setError(d.error || 'Error'); setSearching(false); return }
+
+    setResults(prev => reset ? d.results : [...prev, ...d.results])
+    setNextPage(d.nextPageToken || null)
+    if (!reset) setPage(p => p + 1)
+    setSearching(false)
+  }
+
+  const toggleAll = () => {
+    if (selected.size === results.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(results.map(r => r.placeId)))
+    }
+  }
+
+  const toggle = (id: string) => {
+    setSelected(prev => {
+      const s = new Set(prev)
+      s.has(id) ? s.delete(id) : s.add(id)
+      return s
+    })
+  }
+
+  const importSelected = async () => {
+    const toImport = results.filter(r => selected.has(r.placeId))
+    if (!toImport.length) return
+    setImporting(true)
+    const prospects = toImport.map(r => ({
+      nombre:   r.nombre,
+      empresa:  r.empresa,
+      telefono: r.telefono,
+      web:      r.web,
+      zona:     r.zona,
+      sector:   r.sector,
+    }))
+    const res = await fetch('/api/coldcall/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prospects }),
+    })
+    const d = await res.json()
+    setImportedCount(d.imported || 0)
+    setImporting(false)
+    setSelected(new Set())
+    onImported()
+  }
+
+  return (
+    <div className="border border-blue-200 bg-blue-50 rounded-2xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 py-4 bg-white border-b border-blue-100">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white shrink-0">
+          <Globe className="h-4 w-4" />
+        </div>
+        <div>
+          <p className="font-semibold text-gray-900 text-sm">Buscar prospectos en Google Maps</p>
+          <p className="text-xs text-gray-500">Places API · ~200 resultados por ciudad gratis al mes</p>
+        </div>
+      </div>
+
+      {/* Search form */}
+      <div className="p-4 bg-white">
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="abogados, notarios, consultoras..."
+            className="flex-1 min-w-40 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            onKeyDown={e => e.key === 'Enter' && search()}
+          />
+          <select
+            value={ciudad}
+            onChange={e => setCiudad(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+          >
+            {CIUDADES_CATALUNA.map(c => <option key={c} value={c}>{c}</option>)}
+            <option value="__custom__">Otra ciudad...</option>
+          </select>
+          {ciudad === '__custom__' && (
+            <input
+              value={ciudadCustom}
+              onChange={e => setCiudadCustom(e.target.value)}
+              placeholder="Ciudad"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-36"
+            />
+          )}
+          <Button
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={() => search(true)}
+            disabled={searching}
+          >
+            {searching ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            <span className="ml-1.5">{searching ? 'Buscando...' : 'Buscar'}</span>
+          </Button>
+        </div>
+        {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
+      </div>
+
+      {/* Results */}
+      {results.length > 0 && (
+        <div>
+          {/* Toolbar */}
+          <div className="flex items-center justify-between px-4 py-2 bg-blue-50 border-y border-blue-100">
+            <div className="flex items-center gap-3">
+              <input type="checkbox" checked={selected.size === results.length} onChange={toggleAll}
+                className="rounded cursor-pointer" />
+              <span className="text-xs text-gray-600 font-medium">
+                {results.length} resultados · {selected.size} seleccionados
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {nextPage && (
+                <Button variant="outline" size="sm" onClick={() => search(false)} disabled={searching}>
+                  {searching ? 'Cargando...' : '+ Cargar más'}
+                </Button>
+              )}
+              {selected.size > 0 && (
+                <Button
+                  size="sm"
+                  className="bg-gray-900 text-white"
+                  onClick={importSelected}
+                  disabled={importing}
+                >
+                  {importing ? 'Importando...' : `Importar ${selected.size} prospectos`}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {importedCount > 0 && (
+            <div className="px-4 py-2 bg-green-50 text-green-700 text-sm font-medium border-b border-green-100">
+              ✅ {importedCount} prospectos importados correctamente
+            </div>
+          )}
+
+          {/* List */}
+          <div className="divide-y divide-blue-50 max-h-96 overflow-y-auto bg-white">
+            {results.map(r => (
+              <label key={r.placeId} className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selected.has(r.placeId)}
+                  onChange={() => toggle(r.placeId)}
+                  className="mt-1 rounded cursor-pointer shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{r.nombre}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{r.direccion}</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        {r.telefono && (
+                          <span className="text-xs text-green-700 flex items-center gap-1">
+                            <Phone className="h-3 w-3" />{r.telefono}
+                          </span>
+                        )}
+                        {r.web && (
+                          <span className="text-xs text-blue-600 flex items-center gap-1 truncate max-w-40">
+                            <Globe className="h-3 w-3 shrink-0" />{r.web.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {r.rating && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Star className="h-3 w-3 text-yellow-400 fill-yellow-400" />
+                        <span className="text-xs text-gray-600">{r.rating} ({r.reviews})</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -701,6 +934,9 @@ export default function ColdCallingTab() {
           {importMsg}
         </div>
       )}
+
+      {/* Google Maps Search */}
+      <GoogleMapsSearch onImported={() => loadData(1)} />
 
       {/* Hint CSV */}
       {total === 0 && !loading && (
