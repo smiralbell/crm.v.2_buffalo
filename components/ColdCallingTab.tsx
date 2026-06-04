@@ -58,7 +58,7 @@ const RESULTADOS = [
 
 // ── Sales scripts ─────────────────────────────────────────────────────────────
 
-const GUION_SIN_NOMBRE = [
+const GUION_ES = [
   {
     step: '01', titulo: 'Recepción',
     texto: '"Buenas, ¿me puede poner con el responsable del despacho o el socio director? De parte de Sergi, de Buffalo AI."',
@@ -80,52 +80,66 @@ const GUION_SIN_NOMBRE = [
     tip: 'Hablar del problema que ya conocen antes de presentar la solución.',
   },
   {
-    step: '05', titulo: 'Cierre — en catalán',
-    texto: '"Fins aquí, t\'encaixa? Creus que podria tenir sentit en el vostre cas?"',
-    tip: 'El cambio al catalán conecta. Especialmente efectivo con socios directores de despachos catalanes.',
+    step: '05', titulo: 'Pregunta de cierre',
+    texto: '"Hasta aquí, ¿te encaja? ¿Crees que podría tener sentido en vuestro caso?"',
+    tip: 'Pregunta abierta. Deja hablar al interlocutor.',
   },
   {
     step: '06', titulo: 'Si hay interés',
-    texto: '"Perfecte. Hem preparat una demo completament gratuïta perquè pugueu veure en directe com funcionaria per al vostre despatx.\n\nNo hi ha cap compromís. Simplement us l\'ensenyem i decidiu si té encaix o no.\n\nQuè et sembla si busquem 20 minuts aquesta setmana?"',
-    tip: '"Gratuïta" + "sense compromís" + fecha concreta es la combinación de cierre perfecta.',
+    texto: '"Perfecto. Hemos preparado una demo completamente gratuita para que podáis ver en directo cómo funcionaría exactamente para vuestro despacho.\n\nNo hay ningún compromiso. Simplemente os la enseñamos, valoráis si os aporta valor y decidís si tiene encaje o no.\n\n¿Qué te parece si buscamos 20 minutos esta semana?"',
+    tip: '"Gratuita" + "sin compromiso" + fecha concreta es la combinación de cierre perfecta.',
   },
 ]
 
-const GUION_CON_NOMBRE = [
+const GUION_CA = [
   {
-    step: '01', titulo: 'Apertura directa',
-    texto: '"Hola, buenas tardes, ¿hablo con [NOMBRE]?\n\nPerfecto, encantado.\n\nSoy Sergi Masoliver, de Buffalo AI. No sé si me tienes ubicado."',
-    tip: 'Confirmar que hablas con la persona correcta antes de lanzar el pitch.',
+    step: '01', titulo: 'Recepció',
+    texto: '"Bones, em podria posar amb el responsable del despatx o el soci director? De part d\'en Sergi, de Buffalo AI."',
+    tip: 'Si pregunta de què: "És una trucada comercial, no li robo més de 2 minuts." L\'honestedat funciona millor que inventar excuses.',
   },
   {
-    step: '02', titulo: 'Los 15 segundos',
-    texto: '"No pasa nada. Mira, te robo únicamente 15 segundos y si no te interesa me lo dices sin ningún problema, ¿vale?"',
-    tip: 'Dar permiso para decir que no baja la guardia. Contraintuitivo pero muy efectivo.',
+    step: '02', titulo: 'Obertura',
+    texto: '"Hola, bona tarda. Amb qui parlo?\n\nPerfecte, [Nom], encantat.\n\nSóc en Sergi Masoliver, de Buffalo AI. No sé si em tens ubicat."',
+    tip: 'Presentar-se amb nom i cognoms dóna serietat. Preguntar "amb qui parlo?" mostra respecte.',
   },
   {
-    step: '03', titulo: 'Propuesta de valor',
-    texto: '"Estamos ayudando a despachos como el vuestro a gestionar todas las consultas que llegan tanto dentro como fuera del horario laboral.\n\nLo que nos comentan muchos despachos es que reciben llamadas que no tienen sentido para el negocio, y los abogados acaban filtrando casos no viables.\n\nHemos desarrollado un sistema de IA que atiende esas consultas, hace las preguntas necesarias y solo pasa los casos interesantes al despacho."',
-    tip: 'Hablar en plural ("muchos despachos nos comentan") da credibilidad social.',
+    step: '03', titulo: 'Els 15 segons',
+    texto: '"No passa res. Mira, et robo únicament 15 segons i si no t\'interessa m\'ho dius sense cap problema, ¿val?"',
+    tip: 'Donar permís per dir que no baixa la guàrdia. Contraintuïtiu però molt efectiu.',
   },
   {
-    step: '04', titulo: 'Cierre — en catalán',
+    step: '04', titulo: 'Proposta de valor',
+    texto: '"Estem ajudant despatxos com el vostre a gestionar totes les consultes que arriben tant dins com fora de l\'horari laboral.\n\nEl que ens comenten molts despatxos és que reben un volum important de trucades, però que no totes tenen sentit per al negoci i al final els advocats acaben filtrant casos que no són viables.\n\nHem desenvolupat un sistema d\'atenció al client amb intel·ligència artificial que s\'encarrega d\'atendre aquestes consultes, fer les preguntes necessàries i determinar quines té sentit passar a un advocat.\n\nAl despatx només li arriben els casos realment interessants."',
+    tip: 'Parlar del problema que ja coneixen abans de presentar la solució.',
+  },
+  {
+    step: '05', titulo: 'Pregunta de tancament',
     texto: '"Fins aquí, t\'encaixa? Creus que podria tenir sentit en el vostre cas?"',
-    tip: 'El cambio al catalán rompe el patrón y conecta.',
+    tip: 'Pregunta oberta. Deixa parlar l\'interlocutor.',
   },
   {
-    step: '05', titulo: 'Si hay interés',
-    texto: '"Perfecte. Hem preparat una demo completament gratuïta perquè pugueu veure en directe com funcionaria per al vostre despatx.\n\nSense cap compromís. Simplement us l\'ensenyem i decidiu.\n\nQuè et sembla si busquem 20 minuts aquesta setmana?"',
-    tip: '"Gratuïta" + "sense compromís" + fecha concreta.',
+    step: '06', titulo: 'Si hi ha interès',
+    texto: '"Perfecte. Hem preparat una demo completament gratuïta perquè pugueu veure en directe com funcionaria exactament per al vostre despatx.\n\nNo hi ha cap compromís. Simplement us l\'ensenyem, valoreu si us aporta valor i decidiu si té encaix o no.\n\nQuè et sembla si busquem 20 minuts aquesta setmana?"',
+    tip: '"Gratuïta" + "sense compromís" + data concreta és la combinació de tancament perfecta.',
   },
 ]
 
-const OBJECIONES = [
-  { obj: '"Ya tenemos secretaria"', resp: '"Perfecte, i fora d\'horari? Els dissabtes? L\'agent la complementa, no la substitueix. Els despatxos que ho tenen diuen que la seva secretària ara es pot dedicar a tasques de molt més valor."' },
-  { obj: '"No me interesa la IA"', resp: '"Entiendo perfectamente. ¿Cuántas consultas recibís a la semana que no son casos para vosotros? ¿Cuánto tiempo os lleva filtrarlos?"' },
-  { obj: '"¿Cuánto cuesta?"', resp: '"La implementació és de 2.200€ i el manteniment 90€/mes. Si el sistema us filtra 3-4 casos no viables a la setmana i recupereu 2 clients nous al mes, s\'amortitza sol. Però això és el que us mostrarem a la demo, amb números reals."' },
-  { obj: '"Ahora no es el momento"', resp: '"Ho entenc. Quan seria bon moment? Dóna\'m una data concreta i et truco aquell dia."' },
-  { obj: '"Mándame información por email"', resp: '"Per descomptat, a quin email t\'ho envio? I ja que ho faig — quina és la part que més us preocupa, les consultes fora d\'horari o el temps que dediqueu a filtrar casos?"' },
+const OBJECIONES_ES = [
+  { obj: '"Ya tenemos secretaria"', resp: '"Perfecto, ¿y fuera de horario? ¿Los sábados? El agente la complementa, no la sustituye. Los despachos que lo tienen dicen que su secretaria ahora puede dedicarse a tareas de mucho más valor."' },
+  { obj: '"No me interesa la IA"', resp: '"Lo entiendo perfectamente. ¿Cuántas consultas recibís a la semana que no son casos para vosotros? ¿Cuánto tiempo os lleva filtrarlos?"' },
+  { obj: '"¿Cuánto cuesta?"', resp: '"La implementación es de 2.200€ y el mantenimiento 90€/mes. Si el sistema os filtra 3-4 casos no viables a la semana y recuperáis 2 clientes nuevos al mes, se amortiza solo. Pero eso es lo que os mostraremos en la demo, con números reales."' },
+  { obj: '"Ahora no es el momento"', resp: '"Lo entiendo. ¿Cuándo sería buen momento? Dame una fecha concreta y te llamo ese día."' },
+  { obj: '"Mándame información por email"', resp: '"Por supuesto, ¿a qué email te lo envío? Y ya que lo hago — ¿qué es lo que más os preocupa, las consultas fuera de horario o el tiempo que dedicáis a filtrar casos?"' },
   { obj: '"Ya lo gestionamos bien"', resp: '"Me alegra escuchar eso. ¿Y los fines de semana y por las noches? ¿También lo tenéis cubierto? Porque la mayoría de despachos nos dicen que ahí es donde pierden más."' },
+]
+
+const OBJECIONES_CA = [
+  { obj: '"Ja tenim secretària"', resp: '"Perfecte, i fora d\'horari? Els dissabtes? L\'agent la complementa, no la substitueix. Els despatxos que ho tenen diuen que la seva secretària ara es pot dedicar a tasques de molt més valor."' },
+  { obj: '"No m\'interessa la IA"', resp: '"Ho entenc perfectament. Quantes consultes rebeu a la setmana que no són casos per a vosaltres? Quant de temps us porta filtrar-los?"' },
+  { obj: '"Quant costa?"', resp: '"La implementació és de 2.200€ i el manteniment 90€/mes. Si el sistema us filtra 3-4 casos no viables a la setmana i recupereu 2 clients nous al mes, s\'amortitza sol. Però això és el que us mostrarem a la demo, amb números reals."' },
+  { obj: '"Ara no és el moment"', resp: '"Ho entenc. Quan seria bon moment? Dóna\'m una data concreta i et truco aquell dia."' },
+  { obj: '"Envia\'m informació per email"', resp: '"Per descomptat, a quin email t\'ho envio? I ja que ho faig — quina és la part que més us preocupa, les consultes fora d\'horari o el temps que dediqueu a filtrar casos?"' },
+  { obj: '"Ja ho gestionem bé"', resp: '"M\'alegra sentir això. I els caps de setmana i per les nits? També ho teniu cobert? Perquè la majoria de despatxos ens diuen que és allà on perden més."' },
 ]
 
 // ── Message templates ─────────────────────────────────────────────────────────
@@ -493,7 +507,7 @@ function CallPanel({ prospect, onClose, onUpdate }: {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [guionOpen, setGuionOpen] = useState(false)
-  const [guionMode, setGuionMode] = useState<'sin' | 'con'>('sin')
+  const [guionMode, setGuionMode] = useState<'es' | 'ca'>('es')
   const [objecionesOpen, setObjecionesOpen] = useState(false)
   const [msgCopiado, setMsgCopiado] = useState(false)
   const [editNotas, setEditNotas] = useState(false)
@@ -607,15 +621,15 @@ function CallPanel({ prospect, onClose, onUpdate }: {
             {guionOpen && (
               <div className="bg-white">
                 <div className="flex border-b border-gray-100">
-                  {[{ id: 'sin', label: 'Sin contacto conocido' }, { id: 'con', label: 'Contacto identificado' }].map(t => (
-                    <button key={t.id} onClick={() => setGuionMode(t.id as 'sin' | 'con')}
+                  {[{ id: 'es', label: 'Castellano' }, { id: 'ca', label: 'Català' }].map(t => (
+                    <button key={t.id} onClick={() => setGuionMode(t.id as 'es' | 'ca')}
                       className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${guionMode === t.id ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
                       {t.label}
                     </button>
                   ))}
                 </div>
                 <div className="divide-y divide-gray-100">
-                  {(guionMode === 'sin' ? GUION_SIN_NOMBRE : GUION_CON_NOMBRE).map((g, i) => (
+                  {(guionMode === 'es' ? GUION_ES : GUION_CA).map((g, i) => (
                     <div key={i} className="p-4 space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-gray-400 w-5">{g.step}</span>
@@ -634,7 +648,7 @@ function CallPanel({ prospect, onClose, onUpdate }: {
                   </button>
                   {objecionesOpen && (
                     <div className="divide-y divide-gray-100">
-                      {OBJECIONES.map((o, i) => (
+                      {(guionMode === 'es' ? OBJECIONES_ES : OBJECIONES_CA).map((o, i) => (
                         <div key={i} className="px-4 py-3 space-y-1.5">
                           <p className="text-xs font-semibold text-gray-700">{o.obj}</p>
                           <p className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2.5 border border-gray-100 whitespace-pre-line">{o.resp}</p>
