@@ -358,7 +358,7 @@ export default function OnboardingPage() {
                 )}
                 {search.length >= 2 && results.length === 0 && (
                   <div className="mt-4 py-6 text-center">
-                    <p className="text-sm text-gray-400">Sin resultados para "<strong>{search}</strong>"</p>
+                    <p className="text-sm text-gray-400">Sin resultados para &quot;<strong>{search}</strong>&quot;</p>
                     <button
                       onClick={() => { setView('new_lead'); setForm(f => ({ ...f, nombre: search })) }}
                       className="mt-2 text-xs text-gray-500 underline hover:text-gray-800 transition-colors"
