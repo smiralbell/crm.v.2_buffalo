@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Guardar TODO
     await prisma.$executeRawUnsafe(
-      `INSERT INTO "instantly_webhooks_debug" ("payload", "headers") VALUES ($1, $2)`,
+      `INSERT INTO "instantly_webhooks_debug" ("payload", "headers") VALUES ($1::jsonb, $2::jsonb)`,
       JSON.stringify(payload),
       JSON.stringify(headers)
     )
