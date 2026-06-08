@@ -111,7 +111,7 @@ model Task {
   id         Int       @id @default(autoincrement())
   lead_id    Int?
   contact_id Int?
-  tarea      String
+  tarea      String?
   pendiente  Boolean   @default(true)
   fecha      DateTime?
   lead       Lead?     @relation(fields: [lead_id], references: [id], onDelete: SetNull)
@@ -451,4 +451,22 @@ model MarketingOutreachContact {
 
   @@unique([email, period])
   @@map("marketing_outreach_contacts")
+}
+
+// Webhooks de Instantly (Email Outreach)
+model InstantlyWebhook {
+  id          Int       @id @default(autoincrement())
+  event_type  String    // 'campaign_created', 'email_sent', 'bounce', 'reply', etc.
+  email       String?
+  campaign_id String?
+  campaign_name String?
+  payload     Json      // full payload from Instantly
+  status      String?   // 'success', 'bounce', 'replied', etc.
+  created_at  DateTime  @default(now())
+
+  @@index([event_type])
+  @@index([email])
+  @@index([campaign_id])
+  @@index([created_at])
+  @@map("instantly_webhooks")
 }

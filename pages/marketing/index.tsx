@@ -13,6 +13,7 @@ import {
   CheckCircle2, XCircle, AlertCircle, Zap, Phone,
 } from 'lucide-react'
 import ColdCallingTab from '@/components/ColdCallingTab'
+import EmailOutreachTab from '@/components/EmailOutreachTab'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -625,6 +626,11 @@ export default function MarketingPage() {
                   Header: <code>Authorization: Bearer buf-instantly-2026</code>
                 </p>
               </div>
+            </div>
+
+            {/* Webhook Monitor */}
+            <div className="mt-8 pt-8 border-t border-gray-200">
+              <EmailOutreachTab />
             </div>
           </div>
         )}
