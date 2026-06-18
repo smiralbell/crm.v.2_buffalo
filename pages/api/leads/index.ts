@@ -24,13 +24,24 @@ export default async function handler(
       const page = parseInt(req.query.page as string) || 1
       const search = (req.query.search as string) || ''
       const estado = (req.query.estado as string) || ''
-      const pageSize = 10
+      const configured = req.query.configured === '1' || req.query.configured === 'true'
+      const pageSize = Math.min(
+        parseInt(req.query.pageSize as string) || 10,
+        100
+      )
       const skip = (page - 1) * pageSize
 
-      const where: any = {}
+      const where: Prisma.LeadWhereInput = {}
 
       if (estado) {
         where.estado = estado
+      }
+
+      if (configured) {
+        where.AND = [
+          { configuracion: { not: null } },
+          { NOT: { configuracion: '' } },
+        ]
       }
 
       if (search) {
@@ -47,13 +58,16 @@ export default async function handler(
           where,
           skip,
           take: pageSize,
-          orderBy: { created_at: 'desc' },
+          orderBy: configured
+            ? { updated_at: 'desc' }
+            : { created_at: 'desc' },
           include: {
             contact: {
               select: {
                 id: true,
                 nombre: true,
                 email: true,
+                empresa: true,
               },
             },
           },

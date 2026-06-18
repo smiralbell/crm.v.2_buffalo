@@ -57,14 +57,10 @@ export default function NewSalary() {
       <div className="space-y-6 max-w-2xl">
         <div className="flex items-center gap-4">
           <Link href="/finances/expenses">
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="rounded-xl">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Nueva Nómina</h1>
-            <p className="text-sm text-gray-500 mt-1">Pago a socio o empleado (sin IVA)</p>
-          </div>
         </div>
 
         <Card className="border border-gray-200 shadow-sm">

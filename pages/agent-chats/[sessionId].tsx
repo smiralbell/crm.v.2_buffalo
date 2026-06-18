@@ -99,27 +99,27 @@ export default function AgentChatSessionPage({ sessionId }: AgentChatSessionPage
   return (
     <Layout>
       <div className="mx-auto flex w-full min-h-[calc(100vh-8rem)] max-w-[min(100%,1400px)] flex-col">
-        <header className="sticky top-0 z-20 mb-4 flex shrink-0 flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <header className="sticky top-0 z-20 mb-4 flex shrink-0 flex-col gap-3 rounded-2xl border border-gray-200/80 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <Button variant="outline" size="sm" className="shrink-0 border-slate-200 bg-white" asChild>
+            <Button variant="outline" size="sm" className="shrink-0 border-gray-200 bg-white rounded-xl" asChild>
               <Link href="/agent-chats">
                 <ArrowLeft className="mr-1.5 h-4 w-4" />
                 Sesiones
               </Link>
             </Button>
-            <div className="h-8 w-px shrink-0 bg-slate-200 hidden sm:block" aria-hidden />
-            <p className="min-w-0 truncate font-mono text-xs text-slate-600 sm:text-[13px]" title={sessionId}>
+            <div className="h-8 w-px shrink-0 bg-gray-200 hidden sm:block" aria-hidden />
+            <p className="min-w-0 truncate text-xs text-gray-600 tracking-wide sm:text-[13px]" title={sessionId}>
               {sessionId}
             </p>
           </div>
         </header>
 
-        <div className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/60 bg-gradient-to-b from-slate-100 via-white to-slate-50 shadow-inner">
+        <div className="relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/60 bg-gradient-to-b from-gray-50 via-white to-gray-50 shadow-inner">
           <div
-            className="pointer-events-none absolute inset-0 opacity-[0.35]"
+            className="pointer-events-none absolute inset-0 opacity-40"
             style={{
-              backgroundImage: `radial-gradient(circle at 20% 10%, rgb(224 242 254 / 0.9) 0%, transparent 45%),
-                radial-gradient(circle at 85% 90%, rgb(238 242 255 / 0.8) 0%, transparent 40%)`,
+              backgroundImage: `radial-gradient(circle at 20% 10%, rgb(243 244 246 / 0.9) 0%, transparent 45%),
+                radial-gradient(circle at 85% 90%, rgb(229 231 235 / 0.8) 0%, transparent 40%)`,
             }}
             aria-hidden
           />
@@ -130,8 +130,8 @@ export default function AgentChatSessionPage({ sessionId }: AgentChatSessionPage
                 {error}
               </div>
             ) : loading ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-slate-500">
-                <div className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-sky-600" />
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-gray-500">
+                <div className="h-9 w-9 animate-spin rounded-full border-2 border-gray-200 border-t-gray-900" />
                 <p className="text-sm">Cargando conversación…</p>
               </div>
             ) : messages.length === 0 ? (
@@ -168,12 +168,12 @@ export default function AgentChatSessionPage({ sessionId }: AgentChatSessionPage
                             'relative px-4 py-3.5 text-[15px] leading-relaxed shadow-md sm:px-5 sm:py-4',
                             'ring-1 ring-black/5',
                             isUser &&
-                              'rounded-2xl rounded-br-md bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-sky-500/20',
+                              'rounded-2xl rounded-br-md bg-gray-900 text-white shadow-gray-900/15',
                             isAssistant &&
-                              'rounded-2xl rounded-bl-md border border-slate-200/90 bg-white text-slate-800 shadow-slate-200/60',
+                              'rounded-2xl rounded-bl-md border border-gray-200/90 bg-white text-gray-800 shadow-gray-200/60',
                             !isUser &&
                               !isAssistant &&
-                              'rounded-2xl rounded-bl-md border border-violet-200/90 bg-violet-50 text-violet-950'
+                              'rounded-2xl rounded-bl-md border border-gray-200/90 bg-gray-50 text-gray-900'
                           )}
                         >
                           <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">

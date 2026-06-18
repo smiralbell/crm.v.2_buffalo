@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
-import { ArrowLeft, Edit, Euro, User, ClipboardList, StickyNote, FileText, Zap } from 'lucide-react'
+import { ArrowLeft, Edit, Euro, User, ClipboardList, StickyNote, FileText } from 'lucide-react'
 
 interface LeadDetailProps {
   lead: {
@@ -54,6 +54,15 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     })
 
     if (!lead) return { notFound: true }
+
+    if (lead.configuracion) {
+      return {
+        redirect: {
+          destination: `/onboarding/proyectos/${lead.id}`,
+          permanent: false,
+        },
+      }
+    }
 
     return {
       props: {
@@ -138,7 +147,6 @@ export default function LeadDetail({ lead }: LeadDetailProps) {
                 </Button>
               ) : (
                 <Button variant="outline" size="sm">
-                  <Zap className="mr-2 h-4 w-4" />
                   Configurar proyecto
                 </Button>
               )}
@@ -282,7 +290,6 @@ export default function LeadDetail({ lead }: LeadDetailProps) {
             <p className="text-sm text-gray-400 mb-3">Todavía no hay ningún coste de proyecto configurado</p>
             <Link href={configureUrl}>
               <Button variant="outline" size="sm">
-                <Zap className="mr-2 h-4 w-4" />
                 Configurar proyecto
               </Button>
             </Link>

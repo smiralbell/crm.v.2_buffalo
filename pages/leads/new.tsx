@@ -135,24 +135,17 @@ export default function NewLead() {
         {/* Header */}
         <div className="flex items-center gap-4">
           <Link href="/leads">
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="rounded-xl">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Nuevo Lead</h1>
-            <p className="text-gray-500 mt-1 text-sm">Rellena los datos del contacto y del lead</p>
-          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Contact block */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <User className="h-4 w-4 text-gray-500" />
-                Datos del contacto
-              </CardTitle>
+              <CardTitle className="text-base">Datos del contacto</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">

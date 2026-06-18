@@ -6,8 +6,7 @@ import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
 import {
   TrendingUp, TrendingDown, Minus,
-  FileText, Users, Zap, CheckCircle2,
-  ArrowRight, AlertCircle, Target, RefreshCw,
+  ArrowRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -249,36 +248,31 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
 // ── KPI Card ───────────────────────────────────────────────────────────
 function KpiCard({
-  title, value, sub, trend, icon: Icon, href, accent,
+  title, value, sub, trend, href,
 }: {
   title: string; value: string; sub?: string; trend?: number
-  icon: React.ComponentType<{ className?: string }>; href?: string; accent?: string
+  href?: string
 }) {
   const TrendIcon = trend == null ? null : trend > 0 ? TrendingUp : trend < 0 ? TrendingDown : Minus
-  const trendCls  = trend == null ? '' : trend > 0 ? 'text-green-600' : trend < 0 ? 'text-red-500' : 'text-gray-400'
+  const trendCls  = trend == null ? '' : trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-red-500' : 'text-gray-400'
 
   const inner = (
     <div className={cn(
-      'rounded-2xl border border-gray-200 bg-white p-5 flex flex-col gap-3',
-      'hover:shadow-md hover:border-gray-300 transition-all h-full',
+      'rounded-2xl border border-gray-200/80 bg-white p-5 flex flex-col gap-2',
+      'hover:shadow-sm hover:border-gray-300/80 transition-all h-full',
       href && 'cursor-pointer'
     )}>
-      <div className="flex items-start justify-between">
-        <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl', accent || 'bg-gray-100')}>
-          <Icon className={cn('h-5 w-5', accent ? 'text-white' : 'text-gray-600')} />
-        </div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-xs text-gray-500 font-medium">{title}</div>
         {TrendIcon && trend != null && (
-          <div className={cn('flex items-center gap-1 text-xs font-semibold', trendCls)}>
+          <div className={cn('flex items-center gap-1 text-xs font-medium shrink-0', trendCls)}>
             <TrendIcon className="h-3.5 w-3.5" />
             {Math.abs(trend)}%
           </div>
         )}
       </div>
-      <div>
-        <div className="text-2xl font-bold text-gray-900 leading-none tracking-tight">{value}</div>
-        <div className="text-xs text-gray-500 mt-1.5 font-semibold">{title}</div>
-        {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
-      </div>
+      <div className="text-2xl font-semibold text-gray-900 leading-none tracking-tight">{value}</div>
+      {sub && <div className="text-xs text-gray-400">{sub}</div>}
     </div>
   )
   return href ? <Link href={href} className="block">{inner}</Link> : inner
@@ -309,21 +303,16 @@ function ObjetivoCard({ invoicedYTD, mrrAmount }: { invoicedYTD: number; mrrAmou
   const exceeded  = totalProjected > ANNUAL_TARGET
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5">
+    <div className="rounded-2xl border border-gray-200/80 bg-white p-5">
 
       {/* ── Cabecera ── */}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 flex-shrink-0">
-            <Target className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <div className="text-sm font-bold text-gray-900">Objetivo anual {year}</div>
-            <div className="text-xs text-gray-400">Meta: {fmt(ANNUAL_TARGET)}</div>
-          </div>
+        <div>
+          <div className="text-sm font-semibold text-gray-900">Objetivo anual {year}</div>
+          <div className="text-xs text-gray-400 mt-0.5">Meta: {fmt(ANNUAL_TARGET)}</div>
         </div>
         <div className="text-right">
-          <div className="text-2xl font-bold text-gray-900 leading-none tracking-tight">{fmt(totalProjected)}</div>
+          <div className="text-2xl font-semibold text-gray-900 leading-none tracking-tight">{fmt(totalProjected)}</div>
           <div className="text-xs text-gray-400 mt-1">{totalPct.toFixed(1)}% del objetivo</div>
         </div>
       </div>
@@ -413,8 +402,6 @@ function ObjetivoCard({ invoicedYTD, mrrAmount }: { invoicedYTD: number; mrrAmou
 
 // ══════════════════════════════════════════════════════════════════════
 export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLeads, monthlyRevenue }: DashboardProps) {
-  const now        = new Date()
-  const monthName  = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
   const trendMonth = pct(kpis.invoicedThisMonth, kpis.invoicedLastMonth)
   const maxCount   = Math.max(...pipelineStages.map(s => s.count), 1)
 
@@ -425,13 +412,7 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
 
   return (
     <Layout>
-      <div className="space-y-6 max-w-7xl mx-auto">
-
-        {/* ── Header ── */}
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-400 mt-0.5 capitalize">{monthName}</p>
-        </div>
+      <div className="space-y-6 max-w-6xl mx-auto">
 
         {/* ── Objetivo anual ── */}
         <ObjetivoCard invoicedYTD={kpis.invoicedYTD} mrrAmount={kpis.mrrAmount} />
@@ -443,15 +424,12 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
             value={fmt(kpis.invoicedThisMonth)}
             sub={`mes anterior: ${fmt(kpis.invoicedLastMonth)}`}
             trend={kpis.invoicedLastMonth > 0 ? trendMonth : undefined}
-            icon={TrendingUp}
-            accent="bg-gray-900"
             href="/invoices"
           />
           <KpiCard
             title="Facturado en el año"
             value={fmt(kpis.invoicedYTD)}
             sub="acumulado desde enero"
-            icon={FileText}
             href="/invoices"
           />
           <KpiCard
@@ -462,16 +440,12 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
                 ? `${kpis.pendingInvoices} factura${kpis.pendingInvoices !== 1 ? 's' : ''} en borrador`
                 : 'Sin borradores pendientes'
             }
-            icon={kpis.pendingInvoices > 0 ? AlertCircle : CheckCircle2}
-            accent={kpis.pendingInvoices > 0 ? 'bg-amber-500' : 'bg-green-500'}
             href="/invoices"
           />
           <KpiCard
             title="MRR · Mantenimientos"
             value={kpis.mrrAmount > 0 ? fmt(kpis.mrrAmount) : '—'}
             sub={kpis.mrrAmount > 0 ? 'ingresos recurrentes / mes' : 'Sin contratos activos'}
-            icon={RefreshCw}
-            accent={kpis.mrrAmount > 0 ? 'bg-indigo-600' : 'bg-gray-200'}
             href="/invoices"
           />
         </div>
@@ -482,20 +456,18 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
             title="Pipeline activo"
             value={fmt(kpis.pipelineValue)}
             sub={`${kpis.pipelineDeals} deal${kpis.pipelineDeals !== 1 ? 's' : ''} en curso`}
-            icon={Zap}
-            accent="bg-amber-500"
             href="/pipelines"
           />
-          <KpiCard title="Total leads"          value={String(kpis.leadsTotal)}            sub={`+${kpis.leadsThisMonth} este mes`} icon={Users}         href="/leads" />
-          <KpiCard title="Contratos firmados"   value={String(kpis.dealsClosedThisMonth)} sub="este mes"                          icon={CheckCircle2}  href="/pipelines" />
-          <KpiCard title="Contactos"            value={String(kpis.contactsTotal)}                                                icon={Users}         href="/contacts" />
+          <KpiCard title="Total leads"          value={String(kpis.leadsTotal)}            sub={`+${kpis.leadsThisMonth} este mes`} href="/leads" />
+          <KpiCard title="Contratos firmados"   value={String(kpis.dealsClosedThisMonth)} sub="este mes"                          href="/pipelines" />
+          <KpiCard title="Contactos"            value={String(kpis.contactsTotal)}                                                href="/contacts" />
         </div>
 
         {/* ── Gráfico + Embudo ── */}
         <div className="grid gap-6 lg:grid-cols-2">
 
           {/* Revenue chart */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-5">
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-5">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-sm font-bold text-gray-900">Facturación mensual (6 meses)</h2>
               <Link href="/invoices" className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 transition-colors">
@@ -506,7 +478,7 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
           </div>
 
           {/* Pipeline funnel — count-based */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-5">
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-5">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-sm font-bold text-gray-900">Embudo de ventas</h2>
               <Link href="/pipelines" className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 transition-colors">
@@ -562,7 +534,7 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
         <div className="grid gap-6 lg:grid-cols-2">
 
           {/* Últimas facturas */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-5">
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-bold text-gray-900">Últimas facturas</h2>
               <Link href="/invoices" className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 transition-colors">
@@ -607,7 +579,7 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
           </div>
 
           {/* Leads activos */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-5">
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-bold text-gray-900">Leads en pipeline</h2>
               <Link href="/leads" className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 transition-colors">
@@ -648,12 +620,12 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
         </div>
 
         {/* ── Acciones rápidas ── */}
-        <div className="rounded-2xl border border-gray-100 bg-gray-50 px-5 py-4">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Acciones rápidas</p>
-          <div className="flex flex-wrap gap-2">
+        <div className="rounded-2xl border border-gray-100 bg-white/80 px-5 py-5 text-center">
+          <p className="text-xs font-medium text-gray-400 mb-4">Acciones rápidas</p>
+          <div className="flex flex-wrap justify-center gap-2">
             {[
               { label: 'Nueva factura',       href: '/invoices/new' },
-              { label: 'Nuevo lead',          href: '/leads/new' },
+              { label: 'Nuevo lead',          href: '/leads' },
               { label: 'Ver pipeline',        href: '/pipelines' },
               { label: 'Configurar proyecto', href: '/onboarding' },
               { label: 'Finanzas',            href: '/finances' },
@@ -661,9 +633,9 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
               <Link
                 key={a.href}
                 href={a.href}
-                className="flex items-center gap-1.5 px-4 h-8 rounded-lg bg-white border border-gray-200 text-xs font-semibold text-gray-700 hover:border-gray-300 hover:shadow-sm transition-all"
+                className="flex items-center gap-1.5 px-4 h-9 rounded-xl bg-white border border-gray-200/80 text-xs font-medium text-gray-700 hover:border-gray-300 hover:shadow-sm transition-all"
               >
-                {a.label} <ArrowRight className="h-3 w-3 text-gray-400" />
+                {a.label}
               </Link>
             ))}
           </div>

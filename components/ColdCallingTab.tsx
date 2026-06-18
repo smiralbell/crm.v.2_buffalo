@@ -168,10 +168,8 @@ function getMensaje(resultado: string, prospect: Prospect): { tipo: 'whatsapp' |
 
 function EstadoBadge({ estado }: { estado: string }) {
   const e = ESTADOS.find(s => s.id === estado) || ESTADOS[0]
-  const Icon = e.icon
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">
-      <Icon className="h-3 w-3" />
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
       {e.label}
     </span>
   )
@@ -216,22 +214,15 @@ const CIUDADES_CATALUNA = [
 
 // ── Metric KPI card ───────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, icon: Icon }: {
-  label: string; value: string | number; sub?: string; icon: React.ElementType
+function KpiCard({ label, value, sub }: {
+  label: string; value: string | number; sub?: string
 }) {
   return (
-    <Card className="shadow-none border border-gray-200">
+    <Card className="shadow-none border border-gray-200/80">
       <CardContent className="pt-4 pb-3">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">{label}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-0.5">{value}</p>
-            {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-          </div>
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 shrink-0">
-            <Icon className="h-4 w-4 text-gray-600" />
-          </div>
-        </div>
+        <p className="text-xs text-gray-500 font-medium">{label}</p>
+        <p className="text-2xl font-semibold text-gray-900 mt-0.5">{value}</p>
+        {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
       </CardContent>
     </Card>
   )
@@ -242,13 +233,13 @@ function KpiCard({ label, value, sub, icon: Icon }: {
 function CallFunnel({ f }: { f: Funnel }) {
   const llamados = f.total_prospectos - f.pendientes
   const steps = [
-    { label: 'Total prospectos',  value: f.total_prospectos, icon: FileText,    sub: `${f.pendientes} sin llamar` },
-    { label: 'Llamadas hechas',   value: f.llamadas_hechas,  icon: Phone,        sub: f.total_prospectos > 0 ? `${Math.round((llamados / f.total_prospectos) * 100)}% del total` : '—' },
-    { label: 'Llamar más tarde',  value: f.llamar_tarde,     icon: Clock,        sub: 'Callback pendiente' },
-    { label: 'Sin respuesta',     value: f.sin_respuesta,    icon: PhoneMissed,  sub: llamados > 0 ? `${Math.round((f.sin_respuesta / Math.max(llamados, 1)) * 100)}% de llamados` : '—' },
-    { label: 'Interesados',       value: f.interesados,      icon: ThumbsUp,     sub: llamados > 0 ? `${Math.round((f.interesados / Math.max(llamados, 1)) * 100)}% de llamados` : '—' },
-    { label: 'Reunión agendada',  value: f.reunion_agendada, icon: CalendarPlus, sub: f.interesados > 0 ? `${Math.round((f.reunion_agendada / Math.max(f.interesados, 1)) * 100)}% de interesados` : '—' },
-    { label: 'No interesado',     value: f.no_interesado,    icon: ThumbsDown,   sub: llamados > 0 ? `${Math.round((f.no_interesado / Math.max(llamados, 1)) * 100)}% de llamados` : '—' },
+    { label: 'Total prospectos',  value: f.total_prospectos, sub: `${f.pendientes} sin llamar` },
+    { label: 'Llamadas hechas',   value: f.llamadas_hechas,  sub: f.total_prospectos > 0 ? `${Math.round((llamados / f.total_prospectos) * 100)}% del total` : '—' },
+    { label: 'Llamar más tarde',  value: f.llamar_tarde,     sub: 'Callback pendiente' },
+    { label: 'Sin respuesta',     value: f.sin_respuesta,    sub: llamados > 0 ? `${Math.round((f.sin_respuesta / Math.max(llamados, 1)) * 100)}% de llamados` : '—' },
+    { label: 'Interesados',       value: f.interesados,      sub: llamados > 0 ? `${Math.round((f.interesados / Math.max(llamados, 1)) * 100)}% de llamados` : '—' },
+    { label: 'Reunión agendada',  value: f.reunion_agendada, sub: f.interesados > 0 ? `${Math.round((f.reunion_agendada / Math.max(f.interesados, 1)) * 100)}% de interesados` : '—' },
+    { label: 'No interesado',     value: f.no_interesado,    sub: llamados > 0 ? `${Math.round((f.no_interesado / Math.max(llamados, 1)) * 100)}% de llamados` : '—' },
   ]
   const max = Math.max(...steps.map(s => s.value), 1)
 
@@ -260,13 +251,9 @@ function CallFunnel({ f }: { f: Funnel }) {
       </div>
       <div className="p-4 space-y-3">
         {steps.map((s, i) => {
-          const Icon = s.icon
           const w = Math.max(3, (s.value / max) * 100)
           return (
             <div key={i} className="flex items-center gap-3">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-100 shrink-0">
-                <Icon className="h-3.5 w-3.5 text-gray-600" />
-              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs font-medium text-gray-700">{s.label}</span>
@@ -693,22 +680,19 @@ function CallPanel({ prospect, onClose, onUpdate }: {
           {/* Registrar llamada */}
           <div className="border border-gray-200 rounded-xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-b border-gray-100">
-              <PhoneCall className="h-4 w-4 text-gray-500" />
-              <p className="text-sm font-semibold text-gray-700">Registrar llamada</p>
+              <p className="text-sm font-medium text-gray-700">Registrar llamada</p>
             </div>
             <div className="p-4 space-y-4">
               <div>
                 <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Resultado</p>
                 <div className="grid grid-cols-2 gap-2">
                   {RESULTADOS.map(r => {
-                    const Icon = r.icon
                     const isActive = resultado === r.id
                     return (
                       <button key={r.id} onClick={() => setResultado(r.id === resultado ? null : r.id)}
-                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all border ${
+                        className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
                           isActive ? 'bg-gray-900 text-white border-gray-900' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                         }`}>
-                        <Icon className="h-4 w-4 shrink-0" />
                         {r.label}
                       </button>
                     )
@@ -971,10 +955,10 @@ export default function ColdCallingTab() {
       {metrics && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-1 grid grid-cols-2 gap-3 content-start">
-            <KpiCard label="Llamadas hoy"    value={metrics.hoy.llamadas}             icon={Phone} />
-            <KpiCard label="Interesados hoy" value={metrics.hoy.interesados}           icon={ThumbsUp} />
-            <KpiCard label="Reuniones hoy"   value={metrics.hoy.reuniones}             icon={CalendarPlus} />
-            <KpiCard label="Conversión"      value={`${metrics.hoy.tasaConversion}%`}  icon={Target}
+            <KpiCard label="Llamadas hoy"    value={metrics.hoy.llamadas} />
+            <KpiCard label="Interesados hoy" value={metrics.hoy.interesados} />
+            <KpiCard label="Reuniones hoy"   value={metrics.hoy.reuniones} />
+            <KpiCard label="Conversión"      value={`${metrics.hoy.tasaConversion}%`}
               sub={`${metrics.totales.prospectos} prospectos`} />
           </div>
           <div className="lg:col-span-2">
@@ -1028,12 +1012,7 @@ export default function ColdCallingTab() {
       {/* Empty state */}
       {prospects.length === 0 && !loading && (
         <div className="border-2 border-dashed border-gray-200 rounded-xl p-12 text-center space-y-3">
-          <div className="flex justify-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100">
-              <Phone className="h-6 w-6 text-gray-400" />
-            </div>
-          </div>
-          <h3 className="font-semibold text-gray-600">Sin prospectos</h3>
+          <h3 className="font-medium text-gray-600">Sin prospectos</h3>
           <p className="text-sm text-gray-400 max-w-sm mx-auto">
             Usa el buscador de Google Maps para importar prospectos, o añade uno manualmente.
           </p>
@@ -1058,7 +1037,6 @@ export default function ColdCallingTab() {
               {prospects.map(p => {
                 const lastCall = p.calls[0]
                 const lastResultado = RESULTADOS.find(r => r.id === lastCall?.resultado)
-                const LastIcon = lastResultado?.icon
                 return (
                   <tr key={p.id} onClick={() => setSelected(p)}
                     className={`cursor-pointer transition-colors hover:bg-gray-50 ${selected?.id === p.id ? 'bg-gray-50' : ''}`}>
@@ -1080,11 +1058,10 @@ export default function ColdCallingTab() {
                       </div>
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
-                      {lastCall && LastIcon ? (
-                        <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                          <LastIcon className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                      {lastCall ? (
+                        <div className="text-xs text-gray-500">
                           <span>{lastResultado?.label}</span>
-                          <span className="text-gray-300">·</span>
+                          <span className="text-gray-300 mx-1">·</span>
                           <span>{fmtDate(lastCall.fecha)}</span>
                         </div>
                       ) : <span className="text-xs text-gray-400">Sin llamadas</span>}

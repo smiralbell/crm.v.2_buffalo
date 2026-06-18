@@ -28,7 +28,7 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
 .prog-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;}
 .prog-arrow{color:var(--muted);font-size:12px;padding:0 4px;}
 
-.step{display:none;max-width:1200px;margin:0 auto;padding:32px 24px 0;}
+.step{display:none;max-width:1200px;margin:0 auto;padding:32px 24px 88px;}
 .step.active{display:block;}
 
 .agents-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}
@@ -102,7 +102,7 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
 .dash-tier.sel .dash-amt{color:var(--green);}
 .card:not(.active) .dash-tier{pointer-events:none;}
 
-.s1-bottom{display:flex;flex-direction:column;gap:10px;margin-top:16px;}
+.s1-bottom{display:flex;flex-direction:column;gap:10px;margin-top:16px;margin-bottom:20px;}
 
 .pack-card{border:1px dashed rgba(34,217,122,.3);border-radius:14px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;opacity:.3;pointer-events:none;transition:opacity .3s;cursor:pointer;user-select:none;}
 .pack-card.avail{opacity:1;pointer-events:auto;}
@@ -115,7 +115,7 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
 .maint-hdr{padding:10px 18px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:8px;}
 .maint-hdr-t{font-size:12px;font-weight:600;color:var(--off);}
 .maint-hdr-s{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--muted);margin-left:auto;}
-.maint-grid{display:grid;grid-template-columns:1fr 1fr;}
+.maint-grid{display:grid;grid-template-columns:1fr 1fr 1fr;}
 .maint-opt{padding:14px 18px;cursor:pointer;transition:background .15s;position:relative;border-right:1px solid var(--rule);}
 .maint-opt:last-child{border-right:none;}
 .maint-opt.sel{background:var(--gdim);}
@@ -169,7 +169,7 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
 .sum-line.sum-total{border-top:1px solid var(--rule);padding-top:8px;margin-top:4px;}
 .sum-line.sum-total .sl{font-weight:700;color:var(--white);font-size:13px;}
 .sum-line.sum-total .sv{color:var(--green);font-weight:700;font-size:13px;}
-.sum-maint{background:var(--gdim);border:1px solid rgba(34,217,122,.2);border-radius:9px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+.sum-maint{background:var(--gdim);border:1px solid rgba(34,217,122,.2);border-radius:9px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;margin-top:12px;margin-bottom:16px;}
 .sm-lbl{font-size:11px;color:var(--off);}
 .sm-val{font-family:"IBM Plex Mono",monospace;font-size:14px;font-weight:700;color:var(--green);}
 
@@ -323,7 +323,7 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
         <div class="maint-hdr">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
           <span class="maint-hdr-t">Mantenimiento mensual</span>
-          <span class="maint-hdr-s">% sobre setup total</span>
+          <span class="maint-hdr-s">Opcional · % sobre setup</span>
         </div>
         <div class="maint-grid" id="maintGrid"><div class="maint-empty">Configura el setup para ver opciones</div></div>
       </div>
@@ -386,7 +386,7 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
           <div class="sm-val" id="sm-val">0 €/mes</div>
         </div>
         <!-- Pagos -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px;">
           <div style="background:var(--bg3);border-radius:9px;padding:12px 14px;">
             <div style="font-size:10px;color:var(--muted);font-family:'IBM Plex Mono',monospace;margin-bottom:4px;">1ER PAGO · INICIO</div>
             <div style="font-size:18px;font-weight:800;color:var(--green);" id="pay1">0 €</div>
@@ -478,13 +478,6 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
             </div>
           </div>
 
-        </div>
-        <!-- CRM save button (only shown in CRM mode) -->
-        <div id="crm-save-wrap" style="display:none;margin-top:10px;">
-          <button id="crm-save-btn" onclick="crmSaveNow()" style="width:100%;background:rgba(34,217,122,.1);border:1px solid rgba(34,217,122,.35);color:#22D97A;font-size:12px;font-weight:700;padding:10px 16px;border-radius:10px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:7px;transition:background .15s;">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            <span id="crm-save-label">Guardar en CRM</span>
-          </button>
         </div>
         <div class="toast-msg" id="toastMsg"></div>
       </div>
@@ -588,8 +581,10 @@ function updatePack() {
 }
 
 function selMaint(type) {
-  S.maint = S.maint === type ? null : type;
-  document.querySelectorAll('.maint-opt').forEach(o=>o.classList.toggle('sel', o.dataset.type===S.maint));
+  S.maint = type === 'none' ? null : type;
+  document.querySelectorAll('.maint-opt').forEach(o => {
+    o.classList.toggle('sel', o.dataset.type === (S.maint || 'none'));
+  });
   recalc();
 }
 
@@ -662,15 +657,11 @@ function restoreFromConfig(cfg) {
       document.getElementById('packCard').classList.add('applied');
     }
     // ── Mantenimiento ────────────────────────────────────────────────────
-    if (cfg.maint) {
-      S.maint = cfg.maint;
-      // maint options are rendered by recalc → renderMaint, so just set the value
-    }
+    S.maint = cfg.maint || null;
     recalc();
-    // After recalc renders maint options, highlight the selected one
     setTimeout(function() {
       document.querySelectorAll('.maint-opt').forEach(function(o) {
-        o.classList.toggle('sel', o.dataset.type === S.maint);
+        o.classList.toggle('sel', o.dataset.type === (S.maint || 'none'));
       });
     }, 50);
   } catch(e) { console.warn('restoreFromConfig error:', e); }
@@ -735,7 +726,12 @@ function renderMaint(setup) {
   const g = document.getElementById('maintGrid');
   if (setup===0) { g.innerHTML='<div class="maint-empty">Configura el setup para ver opciones</div>'; return; }
   const c = Math.round(setup*0.10), b = Math.round(setup*0.15);
+  const noneSel = !S.maint ? 'sel' : '';
   g.innerHTML = `
+    <div class="maint-opt ${noneSel}" data-type="none" onclick="selMaint('none')">
+      <div class="maint-plan">Sin mantenimiento</div><div class="maint-nm">Solo setup</div>
+      <div class="maint-pr">0 €</div><div class="maint-pct">No incluido</div>
+    </div>
     <div class="maint-opt ${S.maint==='connect'?'sel':''}" data-type="connect" onclick="selMaint('connect')">
       <div class="maint-plan">Buffalo Connect</div><div class="maint-nm">Servidores cliente</div>
       <div class="maint-pr">${fmtSp(c)}</div><div class="maint-pct">10% del setup</div>
@@ -1285,9 +1281,14 @@ recalc();
       .maint-empty { color:#9ca3af !important; }
 
       /* ── Action bar: sticky (not fixed) in CRM ── */
+      .step { max-width:none !important; padding-left:12px !important; padding-right:12px !important; padding-bottom:24px !important; }
+      .agents-grid { gap:16px !important; }
+      .step2-layout { max-width:none !important; }
+      .s1-bottom { margin-bottom:24px !important; }
       .action-bar {
         position:sticky !important;
         bottom:0 !important;
+        margin-top:16px !important;
         background:rgba(255,255,255,0.97) !important;
         border-top:1px solid #e5e7eb !important;
         backdrop-filter:blur(20px) !important;
@@ -1339,16 +1340,44 @@ recalc();
 
   // ── Restore saved configuration if present ──────────────────────────
   const savedCfgRaw = p.get('cfg');
+  const projectView = p.get('projectView') === '1';
   if (savedCfgRaw) {
     try {
       var savedCfg = JSON.parse(decodeURIComponent(escape(atob(savedCfgRaw))));
       restoreFromConfig(savedCfg);
-      // Auto-advance to step 2 (documents) so the user lands directly on
-      // propuesta / contrato / onboarding link — they can still go back to step 1
       setTimeout(function() {
         if (calcSetup().total > 0) goStep(2);
+        if (projectView) applyProjectViewLayout();
       }, 80);
     } catch(e) { console.warn('Could not restore config:', e); }
+  }
+
+  function applyProjectViewLayout() {
+    var hdr = document.querySelector('header');
+    if (hdr) hdr.style.display = 'none';
+    var ab = document.querySelector('.action-bar');
+    if (ab) ab.style.display = 'none';
+    var s1 = document.getElementById('step1');
+    if (s1) s1.style.display = 'none';
+    var layout = document.querySelector('.step2-layout');
+    if (layout) {
+      if (layout.children[0]) layout.children[0].style.display = 'none';
+      var right = layout.children[1];
+      if (right) {
+        var cards = right.querySelectorAll('.form-card');
+        if (cards[0]) cards[0].style.display = 'none';
+      }
+      layout.style.gridTemplateColumns = '1fr';
+      layout.style.maxWidth = 'none';
+    }
+    var step2 = document.getElementById('step2');
+    if (step2) step2.style.padding = '8px 12px 16px';
+    setTimeout(reportHeight, 200);
+    setTimeout(reportHeight, 600);
+  }
+
+  if (projectView && !savedCfgRaw) {
+    setTimeout(applyProjectViewLayout, 100);
   }
 
   // ── Patch functions to emit postMessage to CRM parent ──
@@ -1418,18 +1447,23 @@ recalc();
   // ── Auto-save: debounced draft save every time the config changes ──
   // Fires 1.5 s after the last change; silently updates valor + notas on the lead.
   var _autoSaveTimer = null;
+  function flushDraftSave() {
+    if (!leadId_pm) return;
+    if (_autoSaveTimer) { clearTimeout(_autoSaveTimer); _autoSaveTimer = null; }
+    var data = buildProjectData();
+    if (!data.projectTotal && !data.projectNotes) return;
+    window.parent.postMessage(Object.assign({
+      type: 'buffalo_configurador_action',
+      action: 'guardar_borrador',
+      leadId: leadId_pm,
+      cardId: cardId_pm,
+      pipelineId: pipelineId_pm,
+    }, data), '*');
+  }
   function scheduleDraftSave() {
     if (!leadId_pm) return;                     // only in CRM mode with a lead
     if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
-    _autoSaveTimer = setTimeout(function() {
-      var data = buildProjectData();
-      if (!data.projectTotal && !data.projectNotes) return;  // nothing configured yet
-      window.parent.postMessage(Object.assign({
-        type: 'buffalo_configurador_action',
-        action: 'guardar_borrador',
-        leadId: leadId_pm,
-      }, data), '*');
-    }, 1500);
+    _autoSaveTimer = setTimeout(flushDraftSave, 1500);
   }
 
   // Hook auto-save into recalc (runs on every config change)
@@ -1443,32 +1477,35 @@ recalc();
   var _origGoStep = window.goStep;
   window.goStep = function(n) {
     if (_origGoStep) _origGoStep.apply(this, arguments);
+    if (n === 2) flushDraftSave();  // save immediately when advancing to documents
     setTimeout(reportHeight, 120);
     setTimeout(reportHeight, 400);
   };
 
-  // ── Show save button + wire up crmSaveNow ────────────────────────────
-  var _saveWrap = document.getElementById('crm-save-wrap');
-  if (_saveWrap) _saveWrap.style.display = 'block';
-
+  // ── CRM save (triggered from parent header button) ──
   window.crmSaveNow = function() {
     var data = buildProjectData();
-    var lbl  = document.getElementById('crm-save-label');
+    if (!leadId_pm) {
+      showToast('Error: no hay lead vinculado al CRM', 'orange');
+      window.parent.postMessage({ type: 'buffalo_crm_save_error', error: 'no_lead' }, '*');
+      return false;
+    }
     if (!data.projectTotal && !data.projectNotes) {
       showToast('Activa al menos un agente para guardar', 'orange');
-      return;
+      window.parent.postMessage({ type: 'buffalo_crm_save_error', error: 'empty' }, '*');
+      return false;
     }
-    window.parent.postMessage(Object.assign({
-      type:     'buffalo_configurador_action',
-      action:   'guardar_borrador',
-      leadId:   leadId_pm,
-      cardId:   cardId_pm,
-      pipelineId: pipelineId_pm,
-    }, data), '*');
-    if (lbl) lbl.textContent = 'Guardado ✓';
-    setTimeout(function() { if (lbl) lbl.textContent = 'Guardar en CRM'; }, 2500);
-    showToast('Proyecto guardado en el CRM ✓', 'green');
+    flushDraftSave();
+    showToast('Configuración guardada ✓', 'green');
+    return true;
   };
+
+  // Parent CRM can trigger save via postMessage
+  window.addEventListener('message', function(ev) {
+    if (ev.data && ev.data.type === 'buffalo_crm_save_request') {
+      crmSaveNow();
+    }
+  });
 
   // ── Helper: open a document in a new tab as Blob (no auto-print block) ──────
   function openDocBlobTab(buildFn) {

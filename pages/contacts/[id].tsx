@@ -124,10 +124,9 @@ export default function ContactDetail({ contact, leads }: ContactDetailProps) {
               </Button>
             </Link>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+              <h1 className="text-xl font-semibold text-gray-900">
                 {contact.nombre || 'Contacto sin nombre'}
               </h1>
-              <p className="text-gray-600 mt-1">Detalle del contacto</p>
             </div>
           </div>
           <Link href={`/contacts/${contact.id}/edit`}>

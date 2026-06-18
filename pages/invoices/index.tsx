@@ -717,8 +717,8 @@ export default function InvoicesPage({
         {/* Filters and New Button - Estilo minimalista */}
         <Card className="border border-gray-200 shadow-sm">
           <CardContent className="pt-6">
-            <form onSubmit={handleSearch} className="flex flex-wrap gap-4">
-              <div className="flex-1 min-w-[250px]">
+            <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-3">
+              <div className="flex-1 min-w-[200px]">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input
@@ -730,7 +730,7 @@ export default function InvoicesPage({
                 </div>
               </div>
               <Select value={status || 'all'} onValueChange={handleStatusChange}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[160px] shrink-0">
                   <SelectValue placeholder="Todos los estados" />
                 </SelectTrigger>
                 <SelectContent>
@@ -743,47 +743,39 @@ export default function InvoicesPage({
               <DateRangePicker
                 onRangeChange={handleDateRangeChange}
                 defaultRange={dateRange}
-                className="min-w-[280px]"
+                className="shrink-0"
               />
-              <Button type="submit" disabled={loading} variant="outline">
-                <Search className="mr-2 h-4 w-4" />
-                Buscar
-              </Button>
-              <Link href="/invoices/new">
-                <Button type="button">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nueva Factura
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <Button type="submit" disabled={loading} variant="outline">
+                  <Search className="mr-2 h-4 w-4" />
+                  Buscar
                 </Button>
-              </Link>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button 
-                    type="button" 
-                    variant="outline"
-                    disabled={exporting}
-                  >
-                    <FileDown className="mr-2 h-4 w-4" />
-                    Exportar
-                    <ChevronDown className="ml-2 h-4 w-4" />
+                <Link href="/invoices/new">
+                  <Button type="button">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nueva Factura
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem 
-                    onClick={handleExportSelected}
-                    disabled={exporting}
-                  >
-                    <FileDown className="mr-2 h-4 w-4" />
-                    Exportar Seleccionadas
-                  </DropdownMenuItem>
-                  <DropdownMenuItem 
-                    onClick={handleExportAll}
-                    disabled={exporting}
-                  >
-                    <FileDown className="mr-2 h-4 w-4" />
-                    Exportar Todo
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </Link>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline" disabled={exporting}>
+                      <FileDown className="mr-2 h-4 w-4" />
+                      Exportar
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={handleExportSelected} disabled={exporting}>
+                      <FileDown className="mr-2 h-4 w-4" />
+                      Exportar Seleccionadas
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportAll} disabled={exporting}>
+                      <FileDown className="mr-2 h-4 w-4" />
+                      Exportar Todo
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
               {selectionMode && (
                 <div className="flex items-center gap-2">
                   <Button

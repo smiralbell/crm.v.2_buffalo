@@ -54,17 +54,13 @@ export default function NewPipeline() {
       <div className="space-y-6">
         <div className="flex items-center gap-4">
           <Link href="/pipelines">
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="rounded-xl">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Nuevo Pipeline</h1>
-            <p className="text-gray-600 mt-1">Crea un nuevo pipeline Kanban</p>
-          </div>
         </div>
 
-        <Card className="border border-gray-200">
+        <Card className="border border-gray-200/80">
           <CardHeader>
             <CardTitle>Información del Pipeline</CardTitle>
           </CardHeader>

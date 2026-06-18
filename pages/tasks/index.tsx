@@ -455,11 +455,10 @@ export default function TasksPage({ initialTasks, meta }: TasksPageProps) {
     <Layout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold text-gray-900">Tareas</h1>
-            <p className="text-gray-600 text-sm">
-              Organiza el trabajo por cliente, proyecto y persona. Pendientes: {pendingCount} · Hechas: {completedCount}
-            </p>
+          <div className="flex items-center gap-3 text-sm text-gray-500">
+            <span>Pendientes: {pendingCount}</span>
+            <span className="text-gray-300">·</span>
+            <span>Hechas: {completedCount}</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center rounded-lg border bg-white p-1 text-xs">

@@ -470,3 +470,164 @@ model InstantlyWebhook {
   @@index([created_at])
   @@map("instantly_webhooks")
 }
+
+// ============================================
+// ENGRANAJE 5 — RETENCIÓN
+// ============================================
+
+model Proyecto {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id             String    @db.Uuid
+  name                  String
+  service_type          String
+  status                String    @default("development")
+  launched_at           DateTime? @db.Date
+
+  addon_outbound        Boolean   @default(false)
+  addon_crm_integration Boolean   @default(false)
+  addon_human_transfer  Boolean   @default(false)
+  addon_email_summary   Boolean   @default(false)
+  addon_transcription   Boolean   @default(false)
+  addon_cloned_voice    Boolean   @default(false)
+  addon_whatsapp        Boolean   @default(false)
+  addon_web_widget      Boolean   @default(false)
+  addon_form_trigger    Boolean   @default(false)
+  addon_multimodal      Boolean   @default(false)
+  addon_voice_in_chat   Boolean   @default(false)
+  dashboard_tier        String?
+  languages_count       Int       @default(1)
+
+  cost_operator_hour_eur  Decimal? @db.Decimal(8, 2)
+  operators_dedicated     Decimal? @db.Decimal(4, 1)
+  hours_per_week_before   Decimal? @db.Decimal(6, 1)
+  setup_fee_eur           Decimal? @db.Decimal(10, 2)
+  monthly_fee_eur         Decimal? @db.Decimal(8, 2)
+  has_mensualidad         Boolean  @default(false)
+  maint_plan              String?
+  has_voz                 Boolean  @default(false)
+  has_chat                Boolean  @default(false)
+  has_dash                Boolean  @default(false)
+  has_pack                Boolean  @default(false)
+
+  retell_agent_id       String?
+  twilio_number         String?
+  whatsapp_number       String?
+  webhook_secret        String    @default(dbgenerated("gen_random_uuid()::TEXT"))
+
+  lead_id               Int?      @unique
+  contact_id            Int?
+  config_ref            String?
+
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  engranaje5_data       Engranaje5Data[]
+  engranaje5_kpis       Engranaje5Kpi[]
+
+  @@index([client_id])
+  @@index([contact_id])
+  @@index([service_type])
+  @@index([status])
+  @@index([has_mensualidad])
+  @@map("proyectos")
+}
+
+model Engranaje5Data {
+  id                        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id                String   @db.Uuid
+  year                      Int
+  month                     Int
+
+  total_interactions        Int?
+  interactions_resolved     Int?
+  interactions_escalated    Int?
+  interactions_abandoned      Int?
+  interactions_error        Int?
+
+  calls_inbound             Int?
+  calls_outbound            Int?
+  avg_call_duration_s       Decimal? @db.Decimal(8, 2)
+  total_call_minutes        Decimal? @db.Decimal(10, 2)
+  avg_confidence_score      Decimal? @db.Decimal(4, 3)
+  peak_calls_day            Int?
+  peak_calls_hour           Int?
+  transcriptions_stored     Int?
+  cloned_voice_used_pct     Decimal? @db.Decimal(5, 4)
+  human_transfers           Int?
+  email_summaries_sent      Int?
+  top_intents_json          Json?    @db.JsonB
+  escalation_reasons_json   Json?    @db.JsonB
+
+  conversations_whatsapp    Int?
+  conversations_web         Int?
+  conversations_form        Int?
+  avg_messages_per_conv     Decimal? @db.Decimal(6, 2)
+  avg_response_time_ms      Decimal? @db.Decimal(10, 2)
+  avg_conv_duration_s       Decimal? @db.Decimal(8, 2)
+  tokens_input_total        BigInt?
+  tokens_output_total       BigInt?
+  llm_cost_usd              Decimal? @db.Decimal(10, 4)
+  conversations_outside_hours Int?
+  top_topics_json           Json?    @db.JsonB
+  multimodal_inputs         Int?
+
+  sessions_total            Int?
+  users_unique              Int?
+  avg_session_duration_s    Decimal? @db.Decimal(8, 2)
+  avg_page_views            Decimal? @db.Decimal(6, 2)
+  conversions_total         Int?
+  reports_exported          Int?
+  sessions_mobile           Int?
+  features_used_json        Json?    @db.JsonB
+  days_inactive_streak      Int?
+
+  infra_cost_usd            Decimal? @db.Decimal(10, 4)
+  uptime_minutes            Int?
+  downtime_minutes          Int?
+  incidents_count           Int?     @default(0)
+  improvements_applied      Int?     @default(0)
+
+  nps_score_avg             Decimal? @db.Decimal(4, 2)
+  nps_responses_count       Int?     @default(0)
+
+  recorded_at               DateTime @default(now()) @db.Timestamptz(6)
+
+  proyecto                  Proyecto @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, year, month])
+  @@index([project_id])
+  @@map("engranaje5_data")
+}
+
+model Engranaje5Kpi {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id          String   @db.Uuid
+  year                Int
+  month               Int
+
+  kpi_key             String
+  kpi_label           String
+  kpi_category        String
+
+  kpi_value           Decimal? @db.Decimal(15, 4)
+  kpi_unit            String?
+  kpi_value_label     String?
+
+  chart_type          String
+  is_star_kpi         Boolean  @default(false)
+  visible_dashboard   Boolean  @default(true)
+  visible_report      Boolean  @default(false)
+
+  trend_vs_prev_month Decimal? @db.Decimal(8, 4)
+  trend_direction     String?
+
+  service_types       String[]
+  formula_notes       String?
+  computed_at         DateTime @default(now()) @db.Timestamptz(6)
+
+  proyecto            Proyecto @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, year, month, kpi_key])
+  @@index([project_id])
+  @@map("engranaje5_kpis")
+}

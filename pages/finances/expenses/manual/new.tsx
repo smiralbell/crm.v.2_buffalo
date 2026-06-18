@@ -159,16 +159,10 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
         <div className="w-full max-w-xl space-y-6">
           <div className="flex items-center gap-4">
             <Link href="/finances/expenses">
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" className="rounded-xl">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <div>
-              <h1 className="text-2xl font-semibold text-gray-900">Colgar factura de gasto</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Registra un gasto puntual con concepto claro y fecha específica.
-              </p>
-            </div>
           </div>
 
           <Card className="border border-gray-200 shadow-sm">

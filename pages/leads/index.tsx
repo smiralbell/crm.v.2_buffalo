@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { Plus, Search, Edit, Trash2, Eye, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
+import NewLeadDialog from '@/components/NewLeadDialog'
 import { Badge } from '@/components/ui/badge'
 
 interface Lead {
@@ -169,6 +170,7 @@ export default function LeadsPage({
   }
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [newLeadOpen, setNewLeadOpen] = useState(false)
   const [leadToDelete, setLeadToDelete] = useState<{ id: number; name: string } | null>(null)
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
 
@@ -256,15 +258,15 @@ export default function LeadsPage({
               <Button type="submit" disabled={loading} variant="outline">
                 Buscar
               </Button>
-              <Link href="/leads/new">
-                <Button type="button">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nuevo Lead
-                </Button>
-              </Link>
+              <Button type="button" onClick={() => setNewLeadOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo Lead
+              </Button>
             </form>
           </CardContent>
         </Card>
+
+        <NewLeadDialog open={newLeadOpen} onOpenChange={setNewLeadOpen} />
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

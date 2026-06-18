@@ -177,14 +177,10 @@ export default function EditContact({ contact }: EditContactProps) {
       <div className="space-y-6">
         <div className="flex items-center gap-4">
           <Link href={`/contacts/${contact.id}`}>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="rounded-xl">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Editar Contacto</h1>
-            <p className="text-gray-600 mt-1">Modifica la información del contacto</p>
-          </div>
         </div>
 
         <form onSubmit={handleSubmit}>

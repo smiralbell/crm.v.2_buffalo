@@ -3,10 +3,8 @@ import { useRouter } from 'next/router'
 import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, TrendingUp, FileText, LogOut, Workflow,
-  DollarSign, MessageSquare, ClipboardList, Megaphone,
-  ChevronDown, ChevronRight,
-  BarChart3, Mail, Phone, MousePointerClick, Users,
-  Settings, PackageCheck,
+  DollarSign, MessageSquare, Megaphone,
+  ChevronDown, ChevronRight, PackageCheck, HeartHandshake,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -54,8 +52,17 @@ const NAV: NavItem[] = [
     badge: 'ENG 2',
     icon: PackageCheck,
     children: [
-      { href: '/onboarding',           label: 'Proyectos activos' },
+      { href: '/onboarding',           label: 'Proyectos activos', tab: 'projects' },
       { href: '/onboarding/configure', label: 'Configurador'     },
+    ],
+  },
+  {
+    href: '/retencion',
+    label: 'Retención',
+    badge: 'ENG 3',
+    icon: HeartHandshake,
+    children: [
+      { href: '/retencion', label: 'Clientes con mensualidad' },
     ],
   },
   { href: '/finances', label: 'Finanzas', icon: DollarSign },
@@ -80,8 +87,12 @@ export default function Sidebar() {
     setOpen(prev => ({ ...prev, ...updates }))
   }, [router.pathname])
 
-  const toggle = (href: string) =>
-    setOpen(prev => ({ ...prev, [href]: !prev[href] }))
+  const handleParentNav = (item: NavItem) => {
+    setOpen(prev => ({ ...prev, [item.href]: true }))
+    if (item.href === '/marketing') router.push('/marketing?tab=global')
+    else if (item.href === '/onboarding') router.push('/onboarding?tab=projects')
+    else if (item.href === '/retencion') router.push('/retencion')
+  }
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -92,21 +103,21 @@ export default function Sidebar() {
     router.pathname === item.href || router.pathname.startsWith(item.href + '/')
 
   return (
-    <div className="flex h-screen w-60 flex-col border-r bg-white">
+    <div className="flex h-screen w-60 flex-col border-r border-gray-100 bg-white">
 
       {/* Logo */}
-      <div className="border-b p-5">
+      <div className="border-b border-gray-100 px-5 py-6">
         <Link href="/dashboard" className="flex items-center justify-center">
           <img
             src="https://agenciabuffalo.es/wp-content/uploads/2025/10/Generated_Image_September_25__2025_-_11_16AM-removebg-preview.png"
             alt="Buffalo AI"
-            className="h-11 w-auto object-contain"
+            className="h-[52px] w-auto object-contain"
           />
         </Link>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
         {NAV.map((item) => {
           const Icon = item.icon
           const active = isParentActive(item)
@@ -118,10 +129,10 @@ export default function Sidebar() {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
                   active
                     ? 'bg-gray-100 text-gray-900'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />
@@ -134,18 +145,18 @@ export default function Sidebar() {
           return (
             <div key={item.href}>
               <button
-                onClick={() => toggle(item.href)}
+                onClick={() => handleParentNav(item)}
                 className={cn(
-                  'w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
                   active
                     ? 'bg-gray-100 text-gray-900'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 <span className="flex-1 text-left">{item.label}</span>
                 {item.badge && (
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-900 text-white tracking-wide">
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-900 text-white tracking-wide shrink-0">
                     {item.badge}
                   </span>
                 )}
@@ -165,15 +176,18 @@ export default function Sidebar() {
                     // Activo si estamos en la ruta exacta y el tab coincide (si hay)
                     const tabParam = router.query.tab as string | undefined
                     const childActive = child.tab
-                      ? router.pathname === child.href && (tabParam === child.tab || (!tabParam && child.tab === 'global'))
-                      : router.pathname === child.href
+                      ? router.pathname === child.href && (
+                          tabParam === child.tab ||
+                          (!tabParam && child.tab === 'global')
+                        )
+                      : router.pathname === child.href || router.pathname.startsWith(child.href + '/')
 
                     return (
                       <Link
                         key={`${child.href}-${child.tab || child.label}`}
                         href={childHref}
                         className={cn(
-                          'block rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                          'block rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
                           childActive
                             ? 'bg-gray-100 text-gray-900'
                             : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
@@ -191,8 +205,8 @@ export default function Sidebar() {
       </nav>
 
       {/* Logout */}
-      <div className="border-t p-3">
-        <Button variant="ghost" size="sm" className="w-full justify-start text-gray-600" onClick={handleLogout}>
+      <div className="border-t border-gray-100 p-3">
+        <Button variant="ghost" size="sm" className="w-full justify-start rounded-xl text-gray-500" onClick={handleLogout}>
           <LogOut className="mr-2.5 h-4 w-4" />
           Cerrar sesión
         </Button>
