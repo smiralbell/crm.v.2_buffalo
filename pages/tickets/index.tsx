@@ -4,9 +4,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Ticket, RefreshCw, AlertCircle, Settings } from 'lucide-react'
+import { RefreshCw, AlertCircle, Settings } from 'lucide-react'
 import { PRIORITY_LABELS, STATUS_LABELS, type TicketPriority, type TicketStatus } from '@/lib/tickets/ingest'
 
 interface TicketRow {
@@ -93,34 +93,23 @@ export default function TicketsPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-              <Ticket className="h-5 w-5 text-gray-400" />
-              Incidencias
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Tickets recibidos desde los dashboards de clientes.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/tickets/config"
-              className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:bg-gray-50"
-            >
-              <Settings className="h-4 w-4" />
-              Configurar respuestas
-            </Link>
-            <button
-              type="button"
-              onClick={load}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Actualizar
-            </button>
-          </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Link
+            href="/tickets/config"
+            className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:bg-gray-50"
+          >
+            <Settings className="h-4 w-4" />
+            Configurar respuestas
+          </Link>
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:bg-gray-50 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
         </div>
 
         <div className="flex flex-wrap gap-3">
