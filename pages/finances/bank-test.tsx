@@ -7,11 +7,20 @@ import { requireAuth } from '@/lib/auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   ArrowLeft, Landmark, Loader2, AlertCircle, CheckCircle2, RefreshCw,
 } from 'lucide-react'
 
-interface Props {
-  bankDefault: string
+interface Aspsp {
+  name: string
+  country: string
+  psu_types?: string[]
 }
 
 interface TxRow {
@@ -76,17 +85,25 @@ function extractTransactions(raw: unknown): TxRow[] {
   })
 }
 
-export const getServerSideProps: GetServerSideProps<Props> = async (context) => {
+export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
     await requireAuth(context)
   } catch {
     return { redirect: { destination: '/login', permanent: false } }
   }
-  return { props: { bankDefault: 'CaixaBank' } }
+  return { props: {} }
 }
 
-export default function FinancesBankTestPage({ bankDefault }: Props) {
+function pickDefaultBank(banks: Aspsp[]): string {
+  const caixa = banks.find((b) => /caixa/i.test(b.name))
+  return caixa?.name || banks[0]?.name || ''
+}
+
+export default function FinancesBankTestPage() {
   const router = useRouter()
+  const [banks, setBanks] = useState<Aspsp[]>([])
+  const [selectedBank, setSelectedBank] = useState('')
+  const [loadingBanks, setLoadingBanks] = useState(true)
   const [connecting, setConnecting] = useState(false)
   const [loadingData, setLoadingData] = useState(false)
   const [error, setError] = useState('')
@@ -105,14 +122,42 @@ export default function FinancesBankTestPage({ bankDefault }: Props) {
     }
   }, [isError, statusMessage])
 
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoadingBanks(true)
+      try {
+        const res = await fetch('/api/bank/test/banks')
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'No se pudo cargar el listado de bancos')
+        const list: Aspsp[] = Array.isArray(data.aspsps) ? data.aspsps : []
+        if (!cancelled) {
+          setBanks(list)
+          setSelectedBank(pickDefaultBank(list))
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Error al cargar bancos')
+        }
+      } finally {
+        if (!cancelled) setLoadingBanks(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   const primaryBalance = useMemo(() => extractPrimaryBalance(balances), [balances])
   const txRows = useMemo(() => extractTransactions(transactions), [transactions])
 
   const connectBank = useCallback(async () => {
+    if (!selectedBank) {
+      setError('Selecciona un banco de la lista')
+      return
+    }
     setConnecting(true)
     setError('')
     try {
-      const res = await fetch(`/api/bank/test/start?bank=${encodeURIComponent(bankDefault)}`)
+      const res = await fetch(`/api/bank/test/start?bank=${encodeURIComponent(selectedBank)}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'No se pudo iniciar la conexión')
       if (!data.url) throw new Error('Respuesta sin URL de autorización')
@@ -121,7 +166,7 @@ export default function FinancesBankTestPage({ bankDefault }: Props) {
       setError(e instanceof Error ? e.message : 'Error de conexión')
       setConnecting(false)
     }
-  }, [bankDefault])
+  }, [selectedBank])
 
   const loadData = useCallback(async () => {
     setLoadingData(true)
@@ -191,13 +236,37 @@ export default function FinancesBankTestPage({ bankDefault }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500">Banco (nombre exacto de Enable Banking)</p>
+              {loadingBanks ? (
+                <p className="text-sm text-gray-400 flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando bancos…
+                </p>
+              ) : banks.length === 0 ? (
+                <p className="text-sm text-gray-400">No hay bancos disponibles para empresa (AIS).</p>
+              ) : (
+                <Select value={selectedBank} onValueChange={setSelectedBank}>
+                  <SelectTrigger className="h-10 rounded-xl border-gray-200 bg-white shadow-sm max-w-md">
+                    <SelectValue placeholder="Selecciona un banco" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-gray-200 shadow-lg max-h-72">
+                    {banks.map((b) => (
+                      <SelectItem key={`${b.country}-${b.name}`} value={b.name}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
             <p className="text-sm text-gray-500">
-              Inicia el flujo OAuth con {bankDefault}. Serás redirigido al banco para autorizar el acceso de lectura.
+              Inicia el flujo OAuth. Serás redirigido al banco para autorizar el acceso de lectura.
             </p>
             <div className="flex flex-wrap gap-3">
               <Button
                 onClick={connectBank}
-                disabled={connecting}
+                disabled={connecting || loadingBanks || !selectedBank}
                 className="bg-gray-900 hover:bg-gray-800"
               >
                 {connecting ? (
@@ -205,7 +274,7 @@ export default function FinancesBankTestPage({ bankDefault }: Props) {
                 ) : (
                   <Landmark className="h-4 w-4 mr-2" />
                 )}
-                Conectar {bankDefault}
+                Conectar banco
               </Button>
               {isOk && (
                 <Button variant="outline" onClick={loadData} disabled={loadingData}>

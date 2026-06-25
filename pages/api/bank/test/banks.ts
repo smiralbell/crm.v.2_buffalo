@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createEnableBankingJwt } from '@/lib/enable-banking/jwt'
 
-const ASPSPS_URL = 'https://api.enablebanking.com/aspsps?country=ES'
+const ASPSPS_URL = 'https://api.enablebanking.com/aspsps?country=ES&psu_type=business&service=AIS'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
