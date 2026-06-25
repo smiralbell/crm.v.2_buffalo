@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { TICKETS_WEBHOOK_TOKEN } from '@/lib/tickets/config'
-import { ensureTicketTables } from '@/lib/tickets/ensure-tables'
 import { ingestTicketPayload } from '@/lib/tickets/ingest'
 import { insertTicket, resolveProjectFromPayload } from '@/lib/tickets/store'
 
@@ -25,8 +24,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    await ensureTicketTables()
-
     const body = req.body
     if (!body || typeof body !== 'object') {
       return res.status(400).json({ error: 'Body JSON requerido' })
