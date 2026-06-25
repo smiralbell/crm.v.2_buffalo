@@ -517,6 +517,8 @@ model Proyecto {
   lead_id               Int?      @unique
   contact_id            Int?
   config_ref            String?
+  ticket_callback_url   String?
+  ticket_callback_token String?
 
   created_at            DateTime  @default(now()) @db.Timestamptz(6)
   updated_at            DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
@@ -659,6 +661,7 @@ model Ticket {
   updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   proyecto       Proyecto @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  updates        TicketUpdate[]
 
   @@index([project_id])
   @@index([status])
@@ -681,4 +684,20 @@ model TicketFieldDiscovery {
   @@unique([project_id, field_key])
   @@index([project_id])
   @@map("ticket_field_discoveries")
+}
+
+model TicketUpdate {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticket_id      String   @db.Uuid
+  author_name    String?
+  message        String
+  status         String?
+  is_from_client Boolean  @default(false)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+
+  ticket         Ticket   @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+
+  @@index([ticket_id])
+  @@index([created_at])
+  @@map("ticket_updates")
 }

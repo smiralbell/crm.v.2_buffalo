@@ -4,13 +4,9 @@ import { useRouter } from 'next/router'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  ArrowLeft, Ticket, User, Mail, Calendar, Copy, Check,
-  AlertCircle, Code2, Layers,
-} from 'lucide-react'
+import { ArrowLeft, AlertCircle, Send } from 'lucide-react'
 import {
   flattenCustomFieldsForDisplay,
   PRIORITY_LABELS,
@@ -21,21 +17,24 @@ import {
 
 interface TicketDetail {
   id: string
-  project_id: string
   project_name: string
-  config_ref: string | null
   title: string
   description: string | null
   priority: string
   status: string
   reporter_name: string | null
   reporter_email: string | null
-  source: string
-  external_id: string | null
-  payload: Record<string, unknown>
   custom_fields: Record<string, unknown>
   created_at: string
-  updated_at: string
+}
+
+interface TicketUpdate {
+  id: string
+  author_name: string | null
+  message: string
+  status: string | null
+  is_from_client: boolean
+  created_at: string
 }
 
 const priorityClass: Record<string, string> = {
@@ -43,6 +42,13 @@ const priorityClass: Record<string, string> = {
   medium: 'bg-blue-50 text-blue-800',
   high: 'bg-amber-50 text-amber-800',
   critical: 'bg-red-50 text-red-800',
+}
+
+const statusClass: Record<string, string> = {
+  open: 'bg-sky-50 text-sky-800',
+  in_progress: 'bg-violet-50 text-violet-800',
+  resolved: 'bg-emerald-50 text-emerald-800',
+  closed: 'bg-gray-100 text-gray-600',
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -59,11 +65,13 @@ export default function TicketDetailPage() {
   const { id } = router.query
 
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
-  const [webhookUrl, setWebhookUrl] = useState('')
+  const [updates, setUpdates] = useState<TicketUpdate[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [copied, setCopied] = useState<'ref' | 'url' | null>(null)
-  const [savingStatus, setSavingStatus] = useState(false)
+  const [reply, setReply] = useState('')
+  const [replyStatus, setReplyStatus] = useState('')
+  const [sending, setSending] = useState(false)
+  const [notifyWarning, setNotifyWarning] = useState('')
 
   const load = useCallback(async () => {
     if (!id || typeof id !== 'string') return
@@ -74,7 +82,8 @@ export default function TicketDetailPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al cargar')
       setTicket(data.ticket)
-      setWebhookUrl(data.webhook_url || '')
+      setUpdates(data.updates || [])
+      setReplyStatus(data.ticket?.status || '')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar')
     } finally {
@@ -91,17 +100,47 @@ export default function TicketDetailPage() {
     return flattenCustomFieldsForDisplay(ticket.custom_fields || {})
   }, [ticket])
 
-  const copy = async (text: string, which: 'ref' | 'url') => {
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleString('es-ES', {
+      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+    })
+
+  const sendReply = async () => {
+    if (!ticket || !reply.trim()) return
+    setSending(true)
+    setError('')
+    setNotifyWarning('')
     try {
-      await navigator.clipboard.writeText(text)
-      setCopied(which)
-      setTimeout(() => setCopied(null), 2000)
-    } catch { /* ignore */ }
+      const body: { message: string; status?: string } = { message: reply.trim() }
+      if (replyStatus && replyStatus !== ticket.status) body.status = replyStatus
+
+      const res = await fetch(`/api/tickets/${ticket.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al enviar')
+
+      setTicket((t) => (t ? { ...t, status: data.status || t.status } : t))
+      setUpdates(data.updates || [])
+      setReply('')
+
+      if (data.notify && !data.notify.sent && data.notify.error) {
+        setNotifyWarning(data.notify.error)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al enviar')
+    } finally {
+      setSending(false)
+    }
   }
 
-  const updateStatus = async (status: string) => {
-    if (!ticket) return
-    setSavingStatus(true)
+  const setStatusOnly = async (status: string) => {
+    if (!ticket || ticket.status === status) return
+    setSending(true)
+    setError('')
+    setNotifyWarning('')
     try {
       const res = await fetch(`/api/tickets/${ticket.id}`, {
         method: 'PATCH',
@@ -111,33 +150,42 @@ export default function TicketDetailPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error')
       setTicket((t) => (t ? { ...t, status } : t))
+      setReplyStatus(status)
+      if (data.notify && !data.notify.sent && data.notify.error) {
+        setNotifyWarning(data.notify.error)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al actualizar')
     } finally {
-      setSavingStatus(false)
+      setSending(false)
     }
   }
 
-  const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleString('es-ES', {
-      day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
-    })
-
   return (
     <Layout>
-      <div className="space-y-6 max-w-5xl">
-        <div className="flex items-center gap-3">
+      <div className="space-y-5 max-w-3xl mx-auto">
+        <div className="flex items-start gap-3">
           <Link
             href="/tickets"
-            className="inline-flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50"
+            className="inline-flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 shrink-0 mt-1"
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-gray-400 uppercase tracking-wide">Ticket</p>
-            <h1 className="text-xl font-semibold text-gray-900 truncate">
+            <h1 className="text-xl font-semibold text-gray-900 leading-snug">
               {ticket?.title || 'Cargando…'}
             </h1>
+            {ticket && (
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <span className="text-sm text-gray-500">{ticket.project_name}</span>
+                <Badge className={priorityClass[ticket.priority] || priorityClass.medium}>
+                  {PRIORITY_LABELS[ticket.priority as TicketPriority] || ticket.priority}
+                </Badge>
+                <Badge className={statusClass[ticket.status] || statusClass.open}>
+                  {STATUS_LABELS[ticket.status as TicketStatus] || ticket.status}
+                </Badge>
+              </div>
+            )}
           </div>
         </div>
 
@@ -150,26 +198,22 @@ export default function TicketDetailPage() {
           </div>
         )}
 
+        {notifyWarning && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Respuesta guardada, pero no se pudo notificar al cliente: {notifyWarning}
+          </div>
+        )}
+
         {ticket && (
           <>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className={priorityClass[ticket.priority] || priorityClass.medium}>
-                {PRIORITY_LABELS[ticket.priority as TicketPriority] || ticket.priority}
-              </Badge>
-              <Badge variant="secondary">{STATUS_LABELS[ticket.status as TicketStatus] || ticket.status}</Badge>
-              {ticket.external_id && (
-                <span className="text-xs font-mono text-gray-400">#{ticket.external_id}</span>
-              )}
-            </div>
-
             <div className="flex flex-wrap gap-2">
               {(['open', 'in_progress', 'resolved', 'closed'] as const).map((s) => (
                 <Button
                   key={s}
                   size="sm"
                   variant={ticket.status === s ? 'default' : 'outline'}
-                  disabled={savingStatus || ticket.status === s}
-                  onClick={() => updateStatus(s)}
+                  disabled={sending || ticket.status === s}
+                  onClick={() => setStatusOnly(s)}
                   className={ticket.status === s ? 'bg-gray-900' : ''}
                 >
                   {STATUS_LABELS[s]}
@@ -177,154 +221,83 @@ export default function TicketDetailPage() {
               ))}
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card className="border border-gray-200 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Ticket className="h-4 w-4 text-gray-400" />
-                    Detalle
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
-                  {ticket.description && (
-                    <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{ticket.description}</p>
-                  )}
-                  <dl className="space-y-2">
-                    <div className="flex justify-between gap-4">
-                      <dt className="text-gray-400">Proyecto</dt>
-                      <dd className="font-medium text-gray-900 text-right">{ticket.project_name}</dd>
-                    </div>
-                    {ticket.config_ref && (
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-gray-400">Referencia</dt>
-                        <dd className="font-mono text-xs text-gray-700">{ticket.config_ref}</dd>
-                      </div>
-                    )}
-                    <div className="flex justify-between gap-4">
-                      <dt className="text-gray-400 flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Recibido</dt>
-                      <dd className="text-gray-900">{fmtDate(ticket.created_at)}</dd>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <dt className="text-gray-400">Origen</dt>
-                      <dd className="text-gray-900">{ticket.source}</dd>
-                    </div>
-                  </dl>
-                </CardContent>
-              </Card>
+            <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
+              <div className="p-4">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <p className="text-sm font-medium text-gray-900">
+                    {ticket.reporter_name || ticket.reporter_email || 'Cliente'}
+                  </p>
+                  <span className="text-xs text-gray-400">{fmtDate(ticket.created_at)}</span>
+                </div>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  {ticket.description || 'Sin descripción'}
+                </p>
+              </div>
 
-              <Card className="border border-gray-200 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <User className="h-4 w-4 text-gray-400" />
-                    Reportado por
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  {ticket.reporter_name && (
-                    <p className="font-medium text-gray-900">{ticket.reporter_name}</p>
-                  )}
-                  {ticket.reporter_email && (
-                    <p className="flex items-center gap-1.5 text-gray-600">
-                      <Mail className="h-3.5 w-3.5" />
-                      <a href={`mailto:${ticket.reporter_email}`} className="hover:underline">
-                        {ticket.reporter_email}
-                      </a>
+              {fieldRows.length > 0 && (
+                <div className="px-4 py-3 bg-gray-50/50">
+                  <p className="text-xs font-medium text-gray-500 mb-2">Datos del cliente</p>
+                  <div className="flex flex-wrap gap-2">
+                    {fieldRows.map((row) => (
+                      <span
+                        key={row.key}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs"
+                      >
+                        <span className="text-gray-400">{row.key}:</span>
+                        <span className="text-gray-800 max-w-[200px] truncate">{row.value}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {updates.map((u) => (
+                <div key={u.id} className={`p-4 ${u.is_from_client ? '' : 'bg-sky-50/40'}`}>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-sm font-medium text-gray-900">
+                      {u.author_name || (u.is_from_client ? 'Cliente' : 'Buffalo')}
+                    </p>
+                    <span className="text-xs text-gray-400">{fmtDate(u.created_at)}</span>
+                  </div>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{u.message}</p>
+                  {u.status && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Estado → {STATUS_LABELS[u.status as TicketStatus] || u.status}
                     </p>
                   )}
-                  {!ticket.reporter_name && !ticket.reporter_email && (
-                    <p className="text-gray-400">Sin datos del reportador</p>
-                  )}
-                </CardContent>
-              </Card>
+                </div>
+              ))}
             </div>
 
-            <Card className="border border-gray-200 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-gray-400" />
-                  Campos del cliente
-                  <span className="text-xs font-normal text-gray-400">(dinámicos)</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {fieldRows.length === 0 ? (
-                  <p className="text-sm text-gray-400">No se enviaron campos adicionales en `fields`.</p>
-                ) : (
-                  <div className="overflow-x-auto rounded-xl border border-gray-100">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b bg-gray-50 text-gray-500">
-                          <th className="text-left font-medium px-4 py-2.5 w-1/3">Campo</th>
-                          <th className="text-left font-medium px-4 py-2.5">Valor</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {fieldRows.map((row) => (
-                          <tr key={row.key} className="border-b border-gray-50 last:border-0">
-                            <td className="px-4 py-2.5 font-mono text-xs text-gray-600">{row.key}</td>
-                            <td className="px-4 py-2.5 text-gray-900 break-all">{row.value}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border border-gray-200 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Code2 className="h-4 w-4 text-gray-400" />
-                  Integración webhook
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                <p className="text-gray-500 text-xs">
-                  Todos los proyectos usan la misma URL. Este ticket pertenece al proyecto indicado en{' '}
-                  <code className="text-gray-700">project_ref</code>.
-                </p>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">URL (única para todos)</p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 rounded-lg border bg-gray-50 px-3 py-2 text-xs break-all">
-                      {webhookUrl}
-                    </code>
-                    <Button type="button" variant="outline" size="icon" onClick={() => copy(webhookUrl, 'url')}>
-                      {copied === 'url' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">project_ref de este proyecto</p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 rounded-lg border bg-gray-50 px-3 py-2 text-xs break-all font-mono">
-                      {ticket.config_ref || ticket.project_id}
-                    </code>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => copy(ticket.config_ref || ticket.project_id, 'ref')}
-                    >
-                      {copied === 'ref' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-400">
-                  Guía para desarrolladores: <code>docs/TICKETS_WEBHOOK.md</code>
-                </p>
-              </CardContent>
-            </Card>
-
-            <details className="rounded-xl border border-gray-200 bg-white">
-              <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-gray-600">
-                Ver payload JSON completo
-              </summary>
-              <pre className="px-5 pb-5 text-xs text-gray-700 overflow-x-auto font-mono">
-                {JSON.stringify(ticket.payload, null, 2)}
-              </pre>
-            </details>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+              <p className="text-sm font-medium text-gray-900">Responder al cliente</p>
+              <textarea
+                value={reply}
+                onChange={(e) => setReply(e.target.value)}
+                rows={4}
+                placeholder="Escribe tu respuesta…"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-y min-h-[100px]"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <select
+                  value={replyStatus}
+                  onChange={(e) => setReplyStatus(e.target.value)}
+                  className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700"
+                >
+                  {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+                <Button
+                  onClick={sendReply}
+                  disabled={sending || !reply.trim()}
+                  className="bg-gray-900 hover:bg-gray-800"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Enviar respuesta
+                </Button>
+              </div>
+            </div>
           </>
         )}
       </div>

@@ -1,13 +1,21 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { getTicketsWebhookUrl } from '@/lib/tickets/config'
+import { notifyClientTicketUpdate } from '@/lib/tickets/notify'
+import {
+  getTicketWithProject,
+  insertTicketUpdate,
+  listTicketUpdates,
+  updateTicketStatus,
+  type TicketUpdateRow,
+} from '@/lib/tickets/updates'
 
 const VALID_STATUS = new Set(['open', 'in_progress', 'resolved', 'closed'])
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  let userEmail = 'Buffalo'
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
+    userEmail = user.email
   } catch {
     return
   }
@@ -17,57 +25,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     try {
-      const rows = await prisma.$queryRaw<
-        {
-          id: string
-          project_id: string
-          project_name: string
-          config_ref: string | null
-          title: string
-          description: string | null
-          priority: string
-          status: string
-          reporter_name: string | null
-          reporter_email: string | null
-          source: string
-          external_id: string | null
-          payload: unknown
-          custom_fields: unknown
-          created_at: Date
-          updated_at: Date
-        }[]
-      >`
-        SELECT
-          t.id, t.project_id, p.name AS project_name, p.config_ref,
-          t.title, t.description, t.priority, t.status,
-          t.reporter_name, t.reporter_email, t.source, t.external_id,
-          t.payload, t.custom_fields, t.created_at, t.updated_at
-        FROM tickets t
-        JOIN proyectos p ON p.id = t.project_id
-        WHERE t.id = ${id}::uuid
-        LIMIT 1
-      `
-
-      const row = rows[0]
+      const row = await getTicketWithProject(id)
       if (!row) return res.status(404).json({ error: 'Ticket no encontrado' })
 
-      const fields = await prisma.$queryRaw<
-        { field_key: string; sample_value: string | null; occurrence_count: number }[]
-      >`
-        SELECT field_key, sample_value, occurrence_count
-        FROM ticket_field_discoveries
-        WHERE project_id = ${row.project_id}::uuid
-        ORDER BY occurrence_count DESC, field_key
-      `
+      let updates: TicketUpdateRow[] = []
+      try {
+        updates = await listTicketUpdates(id)
+      } catch {
+        updates = []
+      }
 
       return res.status(200).json({
         ticket: {
-          ...row,
+          id: row.id,
+          project_id: row.project_id,
+          project_name: row.project_name,
+          config_ref: row.config_ref,
+          title: row.title,
+          description: row.description,
+          priority: row.priority,
+          status: row.status,
+          reporter_name: row.reporter_name,
+          reporter_email: row.reporter_email,
+          external_id: row.external_id,
+          custom_fields: row.custom_fields,
           created_at: row.created_at.toISOString(),
           updated_at: row.updated_at.toISOString(),
         },
-        discovered_fields: fields,
-        webhook_url: getTicketsWebhookUrl(req),
+        updates: updates.map((u) => ({
+          id: u.id,
+          author_name: u.author_name,
+          message: u.message,
+          status: u.status,
+          is_from_client: u.is_from_client,
+          created_at: u.created_at.toISOString(),
+        })),
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error interno'
@@ -77,20 +69,86 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'PATCH') {
-    const { status } = req.body || {}
-    if (!status || !VALID_STATUS.has(status)) {
+    const { status, message } = req.body || {}
+
+    if (status && !VALID_STATUS.has(status)) {
       return res.status(400).json({
         error: 'status inválido',
         allowed: Array.from(VALID_STATUS),
       })
     }
 
+    const replyMessage = typeof message === 'string' ? message.trim() : ''
+    if (!status && !replyMessage) {
+      return res.status(400).json({ error: 'Indica status y/o message' })
+    }
+
     try {
-      await prisma.$executeRaw`
-        UPDATE tickets SET status = ${status}, updated_at = NOW()
-        WHERE id = ${id}::uuid
-      `
-      return res.status(200).json({ ok: true, status })
+      const row = await getTicketWithProject(id)
+      if (!row) return res.status(404).json({ error: 'Ticket no encontrado' })
+
+      const nextStatus = status || row.status
+
+      if (status) {
+        await updateTicketStatus(id, status)
+      }
+
+      let notifyResult: { sent: boolean; error?: string } = { sent: false }
+
+      if (replyMessage) {
+        await insertTicketUpdate({
+          ticketId: id,
+          authorName: userEmail,
+          message: replyMessage,
+          status: status || null,
+        })
+
+        notifyResult = await notifyClientTicketUpdate({
+          callbackUrl: row.ticket_callback_url,
+          callbackToken: row.ticket_callback_token,
+          payload: {
+            event: 'ticket.updated',
+            ticket_id: row.id,
+            external_id: row.external_id,
+            project_ref: row.config_ref,
+            status: nextStatus,
+            message: replyMessage,
+            updated_by: userEmail,
+            updated_at: new Date().toISOString(),
+          },
+        })
+      } else if (status) {
+        notifyResult = await notifyClientTicketUpdate({
+          callbackUrl: row.ticket_callback_url,
+          callbackToken: row.ticket_callback_token,
+          payload: {
+            event: 'ticket.updated',
+            ticket_id: row.id,
+            external_id: row.external_id,
+            project_ref: row.config_ref,
+            status: nextStatus,
+            message: `Estado actualizado a ${status}`,
+            updated_by: userEmail,
+            updated_at: new Date().toISOString(),
+          },
+        })
+      }
+
+      const updates = await listTicketUpdates(id).catch(() => [])
+
+      return res.status(200).json({
+        ok: true,
+        status: nextStatus,
+        notify: notifyResult,
+        updates: updates.map((u) => ({
+          id: u.id,
+          author_name: u.author_name,
+          message: u.message,
+          status: u.status,
+          is_from_client: u.is_from_client,
+          created_at: u.created_at.toISOString(),
+        })),
+      })
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error interno'
       return res.status(500).json({ error: msg })

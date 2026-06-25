@@ -6,7 +6,7 @@ import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Ticket, RefreshCw, AlertCircle } from 'lucide-react'
+import { Ticket, RefreshCw, AlertCircle, Settings } from 'lucide-react'
 import { PRIORITY_LABELS, STATUS_LABELS, type TicketPriority, type TicketStatus } from '@/lib/tickets/ingest'
 
 interface TicketRow {
@@ -56,7 +56,6 @@ export default function TicketsPage() {
   const router = useRouter()
   const [tickets, setTickets] = useState<TicketRow[]>([])
   const [projects, setProjects] = useState<ProjectFilter[]>([])
-  const [webhookUrl, setWebhookUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -74,7 +73,6 @@ export default function TicketsPage() {
       if (!res.ok) throw new Error(data.error || 'Error al cargar')
       setTickets(data.tickets || [])
       setProjects(data.projects || [])
-      setWebhookUrl(data.webhook_url || '')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar')
       setTickets([])
@@ -99,26 +97,30 @@ export default function TicketsPage() {
           <div>
             <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
               <Ticket className="h-5 w-5 text-gray-400" />
-              Tickets
+              Incidencias
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Incidencias recibidas en el webhook único de Buffalo.
+              Tickets recibidos desde los dashboards de clientes.
             </p>
-            {webhookUrl && (
-              <p className="text-xs text-gray-400 mt-2 font-mono break-all">
-                POST {webhookUrl}
-              </p>
-            )}
           </div>
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:bg-gray-50 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/tickets/config"
+              className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:bg-gray-50"
+            >
+              <Settings className="h-4 w-4" />
+              Configurar respuestas
+            </Link>
+            <button
+              type="button"
+              onClick={load}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:bg-gray-50 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Actualizar
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-3">
@@ -154,15 +156,12 @@ export default function TicketsPage() {
         )}
 
         <Card className="border border-gray-200 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg">Incidencias</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto p-0 sm:p-6 sm:pt-0">
+          <CardContent className="overflow-x-auto p-0 sm:p-6 sm:pt-6">
             {loading ? (
               <div className="py-16 text-center text-sm text-gray-400">Cargando…</div>
             ) : tickets.length === 0 ? (
               <div className="py-16 text-center text-sm text-gray-400 px-6">
-                No hay tickets todavía. Cuando un dashboard de cliente envíe una incidencia al webhook, aparecerá aquí.
+                No hay incidencias todavía.
               </div>
             ) : (
               <table className="w-full min-w-[720px] text-left text-sm">
@@ -188,12 +187,7 @@ export default function TicketsPage() {
                           {t.title}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        <div>{t.project_name}</div>
-                        {t.config_ref && (
-                          <div className="text-[11px] font-mono text-gray-400">{t.config_ref}</div>
-                        )}
-                      </td>
+                      <td className="px-4 py-3 text-gray-700">{t.project_name}</td>
                       <td className="px-4 py-3">
                         <Badge className={priorityClass[t.priority] || priorityClass.medium}>
                           {PRIORITY_LABELS[t.priority as TicketPriority] || t.priority}

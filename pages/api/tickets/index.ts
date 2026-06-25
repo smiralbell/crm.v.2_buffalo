@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getTicketsWebhookUrl } from '@/lib/tickets/config'
 
 type TicketRow = {
   id: string
@@ -121,7 +120,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         config_ref: p.config_ref,
         ticket_count: Number(p.ticket_count),
       })),
-      webhook_url: getTicketsWebhookUrl(req),
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error interno'
