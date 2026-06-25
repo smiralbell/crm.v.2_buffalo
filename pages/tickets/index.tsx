@@ -6,6 +6,13 @@ import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { RefreshCw, AlertCircle, Settings, FolderKanban, Clock } from 'lucide-react'
 import { PRIORITY_LABELS, STATUS_LABELS, type TicketPriority, type TicketStatus } from '@/lib/tickets/ingest'
 
@@ -106,6 +113,38 @@ export default function TicketsPage() {
     <Layout>
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <Select
+            value={statusFilter || 'all'}
+            onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}
+          >
+            <SelectTrigger className="h-10 w-[min(100%,200px)] sm:w-[200px] rounded-xl border-gray-200 bg-white text-gray-700 shadow-sm focus:ring-gray-300">
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-gray-200 shadow-lg">
+              <SelectItem value="all">Todos los estados</SelectItem>
+              {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                <SelectItem key={k} value={k}>{v}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={projectFilter || 'all'}
+            onValueChange={(v) => setProjectFilter(v === 'all' ? '' : v)}
+          >
+            <SelectTrigger className="h-10 w-[min(100%,240px)] sm:w-[240px] rounded-xl border-gray-200 bg-white text-gray-700 shadow-sm focus:ring-gray-300">
+              <SelectValue placeholder="Proyecto" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-gray-200 shadow-lg max-h-72">
+              <SelectItem value="all">Todos los proyectos</SelectItem>
+              {projects.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name} ({p.ticket_count})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Link
             href="/tickets/config"
             className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:bg-gray-50"
@@ -177,31 +216,6 @@ export default function TicketsPage() {
             </div>
           </div>
         )}
-
-        <div className="flex flex-wrap gap-3">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700"
-          >
-            <option value="">Todos los estados</option>
-            {Object.entries(STATUS_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-          <select
-            value={projectFilter}
-            onChange={(e) => setProjectFilter(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 min-w-[200px]"
-          >
-            <option value="">Todos los proyectos</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.ticket_count})
-              </option>
-            ))}
-          </select>
-        </div>
 
         {error && (
           <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
