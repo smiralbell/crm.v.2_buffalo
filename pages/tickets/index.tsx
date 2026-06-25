@@ -6,7 +6,7 @@ import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { RefreshCw, AlertCircle, Settings } from 'lucide-react'
+import { RefreshCw, AlertCircle, Settings, FolderKanban, Clock } from 'lucide-react'
 import { PRIORITY_LABELS, STATUS_LABELS, type TicketPriority, type TicketStatus } from '@/lib/tickets/ingest'
 
 interface TicketRow {
@@ -26,6 +26,17 @@ interface ProjectFilter {
   name: string
   config_ref: string | null
   ticket_count: number
+}
+
+interface TicketStats {
+  total: number
+  unresolved: number
+  open: number
+  in_progress: number
+  resolved: number
+  closed: number
+  projects_with_tickets: number
+  last_7_days: number
 }
 
 const priorityClass: Record<string, string> = {
@@ -55,6 +66,7 @@ export default function TicketsPage() {
   const router = useRouter()
   const [tickets, setTickets] = useState<TicketRow[]>([])
   const [projects, setProjects] = useState<ProjectFilter[]>([])
+  const [stats, setStats] = useState<TicketStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -72,6 +84,7 @@ export default function TicketsPage() {
       if (!res.ok) throw new Error(data.error || 'Error al cargar')
       setTickets(data.tickets || [])
       setProjects(data.projects || [])
+      setStats(data.stats || null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar')
       setTickets([])
@@ -110,6 +123,60 @@ export default function TicketsPage() {
             Actualizar
           </button>
         </div>
+
+        {stats && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('')}
+              className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+            >
+              <p className="text-xs text-gray-500">Total</p>
+              <p className="text-2xl font-semibold text-gray-900 mt-0.5">{stats.total}</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('open')}
+              className="rounded-xl border border-sky-100 bg-sky-50/50 px-4 py-3 text-left hover:bg-sky-50 transition-colors"
+            >
+              <p className="text-xs text-sky-700">Sin resolver</p>
+              <p className="text-2xl font-semibold text-sky-900 mt-0.5">{stats.unresolved}</p>
+              <p className="text-[11px] text-sky-600/80 mt-0.5">
+                {stats.open} abiertos · {stats.in_progress} en progreso
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('resolved')}
+              className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 text-left hover:bg-emerald-50 transition-colors"
+            >
+              <p className="text-xs text-emerald-700">Resueltos</p>
+              <p className="text-2xl font-semibold text-emerald-900 mt-0.5">{stats.resolved}</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('closed')}
+              className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-left hover:bg-gray-100/80 transition-colors"
+            >
+              <p className="text-xs text-gray-500">Cerrados</p>
+              <p className="text-2xl font-semibold text-gray-900 mt-0.5">{stats.closed}</p>
+            </button>
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+              <p className="text-xs text-gray-500 flex items-center gap-1">
+                <FolderKanban className="h-3 w-3" />
+                Proyectos
+              </p>
+              <p className="text-2xl font-semibold text-gray-900 mt-0.5">{stats.projects_with_tickets}</p>
+            </div>
+            <div className="rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-3">
+              <p className="text-xs text-violet-700 flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Últimos 7 días
+              </p>
+              <p className="text-2xl font-semibold text-violet-900 mt-0.5">{stats.last_7_days}</p>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-3">
           <select

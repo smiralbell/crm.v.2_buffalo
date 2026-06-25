@@ -121,3 +121,65 @@ export async function countTickets(params: {
     SELECT COUNT(*)::bigint AS count FROM tickets`
   return Number(c[0]?.count ?? 0)
 }
+
+export type TicketStats = {
+  total: number
+  unresolved: number
+  open: number
+  in_progress: number
+  resolved: number
+  closed: number
+  projects_with_tickets: number
+  last_7_days: number
+}
+
+const EMPTY_STATS: TicketStats = {
+  total: 0,
+  unresolved: 0,
+  open: 0,
+  in_progress: 0,
+  resolved: 0,
+  closed: 0,
+  projects_with_tickets: 0,
+  last_7_days: 0,
+}
+
+export async function getTicketStats(): Promise<TicketStats> {
+  const rows = await prisma.$queryRaw<
+    {
+      total: bigint
+      unresolved: bigint
+      open_count: bigint
+      in_progress_count: bigint
+      resolved_count: bigint
+      closed_count: bigint
+      projects_with_tickets: bigint
+      last_7_days: bigint
+    }[]
+  >`
+    SELECT
+      COUNT(*)::bigint AS total,
+      COUNT(*) FILTER (WHERE status IN ('open', 'in_progress'))::bigint AS unresolved,
+      COUNT(*) FILTER (WHERE status = 'open')::bigint AS open_count,
+      COUNT(*) FILTER (WHERE status = 'in_progress')::bigint AS in_progress_count,
+      COUNT(*) FILTER (WHERE status = 'resolved')::bigint AS resolved_count,
+      COUNT(*) FILTER (WHERE status = 'closed')::bigint AS closed_count,
+      COUNT(DISTINCT project_id)::bigint AS projects_with_tickets,
+      COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')::bigint AS last_7_days
+    FROM tickets
+  `
+
+  const r = rows[0]
+  if (!r) return EMPTY_STATS
+
+  return {
+    total: Number(r.total),
+    unresolved: Number(r.unresolved),
+    open: Number(r.open_count),
+    in_progress: Number(r.in_progress_count),
+    resolved: Number(r.resolved_count),
+    closed: Number(r.closed_count),
+    projects_with_tickets: Number(r.projects_with_tickets),
+    last_7_days: Number(r.last_7_days),
+  }
+}

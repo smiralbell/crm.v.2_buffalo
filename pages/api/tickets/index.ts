@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { countTickets, listTickets, truncateClientSummary } from '@/lib/tickets/list'
+import { countTickets, getTicketStats, listTickets, truncateClientSummary } from '@/lib/tickets/list'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -22,6 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const rows = await listTickets({ status, projectId, limit, offset })
     const total = await countTickets({ status, projectId })
+    const stats = await getTicketStats().catch(() => null)
 
     const projects = await prisma.$queryRaw<
       { id: string; name: string; config_ref: string | null; ticket_count: bigint }[]
@@ -47,6 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         created_at: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
       })),
       total,
+      stats,
       projects: projects.map((p) => ({
         id: p.id,
         name: p.name,
@@ -57,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error interno'
     if (msg.includes('relation "tickets" does not exist')) {
-      return res.status(200).json({ tickets: [], total: 0, projects: [] })
+      return res.status(200).json({ tickets: [], total: 0, stats: null, projects: [] })
     }
     if (process.env.NODE_ENV === 'development') console.error('[tickets/index]', err)
     return res.status(500).json({ error: msg })
