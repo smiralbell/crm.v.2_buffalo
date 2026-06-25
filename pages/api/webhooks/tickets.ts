@@ -1,42 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { prisma } from '@/lib/prisma'
 import { TICKETS_WEBHOOK_TOKEN } from '@/lib/tickets/config'
+import { ensureTicketTables } from '@/lib/tickets/ensure-tables'
 import { ingestTicketPayload } from '@/lib/tickets/ingest'
 import { insertTicket, resolveProjectFromPayload } from '@/lib/tickets/store'
-
-async function ensureTicketTables(): Promise<void> {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS tickets (
-      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      project_id      UUID NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
-      title           TEXT NOT NULL,
-      description     TEXT,
-      priority        TEXT NOT NULL DEFAULT 'medium',
-      status          TEXT NOT NULL DEFAULT 'open',
-      reporter_name   TEXT,
-      reporter_email  TEXT,
-      source          TEXT NOT NULL DEFAULT 'dashboard',
-      external_id     TEXT,
-      payload         JSONB NOT NULL DEFAULT '{}',
-      custom_fields   JSONB NOT NULL DEFAULT '{}',
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_tickets_project_id ON tickets(project_id);
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_tickets_project_external
-      ON tickets(project_id, external_id) WHERE external_id IS NOT NULL;
-    CREATE TABLE IF NOT EXISTS ticket_field_discoveries (
-      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      project_id       UUID NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
-      field_key        TEXT NOT NULL,
-      sample_value     TEXT,
-      occurrence_count INTEGER NOT NULL DEFAULT 1,
-      first_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      last_seen_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE(project_id, field_key)
-    );
-  `)
-}
 
 /**
  * POST /api/webhooks/tickets
