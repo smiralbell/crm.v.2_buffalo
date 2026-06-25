@@ -523,6 +523,8 @@ model Proyecto {
 
   engranaje5_data       Engranaje5Data[]
   engranaje5_kpis       Engranaje5Kpi[]
+  tickets               Ticket[]
+  ticket_field_discoveries TicketFieldDiscovery[]
 
   @@index([client_id])
   @@index([contact_id])
@@ -630,4 +632,53 @@ model Engranaje5Kpi {
   @@unique([project_id, year, month, kpi_key])
   @@index([project_id])
   @@map("engranaje5_kpis")
+}
+
+// ============================================
+// TICKETS — Incidencias desde dashboards cliente
+// ============================================
+
+model Ticket {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id     String   @db.Uuid
+
+  title          String
+  description    String?
+  priority       String   @default("medium")
+  status         String   @default("open")
+
+  reporter_name  String?
+  reporter_email String?
+  source         String   @default("dashboard")
+  external_id    String?
+
+  payload        Json     @default("{}") @db.JsonB
+  custom_fields  Json     @default("{}") @db.JsonB
+
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  proyecto       Proyecto @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_id])
+  @@index([status])
+  @@index([priority])
+  @@index([created_at])
+  @@map("tickets")
+}
+
+model TicketFieldDiscovery {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  project_id       String   @db.Uuid
+  field_key        String
+  sample_value     String?
+  occurrence_count Int      @default(1)
+  first_seen_at    DateTime @default(now()) @db.Timestamptz(6)
+  last_seen_at     DateTime @default(now()) @db.Timestamptz(6)
+
+  proyecto         Proyecto @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, field_key])
+  @@index([project_id])
+  @@map("ticket_field_discoveries")
 }
