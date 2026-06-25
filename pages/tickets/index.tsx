@@ -17,8 +17,7 @@ interface TicketRow {
   title: string
   priority: string
   status: string
-  reporter_name: string | null
-  reporter_email: string | null
+  last_client_summary: string
   created_at: string
 }
 
@@ -160,7 +159,7 @@ export default function TicketsPage() {
                     <th className="px-4 py-3 font-medium">Proyecto</th>
                     <th className="px-4 py-3 font-medium">Prioridad</th>
                     <th className="px-4 py-3 font-medium">Estado</th>
-                    <th className="px-4 py-3 font-medium">Reportado por</th>
+                    <th className="px-4 py-3 font-medium">Último mensaje</th>
                     <th className="px-4 py-3 font-medium">Fecha</th>
                   </tr>
                 </thead>
@@ -187,8 +186,10 @@ export default function TicketsPage() {
                           {STATUS_LABELS[t.status as TicketStatus] || t.status}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {t.reporter_name || t.reporter_email || '—'}
+                      <td className="px-4 py-3 text-gray-600 max-w-[240px]">
+                        <span className="line-clamp-2 text-sm leading-snug">
+                          {t.last_client_summary}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(t.created_at)}</td>
                     </tr>

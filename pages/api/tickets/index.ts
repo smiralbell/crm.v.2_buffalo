@@ -1,24 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-
-type TicketRow = {
-  id: string
-  project_id: string
-  project_name: string
-  config_ref: string | null
-  title: string
-  description: string | null
-  priority: string
-  status: string
-  reporter_name: string | null
-  reporter_email: string | null
-  source: string
-  external_id: string | null
-  custom_fields: unknown
-  created_at: Date
-  updated_at: Date
-}
+import { countTickets, listTickets, truncateClientSummary } from '@/lib/tickets/list'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -37,64 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const limit = Math.min(parseInt(req.query.limit as string, 10) || 50, 100)
     const offset = parseInt(req.query.offset as string, 10) || 0
 
-    let rows: TicketRow[]
-
-    if (status && projectId) {
-      rows = await prisma.$queryRaw<TicketRow[]>`
-        SELECT t.id, t.project_id, p.name AS project_name, p.config_ref,
-          t.title, t.description, t.priority, t.status,
-          t.reporter_name, t.reporter_email, t.source, t.external_id,
-          t.custom_fields, t.created_at, t.updated_at
-        FROM tickets t JOIN proyectos p ON p.id = t.project_id
-        WHERE t.status = ${status} AND t.project_id = ${projectId}::uuid
-        ORDER BY t.created_at DESC LIMIT ${limit} OFFSET ${offset}`
-    } else if (status) {
-      rows = await prisma.$queryRaw<TicketRow[]>`
-        SELECT t.id, t.project_id, p.name AS project_name, p.config_ref,
-          t.title, t.description, t.priority, t.status,
-          t.reporter_name, t.reporter_email, t.source, t.external_id,
-          t.custom_fields, t.created_at, t.updated_at
-        FROM tickets t JOIN proyectos p ON p.id = t.project_id
-        WHERE t.status = ${status}
-        ORDER BY t.created_at DESC LIMIT ${limit} OFFSET ${offset}`
-    } else if (projectId) {
-      rows = await prisma.$queryRaw<TicketRow[]>`
-        SELECT t.id, t.project_id, p.name AS project_name, p.config_ref,
-          t.title, t.description, t.priority, t.status,
-          t.reporter_name, t.reporter_email, t.source, t.external_id,
-          t.custom_fields, t.created_at, t.updated_at
-        FROM tickets t JOIN proyectos p ON p.id = t.project_id
-        WHERE t.project_id = ${projectId}::uuid
-        ORDER BY t.created_at DESC LIMIT ${limit} OFFSET ${offset}`
-    } else {
-      rows = await prisma.$queryRaw<TicketRow[]>`
-        SELECT t.id, t.project_id, p.name AS project_name, p.config_ref,
-          t.title, t.description, t.priority, t.status,
-          t.reporter_name, t.reporter_email, t.source, t.external_id,
-          t.custom_fields, t.created_at, t.updated_at
-        FROM tickets t JOIN proyectos p ON p.id = t.project_id
-        ORDER BY t.created_at DESC LIMIT ${limit} OFFSET ${offset}`
-    }
-
-    let total = rows.length
-    if (status && projectId) {
-      const c = await prisma.$queryRaw<{ count: bigint }[]>`
-        SELECT COUNT(*)::bigint AS count FROM tickets
-        WHERE status = ${status} AND project_id = ${projectId}::uuid`
-      total = Number(c[0]?.count ?? 0)
-    } else if (status) {
-      const c = await prisma.$queryRaw<{ count: bigint }[]>`
-        SELECT COUNT(*)::bigint AS count FROM tickets WHERE status = ${status}`
-      total = Number(c[0]?.count ?? 0)
-    } else if (projectId) {
-      const c = await prisma.$queryRaw<{ count: bigint }[]>`
-        SELECT COUNT(*)::bigint AS count FROM tickets WHERE project_id = ${projectId}::uuid`
-      total = Number(c[0]?.count ?? 0)
-    } else {
-      const c = await prisma.$queryRaw<{ count: bigint }[]>`
-        SELECT COUNT(*)::bigint AS count FROM tickets`
-      total = Number(c[0]?.count ?? 0)
-    }
+    const rows = await listTickets({ status, projectId, limit, offset })
+    const total = await countTickets({ status, projectId })
 
     const projects = await prisma.$queryRaw<
       { id: string; name: string; config_ref: string | null; ticket_count: bigint }[]
@@ -109,9 +36,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       tickets: rows.map((r) => ({
-        ...r,
+        id: r.id,
+        project_id: r.project_id,
+        project_name: r.project_name,
+        config_ref: r.config_ref,
+        title: r.title,
+        priority: r.priority,
+        status: r.status,
+        last_client_summary: truncateClientSummary(r.last_client_message),
         created_at: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
-        updated_at: r.updated_at instanceof Date ? r.updated_at.toISOString() : String(r.updated_at),
       })),
       total,
       projects: projects.map((p) => ({
