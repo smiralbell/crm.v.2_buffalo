@@ -92,6 +92,25 @@ export interface AuthorizeSessionResponse {
   accounts?: SessionAccount[]
 }
 
+export interface AspspItem {
+  name: string
+  country: string
+  psu_types?: string[]
+}
+
+export async function listAspsps(country = 'ES'): Promise<AspspItem[]> {
+  const fetchList = async (query: string) => {
+    const data = await enableBankingRequest<{ aspsps?: AspspItem[] }>(`/aspsps?${query}`)
+    return data.aspsps ?? []
+  }
+
+  let list = await fetchList(`country=${country}&psu_type=business&service=AIS`)
+  if (!list.length) list = await fetchList(`country=${country}&service=AIS`)
+  if (!list.length) list = await fetchList(`country=${country}`)
+
+  return list.sort((a, b) => a.name.localeCompare(b.name, 'es'))
+}
+
 export async function startAuthorization(bankName: string): Promise<StartAuthResponse> {
   const { redirectUrl } = getEnableBankingConfig()
 
