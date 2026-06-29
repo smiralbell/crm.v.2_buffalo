@@ -503,58 +503,54 @@ export default function FinancesDashboard({
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  className="flex items-center gap-2"
-                  onClick={handleConnect}
-                  disabled={connecting || syncing}
-                >
-                  {connecting || syncing ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Landmark className="h-4 w-4" />
-                  )}
-                  {bankConnection.connected ? 'Reconectar CaixaBank' : 'Conectar CaixaBank'}
-                </Button>
-                {bankConnection.connected && (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => runSync(true)}
-                    disabled={syncing}
-                    title="Sincronizar movimientos"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-                  </Button>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              className="flex items-center gap-2"
+              onClick={handleConnect}
+              disabled={connecting || syncing}
+            >
+              {connecting || syncing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Landmark className="h-4 w-4" />
+              )}
+              {bankConnection.connected ? 'Reconectar CaixaBank' : 'Conectar CaixaBank'}
+            </Button>
+            {bankConnection.connected && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => runSync(true)}
+                disabled={syncing}
+                title="Sincronizar movimientos"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              </Button>
+            )}
+            {bankConnection.connected && bankConnection.days_remaining !== null && (
+              <p
+                className={`text-xs w-full sm:w-auto ${
+                  bankConnection.expires_soon ? 'text-red-600 font-medium' : 'text-gray-500'
+                }`}
+              >
+                {bankConnection.expires_soon ? (
+                  <>
+                    Quedan {bankConnection.days_remaining} día
+                    {bankConnection.days_remaining === 1 ? '' : 's'} para desconectarse — reconecta
+                    pronto
+                  </>
+                ) : (
+                  <>
+                    Conexión activa · quedan {bankConnection.days_remaining} día
+                    {bankConnection.days_remaining === 1 ? '' : 's'} para volver a conectar
+                  </>
                 )}
-              </div>
-              {bankConnection.connected && bankConnection.days_remaining !== null && (
-                <p
-                  className={`text-xs ${
-                    bankConnection.expires_soon ? 'text-red-600 font-medium' : 'text-gray-500'
-                  }`}
-                >
-                  {bankConnection.expires_soon ? (
-                    <>
-                      Quedan {bankConnection.days_remaining} día
-                      {bankConnection.days_remaining === 1 ? '' : 's'} para desconectarse — reconecta
-                      pronto
-                    </>
-                  ) : (
-                    <>
-                      Conexión activa · quedan {bankConnection.days_remaining} día
-                      {bankConnection.days_remaining === 1 ? '' : 's'} para volver a conectar
-                    </>
-                  )}
-                </p>
-              )}
-              {syncMessage && (
-                <p className="text-xs text-green-700">{syncMessage}</p>
-              )}
-            </div>
+              </p>
+            )}
+            {syncMessage && (
+              <p className="text-xs text-green-700 w-full sm:w-auto">{syncMessage}</p>
+            )}
           </div>
           <FinancePeriodFilter value={dateRange} onChange={handlePeriodChange} />
         </div>

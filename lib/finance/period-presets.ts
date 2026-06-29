@@ -27,14 +27,14 @@ export interface PeriodRange {
 }
 
 export const PERIOD_PRESETS: Array<{ id: PeriodPresetId; label: string }> = [
-  { id: '7d', label: '7 días' },
-  { id: '30d', label: '30 días' },
-  { id: '90d', label: '90 días' },
-  { id: 'month', label: 'Este mes' },
-  { id: 'prev_month', label: 'Mes anterior' },
-  { id: 'quarter', label: 'Trimestre' },
-  { id: 'year', label: 'Año en curso' },
-  { id: 'custom', label: 'Personalizado' },
+  { id: '7d', label: '7d' },
+  { id: '30d', label: '30d' },
+  { id: '90d', label: '90d' },
+  { id: 'month', label: 'Mes' },
+  { id: 'prev_month', label: 'Anterior' },
+  { id: 'quarter', label: 'Trim.' },
+  { id: 'year', label: 'Año' },
+  { id: 'custom', label: 'Rango' },
 ]
 
 export function getDefaultPeriodRange(now = new Date()): PeriodRange {

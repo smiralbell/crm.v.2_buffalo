@@ -44,15 +44,15 @@ export default function FinancePeriodFilter({ value, onChange, className }: Prop
   }
 
   return (
-    <div className={cn('flex flex-col gap-2 items-end', className)}>
-      <div className="flex flex-wrap gap-1.5 justify-end max-w-xl">
+    <div className={cn('flex flex-col gap-2 w-full min-w-0', className)}>
+      <div className="flex flex-nowrap items-center gap-1 w-full overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {PERIOD_PRESETS.map((preset) => (
           <button
             key={preset.id}
             type="button"
             onClick={() => applyPreset(preset.id)}
             className={cn(
-              'px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors',
+              'shrink-0 px-2 py-1 text-[11px] font-medium rounded-md border transition-colors whitespace-nowrap',
               activePreset === preset.id
                 ? 'bg-gray-900 text-white border-gray-900'
                 : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-900'
@@ -61,6 +61,9 @@ export default function FinancePeriodFilter({ value, onChange, className }: Prop
             {preset.label}
           </button>
         ))}
+        <span className="shrink-0 text-[11px] text-gray-400 tabular-nums pl-1 hidden sm:inline">
+          {formatPeriodLabel(value.start, value.end)}
+        </span>
       </div>
 
       {(showCustom || activePreset === 'custom') && (
@@ -70,7 +73,7 @@ export default function FinancePeriodFilter({ value, onChange, className }: Prop
         />
       )}
 
-      <p className="text-[11px] text-gray-400 tabular-nums">
+      <p className="text-[11px] text-gray-400 tabular-nums sm:hidden">
         {formatPeriodLabel(value.start, value.end)}
       </p>
     </div>
