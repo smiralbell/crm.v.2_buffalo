@@ -9,10 +9,12 @@ export interface ExpenseLoadResult {
   source_label: string
 }
 
-export async function loadExpenseTransactionsYtd(
-  startYTD: Date
+export async function loadExpenseTransactionsForPeriod(
+  start: Date,
+  end: Date
 ): Promise<ExpenseLoadResult> {
-  const startStr = startYTD.toISOString().slice(0, 10)
+  const startStr = start.toISOString().slice(0, 10)
+  const endStr = end.toISOString().slice(0, 10)
   const transactions: CategorizedTransaction[] = []
   let bank_count = 0
   let manual_count = 0
@@ -21,9 +23,9 @@ export async function loadExpenseTransactionsYtd(
     const bankResult = await query<{ description: string; amount: string; date: string }>(
       `SELECT description, amount, date::text AS date
        FROM bank_transactions
-       WHERE date >= $1 AND amount < 0
+       WHERE date >= $1 AND date <= $2 AND amount < 0
        ORDER BY date DESC`,
-      [startStr]
+      [startStr, endStr]
     )
     for (const r of bankResult.rows) {
       bank_count++
@@ -43,14 +45,17 @@ export async function loadExpenseTransactionsYtd(
         where: {
           deleted_at: null,
           OR: [
-            { date_start: { gte: startYTD } },
-            { date_end: { gte: startYTD } },
+            { date_start: { gte: start, lte: end } },
+            { date_end: { gte: start, lte: end } },
+            {
+              AND: [{ date_start: { lte: start } }, { date_end: { gte: end } }],
+            },
           ],
         },
         select: { name: true, total_amount: true, person_name: true, date_start: true },
       }),
       prisma.salary.findMany({
-        where: { deleted_at: null, date: { gte: startYTD } },
+        where: { deleted_at: null, date: { gte: start, lte: end } },
         select: { person_name: true, amount: true, date: true },
       }),
       prisma.fixedExpense.findMany({
@@ -78,10 +83,13 @@ export async function loadExpenseTransactionsYtd(
       })
     }
 
-    const monthsElapsed = Math.max(1, new Date().getMonth() + 1)
+    const monthsInRange = Math.max(
+      1,
+      (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+    )
     for (const f of fixedActive) {
       manual_count++
-      const total = Math.abs(Number(f.amount)) * monthsElapsed
+      const total = Math.abs(Number(f.amount)) * monthsInRange
       transactions.push({
         description: `${f.name} (fijo mensual)`,
         amount: -total,
@@ -102,6 +110,14 @@ export async function loadExpenseTransactionsYtd(
           : 'Sin datos — conecta el banco o registra gastos'
 
   return { transactions, bank_count, manual_count, source_label }
+}
+
+/** @deprecated use loadExpenseTransactionsForPeriod */
+export async function loadExpenseTransactionsYtd(
+  startYTD: Date
+): Promise<ExpenseLoadResult> {
+  const end = new Date()
+  return loadExpenseTransactionsForPeriod(startYTD, end)
 }
 
 export async function loadMrrByClient(): Promise<
@@ -150,12 +166,16 @@ export async function loadMrrByClient(): Promise<
   return []
 }
 
-export async function countUnclassifiedExpenses(startYTD: Date): Promise<{
+export async function countUnclassifiedExpenses(
+  start: Date,
+  end?: Date
+): Promise<{
   unlinked_manual: number
   unlinked_manual_total: number
   bank_without_manual: number
 }> {
-  const startStr = startYTD.toISOString().slice(0, 10)
+  const startStr = start.toISOString().slice(0, 10)
+  const endStr = (end ?? new Date()).toISOString().slice(0, 10)
   let unlinked_manual = 0
   let unlinked_manual_total = 0
   let bank_without_manual = 0
@@ -164,7 +184,7 @@ export async function countUnclassifiedExpenses(startYTD: Date): Promise<{
     const orphans = await prisma.expense.findMany({
       where: {
         deleted_at: null,
-        date_start: { gte: startYTD },
+        date_start: { gte: start, lte: end ?? new Date() },
         project: null,
         client_name: null,
       },
@@ -178,12 +198,13 @@ export async function countUnclassifiedExpenses(startYTD: Date): Promise<{
 
   try {
     const bankNeg = await query<{ cnt: string }>(
-      `SELECT COUNT(*)::text AS cnt FROM bank_transactions WHERE date >= $1 AND amount < 0`,
-      [startStr]
+      `SELECT COUNT(*)::text AS cnt FROM bank_transactions
+       WHERE date >= $1 AND date <= $2 AND amount < 0`,
+      [startStr, endStr]
     )
     const bankCount = Number(bankNeg.rows[0]?.cnt ?? 0)
     const manualCount = await prisma.expense.count({
-      where: { deleted_at: null, date_start: { gte: startYTD } },
+      where: { deleted_at: null, date_start: { gte: start, lte: end ?? new Date() } },
     })
     if (bankCount > 0 && manualCount === 0) {
       bank_without_manual = bankCount

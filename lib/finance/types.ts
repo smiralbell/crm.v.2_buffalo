@@ -123,6 +123,7 @@ export interface PeriodInsight {
 }
 
 export interface ExecutiveSummary {
+  period_label: string
   kpis: ExecutiveKpis
   annual_goal: AnnualGoalDetail
   kpi_cards: RichKpiCard[]

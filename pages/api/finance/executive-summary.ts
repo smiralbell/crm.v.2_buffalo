@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { buildExecutiveSummary } from '@/lib/finance/executive-summary'
+import { parsePeriodFromQuery } from '@/lib/finance/period-presets'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -14,7 +15,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const summary = await buildExecutiveSummary()
+    const period = parsePeriodFromQuery(
+      req.query.start as string | undefined,
+      req.query.end as string | undefined
+    )
+    const summary = await buildExecutiveSummary(period)
     return res.status(200).json(summary)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error al generar resumen ejecutivo'

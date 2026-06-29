@@ -45,8 +45,14 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import Link from 'next/link'
-import { format, startOfMonth, endOfMonth, startOfYear, startOfDay, endOfDay } from 'date-fns'
-import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
+import { format } from 'date-fns'
+import FinancePeriodFilter, { periodToQuery } from '@/components/finances/FinancePeriodFilter'
+import {
+  getDefaultPeriodRange,
+  parsePeriodFromQuery,
+  type PeriodPresetId,
+  type PeriodRange,
+} from '@/lib/finance/period-presets'
 
 interface DashboardProps {
   dateRange: {
@@ -76,13 +82,12 @@ interface DashboardProps {
 export const getServerSideProps: GetServerSideProps = async (context) => {
   // Durante el build, si DATABASE_URL no está disponible, retornar datos por defecto
   if (!process.env.DATABASE_URL && process.env.NEXT_PHASE === 'phase-production-build') {
-    const now = new Date()
+    const defaultRange = getDefaultPeriodRange()
     return {
       props: {
         dateRange: {
-          // Por defecto: desde el 1 de enero hasta fin de mes actual
-          start: startOfYear(now).toISOString(),
-          end: endOfMonth(now).toISOString(),
+          start: defaultRange.start.toISOString(),
+          end: defaultRange.end.toISOString(),
         },
         stats: {
           currentBalance: 0,
@@ -120,22 +125,10 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   }
 
   try {
-    // Obtener rango de fechas de query params o usar mes actual por defecto
+    // Obtener rango de fechas de query params o usar año en curso por defecto
     const startParam = context.query.start as string
     const endParam = context.query.end as string
-    
-    let startDate: Date
-    let endDate: Date
-    
-    if (startParam && endParam) {
-      startDate = startOfDay(new Date(startParam))
-      endDate = endOfDay(new Date(endParam))
-    } else {
-      // Por defecto: desde el 1 de enero hasta fin de mes actual
-      const now = new Date()
-      startDate = startOfYear(now)
-      endDate = endOfMonth(now)
-    }
+    const { start: startDate, end: endDate } = parsePeriodFromQuery(startParam, endParam)
 
     // Calcular desde bank_transactions (datos reales) con filtro de fechas
     const startStr = format(startDate, 'yyyy-MM-dd')
@@ -290,12 +283,12 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     if (process.env.NODE_ENV === 'development') {
       console.error('[ERROR] Error loading financial dashboard:', error)
     }
-    const now = new Date()
+    const defaultRange = getDefaultPeriodRange()
     return {
       props: {
         dateRange: {
-          start: startOfMonth(now).toISOString(),
-          end: endOfMonth(now).toISOString(),
+          start: defaultRange.start.toISOString(),
+          end: defaultRange.end.toISOString(),
         },
         stats: {
           currentBalance: 0,
@@ -331,10 +324,11 @@ export default function FinancesDashboard({
   initialAiAnalysis,
 }: DashboardProps) {
   const router = useRouter()
-  const [dateRange, setDateRange] = useState<DateRangePickerResult>({
-    start: initialDateRange.start ? new Date(initialDateRange.start) : null,
-    end: initialDateRange.end ? new Date(initialDateRange.end) : null,
-  })
+  const [dateRange, setDateRange] = useState<PeriodRange>(() =>
+    initialDateRange.start && initialDateRange.end
+      ? { start: new Date(initialDateRange.start), end: new Date(initialDateRange.end) }
+      : getDefaultPeriodRange()
+  )
   const [bankConnection, setBankConnection] = useState(initialBankConnection)
   const [selectedBank, setSelectedBank] = useState(initialBanks[0]?.name || '')
   const [connecting, setConnecting] = useState(false)
@@ -414,7 +408,8 @@ export default function FinancesDashboard({
     const loadExecutive = async () => {
       setLoadingExecutive(true)
       try {
-        const res = await fetch('/api/finance/executive-summary')
+        const { start, end } = periodToQuery(dateRange)
+        const res = await fetch(`/api/finance/executive-summary?start=${start}&end=${end}`)
         const data = await res.json()
         if (res.ok) setExecutive(data)
       } catch {
@@ -424,7 +419,7 @@ export default function FinancesDashboard({
       }
     }
     loadExecutive()
-  }, [router.asPath])
+  }, [dateRange])
 
   const handleConnect = async () => {
     const bank = selectedBank || initialBanks[0]?.name
@@ -459,9 +454,7 @@ export default function FinancesDashboard({
     try {
       // Construir URL con filtro de fechas si está presente
       let url = `/api/finance/recent-transactions?limit=10&offset=${currentOffset}`
-      if (dateRange.start && dateRange.end) {
-        url += `&start_date=${format(dateRange.start, 'yyyy-MM-dd')}&end_date=${format(dateRange.end, 'yyyy-MM-dd')}`
-      }
+      url += `&start_date=${format(dateRange.start, 'yyyy-MM-dd')}&end_date=${format(dateRange.end, 'yyyy-MM-dd')}`
       
       const response = await fetch(url)
       const data = await response.json()
@@ -513,31 +506,20 @@ export default function FinancesDashboard({
     }).format(amount)
   }
 
-  const handleDateRangeChange = (range: DateRangePickerResult) => {
+  const handlePeriodChange = (range: PeriodRange, _preset: PeriodPresetId) => {
     setDateRange(range)
-    // Resetear transacciones cuando cambia el rango
     setOffset(0)
     setHasMore(true)
-    // Actualizar URL con los nuevos parámetros
-    if (range.start && range.end) {
-      const params = new URLSearchParams({
-        start: format(range.start, 'yyyy-MM-dd'),
-        end: format(range.end, 'yyyy-MM-dd'),
-      })
-      router.push(`/finances?${params.toString()}`)
-    } else {
-      router.push('/finances')
-    }
+    const params = periodToQuery(range)
+    router.push(`/finances?start=${params.start}&end=${params.end}`)
   }
 
   const periodInsights = useMemo(() => {
-    const start = dateRange.start
-    const end = dateRange.end
-    const periodDays =
-      start && end
-        ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1)
-        : 30
-    return buildPeriodInsights({ ...stats, periodDays })
+    const periodDaysCount = Math.max(
+      1,
+      Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    )
+    return buildPeriodInsights({ ...stats, periodDays: periodDaysCount })
   }, [stats, dateRange])
 
   const quickLinks = [
@@ -624,7 +606,7 @@ export default function FinancesDashboard({
               )}
             </div>
           </div>
-          <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={dateRange} />
+          <FinancePeriodFilter value={dateRange} onChange={handlePeriodChange} />
         </div>
 
         {/* Centro de inteligencia financiera */}
@@ -650,7 +632,7 @@ export default function FinancesDashboard({
                 <Card className="border border-gray-200 shadow-sm">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base font-semibold text-gray-900">Flujo de caja</CardTitle>
-                    <p className="text-xs text-gray-400 font-normal">Últimos 6 meses</p>
+                    <p className="text-xs text-gray-400 font-normal">{executive.period_label}</p>
                   </CardHeader>
                   <CardContent>
                     <CashFlowChart data={executive.cash_flow} />
@@ -659,7 +641,7 @@ export default function FinancesDashboard({
                 <Card className="border border-gray-200 shadow-sm">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base font-semibold text-gray-900">Facturado vs cobrado</CardTitle>
-                    <p className="text-xs text-gray-400 font-normal">Últimos 6 meses</p>
+                    <p className="text-xs text-gray-400 font-normal">{executive.period_label}</p>
                   </CardHeader>
                   <CardContent>
                     <InvoicedVsCollectedChart data={executive.invoiced_vs_collected} />
@@ -671,14 +653,13 @@ export default function FinancesDashboard({
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base font-semibold text-gray-900">Distribución de gastos</CardTitle>
                   <p className="text-xs text-gray-400 font-normal">
-                    Año en curso · {executive.expense_source_label}
+                    {executive.period_label} · {executive.expense_source_label}
                   </p>
                 </CardHeader>
                 <CardContent>
                   <FinanceCategoryDonut
                     data={executive.expense_breakdown}
-                    variant="expense"
-                    emptyMessage="Sin gastos este año — sincroniza el banco o registra gastos en el CRM"
+                    emptyMessage="Sin gastos en este período — sincroniza el banco o registra gastos en el CRM"
                   />
                 </CardContent>
               </Card>
@@ -687,13 +668,12 @@ export default function FinancesDashboard({
                 <Card className="border border-gray-200 shadow-sm">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base font-semibold text-gray-900">Origen de ingresos</CardTitle>
-                    <p className="text-xs text-gray-400 font-normal">Año en curso</p>
+                    <p className="text-xs text-gray-400 font-normal">{executive.period_label}</p>
                   </CardHeader>
                   <CardContent>
                     <FinanceCategoryDonut
                       data={executive.income_breakdown}
-                      variant="income"
-                      emptyMessage="Sin ingresos registrados este año — sincroniza el banco"
+                      emptyMessage="Sin ingresos en este período — sincroniza el banco"
                     />
                   </CardContent>
                 </Card>
@@ -847,11 +827,11 @@ export default function FinancesDashboard({
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0 text-gray-400">
+                        <div className="flex-shrink-0">
                           {transaction.amount >= 0 ? (
-                            <ArrowUp className="h-4 w-4" />
+                            <ArrowUp className="h-4 w-4 text-green-600" />
                           ) : (
-                            <ArrowDown className="h-4 w-4" />
+                            <ArrowDown className="h-4 w-4 text-red-600" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -875,7 +855,12 @@ export default function FinancesDashboard({
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
-                      <div className="text-right font-semibold text-gray-900">
+                      <div
+                        className={`text-right font-semibold tabular-nums ${
+                          transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}
+                      >
+                        {transaction.amount >= 0 ? '+' : ''}
                         {formatCurrency(transaction.amount)}
                       </div>
                       <div className="text-right font-medium text-gray-700 min-w-[100px]">
