@@ -146,28 +146,55 @@ export async function getAccountBalances(accountUid: string): Promise<unknown> {
 
 export async function getAccountTransactions(
   accountUid: string,
-  params?: { continuation_key?: string; date_from?: string; transaction_status?: string }
+  params?: {
+    continuation_key?: string
+    date_from?: string
+    date_to?: string
+    transaction_status?: string
+    strategy?: 'default' | 'longest'
+  }
 ): Promise<unknown> {
   const qs = new URLSearchParams()
   if (params?.continuation_key) qs.set('continuation_key', params.continuation_key)
   if (params?.date_from) qs.set('date_from', params.date_from)
+  if (params?.date_to) qs.set('date_to', params.date_to)
   if (params?.transaction_status) qs.set('transaction_status', params.transaction_status)
+  if (params?.strategy) qs.set('strategy', params.strategy)
   const query = qs.toString()
   const path = `/accounts/${encodeURIComponent(accountUid)}/transactions${query ? `?${query}` : ''}`
   return enableBankingRequest(path)
 }
 
-/** Pagina todas las transacciones BOOK (máx. 50 páginas por seguridad) */
-export async function getAllAccountTransactions(accountUid: string): Promise<unknown> {
+export interface FetchAllTransactionsResult {
+  transactions: unknown[]
+  pages: number
+  truncated: boolean
+}
+
+/** Descarga todo el historial disponible (strategy=longest + paginación) */
+export async function getAllAccountTransactions(
+  accountUid: string
+): Promise<FetchAllTransactionsResult> {
   const all: unknown[] = []
   let continuationKey: string | undefined
   let pages = 0
+  const maxPages = 100
+
+  const dateFrom = new Date()
+  dateFrom.setFullYear(dateFrom.getFullYear() - 2)
+  const dateFromStr = dateFrom.toISOString().slice(0, 10)
 
   do {
-    const page = (await getAccountTransactions(accountUid, {
-      continuation_key: continuationKey,
-      transaction_status: 'BOOK',
-    })) as { transactions?: unknown[]; continuation_key?: string | null }
+    const page = (await getAccountTransactions(
+      accountUid,
+      continuationKey
+        ? { continuation_key: continuationKey }
+        : {
+            transaction_status: 'BOOK',
+            date_from: dateFromStr,
+            strategy: 'longest',
+          }
+    )) as { transactions?: unknown[]; continuation_key?: string | null }
 
     if (Array.isArray(page.transactions)) {
       all.push(...page.transactions)
@@ -178,9 +205,13 @@ export async function getAllAccountTransactions(accountUid: string): Promise<unk
         ? page.continuation_key
         : undefined
     pages++
-  } while (continuationKey && pages < 50)
+  } while (continuationKey && pages < maxPages)
 
-  return { transactions: all }
+  return {
+    transactions: all,
+    pages,
+    truncated: Boolean(continuationKey && pages >= maxPages),
+  }
 }
 
 export function extractOwnAccountIban(details: unknown): string | null {

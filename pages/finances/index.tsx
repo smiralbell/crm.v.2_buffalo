@@ -320,6 +320,7 @@ export default function FinancesDashboard({
   const [loadingTransactions, setLoadingTransactions] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [offset, setOffset] = useState(0)
+  const [transactionTotal, setTransactionTotal] = useState(0)
   const observerTarget = useRef<HTMLDivElement>(null)
 
   const runSync = useCallback(async (reloadAfter = false) => {
@@ -335,15 +336,28 @@ export default function FinancesDashboard({
         }
         return false
       }
-      if (data.repaired > 0 || data.balance_repaired > 0) {
+      if (data.inserted > 0) {
+        let msg = `${data.inserted} movimientos nuevos sincronizados`
+        if (data.oldest_date && data.newest_date) {
+          msg += ` · del ${format(new Date(data.oldest_date), 'dd/MM/yyyy')} al ${format(new Date(data.newest_date), 'dd/MM/yyyy')}`
+        }
+        setSyncMessage(msg)
+      } else if (data.total > 0 && data.oldest_date && data.newest_date) {
+        setSyncMessage(
+          `${data.total} movimientos en banco · ${format(new Date(data.oldest_date), 'dd/MM/yyyy')} – ${format(new Date(data.newest_date), 'dd/MM/yyyy')}`
+        )
+      } else if (data.repaired > 0 || data.balance_repaired > 0) {
         const parts: string[] = []
         if (data.repaired > 0) parts.push(`${data.repaired} corregidos`)
         if (data.balance_repaired > 0) parts.push(`${data.balance_repaired} por saldo`)
         setSyncMessage(`Movimientos ${parts.join(', ')} (ingreso/gasto)`)
-      } else if (data.inserted > 0) {
-        setSyncMessage(`${data.inserted} movimientos nuevos sincronizados`)
       }
-      if (reloadAfter || data.inserted > 0 || data.repaired > 0 || data.balance_repaired > 0) {
+      if (
+        reloadAfter ||
+        data.inserted > 0 ||
+        data.repaired > 0 ||
+        data.balance_repaired > 0
+      ) {
         const { start, end } = periodToQuery(dateRange)
         await router.replace(`/finances?start=${start}&end=${end}`, undefined, { shallow: false })
       }
@@ -419,12 +433,12 @@ export default function FinancesDashboard({
   }, [dateRange])
 
   const loadTransactions = useCallback(async (currentOffset: number) => {
-    if (loadingTransactions || !hasMore) return
+    if (loadingTransactions) return
+    if (currentOffset > 0 && !hasMore) return
 
     setLoadingTransactions(true)
     try {
-      // Construir URL con filtro de fechas si está presente
-      let url = `/api/finance/recent-transactions?limit=10&offset=${currentOffset}`
+      let url = `/api/finance/recent-transactions?limit=25&offset=${currentOffset}`
       url += `&start_date=${format(dateRange.start, 'yyyy-MM-dd')}&end_date=${format(dateRange.end, 'yyyy-MM-dd')}`
       
       const response = await fetch(url)
@@ -437,6 +451,7 @@ export default function FinancesDashboard({
           setTransactions(prev => [...prev, ...data.transactions])
         }
         setHasMore(data.hasMore)
+        setTransactionTotal(data.total ?? 0)
         setOffset(currentOffset + data.transactions.length)
       }
     } catch (error) {
@@ -762,7 +777,14 @@ export default function FinancesDashboard({
         {/* Historial de Movimientos */}
         <Card className="border border-gray-200 shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold">Historial de Movimientos</CardTitle>
+            <CardTitle className="text-lg font-semibold">
+              Historial de Movimientos
+              {transactionTotal > 0 && (
+                <span className="text-sm font-normal text-gray-500 ml-2">
+                  ({transactionTotal} en el período · scroll para ver más)
+                </span>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {transactions.length === 0 && !loadingTransactions ? (

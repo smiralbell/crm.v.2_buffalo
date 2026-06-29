@@ -179,6 +179,10 @@ export async function syncEnableBankingTransactions(): Promise<{
   total: number
   repaired: number
   balance_repaired: number
+  oldest_date: string | null
+  newest_date: string | null
+  pages_fetched: number
+  truncated: boolean
 }> {
   const session = await getLatestBankTestSession()
   if (!session) {
@@ -187,11 +191,13 @@ export async function syncEnableBankingTransactions(): Promise<{
 
   const accountUid = session.account_uid
 
-  const [detailsRaw, balancesRaw, transactionsRaw] = await Promise.all([
+  const [detailsRaw, balancesRaw, fetchResult] = await Promise.all([
     getAccountDetails(accountUid).catch(() => null),
     getAccountBalances(accountUid).catch(() => null),
     getAllAccountTransactions(accountUid),
   ])
+
+  const transactionsRaw = { transactions: fetchResult.transactions }
 
   const ownIban = extractOwnAccountIban(detailsRaw)
   const accountId = await getOrCreateEnableBankingAccount(accountUid, ownIban)
@@ -210,8 +216,16 @@ export async function syncEnableBankingTransactions(): Promise<{
       total: 0,
       repaired: 0,
       balance_repaired: balanceRepaired,
+      oldest_date: null,
+      newest_date: null,
+      pages_fetched: fetchResult.pages,
+      truncated: fetchResult.truncated,
     }
   }
+
+  const sortedDates = transactions.map((t) => t.date).sort()
+  const oldestDate = sortedDates[0] ?? null
+  const newestDate = sortedDates[sortedDates.length - 1] ?? null
 
   let inserted = 0
   let duplicates = 0
@@ -245,7 +259,6 @@ export async function syncEnableBankingTransactions(): Promise<{
   )
 
   for (const tx of transactions) {
-    const absAmt = Math.abs(tx.amount)
     const hash = generateTransactionHash(
       accountId,
       tx.date,
@@ -256,11 +269,9 @@ export async function syncEnableBankingTransactions(): Promise<{
 
     const existing = await query<{ id: string; amount: number }>(
       `SELECT id, amount FROM bank_transactions
-       WHERE account_id = $1 AND date = $2 AND ABS(amount) = $3
-         AND (description = $4 OR description IS NOT DISTINCT FROM $4)
-       ORDER BY ABS(amount - $5) ASC
+       WHERE account_id = $1 AND hash = $2
        LIMIT 1`,
-      [accountId, tx.date, absAmt, tx.description, tx.amount]
+      [accountId, hash]
     )
 
     if (existing.rows[0]) {
@@ -268,9 +279,9 @@ export async function syncEnableBankingTransactions(): Promise<{
       if (Number(row.amount) !== tx.amount) {
         await query(
           `UPDATE bank_transactions
-           SET amount = $1, balance = COALESCE($2, balance), hash = $3
-           WHERE id = $4`,
-          [tx.amount, tx.balance, hash, row.id]
+           SET amount = $1, balance = COALESCE($2, balance)
+           WHERE id = $3`,
+          [tx.amount, tx.balance, row.id]
         )
         repaired++
       } else {
@@ -320,5 +331,9 @@ export async function syncEnableBankingTransactions(): Promise<{
     total: transactions.length,
     repaired,
     balance_repaired: balanceRepaired,
+    oldest_date: oldestDate,
+    newest_date: newestDate,
+    pages_fetched: fetchResult.pages,
+    truncated: fetchResult.truncated,
   }
 }
