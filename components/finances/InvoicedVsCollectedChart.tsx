@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import type { MonthlyInvoicedCollected } from '@/lib/finance/types'
-import { COLORS, fmtEur } from '@/lib/finance/chart-theme'
+import { fmtEur } from '@/lib/finance/chart-theme'
 
 const TooltipContent = ({
   active,
@@ -53,8 +53,8 @@ export default function InvoicedVsCollectedChart({ data }: { data: MonthlyInvoic
         />
         <Tooltip content={<TooltipContent />} cursor={{ fill: '#F9FAFB' }} />
         <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
-        <Bar dataKey="invoiced" name="Facturado" fill={COLORS.invoiced} radius={[4, 4, 0, 0]} maxBarSize={28} />
-        <Bar dataKey="collected" name="Cobrado" fill={COLORS.collected} radius={[4, 4, 0, 0]} maxBarSize={28} />
+        <Bar dataKey="invoiced" name="Facturado" fill="#6B7280" radius={[4, 4, 0, 0]} maxBarSize={28} />
+        <Bar dataKey="collected" name="Cobrado" fill="#111827" radius={[4, 4, 0, 0]} maxBarSize={28} />
       </BarChart>
     </ResponsiveContainer>
   )

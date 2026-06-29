@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import type { MonthlyCashFlow } from '@/lib/finance/types'
-import { COLORS, fmtEur } from '@/lib/finance/chart-theme'
+import { fmtEur } from '@/lib/finance/chart-theme'
 
 const TooltipContent = ({
   active,
@@ -53,8 +53,8 @@ export default function CashFlowChart({ data }: { data: MonthlyCashFlow[] }) {
         />
         <Tooltip content={<TooltipContent />} cursor={{ fill: '#F9FAFB' }} />
         <Legend wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
-        <Bar dataKey="income" name="Entradas" fill={COLORS.income} radius={[4, 4, 0, 0]} maxBarSize={28} />
-        <Bar dataKey="expenses" name="Salidas" fill={COLORS.expense} radius={[4, 4, 0, 0]} maxBarSize={28} />
+        <Bar dataKey="income" name="Entradas" fill="#111827" radius={[4, 4, 0, 0]} maxBarSize={28} />
+        <Bar dataKey="expenses" name="Salidas" fill="#D1D5DB" radius={[4, 4, 0, 0]} maxBarSize={28} />
       </BarChart>
     </ResponsiveContainer>
   )

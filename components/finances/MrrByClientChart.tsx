@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import type { MrrClientRow } from '@/lib/finance/types'
-import { COLORS, chartColor, fmtEur } from '@/lib/finance/chart-theme'
+import { chartColor, fmtEur } from '@/lib/finance/chart-theme'
 
 const TooltipContent = ({
   active,
@@ -33,7 +33,7 @@ export default function MrrByClientChart({ data }: { data: MrrClientRow[] }) {
     )
   }
 
-  const chartData = data.map((d, i) => ({ ...d, fill: i === 0 ? COLORS.blue : chartColor(i) }))
+  const chartData = data.map((d, i) => ({ ...d, fill: chartColor(i) }))
 
   return (
     <ResponsiveContainer width="100%" height={Math.max(180, data.length * 36)}>

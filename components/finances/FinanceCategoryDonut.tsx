@@ -3,12 +3,7 @@
 import { useState, useCallback } from 'react'
 import { PieChart, Pie, Cell, Sector, ResponsiveContainer } from 'recharts'
 import type { CategorySlice } from '@/lib/finance/types'
-import {
-  expenseCategoryColor,
-  incomeCategoryColor,
-  fmtEur,
-  fmtPct,
-} from '@/lib/finance/chart-theme'
+import { chartColor, fmtEur, fmtPct } from '@/lib/finance/chart-theme'
 
 interface Props {
   data: CategorySlice[]
@@ -43,13 +38,12 @@ function ActiveShape(props: ActiveShapeProps) {
   )
 }
 
-export default function FinanceCategoryDonut({ data, emptyMessage, variant = 'expense' }: Props) {
+export default function FinanceCategoryDonut({ data, emptyMessage }: Props) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
-  const colorFn = variant === 'income' ? incomeCategoryColor : expenseCategoryColor
 
   const chartData = data.map((d, i) => ({
     ...d,
-    fill: colorFn(d.id, i),
+    fill: chartColor(i),
   }))
 
   const active = activeIndex != null ? chartData[activeIndex] : null

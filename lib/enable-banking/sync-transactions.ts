@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 import { query } from '@/lib/db'
 import { getAccountBalances, getAccountTransactions } from './client'
+import { parseEbTransactions } from './parse-transactions'
 import { getLatestBankTestSession } from './session-store'
 
 function normalizeDescription(description: string): string {
@@ -36,59 +37,12 @@ async function getOrCreateEnableBankingAccount(accountUid: string): Promise<stri
   return id
 }
 
-function parseEbTransactions(raw: unknown): Array<{
-  date: string
-  amount: number
-  description: string
-  balance: number | null
-}> {
-  if (!raw || typeof raw !== 'object') return []
-  const list = (raw as { transactions?: unknown[] }).transactions
-  if (!Array.isArray(list)) return []
-
-  const out: Array<{ date: string; amount: number; description: string; balance: number | null }> = []
-
-  for (const item of list) {
-    const tx = item as {
-      booking_date?: string
-      value_date?: string
-      remittance_information?: string[]
-      creditor?: { name?: string }
-      debtor?: { name?: string }
-      transaction_amount?: { amount?: string }
-      balance_after_transaction?: { amount?: string }
-    }
-
-    const dateRaw = tx.booking_date || tx.value_date
-    const amountRaw = tx.transaction_amount?.amount
-    if (!dateRaw || !amountRaw) continue
-
-    const amount = parseFloat(amountRaw)
-    if (!Number.isFinite(amount) || amount === 0) continue
-
-    const parts = [
-      ...(tx.remittance_information || []),
-      tx.creditor?.name,
-      tx.debtor?.name,
-    ].filter(Boolean)
-    const description = (parts[0] || 'Movimiento').trim()
-
-    let balance: number | null = null
-    if (tx.balance_after_transaction?.amount) {
-      const b = parseFloat(tx.balance_after_transaction.amount)
-      if (Number.isFinite(b)) balance = b
-    }
-
-    out.push({ date: dateRaw.slice(0, 10), amount, description, balance })
-  }
-
-  return out
-}
-
 export async function syncEnableBankingTransactions(): Promise<{
   inserted: number
+  updated: number
   duplicates: number
   total: number
+  repaired: number
 }> {
   const session = await getLatestBankTestSession()
   if (!session) {
@@ -105,7 +59,52 @@ export async function syncEnableBankingTransactions(): Promise<{
 
   const transactions = parseEbTransactions(transactionsRaw)
   if (transactions.length === 0) {
-    return { inserted: 0, duplicates: 0, total: 0 }
+    return { inserted: 0, updated: 0, duplicates: 0, total: 0, repaired: 0 }
+  }
+
+  let inserted = 0
+  let updated = 0
+  let duplicates = 0
+  let repaired = 0
+
+  // Corregir movimientos guardados con signo erróneo (importe siempre positivo)
+  for (const tx of transactions) {
+    const absAmt = Math.abs(tx.amount)
+
+    // Gastos mal guardados como positivos (caso habitual Enable Banking)
+    if (tx.amount < 0) {
+      const fixResult = await query(
+        `UPDATE bank_transactions
+         SET amount = $1, balance = COALESCE($2, balance)
+         WHERE id = (
+           SELECT id FROM bank_transactions
+           WHERE account_id = $3 AND date = $4
+             AND ABS(amount) = $5 AND amount > 0
+           ORDER BY created_at ASC
+           LIMIT 1
+         )
+         RETURNING id`,
+        [tx.amount, tx.balance, accountId, tx.date, absAmt]
+      )
+      if (fixResult.rowCount && fixResult.rowCount > 0) {
+        repaired += fixResult.rowCount
+        continue
+      }
+    }
+
+    const fixResult2 = await query(
+      `UPDATE bank_transactions
+       SET amount = $1, balance = COALESCE($2, balance)
+       WHERE account_id = $3 AND date = $4
+         AND ABS(amount) = $5
+         AND amount <> $1
+         AND description = $6
+       RETURNING id`,
+      [tx.amount, tx.balance, accountId, tx.date, absAmt, tx.description]
+    )
+    if (fixResult2.rowCount && fixResult2.rowCount > 0) {
+      updated += fixResult2.rowCount
+    }
   }
 
   const dates = transactions.map((t) => t.date).sort()
@@ -113,7 +112,7 @@ export async function syncEnableBankingTransactions(): Promise<{
   const periodEnd = dates[dates.length - 1]
   const statementId = uuidv4()
   const fileHash = createHash('sha256')
-    .update(`${accountUid}:${periodStart}:${periodEnd}:${transactions.length}`)
+    .update(`${accountUid}:${periodStart}:${periodEnd}:${transactions.length}:v2`)
     .digest('hex')
 
   await query(
@@ -130,11 +129,19 @@ export async function syncEnableBankingTransactions(): Promise<{
     ]
   )
 
-  let inserted = 0
-  let duplicates = 0
-
   for (const tx of transactions) {
     const hash = generateTransactionHash(accountId, tx.date, tx.amount, tx.description)
+    const existing = await query<{ id: string }>(
+      `SELECT id FROM bank_transactions
+       WHERE account_id = $1 AND date = $2 AND ABS(amount) = $3 AND description = $4
+       LIMIT 1`,
+      [accountId, tx.date, Math.abs(tx.amount), tx.description]
+    )
+    if (existing.rows[0]) {
+      duplicates++
+      continue
+    }
+
     const result = await query(
       `INSERT INTO bank_transactions
        (id, account_id, statement_id, date, amount, description, hash, balance, created_at)
@@ -146,7 +153,6 @@ export async function syncEnableBankingTransactions(): Promise<{
     else duplicates++
   }
 
-  // Actualizar saldo en la última transacción si Enable Banking lo devolvió en balances
   if (balancesRaw && typeof balancesRaw === 'object') {
     const balances = (balancesRaw as { balances?: unknown[] }).balances
     const primary = Array.isArray(balances) ? balances[0] : null
@@ -168,5 +174,5 @@ export async function syncEnableBankingTransactions(): Promise<{
     }
   }
 
-  return { inserted, duplicates, total: transactions.length }
+  return { inserted, updated, duplicates, total: transactions.length, repaired }
 }

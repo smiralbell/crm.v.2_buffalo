@@ -95,7 +95,7 @@ export default function FinanceAiPanel({ initialAnalysis }: Props) {
   if (!analysis) {
     return (
       <div className="flex flex-col items-center justify-center py-8 gap-4 text-center">
-        <Sparkles className="h-8 w-8 text-blue-600" />
+        <Sparkles className="h-8 w-8 text-gray-400" />
         <div>
           <p className="text-sm font-medium text-gray-900">CFO virtual con IA</p>
           <p className="text-xs text-gray-500 mt-1 max-w-xs">
@@ -113,8 +113,7 @@ export default function FinanceAiPanel({ initialAnalysis }: Props) {
 
   const s = analysis.summary
   const health = s.salud_financiera_0_100 ?? 0
-  const healthColor =
-    health >= 70 ? 'text-green-600' : health >= 40 ? 'text-orange-600' : 'text-red-600'
+  const healthColor = 'text-gray-900'
 
   return (
     <div className="space-y-4">
@@ -152,9 +151,9 @@ export default function FinanceAiPanel({ initialAnalysis }: Props) {
         <div className="grid md:grid-cols-3 gap-3 text-xs">
           {s.wins?.length > 0 && (
             <div>
-              <p className="font-semibold text-green-700 flex items-center gap-1 mb-1">
-                <CheckCircle2 className="h-3 w-3" /> Wins
-              </p>
+            <p className="font-semibold text-gray-900 flex items-center gap-1 mb-1">
+              <CheckCircle2 className="h-3 w-3" /> Wins
+            </p>
               <ul className="space-y-1 text-gray-600">
                 {s.wins.map((w, i) => (
                   <li key={i}>• {w}</li>
@@ -164,9 +163,9 @@ export default function FinanceAiPanel({ initialAnalysis }: Props) {
           )}
           {s.riesgos?.length > 0 && (
             <div>
-              <p className="font-semibold text-red-600 flex items-center gap-1 mb-1">
-                <AlertTriangle className="h-3 w-3" /> Riesgos
-              </p>
+            <p className="font-semibold text-gray-900 flex items-center gap-1 mb-1">
+              <AlertTriangle className="h-3 w-3" /> Riesgos
+            </p>
               <ul className="space-y-1 text-gray-600">
                 {s.riesgos.map((r, i) => (
                   <li key={i}>• {r}</li>
@@ -176,9 +175,9 @@ export default function FinanceAiPanel({ initialAnalysis }: Props) {
           )}
           {s.acciones_esta_semana?.length > 0 && (
             <div>
-              <p className="font-semibold text-blue-700 flex items-center gap-1 mb-1">
-                <TrendingUp className="h-3 w-3" /> Esta semana
-              </p>
+            <p className="font-semibold text-gray-900 flex items-center gap-1 mb-1">
+              <TrendingUp className="h-3 w-3" /> Esta semana
+            </p>
               <ul className="space-y-1 text-gray-600">
                 {s.acciones_esta_semana.map((a, i) => (
                   <li key={i}>• {a}</li>
@@ -189,8 +188,8 @@ export default function FinanceAiPanel({ initialAnalysis }: Props) {
         </div>
 
         {s.path_a_objetivo && (
-          <p className="text-xs text-gray-700 bg-blue-50 border border-blue-100 rounded-lg p-3">
-            <span className="font-semibold text-blue-900">Path al objetivo (250k€): </span>
+        <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <span className="font-semibold text-gray-900">Path al objetivo (250k€): </span>
             {s.path_a_objetivo}
           </p>
         )}

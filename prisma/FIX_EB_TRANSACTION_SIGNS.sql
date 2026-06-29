@@ -1,0 +1,6 @@
+-- Corregir movimientos Enable Banking guardados todos como ingresos (positivos)
+-- Ejecutar SOLO si tras el fix de sync siguen mal; luego pulsa Sincronizar en /finances
+--
+-- Opción A: borrar solo movimientos de cuenta Enable Banking y volver a sincronizar
+-- DELETE FROM bank_transactions
+-- WHERE account_id IN (SELECT id FROM bank_accounts WHERE iban LIKE 'ENABLEBANKING:%');
