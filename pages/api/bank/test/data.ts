@@ -6,7 +6,7 @@ import {
   EnableBankingApiError,
   EnableBankingConfigError,
 } from '@/lib/enable-banking/client'
-import { getLatestAccountUid, getLatestBankTestSession } from '@/lib/enable-banking/session-store'
+import { getLatestBankTestSession } from '@/lib/enable-banking/session-store'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -19,22 +19,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return
   }
 
-  const accountUid = getLatestAccountUid()
-  if (!accountUid) {
+  const session = await getLatestBankTestSession()
+  if (!session) {
     return res.status(404).json({
-      error: 'No hay sesión bancaria de prueba. Conecta el banco primero.',
+      error: 'no_session',
+      message: 'No hay conexión bancaria activa',
     })
   }
 
   try {
     const [balances, transactions] = await Promise.all([
-      getAccountBalances(accountUid),
-      getAccountTransactions(accountUid),
+      getAccountBalances(session.account_uid),
+      getAccountTransactions(session.account_uid),
     ])
 
     return res.status(200).json({
-      account_uid: accountUid,
-      session: getLatestBankTestSession(),
+      account_uid: session.account_uid,
+      session: {
+        ...session,
+        valid_until: session.valid_until.toISOString(),
+        created_at: session.created_at.toISOString(),
+      },
       balances,
       transactions,
     })

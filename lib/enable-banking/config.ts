@@ -9,7 +9,7 @@
  *                                   https://tu-dominio/api/bank/test/callback
  *
  * Opcional:
- *   ENABLEBANKING_FRONTEND_RETURN_URL — Tras OAuth, redirige aquí (default: /finances/bank-test)
+ *   ENABLEBANKING_FRONTEND_RETURN_URL — Tras OAuth, redirige aquí (default: /finances)
  *   NEXT_PUBLIC_BASE_URL              — Base URL del CRM (para construir redirects)
  */
 
@@ -75,7 +75,7 @@ export function getFrontendReturnBase(req?: { headers?: { host?: string; 'x-forw
 }
 
 export function frontendReturnPath(): string {
-  return '/finances/bank-test'
+  return '/finances'
 }
 
 export function buildFrontendReturnUrl(

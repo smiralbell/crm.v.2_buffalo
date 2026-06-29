@@ -90,6 +90,7 @@ export interface SessionAccount {
 export interface AuthorizeSessionResponse {
   session_id: string
   accounts?: SessionAccount[]
+  access?: { valid_until?: string }
 }
 
 export interface AspspItem {

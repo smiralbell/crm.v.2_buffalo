@@ -1,24 +1,48 @@
 import { GetServerSideProps } from 'next'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import dynamic from 'next/dynamic'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
+import { getBankConnectionStatus, type BankConnectionStatus } from '@/lib/enable-banking/connection-status'
+import { listAspsps } from '@/lib/enable-banking/client'
+import { getLatestFinanceAiAnalysis } from '@/lib/finance/ai-analysis'
+import type { ExecutiveSummary, FinanceAiSummary } from '@/lib/finance/types'
+import FinanceAlertsPanel from '@/components/finances/FinanceAlertsPanel'
+import FinanceAiPanel from '@/components/finances/FinanceAiPanel'
+import FinanceKpiCard from '@/components/finances/FinanceKpiCard'
+import AnnualGoalCard from '@/components/finances/AnnualGoalCard'
+import PeriodInsightCard from '@/components/finances/PeriodInsightCard'
+import { buildPeriodInsights } from '@/lib/finance/kpi-details'
+
+const CashFlowChart = dynamic(() => import('@/components/finances/CashFlowChart'), { ssr: false })
+const InvoicedVsCollectedChart = dynamic(() => import('@/components/finances/InvoicedVsCollectedChart'), { ssr: false })
+const FinanceCategoryDonut = dynamic(() => import('@/components/finances/FinanceCategoryDonut'), { ssr: false })
+const MrrByClientChart = dynamic(() => import('@/components/finances/MrrByClientChart'), { ssr: false })
+const NetTrendChart = dynamic(() => import('@/components/finances/NetTrendChart'), { ssr: false })
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { 
   TrendingUp, 
   TrendingDown, 
   DollarSign, 
   Receipt,
   ArrowRight,
-  Calendar,
-  Filter,
-  Upload,
   ArrowUp,
   ArrowDown,
-  Loader2
+  Loader2,
+  Landmark,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react'
 import Link from 'next/link'
 import { format, startOfMonth, endOfMonth, startOfYear, startOfDay, endOfDay } from 'date-fns'
@@ -39,6 +63,14 @@ interface DashboardProps {
     netProfit: number
     netProfitAfterCorporateTax: number
   }
+  bankConnection: BankConnectionStatus
+  banks: Array<{ name: string; country: string }>
+  banksError: string
+  initialAiAnalysis: {
+    summary: FinanceAiSummary
+    model: string
+    created_at: string
+  } | null
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -62,6 +94,16 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           netProfit: 0,
           netProfitAfterCorporateTax: 0,
         },
+        bankConnection: {
+          connected: false,
+          account_uid: null,
+          valid_until: null,
+          days_remaining: null,
+          expires_soon: false,
+        },
+        banks: [],
+        banksError: '',
+        initialAiAnalysis: null,
       },
     }
   }
@@ -186,6 +228,42 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     // Beneficio neto después de impuesto de sociedades
     const netProfitAfterCorporateTax = netProfit - estimatedCorporateTax
 
+    let bankConnection: BankConnectionStatus = {
+      connected: false,
+      account_uid: null,
+      valid_until: null,
+      days_remaining: null,
+      expires_soon: false,
+    }
+    try {
+      bankConnection = await getBankConnectionStatus()
+    } catch {
+      // tabla bank_connections puede no existir aún
+    }
+
+    let banks: Array<{ name: string; country: string }> = []
+    let banksError = ''
+    try {
+      const listed = await listAspsps('ES')
+      banks = listed.map((b) => ({ name: b.name, country: b.country }))
+    } catch (err) {
+      banksError = err instanceof Error ? err.message : 'No se pudo cargar el listado de bancos'
+    }
+
+    let initialAiAnalysis: DashboardProps['initialAiAnalysis'] = null
+    try {
+      const latest = await getLatestFinanceAiAnalysis()
+      if (latest) {
+        initialAiAnalysis = {
+          summary: latest.summary,
+          model: latest.model,
+          created_at: latest.created_at,
+        }
+      }
+    } catch {
+      // tabla puede no existir
+    }
+
     return {
       props: {
         dateRange: {
@@ -202,6 +280,10 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           netProfit,
           netProfitAfterCorporateTax,
         },
+        bankConnection,
+        banks,
+        banksError,
+        initialAiAnalysis,
       },
     }
   } catch (error: any) {
@@ -225,19 +307,42 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           netProfit: 0,
           netProfitAfterCorporateTax: 0,
         },
+        bankConnection: {
+          connected: false,
+          account_uid: null,
+          valid_until: null,
+          days_remaining: null,
+          expires_soon: false,
+        },
+        banks: [],
+        banksError: '',
+        initialAiAnalysis: null,
       },
     }
   }
 }
 
-export default function FinancesDashboard({ dateRange: initialDateRange, stats }: DashboardProps) {
+export default function FinancesDashboard({
+  dateRange: initialDateRange,
+  stats,
+  bankConnection: initialBankConnection,
+  banks: initialBanks,
+  banksError: initialBanksError,
+  initialAiAnalysis,
+}: DashboardProps) {
   const router = useRouter()
   const [dateRange, setDateRange] = useState<DateRangePickerResult>({
     start: initialDateRange.start ? new Date(initialDateRange.start) : null,
     end: initialDateRange.end ? new Date(initialDateRange.end) : null,
   })
-  const [lastStatementDate, setLastStatementDate] = useState<string | null>(null)
-  const [loadingLastDate, setLoadingLastDate] = useState(true)
+  const [bankConnection, setBankConnection] = useState(initialBankConnection)
+  const [selectedBank, setSelectedBank] = useState(initialBanks[0]?.name || '')
+  const [connecting, setConnecting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const syncStartedRef = useRef(false)
+  const [executive, setExecutive] = useState<ExecutiveSummary | null>(null)
+  const [loadingExecutive, setLoadingExecutive] = useState(true)
   const [transactions, setTransactions] = useState<Array<{
     id: string
     date: string
@@ -252,26 +357,88 @@ export default function FinancesDashboard({ dateRange: initialDateRange, stats }
   const [offset, setOffset] = useState(0)
   const observerTarget = useRef<HTMLDivElement>(null)
 
+  const runSync = useCallback(async (reloadAfter = false) => {
+    setSyncing(true)
+    setSyncMessage(null)
+    try {
+      const response = await fetch('/api/bank/sync', { method: 'POST' })
+      const data = await response.json()
+      if (!response.ok) {
+        setSyncMessage(data.message || data.error || 'Error al sincronizar movimientos')
+        return false
+      }
+      if (data.inserted > 0) {
+        setSyncMessage(`${data.inserted} movimientos nuevos sincronizados`)
+      }
+      if (reloadAfter || data.inserted > 0) {
+        await router.replace('/finances', undefined, { shallow: false })
+      }
+      return true
+    } catch {
+      setSyncMessage('Error al sincronizar movimientos')
+      return false
+    } finally {
+      setSyncing(false)
+    }
+  }, [router])
+
+  const refreshConnectionStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/bank/connection-status')
+      const data = await response.json()
+      if (response.ok) {
+        setBankConnection(data)
+      }
+    } catch {
+      // ignorar
+    }
+  }, [])
+
   useEffect(() => {
-    // Cargar la fecha del último extracto
-    const fetchLastStatement = async () => {
+    const status = router.query.status as string | undefined
+    if (status === 'ok') {
+      refreshConnectionStatus()
+      runSync(true)
+    } else if (bankConnection.connected && !syncStartedRef.current) {
+      syncStartedRef.current = true
+      runSync(false)
+    }
+  }, [router.query.status, bankConnection.connected, refreshConnectionStatus, runSync])
+
+  useEffect(() => {
+    const loadExecutive = async () => {
+      setLoadingExecutive(true)
       try {
-        const response = await fetch('/api/finance/latest-statement')
-        const data = await response.json()
-        
-        if (data.has_statements && data.last_date) {
-          const date = new Date(data.last_date)
-          setLastStatementDate(format(date, 'dd/MM/yyyy'))
-        }
-      } catch (error) {
-        console.error('Error loading last statement:', error)
+        const res = await fetch('/api/finance/executive-summary')
+        const data = await res.json()
+        if (res.ok) setExecutive(data)
+      } catch {
+        // ignorar
       } finally {
-        setLoadingLastDate(false)
+        setLoadingExecutive(false)
       }
     }
+    loadExecutive()
+  }, [router.asPath])
 
-    fetchLastStatement()
-  }, [])
+  const handleConnect = async () => {
+    const bank = selectedBank || initialBanks[0]?.name
+    if (!bank) return
+    setConnecting(true)
+    try {
+      const res = await fetch(`/api/bank/test/start?bank=${encodeURIComponent(bank)}`)
+      const data = await res.json()
+      if (!res.ok || !data.url) {
+        setSyncMessage(data.error || 'No se pudo iniciar la conexión bancaria')
+        return
+      }
+      window.location.href = data.url
+    } catch {
+      setSyncMessage('Error al conectar con el banco')
+    } finally {
+      setConnecting(false)
+    }
+  }
 
   // Cargar movimientos iniciales y cuando cambie el rango de fechas
   useEffect(() => {
@@ -358,6 +525,16 @@ export default function FinancesDashboard({ dateRange: initialDateRange, stats }
     }
   }
 
+  const periodInsights = useMemo(() => {
+    const start = dateRange.start
+    const end = dateRange.end
+    const periodDays =
+      start && end
+        ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1)
+        : 30
+    return buildPeriodInsights({ ...stats, periodDays })
+  }, [stats, dateRange])
+
   const quickLinks = [
     { href: '/finances/expenses', label: 'Gastos', icon: TrendingDown, color: 'text-red-600' },
     { href: '/finances/incomes', label: 'Ingresos', icon: TrendingUp, color: 'text-green-600' },
@@ -369,121 +546,247 @@ export default function FinancesDashboard({ dateRange: initialDateRange, stats }
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/finanzas/importar">
-              <Button className="flex items-center gap-2">
-                <Upload className="h-4 w-4" />
-                Nuevo Extracto
-              </Button>
-            </Link>
-            {!loadingLastDate && lastStatementDate && (
-              <p className="text-sm text-gray-600">
-                Último extracto: <span className="font-semibold text-gray-900">{lastStatementDate}</span>
-              </p>
-            )}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {initialBanks.length > 0 && (
+                  <Select value={selectedBank} onValueChange={setSelectedBank}>
+                    <SelectTrigger className="w-[220px]">
+                      <SelectValue placeholder="Selecciona banco" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {initialBanks.map((bank) => (
+                        <SelectItem key={bank.name} value={bank.name}>
+                          {bank.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <Button
+                  className="flex items-center gap-2"
+                  onClick={handleConnect}
+                  disabled={connecting || syncing || initialBanks.length === 0}
+                >
+                  {connecting || syncing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Landmark className="h-4 w-4" />
+                  )}
+                  {bankConnection.connected ? 'Reconectar Enable Banking' : 'Conexión Enable Banking'}
+                </Button>
+                {bankConnection.connected && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => runSync(true)}
+                    disabled={syncing}
+                    title="Sincronizar movimientos"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                  </Button>
+                )}
+              </div>
+              {bankConnection.connected && bankConnection.days_remaining !== null && (
+                <p
+                  className={`text-xs ${
+                    bankConnection.expires_soon ? 'text-red-600 font-medium' : 'text-gray-500'
+                  }`}
+                >
+                  {bankConnection.expires_soon ? (
+                    <>
+                      Quedan {bankConnection.days_remaining} día
+                      {bankConnection.days_remaining === 1 ? '' : 's'} para desconectarse — reconecta
+                      pronto
+                    </>
+                  ) : (
+                    <>
+                      Conexión activa · quedan {bankConnection.days_remaining} día
+                      {bankConnection.days_remaining === 1 ? '' : 's'} para volver a conectar
+                    </>
+                  )}
+                </p>
+              )}
+              {!bankConnection.connected && initialBanksError && (
+                <p className="text-xs text-red-600 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {initialBanksError}
+                </p>
+              )}
+              {syncMessage && (
+                <p className="text-xs text-gray-600">{syncMessage}</p>
+              )}
+            </div>
           </div>
           <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={dateRange} />
         </div>
 
-        {/* Stats Cards - Fila 1: 4 tarjetas */}
+        {/* Centro de inteligencia financiera */}
+        {loadingExecutive && !executive ? (
+          <div className="flex items-center justify-center py-12 text-gray-400 gap-2">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Cargando métricas ejecutivas…
+          </div>
+        ) : executive ? (
+          <>
+            {/* KPIs ejecutivos */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {executive.kpi_cards.map((card) => (
+                <FinanceKpiCard key={card.id} card={card} />
+              ))}
+            </div>
+
+            <AnnualGoalCard goal={executive.annual_goal} />
+
+            {/* Gráficos */}
+            <div className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card className="border border-gray-200 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base font-semibold text-gray-900">Flujo de caja</CardTitle>
+                    <p className="text-xs text-gray-400 font-normal">Últimos 6 meses</p>
+                  </CardHeader>
+                  <CardContent>
+                    <CashFlowChart data={executive.cash_flow} />
+                  </CardContent>
+                </Card>
+                <Card className="border border-gray-200 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base font-semibold text-gray-900">Facturado vs cobrado</CardTitle>
+                    <p className="text-xs text-gray-400 font-normal">Últimos 6 meses</p>
+                  </CardHeader>
+                  <CardContent>
+                    <InvoicedVsCollectedChart data={executive.invoiced_vs_collected} />
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="border border-gray-200 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-semibold text-gray-900">Distribución de gastos</CardTitle>
+                  <p className="text-xs text-gray-400 font-normal">
+                    Año en curso · clasificación automática desde movimientos bancarios
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <FinanceCategoryDonut
+                    data={executive.expense_breakdown}
+                    emptyMessage="Sin gastos registrados este año — sincroniza el banco"
+                  />
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Card className="border border-gray-200 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base font-semibold text-gray-900">Origen de ingresos</CardTitle>
+                    <p className="text-xs text-gray-400 font-normal">Año en curso</p>
+                  </CardHeader>
+                  <CardContent>
+                    <FinanceCategoryDonut
+                      data={executive.income_breakdown}
+                      emptyMessage="Sin ingresos registrados este año"
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="border border-gray-200 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base font-semibold text-gray-900">Beneficio neto mensual</CardTitle>
+                    <p className="text-xs text-gray-400 font-normal">Entradas − salidas por mes</p>
+                  </CardHeader>
+                  <CardContent>
+                    <NetTrendChart data={executive.net_trend} />
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="border border-gray-200 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-semibold text-gray-900">MRR por cliente</CardTitle>
+                  <p className="text-xs text-gray-400 font-normal">Proyectos activos con mensualidad</p>
+                </CardHeader>
+                <CardContent>
+                  <MrrByClientChart data={executive.mrr_by_client} />
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Alertas + IA */}
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card className="border border-gray-200 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2 text-gray-900">
+                    <AlertCircle className="h-4 w-4 text-gray-400" />
+                    Alertas ({executive.alerts.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <FinanceAlertsPanel alerts={executive.alerts} />
+                </CardContent>
+              </Card>
+              <Card className="border border-gray-200 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-semibold">CFO virtual · IA</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <FinanceAiPanel initialAnalysis={initialAiAnalysis} />
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Economía por proyecto */}
+            {executive.project_economics.length > 0 && (
+              <Card className="border border-gray-200 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-semibold">Rentabilidad por cliente (MRR vs coste operativo)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs text-gray-500 border-b">
+                          <th className="pb-2 pr-4">Proyecto</th>
+                          <th className="pb-2 pr-4 text-right">MRR</th>
+                          <th className="pb-2 pr-4 text-right">Coste LLM+infra</th>
+                          <th className="pb-2 pr-4 text-right">Margen</th>
+                          <th className="pb-2">Señales</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {executive.project_economics.map((p) => (
+                          <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50">
+                            <td className="py-2 pr-4 font-medium text-gray-900">
+                              <Link href={`/retencion/${p.id}`} className="hover:underline">{p.name}</Link>
+                            </td>
+                            <td className="py-2 pr-4 text-right">{formatCurrency(p.monthly_fee_eur)}</td>
+                            <td className="py-2 pr-4 text-right text-gray-600">{formatCurrency(p.total_cost_eur)}</td>
+                            <td className={`py-2 pr-4 text-right font-semibold ${p.margin_pct != null && p.margin_pct < 30 ? 'text-gray-900 underline decoration-gray-300' : 'text-gray-700'}`}>
+                              {p.margin_pct != null ? `${p.margin_pct}%` : '—'}
+                            </td>
+                            <td className="py-2 text-xs text-gray-500">
+                              {p.days_inactive_streak != null && p.days_inactive_streak > 7 && (
+                                <span className="text-amber-600">Inactivo {p.days_inactive_streak}d · </span>
+                              )}
+                              {p.nps_score_avg != null && <span>NPS {p.nps_score_avg}</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        ) : null}
+
+        <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Período seleccionado</p>
+
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Dinero Actual en Cuenta</p>
-              <div className="text-2xl font-semibold text-gray-900 mb-1">
-                {formatCurrency(stats.currentBalance)}
-              </div>
-              <p className="text-xs text-gray-400">Saldo total</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Ingresos</p>
-              <div className="text-2xl font-semibold text-green-600 mb-1">
-                {formatCurrency(stats.income)}
-              </div>
-              <p className="text-xs text-gray-400">Del período</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Gastos</p>
-              <div className="text-2xl font-semibold text-red-600 mb-1">
-                {formatCurrency(stats.expenses)}
-              </div>
-              <p className="text-xs text-gray-400">Del período</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Beneficio</p>
-              <div className={`text-2xl font-semibold mb-1 ${stats.profit >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                {formatCurrency(stats.profit)}
-              </div>
-              <p className="text-xs text-gray-400">Ingresos - Gastos</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Stats Cards - Fila 2: 4 tarjetas (IVA, beneficio neto, Imp. Soc., beneficio después imp.) */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">IVA a deber</p>
-              <div
-                className={`text-2xl font-semibold mb-1 ${
-                  stats.ivaToPay >= 0 ? 'text-gray-900' : 'text-emerald-600'
-                }`}
-              >
-                {formatCurrency(stats.ivaToPay)}
-              </div>
-              <p className="text-xs text-gray-400">IVA ingresos - IVA gastos</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Beneficio neto</p>
-              <div
-                className={`text-2xl font-semibold mb-1 ${
-                  stats.netProfit >= 0 ? 'text-gray-900' : 'text-red-600'
-                }`}
-              >
-                {formatCurrency(stats.netProfit)}
-              </div>
-              <p className="text-xs text-gray-400">Beneficio - IVA a deber</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Imp. Sociedades Est.</p>
-              <div className="text-2xl font-semibold text-gray-900 mb-1">
-                {formatCurrency(stats.estimatedCorporateTax)}
-              </div>
-              <p className="text-xs text-gray-400">15% del beneficio neto</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">
-                Beneficio neto después de Imp. Sociedades
-              </p>
-              <div
-                className={`text-2xl font-semibold mb-1 ${
-                  stats.netProfitAfterCorporateTax >= 0 ? 'text-gray-900' : 'text-red-600'
-                }`}
-              >
-                {formatCurrency(stats.netProfitAfterCorporateTax)}
-              </div>
-              <p className="text-xs text-gray-400">Beneficio neto - Imp. sociedades</p>
-            </CardContent>
-          </Card>
+          {periodInsights.map((insight) => (
+            <PeriodInsightCard key={insight.label} insight={insight} />
+          ))}
         </div>
 
         {/* Quick Links - Estilo minimalista */}
@@ -537,9 +840,7 @@ export default function FinancesDashboard({ dateRange: initialDateRange, stats }
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3">
-                        <div className={`flex-shrink-0 ${
-                          transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'
-                        }`}>
+                        <div className="flex-shrink-0 text-gray-400">
                           {transaction.amount >= 0 ? (
                             <ArrowUp className="h-4 w-4" />
                           ) : (
@@ -567,9 +868,7 @@ export default function FinancesDashboard({ dateRange: initialDateRange, stats }
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
-                      <div className={`text-right font-semibold ${
-                        transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'
-                      }`}>
+                      <div className="text-right font-semibold text-gray-900">
                         {formatCurrency(transaction.amount)}
                       </div>
                       <div className="text-right font-medium text-gray-700 min-w-[100px]">
