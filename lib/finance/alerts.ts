@@ -4,6 +4,7 @@ import type { FinanceAlert, PendingInvoiceRow, ProjectEconomicsRow } from './typ
 interface AlertContext {
   bankConnection: BankConnectionStatus
   collectionGap: number
+  collectionRatePct: number | null
   pendingInvoices: PendingInvoiceRow[]
   draftCount: number
   runwayMonths: number | null
@@ -11,6 +12,9 @@ interface AlertContext {
   highCostProjects: ProjectEconomicsRow[]
   mrr: number
   pipelineValue: number
+  unlinkedManualExpenses: number
+  unlinkedManualTotal: number
+  bankExpensesWithoutManual: number
 }
 
 export function buildFinanceAlerts(ctx: AlertContext): FinanceAlert[] {
@@ -19,7 +23,7 @@ export function buildFinanceAlerts(ctx: AlertContext): FinanceAlert[] {
   if (!ctx.bankConnection.connected) {
     alerts.push({
       id: 'bank-disconnected',
-      severity: 'warning',
+      priority: 'medium',
       title: 'Banco no conectado',
       message: 'Conecta Enable Banking para sincronizar movimientos y tener datos de caja en tiempo real.',
       action_label: 'Conectar banco',
@@ -28,11 +32,33 @@ export function buildFinanceAlerts(ctx: AlertContext): FinanceAlert[] {
   } else if (ctx.bankConnection.expires_soon) {
     alerts.push({
       id: 'bank-expiring',
-      severity: 'critical',
+      priority: 'bad',
       title: 'Conexión bancaria por caducar',
       message: `Quedan ${ctx.bankConnection.days_remaining} días para reconectar el banco.`,
       action_label: 'Reconectar',
       action_href: '/finances',
+    })
+  }
+
+  if (ctx.unlinkedManualExpenses > 0) {
+    alerts.push({
+      id: 'expenses-unlinked',
+      priority: 'medium',
+      title: `${ctx.unlinkedManualExpenses} gasto(s) sin proyecto ni cliente`,
+      message: `Hay ${formatEur(ctx.unlinkedManualTotal)} en gastos manuales sin asociar a proyecto o cliente. Clasifícalos para medir rentabilidad por cuenta.`,
+      action_label: 'Ver gastos',
+      action_href: '/finances/expenses',
+    })
+  }
+
+  if (ctx.bankExpensesWithoutManual >= 5) {
+    alerts.push({
+      id: 'bank-expenses-unclassified',
+      priority: 'medium',
+      title: 'Movimientos bancarios sin registrar',
+      message: `~${ctx.bankExpensesWithoutManual} salidas del banco no tienen gasto equivalente en el CRM. Regístralos o asócialos a facturas de proveedor.`,
+      action_label: 'Registrar gasto',
+      action_href: '/finances/expenses/manual/new',
     })
   }
 
@@ -41,7 +67,7 @@ export function buildFinanceAlerts(ctx: AlertContext): FinanceAlert[] {
     const total = overdue.reduce((s, i) => s + i.total, 0)
     alerts.push({
       id: 'invoices-overdue',
-      severity: 'critical',
+      priority: 'bad',
       title: `${overdue.length} factura(s) vencida(s) sin cobrar`,
       message: `Hay ${overdue.length} facturas enviadas sin cobro asociado por un total de ${formatEur(total)}.`,
       action_label: 'Ver facturas',
@@ -51,19 +77,26 @@ export function buildFinanceAlerts(ctx: AlertContext): FinanceAlert[] {
     const total = ctx.pendingInvoices.reduce((s, i) => s + i.total, 0)
     alerts.push({
       id: 'invoices-pending',
-      severity: 'warning',
-      title: 'Cobros pendientes',
+      priority: 'medium',
+      title: 'Cobros pendientes de conciliar',
       message: `${ctx.pendingInvoices.length} facturas enviadas sin vincular a movimiento bancario (${formatEur(total)}).`,
       action_label: 'Conciliar ingresos',
       action_href: '/finances/incomes',
     })
   }
 
-  if (ctx.collectionGap > 500) {
+  if (ctx.collectionRatePct != null && ctx.collectionRatePct >= 95) {
+    alerts.push({
+      id: 'collection-good',
+      priority: 'good',
+      title: 'Cobro al día este mes',
+      message: `Tasa de cobro del ${ctx.collectionRatePct}% sobre lo facturado en el mes.`,
+    })
+  } else if (ctx.collectionGap > 500) {
     alerts.push({
       id: 'collection-gap',
-      severity: 'warning',
-      title: 'Brecha facturado vs cobrado este mes',
+      priority: 'medium',
+      title: 'Brecha facturado vs cobrado',
       message: `Has facturado ${formatEur(ctx.collectionGap)} más de lo cobrado este mes.`,
     })
   }
@@ -71,7 +104,7 @@ export function buildFinanceAlerts(ctx: AlertContext): FinanceAlert[] {
   if (ctx.draftCount >= 3) {
     alerts.push({
       id: 'draft-invoices',
-      severity: 'info',
+      priority: 'medium',
       title: 'Facturas en borrador',
       message: `Tienes ${ctx.draftCount} facturas en borrador sin emitir.`,
       action_label: 'Emitir facturas',
@@ -82,18 +115,25 @@ export function buildFinanceAlerts(ctx: AlertContext): FinanceAlert[] {
   if (ctx.runwayMonths !== null && ctx.runwayMonths < 3 && ctx.cashBalance > 0) {
     alerts.push({
       id: 'low-runway',
-      severity: 'critical',
+      priority: 'bad',
       title: 'Runway de caja bajo',
       message: `Con el gasto medio actual, la caja cubre ~${ctx.runwayMonths} meses.`,
+    })
+  } else if (ctx.runwayMonths != null && ctx.runwayMonths >= 6) {
+    alerts.push({
+      id: 'healthy-runway',
+      priority: 'good',
+      title: 'Caja saludable',
+      message: `Runway de ~${ctx.runwayMonths} meses con el gasto medio actual.`,
     })
   }
 
   for (const p of ctx.highCostProjects.slice(0, 3)) {
     alerts.push({
       id: `project-margin-${p.id}`,
-      severity: 'warning',
+      priority: 'bad',
       title: `Margen bajo: ${p.name}`,
-      message: `Coste operativo ~${formatEur(p.total_cost_eur)}/mes vs fee ${formatEur(p.monthly_fee_eur)} (margen ${p.margin_pct}%). Revisa pricing o uso.`,
+      message: `Coste operativo ~${formatEur(p.total_cost_eur)}/mes vs fee ${formatEur(p.monthly_fee_eur)} (margen ${p.margin_pct}%).`,
       action_label: 'Ver retención',
       action_href: `/retencion/${p.id}`,
     })
@@ -102,7 +142,7 @@ export function buildFinanceAlerts(ctx: AlertContext): FinanceAlert[] {
   if (ctx.mrr > 0 && ctx.pipelineValue > ctx.mrr * 6) {
     alerts.push({
       id: 'strong-pipeline',
-      severity: 'info',
+      priority: 'good',
       title: 'Pipeline comercial fuerte',
       message: `Pipeline activo (${formatEur(ctx.pipelineValue)}) supera 6× el MRR actual. Prioriza cierre.`,
       action_label: 'Ver pipelines',
@@ -113,16 +153,16 @@ export function buildFinanceAlerts(ctx: AlertContext): FinanceAlert[] {
   if (ctx.mrr === 0 && ctx.pipelineValue === 0) {
     alerts.push({
       id: 'no-recurring',
-      severity: 'info',
+      priority: 'medium',
       title: 'Sin MRR registrado',
-      message: 'No hay proyectos activos con mensualidad. Activa clientes en Retención para medir ingresos recurrentes.',
+      message: 'No hay proyectos con mensualidad. Activa clientes en Retención o registra fees en proyectos.',
       action_label: 'Retención',
       action_href: '/retencion',
     })
   }
 
-  const order: Record<string, number> = { critical: 0, warning: 1, info: 2 }
-  return alerts.sort((a, b) => order[a.severity] - order[b.severity])
+  const order: Record<string, number> = { bad: 0, medium: 1, good: 2 }
+  return alerts.sort((a, b) => order[a.priority] - order[b.priority])
 }
 
 function formatEur(n: number): string {

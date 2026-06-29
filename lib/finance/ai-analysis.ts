@@ -41,7 +41,7 @@ export async function generateFinanceAiAnalysis(): Promise<{
     kpis: context.kpis,
     expense_breakdown: context.expense_breakdown,
     income_breakdown: context.income_breakdown,
-    alerts: context.alerts.map((a) => ({ severity: a.severity, title: a.title, message: a.message })),
+    alerts: context.alerts.map((a) => ({ priority: a.priority, title: a.title, message: a.message })),
     cash_flow_last_months: context.cash_flow,
     invoiced_vs_collected: context.invoiced_vs_collected,
     pending_invoices_count: context.pending_invoices.length,

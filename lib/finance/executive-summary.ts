@@ -4,6 +4,11 @@ import { getBankConnectionStatus } from '@/lib/enable-banking/connection-status'
 import { buildFinanceAlerts } from './alerts'
 import { categorizeExpenses, categorizeIncome } from './categorize-transactions'
 import { ANNUAL_TARGET } from './chart-theme'
+import {
+  countUnclassifiedExpenses,
+  loadExpenseTransactionsYtd,
+  loadMrrByClient,
+} from './expense-sources'
 import { buildAnnualGoalDetail, buildRichKpiCards } from './kpi-details'
 import type {
   ExecutiveSummary,
@@ -60,7 +65,8 @@ export async function buildExecutiveSummary(): Promise<ExecutiveSummary> {
     prisma.$queryRaw<Array<{ mrr: string | number; count: bigint }>>`
       SELECT COALESCE(SUM(monthly_fee_eur), 0) AS mrr, COUNT(*)::bigint AS count
       FROM proyectos
-      WHERE status = 'active' AND has_mensualidad = true AND monthly_fee_eur IS NOT NULL
+      WHERE monthly_fee_eur IS NOT NULL AND monthly_fee_eur > 0
+        AND status NOT IN ('churned', 'paused')
     `,
     query<{ balance: number }>(
       `SELECT balance FROM bank_transactions
@@ -322,9 +328,38 @@ export async function buildExecutiveSummary(): Promise<ExecutiveSummary> {
     (p) => p.margin_pct !== null && p.margin_pct < 30 && p.monthly_fee_eur > 0
   )
 
-  const alerts = buildFinanceAlerts({
+  const startYTD = new Date(y, 0, 1)
+
+  const [expenseLoad, mrr_by_client, unclassified] = await Promise.all([
+    loadExpenseTransactionsYtd(startYTD),
+    loadMrrByClient(),
+    countUnclassifiedExpenses(startYTD),
+  ])
+
+  const expenseTx = expenseLoad.transactions.filter((t) => t.amount < 0)
+  const incomeTxFromBank = await query<{ description: string; amount: string; date: string }>(
+    `SELECT description, amount, date::text AS date
+     FROM bank_transactions
+     WHERE date >= $1 AND amount > 0
+     ORDER BY date DESC`,
+    [startYTD.toISOString().slice(0, 10)]
+  ).catch(() => ({ rows: [] as { description: string; amount: string; date: string }[] }))
+
+  const incomeTx = incomeTxFromBank.rows.map((r) => ({
+    description: r.description || '',
+    amount: Number(r.amount),
+    date: r.date,
+  }))
+
+  const expense_breakdown = categorizeExpenses(expenseTx)
+  const income_breakdown = categorizeIncome(incomeTx)
+  const expense_source_label = expenseLoad.source_label
+  const net_trend = cashFlow.map((c) => ({ month: c.month, net: c.net }))
+
+  const alertsFinal = buildFinanceAlerts({
     bankConnection,
     collectionGap,
+    collectionRatePct,
     pendingInvoices,
     draftCount,
     runwayMonths,
@@ -332,50 +367,10 @@ export async function buildExecutiveSummary(): Promise<ExecutiveSummary> {
     highCostProjects,
     mrr,
     pipelineValue,
+    unlinkedManualExpenses: unclassified.unlinked_manual,
+    unlinkedManualTotal: unclassified.unlinked_manual_total,
+    bankExpensesWithoutManual: unclassified.bank_without_manual,
   })
-
-  const startYTD = new Date(y, 0, 1)
-  const startYTDStr = startYTD.toISOString().slice(0, 10)
-
-  const [bankTxYtdResult, mrrByClientRaw] = await Promise.all([
-    query<{ description: string; amount: string; date: string }>(
-      `SELECT description, amount, date::text AS date
-       FROM bank_transactions
-       WHERE date >= $1
-       ORDER BY date DESC`,
-      [startYTDStr]
-    ).catch(() => ({ rows: [] as { description: string; amount: string; date: string }[] })),
-    prisma.$queryRaw<Array<{ name: string; amount: string | number }>>`
-      SELECT name, monthly_fee_eur AS amount
-      FROM proyectos
-      WHERE status = 'active' AND has_mensualidad = true AND monthly_fee_eur IS NOT NULL
-      ORDER BY monthly_fee_eur DESC
-      LIMIT 10
-    `,
-  ])
-
-  const expenseTx = bankTxYtdResult.rows
-    .filter((r) => Number(r.amount) < 0)
-    .map((r) => ({
-      description: r.description || '',
-      amount: Number(r.amount),
-      date: r.date,
-    }))
-  const incomeTx = bankTxYtdResult.rows
-    .filter((r) => Number(r.amount) > 0)
-    .map((r) => ({
-      description: r.description || '',
-      amount: Number(r.amount),
-      date: r.date,
-    }))
-
-  const expense_breakdown = categorizeExpenses(expenseTx)
-  const income_breakdown = categorizeIncome(incomeTx)
-  const mrr_by_client = mrrByClientRaw.map((r) => ({
-    name: r.name,
-    amount: Number(r.amount),
-  }))
-  const net_trend = cashFlow.map((c) => ({ month: c.month, net: c.net }))
 
   const invoicedYTD = await prisma.invoice.aggregate({
     where: { deleted_at: null, status: 'sent', issue_date: { gte: new Date(y, 0, 1) } },
@@ -434,9 +429,10 @@ export async function buildExecutiveSummary(): Promise<ExecutiveSummary> {
     invoiced_vs_collected: invoicedVsCollected,
     expense_breakdown,
     income_breakdown,
+    expense_source_label,
     mrr_by_client,
     net_trend,
-    alerts,
+    alerts: alertsFinal,
     pending_invoices: pendingInvoices,
     project_economics: projectEconomics,
     generated_at: now.toISOString(),

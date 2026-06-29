@@ -1,8 +1,11 @@
-export type AlertSeverity = 'info' | 'warning' | 'critical'
+export type AlertPriority = 'good' | 'medium' | 'bad'
+
+/** @deprecated use priority — kept for compat */
+export type AlertSeverity = AlertPriority
 
 export interface FinanceAlert {
   id: string
-  severity: AlertSeverity
+  priority: AlertPriority
   title: string
   message: string
   action_label?: string
@@ -127,6 +130,7 @@ export interface ExecutiveSummary {
   invoiced_vs_collected: MonthlyInvoicedCollected[]
   expense_breakdown: CategorySlice[]
   income_breakdown: CategorySlice[]
+  expense_source_label: string
   mrr_by_client: MrrClientRow[]
   net_trend: NetTrendPoint[]
   alerts: FinanceAlert[]

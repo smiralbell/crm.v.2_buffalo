@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import type { MrrClientRow } from '@/lib/finance/types'
-import { chartColor, fmtEur } from '@/lib/finance/chart-theme'
+import { COLORS, chartColor, fmtEur } from '@/lib/finance/chart-theme'
 
 const TooltipContent = ({
   active,
@@ -26,13 +26,14 @@ const TooltipContent = ({
 export default function MrrByClientChart({ data }: { data: MrrClientRow[] }) {
   if (data.length === 0) {
     return (
-      <div className="h-52 flex items-center justify-center text-sm text-gray-400">
-        Sin clientes activos con mensualidad
+      <div className="h-52 flex flex-col items-center justify-center text-sm text-gray-400 gap-1 px-4 text-center">
+        <p>Sin clientes con mensualidad registrada</p>
+        <p className="text-xs">Añade monthly_fee_eur en Retención → Proyectos</p>
       </div>
     )
   }
 
-  const chartData = data.map((d, i) => ({ ...d, fill: chartColor(i) }))
+  const chartData = data.map((d, i) => ({ ...d, fill: i === 0 ? COLORS.blue : chartColor(i) }))
 
   return (
     <ResponsiveContainer width="100%" height={Math.max(180, data.length * 36)}>
@@ -52,15 +53,15 @@ export default function MrrByClientChart({ data }: { data: MrrClientRow[] }) {
         <YAxis
           type="category"
           dataKey="name"
-          width={100}
+          width={110}
           tick={{ fontSize: 11, fill: '#6B7280' }}
           axisLine={false}
           tickLine={false}
         />
         <Tooltip content={<TooltipContent />} cursor={{ fill: '#F9FAFB' }} />
         <Bar dataKey="amount" radius={[0, 4, 4, 0]} maxBarSize={22}>
-          {chartData.map((entry, index) => (
-            <Cell key={entry.name} fill={index === 0 ? '#111827' : entry.fill} />
+          {chartData.map((entry) => (
+            <Cell key={entry.name} fill={entry.fill} />
           ))}
         </Bar>
       </BarChart>

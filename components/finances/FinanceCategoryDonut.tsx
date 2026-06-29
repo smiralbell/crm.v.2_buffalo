@@ -3,11 +3,17 @@
 import { useState, useCallback } from 'react'
 import { PieChart, Pie, Cell, Sector, ResponsiveContainer } from 'recharts'
 import type { CategorySlice } from '@/lib/finance/types'
-import { chartColor, fmtEur, fmtPct } from '@/lib/finance/chart-theme'
+import {
+  expenseCategoryColor,
+  incomeCategoryColor,
+  fmtEur,
+  fmtPct,
+} from '@/lib/finance/chart-theme'
 
 interface Props {
   data: CategorySlice[]
   emptyMessage: string
+  variant?: 'expense' | 'income'
 }
 
 interface ActiveShapeProps {
@@ -37,12 +43,13 @@ function ActiveShape(props: ActiveShapeProps) {
   )
 }
 
-export default function FinanceCategoryDonut({ data, emptyMessage }: Props) {
+export default function FinanceCategoryDonut({ data, emptyMessage, variant = 'expense' }: Props) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
+  const colorFn = variant === 'income' ? incomeCategoryColor : expenseCategoryColor
 
   const chartData = data.map((d, i) => ({
     ...d,
-    fill: chartColor(i),
+    fill: colorFn(d.id, i),
   }))
 
   const active = activeIndex != null ? chartData[activeIndex] : null
@@ -53,7 +60,7 @@ export default function FinanceCategoryDonut({ data, emptyMessage }: Props) {
 
   if (total <= 0) {
     return (
-      <div className="h-56 flex items-center justify-center text-sm text-gray-400">
+      <div className="h-56 flex items-center justify-center text-sm text-gray-400 px-4 text-center">
         {emptyMessage}
       </div>
     )
@@ -136,12 +143,12 @@ export default function FinanceCategoryDonut({ data, emptyMessage }: Props) {
         ) : (
           <div className="space-y-2">
             <p className="text-[10px] uppercase tracking-wide text-gray-400 mb-2">Desglose</p>
-            {chartData.map((d) => (
+            {chartData.map((d, i) => (
               <button
                 key={d.id}
                 type="button"
                 className="w-full flex items-center justify-between gap-2 text-left py-1 rounded hover:bg-gray-50 transition-colors"
-                onMouseEnter={() => setActiveIndex(chartData.indexOf(d))}
+                onMouseEnter={() => setActiveIndex(i)}
                 onMouseLeave={() => setActiveIndex(null)}
               >
                 <span className="flex items-center gap-1.5 min-w-0">

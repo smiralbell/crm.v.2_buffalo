@@ -666,13 +666,14 @@ export default function FinancesDashboard({
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base font-semibold text-gray-900">Distribución de gastos</CardTitle>
                   <p className="text-xs text-gray-400 font-normal">
-                    Año en curso · clasificación automática desde movimientos bancarios
+                    Año en curso · {executive.expense_source_label}
                   </p>
                 </CardHeader>
                 <CardContent>
                   <FinanceCategoryDonut
                     data={executive.expense_breakdown}
-                    emptyMessage="Sin gastos registrados este año — sincroniza el banco"
+                    variant="expense"
+                    emptyMessage="Sin gastos este año — sincroniza el banco o registra gastos en el CRM"
                   />
                 </CardContent>
               </Card>
@@ -686,7 +687,8 @@ export default function FinancesDashboard({
                   <CardContent>
                     <FinanceCategoryDonut
                       data={executive.income_breakdown}
-                      emptyMessage="Sin ingresos registrados este año"
+                      variant="income"
+                      emptyMessage="Sin ingresos registrados este año — sincroniza el banco"
                     />
                   </CardContent>
                 </Card>
