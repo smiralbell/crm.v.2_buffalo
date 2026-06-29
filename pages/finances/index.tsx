@@ -344,7 +344,8 @@ export default function FinancesDashboard({
         setSyncMessage(`${data.inserted} movimientos nuevos sincronizados`)
       }
       if (reloadAfter || data.inserted > 0 || data.repaired > 0 || data.balance_repaired > 0) {
-        await router.replace('/finances', undefined, { shallow: false })
+        const { start, end } = periodToQuery(dateRange)
+        await router.replace(`/finances?start=${start}&end=${end}`, undefined, { shallow: false })
       }
       return true
     } catch {
@@ -352,7 +353,7 @@ export default function FinancesDashboard({
     } finally {
       setSyncing(false)
     }
-  }, [router])
+  }, [router, dateRange])
 
   const refreshConnectionStatus = useCallback(async () => {
     try {
@@ -503,56 +504,68 @@ export default function FinancesDashboard({
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              className="flex items-center gap-2"
-              onClick={handleConnect}
-              disabled={connecting || syncing}
-            >
-              {connecting || syncing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Landmark className="h-4 w-4" />
-              )}
-              {bankConnection.connected ? 'Reconectar CaixaBank' : 'Conectar CaixaBank'}
-            </Button>
-            {bankConnection.connected && (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-nowrap items-center gap-3 min-w-0">
+            <div className="flex shrink-0 items-center gap-2">
               <Button
-                variant="outline"
-                size="icon"
-                onClick={() => runSync(true)}
-                disabled={syncing}
-                title="Sincronizar movimientos"
+                className="flex items-center gap-2 h-9 whitespace-nowrap"
+                onClick={handleConnect}
+                disabled={connecting || syncing}
               >
-                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-              </Button>
-            )}
-            {bankConnection.connected && bankConnection.days_remaining !== null && (
-              <p
-                className={`text-xs w-full sm:w-auto ${
-                  bankConnection.expires_soon ? 'text-red-600 font-medium' : 'text-gray-500'
-                }`}
-              >
-                {bankConnection.expires_soon ? (
-                  <>
-                    Quedan {bankConnection.days_remaining} día
-                    {bankConnection.days_remaining === 1 ? '' : 's'} para desconectarse — reconecta
-                    pronto
-                  </>
+                {connecting || syncing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <>
-                    Conexión activa · quedan {bankConnection.days_remaining} día
-                    {bankConnection.days_remaining === 1 ? '' : 's'} para volver a conectar
-                  </>
+                  <Landmark className="h-4 w-4" />
                 )}
-              </p>
-            )}
-            {syncMessage && (
-              <p className="text-xs text-green-700 w-full sm:w-auto">{syncMessage}</p>
-            )}
+                {bankConnection.connected ? 'Reconectar' : 'Conectar CaixaBank'}
+              </Button>
+              {bankConnection.connected && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => runSync(true)}
+                  disabled={syncing}
+                  title="Sincronizar movimientos"
+                >
+                  <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                </Button>
+              )}
+            </div>
+
+            <div className="hidden sm:block h-6 w-px bg-gray-200 shrink-0" />
+
+            <FinancePeriodFilter
+              value={dateRange}
+              onChange={handlePeriodChange}
+              className="flex-1 min-w-0"
+            />
           </div>
-          <FinancePeriodFilter value={dateRange} onChange={handlePeriodChange} />
+
+          {(bankConnection.connected && bankConnection.days_remaining !== null) || syncMessage ? (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+              {bankConnection.connected && bankConnection.days_remaining !== null && (
+                <p
+                  className={
+                    bankConnection.expires_soon ? 'text-red-600 font-medium' : 'text-gray-500'
+                  }
+                >
+                  {bankConnection.expires_soon ? (
+                    <>
+                      Quedan {bankConnection.days_remaining} día
+                      {bankConnection.days_remaining === 1 ? '' : 's'} para desconectarse
+                    </>
+                  ) : (
+                    <>
+                      Conexión activa · {bankConnection.days_remaining} día
+                      {bankConnection.days_remaining === 1 ? '' : 's'} restantes
+                    </>
+                  )}
+                </p>
+              )}
+              {syncMessage && <p className="text-green-700">{syncMessage}</p>}
+            </div>
+          ) : null}
         </div>
 
         {/* Centro de inteligencia financiera */}
