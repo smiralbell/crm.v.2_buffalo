@@ -367,12 +367,15 @@ export default function FinancesDashboard({
         setSyncMessage(data.message || data.error || 'Error al sincronizar movimientos')
         return false
       }
-      if (data.repaired > 0) {
-        setSyncMessage(`${data.repaired} movimientos corregidos (signo ingreso/gasto)`)
+      if (data.repaired > 0 || data.balance_repaired > 0) {
+        const parts: string[] = []
+        if (data.repaired > 0) parts.push(`${data.repaired} corregidos`)
+        if (data.balance_repaired > 0) parts.push(`${data.balance_repaired} por saldo`)
+        setSyncMessage(`Movimientos ${parts.join(', ')} (ingreso/gasto)`)
       } else if (data.inserted > 0) {
         setSyncMessage(`${data.inserted} movimientos nuevos sincronizados`)
       }
-      if (reloadAfter || data.inserted > 0 || data.repaired > 0) {
+      if (reloadAfter || data.inserted > 0 || data.repaired > 0 || data.balance_repaired > 0) {
         await router.replace('/finances', undefined, { shallow: false })
       }
       return true

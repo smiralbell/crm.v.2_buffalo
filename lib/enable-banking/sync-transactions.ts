@@ -1,8 +1,17 @@
 import { createHash } from 'crypto'
 import { v4 as uuidv4 } from 'uuid'
 import { query } from '@/lib/db'
-import { getAccountBalances, getAccountTransactions } from './client'
-import { parseEbTransactions } from './parse-transactions'
+import {
+  extractOwnAccountIban,
+  getAccountBalances,
+  getAccountDetails,
+  getAllAccountTransactions,
+} from './client'
+import {
+  normalizeIban,
+  parseEbTransactions,
+  resignAmountsFromBalanceSeries,
+} from './parse-transactions'
 import { getLatestBankTestSession } from './session-store'
 
 function normalizeDescription(description: string): string {
@@ -13,67 +22,85 @@ function generateTransactionHash(
   accountId: string,
   date: string,
   amount: number,
-  description: string
+  description: string,
+  entryReference?: string
 ): string {
   const normalizedDesc = normalizeDescription(description)
-  const data = `${accountId}|${date}|${amount.toFixed(2)}|${normalizedDesc}`
+  const ref = entryReference ? `|${entryReference}` : ''
+  const data = `${accountId}|${date}|${amount.toFixed(2)}|${normalizedDesc}${ref}`
   return createHash('sha256').update(data).digest('hex')
 }
 
-async function getOrCreateEnableBankingAccount(accountUid: string): Promise<string> {
-  const iban = `ENABLEBANKING:${accountUid}`
+async function getOrCreateEnableBankingAccount(
+  accountUid: string,
+  realIban?: string | null
+): Promise<string> {
+  const syntheticIban = `ENABLEBANKING:${accountUid}`
   const existing = await query<{ id: string }>(
     'SELECT id FROM bank_accounts WHERE iban = $1',
-    [iban]
+    [syntheticIban]
   )
-  if (existing.rows[0]) return existing.rows[0].id
+  if (existing.rows[0]) {
+    if (realIban) {
+      await query(
+        `UPDATE bank_accounts SET name = COALESCE(name, $2) WHERE id = $1`,
+        [existing.rows[0].id, `CaixaBank ${realIban.slice(-4)}`]
+      )
+    }
+    return existing.rows[0].id
+  }
 
   const id = uuidv4()
+  const label = realIban
+    ? `CaixaBank ···${realIban.replace(/\s/g, '').slice(-4)}`
+    : 'Cuenta Enable Banking'
   await query('INSERT INTO bank_accounts (id, name, iban) VALUES ($1, $2, $3)', [
     id,
-    'Cuenta Enable Banking',
-    iban,
+    label,
+    syntheticIban,
   ])
   return id
 }
 
-export async function syncEnableBankingTransactions(): Promise<{
-  inserted: number
-  updated: number
-  duplicates: number
-  total: number
-  repaired: number
-}> {
-  const session = await getLatestBankTestSession()
-  if (!session) {
-    throw new Error('No hay conexión bancaria activa')
-  }
-
-  const accountUid = session.account_uid
-  const accountId = await getOrCreateEnableBankingAccount(accountUid)
-
-  const [balancesRaw, transactionsRaw] = await Promise.all([
-    getAccountBalances(accountUid).catch(() => null),
-    getAccountTransactions(accountUid),
-  ])
-
-  const transactions = parseEbTransactions(transactionsRaw)
-  if (transactions.length === 0) {
-    return { inserted: 0, updated: 0, duplicates: 0, total: 0, repaired: 0 }
-  }
-
-  let inserted = 0
-  let updated = 0
-  let duplicates = 0
+async function repairFromApiBatch(
+  accountId: string,
+  transactions: ReturnType<typeof parseEbTransactions>
+): Promise<number> {
   let repaired = 0
 
-  // Corregir movimientos guardados con signo erróneo (importe siempre positivo)
   for (const tx of transactions) {
     const absAmt = Math.abs(tx.amount)
 
-    // Gastos mal guardados como positivos (caso habitual Enable Banking)
+    // 1) Por entry_reference en descripción o fila única fecha+importe
+    if (tx.entry_reference) {
+      const byRef = await query(
+        `UPDATE bank_transactions
+         SET amount = $1, balance = COALESCE($2, balance)
+         WHERE account_id = $3
+           AND amount <> $1
+           AND (
+             description = $4
+             OR date = $5 AND ABS(amount) = $6
+           )
+         RETURNING id`,
+        [
+          tx.amount,
+          tx.balance,
+          accountId,
+          tx.description,
+          tx.date,
+          absAmt,
+        ]
+      )
+      if (byRef.rowCount && byRef.rowCount > 0) {
+        repaired += byRef.rowCount
+        continue
+      }
+    }
+
+    // 2) Corregir positivos que deberían ser gastos
     if (tx.amount < 0) {
-      const fixResult = await query(
+      const fixDebit = await query(
         `UPDATE bank_transactions
          SET amount = $1, balance = COALESCE($2, balance)
          WHERE id = (
@@ -86,33 +113,121 @@ export async function syncEnableBankingTransactions(): Promise<{
          RETURNING id`,
         [tx.amount, tx.balance, accountId, tx.date, absAmt]
       )
-      if (fixResult.rowCount && fixResult.rowCount > 0) {
-        repaired += fixResult.rowCount
+      if (fixDebit.rowCount && fixDebit.rowCount > 0) {
+        repaired += fixDebit.rowCount
         continue
       }
     }
 
-    const fixResult2 = await query(
+    // 3) Cualquier fila con mismo día e importe absoluto pero signo distinto
+    const fixSign = await query(
       `UPDATE bank_transactions
        SET amount = $1, balance = COALESCE($2, balance)
        WHERE account_id = $3 AND date = $4
-         AND ABS(amount) = $5
-         AND amount <> $1
-         AND description = $6
+         AND ABS(amount) = $5 AND amount <> $1
        RETURNING id`,
-      [tx.amount, tx.balance, accountId, tx.date, absAmt, tx.description]
+      [tx.amount, tx.balance, accountId, tx.date, absAmt]
     )
-    if (fixResult2.rowCount && fixResult2.rowCount > 0) {
-      updated += fixResult2.rowCount
+    if (fixSign.rowCount && fixSign.rowCount > 0) {
+      repaired += fixSign.rowCount
     }
   }
+
+  return repaired
+}
+
+async function repairFromStoredBalances(accountId: string): Promise<number> {
+  const rows = await query<{
+    id: string
+    date: string
+    amount: number
+    balance: number | null
+    created_at: string
+  }>(
+    `SELECT id, date, amount, balance, created_at
+     FROM bank_transactions
+     WHERE account_id = $1 AND balance IS NOT NULL
+     ORDER BY date ASC, created_at ASC`,
+    [accountId]
+  )
+
+  const updates = resignAmountsFromBalanceSeries(
+    rows.rows.map((r) => ({
+      id: r.id,
+      date: String(r.date).slice(0, 10),
+      amount: Number(r.amount),
+      balance: r.balance !== null ? Number(r.balance) : null,
+    }))
+  )
+
+  let repaired = 0
+  for (const u of updates) {
+    const result = await query(
+      `UPDATE bank_transactions SET amount = $1 WHERE id = $2 AND amount <> $1 RETURNING id`,
+      [u.amount, u.id]
+    )
+    if (result.rowCount && result.rowCount > 0) repaired++
+  }
+
+  return repaired
+}
+
+export async function syncEnableBankingTransactions(): Promise<{
+  inserted: number
+  updated: number
+  duplicates: number
+  total: number
+  repaired: number
+  balance_repaired: number
+}> {
+  const session = await getLatestBankTestSession()
+  if (!session) {
+    throw new Error('No hay conexión bancaria activa')
+  }
+
+  const accountUid = session.account_uid
+
+  const [detailsRaw, balancesRaw, transactionsRaw] = await Promise.all([
+    getAccountDetails(accountUid).catch(() => null),
+    getAccountBalances(accountUid).catch(() => null),
+    getAllAccountTransactions(accountUid),
+  ])
+
+  const ownIban = extractOwnAccountIban(detailsRaw)
+  const accountId = await getOrCreateEnableBankingAccount(accountUid, ownIban)
+
+  const transactions = parseEbTransactions(transactionsRaw, {
+    ownAccountIban: ownIban,
+    inferFromBalance: true,
+  })
+
+  if (transactions.length === 0) {
+    const balanceRepaired = await repairFromStoredBalances(accountId)
+    return {
+      inserted: 0,
+      updated: 0,
+      duplicates: 0,
+      total: 0,
+      repaired: 0,
+      balance_repaired: balanceRepaired,
+    }
+  }
+
+  let inserted = 0
+  let duplicates = 0
+
+  let repaired = await repairFromApiBatch(accountId, transactions)
+  const balanceRepaired = await repairFromStoredBalances(accountId)
+  repaired += balanceRepaired
 
   const dates = transactions.map((t) => t.date).sort()
   const periodStart = dates[0]
   const periodEnd = dates[dates.length - 1]
   const statementId = uuidv4()
   const fileHash = createHash('sha256')
-    .update(`${accountUid}:${periodStart}:${periodEnd}:${transactions.length}:v2`)
+    .update(
+      `${accountUid}:${periodStart}:${periodEnd}:${transactions.length}:v3:${normalizeIban(ownIban) || ''}`
+    )
     .digest('hex')
 
   await query(
@@ -130,15 +245,37 @@ export async function syncEnableBankingTransactions(): Promise<{
   )
 
   for (const tx of transactions) {
-    const hash = generateTransactionHash(accountId, tx.date, tx.amount, tx.description)
-    const existing = await query<{ id: string }>(
-      `SELECT id FROM bank_transactions
-       WHERE account_id = $1 AND date = $2 AND ABS(amount) = $3 AND description = $4
-       LIMIT 1`,
-      [accountId, tx.date, Math.abs(tx.amount), tx.description]
+    const absAmt = Math.abs(tx.amount)
+    const hash = generateTransactionHash(
+      accountId,
+      tx.date,
+      tx.amount,
+      tx.description,
+      tx.entry_reference
     )
+
+    const existing = await query<{ id: string; amount: number }>(
+      `SELECT id, amount FROM bank_transactions
+       WHERE account_id = $1 AND date = $2 AND ABS(amount) = $3
+         AND (description = $4 OR description IS NOT DISTINCT FROM $4)
+       ORDER BY ABS(amount - $5) ASC
+       LIMIT 1`,
+      [accountId, tx.date, absAmt, tx.description, tx.amount]
+    )
+
     if (existing.rows[0]) {
-      duplicates++
+      const row = existing.rows[0]
+      if (Number(row.amount) !== tx.amount) {
+        await query(
+          `UPDATE bank_transactions
+           SET amount = $1, balance = COALESCE($2, balance), hash = $3
+           WHERE id = $4`,
+          [tx.amount, tx.balance, hash, row.id]
+        )
+        repaired++
+      } else {
+        duplicates++
+      }
       continue
     }
 
@@ -146,7 +283,9 @@ export async function syncEnableBankingTransactions(): Promise<{
       `INSERT INTO bank_transactions
        (id, account_id, statement_id, date, amount, description, hash, balance, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-       ON CONFLICT (account_id, hash) DO NOTHING`,
+       ON CONFLICT (account_id, hash) DO UPDATE SET
+         amount = EXCLUDED.amount,
+         balance = COALESCE(EXCLUDED.balance, bank_transactions.balance)`,
       [uuidv4(), accountId, statementId, tx.date, tx.amount, tx.description, hash, tx.balance]
     )
     if (result.rowCount && result.rowCount > 0) inserted++
@@ -174,5 +313,12 @@ export async function syncEnableBankingTransactions(): Promise<{
     }
   }
 
-  return { inserted, updated, duplicates, total: transactions.length, repaired }
+  return {
+    inserted,
+    updated: 0,
+    duplicates,
+    total: transactions.length,
+    repaired,
+    balance_repaired: balanceRepaired,
+  }
 }

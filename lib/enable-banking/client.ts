@@ -134,10 +134,64 @@ export async function authorizeSession(code: string): Promise<AuthorizeSessionRe
   })
 }
 
+export async function getAccountDetails(accountUid: string): Promise<unknown> {
+  return enableBankingRequest(`/accounts/${encodeURIComponent(accountUid)}/details`)
+}
+
 export async function getAccountBalances(accountUid: string): Promise<unknown> {
   return enableBankingRequest(`/accounts/${encodeURIComponent(accountUid)}/balances`)
 }
 
-export async function getAccountTransactions(accountUid: string): Promise<unknown> {
-  return enableBankingRequest(`/accounts/${encodeURIComponent(accountUid)}/transactions`)
+export async function getAccountTransactions(
+  accountUid: string,
+  params?: { continuation_key?: string; date_from?: string; transaction_status?: string }
+): Promise<unknown> {
+  const qs = new URLSearchParams()
+  if (params?.continuation_key) qs.set('continuation_key', params.continuation_key)
+  if (params?.date_from) qs.set('date_from', params.date_from)
+  if (params?.transaction_status) qs.set('transaction_status', params.transaction_status)
+  const query = qs.toString()
+  const path = `/accounts/${encodeURIComponent(accountUid)}/transactions${query ? `?${query}` : ''}`
+  return enableBankingRequest(path)
+}
+
+/** Pagina todas las transacciones BOOK (máx. 50 páginas por seguridad) */
+export async function getAllAccountTransactions(accountUid: string): Promise<unknown> {
+  const all: unknown[] = []
+  let continuationKey: string | undefined
+  let pages = 0
+
+  do {
+    const page = (await getAccountTransactions(accountUid, {
+      continuation_key: continuationKey,
+      transaction_status: 'BOOK',
+    })) as { transactions?: unknown[]; continuation_key?: string | null }
+
+    if (Array.isArray(page.transactions)) {
+      all.push(...page.transactions)
+    }
+
+    continuationKey =
+      typeof page.continuation_key === 'string' && page.continuation_key
+        ? page.continuation_key
+        : undefined
+    pages++
+  } while (continuationKey && pages < 50)
+
+  return { transactions: all }
+}
+
+export function extractOwnAccountIban(details: unknown): string | null {
+  if (!details || typeof details !== 'object') return null
+  const d = details as Record<string, unknown>
+  const accountId = d.account_id as { iban?: string } | undefined
+  if (accountId?.iban) return accountId.iban
+
+  const allIds = d.all_account_ids as Array<{ identification?: string; scheme_name?: string }> | undefined
+  if (Array.isArray(allIds)) {
+    const ibanEntry = allIds.find((x) => x.scheme_name?.toUpperCase() === 'IBAN')
+    if (ibanEntry?.identification) return ibanEntry.identification
+  }
+
+  return null
 }
