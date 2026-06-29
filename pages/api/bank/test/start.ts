@@ -5,6 +5,7 @@ import {
   EnableBankingApiError,
   EnableBankingConfigError,
 } from '@/lib/enable-banking/client'
+import { getEnableBankingAspspName } from '@/lib/enable-banking/config'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -18,12 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const bank = (req.query.bank as string)?.trim()
-    if (!bank) {
-      return res.status(400).json({
-        error: 'Parámetro bank requerido. Usa el nombre exacto del listado GET /api/bank/test/banks',
-      })
-    }
+    const bank = getEnableBankingAspspName()
     const result = await startAuthorization(bank)
 
     if (!result.url) {

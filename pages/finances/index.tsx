@@ -6,7 +6,6 @@ import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
 import { getBankConnectionStatus, type BankConnectionStatus } from '@/lib/enable-banking/connection-status'
-import { listAspsps } from '@/lib/enable-banking/client'
 import { getLatestFinanceAiAnalysis } from '@/lib/finance/ai-analysis'
 import type { ExecutiveSummary, FinanceAiSummary } from '@/lib/finance/types'
 import FinanceAlertsPanel from '@/components/finances/FinanceAlertsPanel'
@@ -24,13 +23,6 @@ const NetTrendChart = dynamic(() => import('@/components/finances/NetTrendChart'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -70,8 +62,6 @@ interface DashboardProps {
     netProfitAfterCorporateTax: number
   }
   bankConnection: BankConnectionStatus
-  banks: Array<{ name: string; country: string }>
-  banksError: string
   initialAiAnalysis: {
     summary: FinanceAiSummary
     model: string
@@ -106,8 +96,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           days_remaining: null,
           expires_soon: false,
         },
-        banks: [],
-        banksError: '',
         initialAiAnalysis: null,
       },
     }
@@ -234,15 +222,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       // tabla bank_connections puede no existir aún
     }
 
-    let banks: Array<{ name: string; country: string }> = []
-    let banksError = ''
-    try {
-      const listed = await listAspsps('ES')
-      banks = listed.map((b) => ({ name: b.name, country: b.country }))
-    } catch (err) {
-      banksError = err instanceof Error ? err.message : 'No se pudo cargar el listado de bancos'
-    }
-
     let initialAiAnalysis: DashboardProps['initialAiAnalysis'] = null
     try {
       const latest = await getLatestFinanceAiAnalysis()
@@ -274,8 +253,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           netProfitAfterCorporateTax,
         },
         bankConnection,
-        banks,
-        banksError,
         initialAiAnalysis,
       },
     }
@@ -307,8 +284,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           days_remaining: null,
           expires_soon: false,
         },
-        banks: [],
-        banksError: '',
         initialAiAnalysis: null,
       },
     }
@@ -319,8 +294,6 @@ export default function FinancesDashboard({
   dateRange: initialDateRange,
   stats,
   bankConnection: initialBankConnection,
-  banks: initialBanks,
-  banksError: initialBanksError,
   initialAiAnalysis,
 }: DashboardProps) {
   const router = useRouter()
@@ -330,11 +303,9 @@ export default function FinancesDashboard({
       : getDefaultPeriodRange()
   )
   const [bankConnection, setBankConnection] = useState(initialBankConnection)
-  const [selectedBank, setSelectedBank] = useState(initialBanks[0]?.name || '')
   const [connecting, setConnecting] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
-  const syncStartedRef = useRef(false)
   const [executive, setExecutive] = useState<ExecutiveSummary | null>(null)
   const [loadingExecutive, setLoadingExecutive] = useState(true)
   const [transactions, setTransactions] = useState<Array<{
@@ -358,7 +329,10 @@ export default function FinancesDashboard({
       const response = await fetch('/api/bank/sync', { method: 'POST' })
       const data = await response.json()
       if (!response.ok) {
-        setSyncMessage(data.message || data.error || 'Error al sincronizar movimientos')
+        // No mostrar errores de API (p. ej. límite de consentimiento HUB046) en la UI
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[bank/sync]', data.message || data.error)
+        }
         return false
       }
       if (data.repaired > 0 || data.balance_repaired > 0) {
@@ -374,7 +348,6 @@ export default function FinancesDashboard({
       }
       return true
     } catch {
-      setSyncMessage('Error al sincronizar movimientos')
       return false
     } finally {
       setSyncing(false)
@@ -398,11 +371,8 @@ export default function FinancesDashboard({
     if (status === 'ok') {
       refreshConnectionStatus()
       runSync(true)
-    } else if (bankConnection.connected && !syncStartedRef.current) {
-      syncStartedRef.current = true
-      runSync(false)
     }
-  }, [router.query.status, bankConnection.connected, refreshConnectionStatus, runSync])
+  }, [router.query.status, refreshConnectionStatus, runSync])
 
   useEffect(() => {
     const loadExecutive = async () => {
@@ -422,19 +392,19 @@ export default function FinancesDashboard({
   }, [dateRange])
 
   const handleConnect = async () => {
-    const bank = selectedBank || initialBanks[0]?.name
-    if (!bank) return
     setConnecting(true)
     try {
-      const res = await fetch(`/api/bank/test/start?bank=${encodeURIComponent(bank)}`)
+      const res = await fetch('/api/bank/test/start')
       const data = await res.json()
       if (!res.ok || !data.url) {
-        setSyncMessage(data.error || 'No se pudo iniciar la conexión bancaria')
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[bank/connect]', data.error)
+        }
         return
       }
       window.location.href = data.url
     } catch {
-      setSyncMessage('Error al conectar con el banco')
+      // ignorar
     } finally {
       setConnecting(false)
     }
@@ -537,31 +507,17 @@ export default function FinancesDashboard({
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                {initialBanks.length > 0 && (
-                  <Select value={selectedBank} onValueChange={setSelectedBank}>
-                    <SelectTrigger className="w-[220px]">
-                      <SelectValue placeholder="Selecciona banco" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {initialBanks.map((bank) => (
-                        <SelectItem key={bank.name} value={bank.name}>
-                          {bank.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
                 <Button
                   className="flex items-center gap-2"
                   onClick={handleConnect}
-                  disabled={connecting || syncing || initialBanks.length === 0}
+                  disabled={connecting || syncing}
                 >
                   {connecting || syncing ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Landmark className="h-4 w-4" />
                   )}
-                  {bankConnection.connected ? 'Reconectar Enable Banking' : 'Conexión Enable Banking'}
+                  {bankConnection.connected ? 'Reconectar CaixaBank' : 'Conectar CaixaBank'}
                 </Button>
                 {bankConnection.connected && (
                   <Button
@@ -595,14 +551,8 @@ export default function FinancesDashboard({
                   )}
                 </p>
               )}
-              {!bankConnection.connected && initialBanksError && (
-                <p className="text-xs text-red-600 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  {initialBanksError}
-                </p>
-              )}
               {syncMessage && (
-                <p className="text-xs text-gray-600">{syncMessage}</p>
+                <p className="text-xs text-green-700">{syncMessage}</p>
               )}
             </div>
           </div>

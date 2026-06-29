@@ -15,6 +15,13 @@
 
 export const ENABLEBANKING_API_BASE = 'https://api.enablebanking.com'
 
+/** Nombre exacto del ASPSP en Enable Banking (España) */
+export const DEFAULT_ASPSP_NAME = 'CaixaBank'
+
+export function getEnableBankingAspspName(): string {
+  return process.env.ENABLEBANKING_ASPSP_NAME?.trim() || DEFAULT_ASPSP_NAME
+}
+
 export interface EnableBankingConfig {
   appId: string
   privateKey: string

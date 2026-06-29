@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import {
   ENABLEBANKING_API_BASE,
   EnableBankingConfigError,
+  getEnableBankingAspspName,
   getEnableBankingConfig,
 } from './config'
 import { createEnableBankingJwt, validUntilIso } from './jwt'
@@ -112,14 +113,15 @@ export async function listAspsps(country = 'ES'): Promise<AspspItem[]> {
   return list.sort((a, b) => a.name.localeCompare(b.name, 'es'))
 }
 
-export async function startAuthorization(bankName: string): Promise<StartAuthResponse> {
+export async function startAuthorization(bankName?: string): Promise<StartAuthResponse> {
   const { redirectUrl } = getEnableBankingConfig()
+  const bank = bankName?.trim() || getEnableBankingAspspName()
 
   return enableBankingRequest<StartAuthResponse>('/auth', {
     method: 'POST',
     body: JSON.stringify({
       access: { valid_until: validUntilIso(90) },
-      aspsp: { name: bankName, country: 'ES' },
+      aspsp: { name: bank, country: 'ES' },
       state: randomUUID(),
       redirect_url: redirectUrl,
       psu_type: 'business',
