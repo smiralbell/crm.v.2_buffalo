@@ -127,7 +127,7 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
     await logDemoWebhook({
       step: 'openrouter',
       level: 'info',
-      message: 'Generando respuesta con OpenRouter…',
+      message: `Generando respuesta (${process.env.DEMO_OPENROUTER_MODEL || '~anthropic/claude-sonnet-latest'})…`,
       phone,
       demo_id: demo.demo_id,
       details: { history_messages: history.length },
