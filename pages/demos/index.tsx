@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import DemoFormDialog, { type DemoFormValues } from '@/components/demos/DemoFormDialog'
 import PhoneConflictDialog from '@/components/demos/PhoneConflictDialog'
+import DemoWebhookLogsPanel from '@/components/demos/DemoWebhookLogsPanel'
 import type { DemoListItem, PhoneConflict } from '@/lib/demos/types'
 import {
   Bot,
@@ -229,6 +230,8 @@ export default function DemosPage() {
             {error}
           </div>
         )}
+
+        <DemoWebhookLogsPanel />
 
         <Card className="border border-gray-200 shadow-sm">
           <CardContent className="p-0">

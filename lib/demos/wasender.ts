@@ -1,12 +1,29 @@
 const WASENDER_API_BASE =
   process.env.WASENDER_API_BASE_URL || 'https://www.wasenderapi.com'
 
+const INCOMING_EVENTS = new Set([
+  'messages.received',
+  'messages.upsert',
+  'messages-personal.received',
+  'message.received',
+])
+
 export interface ParsedWasenderMessage {
   senderPhone: string
   text: string
   fromMe: boolean
   event: string | null
 }
+
+export type ParseWasenderResult =
+  | { ok: true; data: ParsedWasenderMessage }
+  | {
+      ok: false
+      reason: string
+      reason_code: string
+      event?: string | null
+      debug?: Record<string, unknown>
+    }
 
 function dig(obj: unknown, ...keys: string[]): unknown {
   let cur: unknown = obj
@@ -17,36 +34,70 @@ function dig(obj: unknown, ...keys: string[]): unknown {
   return cur
 }
 
-export function parseWasenderWebhook(body: unknown): ParsedWasenderMessage | null {
-  if (!body || typeof body !== 'object') return null
+function extractMessageObject(body: Record<string, unknown>): Record<string, unknown> | null {
+  const data = body.data
+  if (!data || typeof data !== 'object') return null
 
-  const event =
-    typeof (body as Record<string, unknown>).event === 'string'
-      ? ((body as Record<string, unknown>).event as string)
-      : null
-
-  if (event && event !== 'messages.received' && event !== 'messages.upsert') {
-    return null
+  const messages = (data as Record<string, unknown>).messages
+  if (messages && typeof messages === 'object' && !Array.isArray(messages)) {
+    return messages as Record<string, unknown>
+  }
+  if (Array.isArray(messages) && messages[0] && typeof messages[0] === 'object') {
+    return messages[0] as Record<string, unknown>
   }
 
-  const messages = dig(body, 'data', 'messages')
-  const msgObj =
-    messages && typeof messages === 'object' && !Array.isArray(messages)
-      ? (messages as Record<string, unknown>)
-      : Array.isArray(messages) && messages[0] && typeof messages[0] === 'object'
-        ? (messages[0] as Record<string, unknown>)
-        : null
+  // Algunos payloads traen el mensaje directamente en data
+  if ((data as Record<string, unknown>).key || (data as Record<string, unknown>).messageBody) {
+    return data as Record<string, unknown>
+  }
 
-  if (!msgObj) return null
+  return null
+}
+
+export function parseWasenderWebhook(body: unknown): ParseWasenderResult {
+  if (!body || typeof body !== 'object') {
+    return { ok: false, reason: 'Body vacío o no JSON', reason_code: 'empty_body' }
+  }
+
+  const root = body as Record<string, unknown>
+  const event = typeof root.event === 'string' ? root.event : null
+
+  if (event && !INCOMING_EVENTS.has(event)) {
+    return {
+      ok: false,
+      reason: `Evento ignorado: ${event}`,
+      reason_code: 'event_ignored',
+      event,
+      debug: { tip: 'Activa messages.received en Wasender' },
+    }
+  }
+
+  const msgObj = extractMessageObject(root)
+  if (!msgObj) {
+    return {
+      ok: false,
+      reason: 'No se encontró data.messages en el payload',
+      reason_code: 'no_messages',
+      event,
+      debug: { keys: Object.keys(root) },
+    }
+  }
 
   const key = msgObj.key as Record<string, unknown> | undefined
   const fromMe = Boolean(key?.fromMe)
-  if (fromMe) return null
+  if (fromMe) {
+    return {
+      ok: false,
+      reason: 'Mensaje saliente (fromMe), ignorado',
+      reason_code: 'from_me',
+      event,
+    }
+  }
 
   const senderRaw =
     (typeof key?.cleanedSenderPn === 'string' && key.cleanedSenderPn) ||
     (typeof key?.cleanedParticipantPn === 'string' && key.cleanedParticipantPn) ||
-    (typeof key?.remoteJid === 'string' && key.remoteJid) ||
+    (typeof key?.remoteJid === 'string' && key.remoteJid.replace(/@.*$/, '')) ||
     ''
 
   const text =
@@ -58,13 +109,34 @@ export function parseWasenderWebhook(body: unknown): ParsedWasenderMessage | nul
       ? (dig(msgObj, 'message', 'extendedTextMessage', 'text') as string).trim()
       : '')
 
-  if (!senderRaw || !text) return null
+  if (!senderRaw) {
+    return {
+      ok: false,
+      reason: 'Sin teléfono del remitente (cleanedSenderPn)',
+      reason_code: 'no_sender',
+      event,
+      debug: { key_fields: key ? Object.keys(key) : [] },
+    }
+  }
+
+  if (!text) {
+    return {
+      ok: false,
+      reason: 'Mensaje sin texto (¿audio/imagen sin caption?)',
+      reason_code: 'no_text',
+      event,
+      debug: { sender_raw: senderRaw },
+    }
+  }
 
   return {
-    senderPhone: senderRaw,
-    text,
-    fromMe,
-    event,
+    ok: true,
+    data: {
+      senderPhone: senderRaw,
+      text,
+      fromMe,
+      event,
+    },
   }
 }
 

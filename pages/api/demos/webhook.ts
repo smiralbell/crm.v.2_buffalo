@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { handleDemoWasenderWebhook } from '@/lib/demos/webhook-handler'
+import { logDemoWebhook } from '@/lib/demos/webhook-log'
 
 /**
  * POST /api/demos/webhook
@@ -12,25 +13,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const webhookSecret = process.env.WASENDER_WEBHOOK_SECRET
+  const signature =
+    (req.headers['x-webhook-signature'] as string | undefined)?.trim() || ''
+
   if (webhookSecret) {
-    const signature =
-      (req.headers['x-webhook-signature'] as string | undefined)?.trim() || ''
     if (!signature || signature !== webhookSecret) {
+      await logDemoWebhook({
+        step: 'auth_failed',
+        level: 'error',
+        message: 'Firma de webhook inválida (X-Webhook-Signature no coincide)',
+        details: {
+          signature_received: signature ? `${signature.slice(0, 8)}…` : '(vacío)',
+          hint: 'WASENDER_WEBHOOK_SECRET debe coincidir con el Webhook Secret de Wasender',
+        },
+        raw_body: req.body,
+      })
       return res.status(401).json({ error: 'Firma de webhook inválida' })
     }
+  } else {
+    await logDemoWebhook({
+      step: 'auth_skipped',
+      level: 'warn',
+      message: 'WASENDER_WEBHOOK_SECRET no configurado — webhook sin verificación',
+    })
   }
 
   try {
     const body = req.body
     if (!body || typeof body !== 'object') {
+      await logDemoWebhook({
+        step: 'empty_body',
+        level: 'warn',
+        message: 'Body vacío',
+      })
       return res.status(200).json({ ok: true, ignored: true })
     }
 
     const result = await handleDemoWasenderWebhook(body)
-
-    if (!result.handled && result.reason === 'no_active_demo') {
-      return res.status(200).json({ ok: true, ignored: true })
-    }
 
     if (!result.handled) {
       return res.status(200).json({ ok: true, ignored: true, reason: result.reason })
@@ -39,10 +58,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ ok: true, replied: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error interno'
-    if (process.env.NODE_ENV === 'development') console.error('[demos/webhook]', err)
-    // Wasender puede reintentar; respondemos 200 si el error es de envío tras guardar
+    await logDemoWebhook({
+      step: 'handler_error',
+      level: 'error',
+      message: msg,
+      raw_body: req.body,
+    })
     if (msg.includes('WASENDER_API_KEY')) {
       return res.status(200).json({ ok: false, error: 'wasender_not_configured' })
+    }
+    if (msg.includes('OPENROUTER')) {
+      return res.status(200).json({ ok: false, error: 'openrouter_error', message: msg })
     }
     return res.status(500).json({ error: msg })
   }

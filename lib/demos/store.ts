@@ -253,6 +253,28 @@ export async function findActiveDemoByPhone(phone: string): Promise<ActiveDemoMa
   return result.rows[0] ?? null
 }
 
+/** Lista todos los números autorizados en demos activas (para debug) */
+export async function listAuthorizedPhones(): Promise<
+  Array<{ phone: string; demo_id: number; nombre_cliente: string }>
+> {
+  const result = await query<{
+    numero_telefono: string
+    demo_id: number
+    nombre_cliente: string
+  }>(
+    `SELECT n.numero_telefono, d.id AS demo_id, d.nombre_cliente
+     FROM demo_numeros n
+     JOIN demos d ON d.id = n.demo_id
+     WHERE d.estado = 'activa'
+     ORDER BY d.nombre_cliente, n.numero_telefono`
+  )
+  return result.rows.map((r) => ({
+    phone: r.numero_telefono,
+    demo_id: r.demo_id,
+    nombre_cliente: r.nombre_cliente,
+  }))
+}
+
 export async function getConversationMessages(
   demoId: number,
   phone: string

@@ -40,6 +40,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_demo_conversaciones_demo_phone
 CREATE INDEX IF NOT EXISTS idx_demo_conversaciones_updated
   ON demo_conversaciones (updated_at DESC);
 
+-- Logs de depuración del webhook Wasender
+CREATE TABLE IF NOT EXISTS demo_webhook_logs (
+  id         SERIAL PRIMARY KEY,
+  step       TEXT NOT NULL,
+  level      TEXT NOT NULL DEFAULT 'info',
+  message    TEXT NOT NULL,
+  event      TEXT,
+  phone      TEXT,
+  demo_id    INTEGER REFERENCES demos(id) ON DELETE SET NULL,
+  details    JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_demo_webhook_logs_created
+  ON demo_webhook_logs (created_at DESC);
+
 -- Si ya creaste las tablas sin índice global, ejecuta esto para migrar:
 -- DROP INDEX IF EXISTS idx_demo_numeros_demo_phone;
 -- CREATE UNIQUE INDEX IF NOT EXISTS idx_demo_numeros_phone_global ON demo_numeros (numero_telefono);
