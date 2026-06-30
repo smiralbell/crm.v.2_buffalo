@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, TrendingUp, FileText, LogOut, Workflow,
   DollarSign, MessageSquare, Megaphone,
-  ChevronDown, ChevronRight, PackageCheck, HeartHandshake, Ticket,
+  ChevronDown, ChevronRight, PackageCheck, HeartHandshake, Ticket, Bot,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -67,6 +67,7 @@ const NAV: NavItem[] = [
   },
   { href: '/finances', label: 'Finanzas', icon: DollarSign },
   { href: '/tickets', label: 'Tickets', icon: Ticket },
+  { href: '/demos', label: 'Demos', icon: Bot },
 ]
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────

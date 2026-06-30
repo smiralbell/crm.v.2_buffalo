@@ -1,12 +1,15 @@
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
-export async function openRouterChatCompletion(messages: ChatMessage[]): Promise<string> {
+export async function openRouterChatCompletion(
+  messages: ChatMessage[],
+  options?: { model?: string; temperature?: number }
+): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY no está configurada')
   }
 
-  const model = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'
+  const model = options?.model || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'
   const siteUrl = process.env.OPENROUTER_HTTP_REFERER || process.env.NEXT_PUBLIC_BASE_URL || ''
 
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -20,7 +23,7 @@ export async function openRouterChatCompletion(messages: ChatMessage[]): Promise
     body: JSON.stringify({
       model,
       messages,
-      temperature: 0.3,
+      temperature: options?.temperature ?? 0.3,
     }),
   })
 

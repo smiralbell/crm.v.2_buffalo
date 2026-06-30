@@ -7,3 +7,6 @@ CREATE TABLE IF NOT EXISTS bank_connections (
 );
 
 CREATE INDEX IF NOT EXISTS idx_bank_connections_created_at ON bank_connections(created_at DESC);
+
+-- Varias cuentas por sesión OAuth (JSON array de account_uid)
+ALTER TABLE bank_connections ADD COLUMN IF NOT EXISTS account_uids TEXT;

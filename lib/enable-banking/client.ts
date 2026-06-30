@@ -169,50 +169,10 @@ export interface FetchAllTransactionsResult {
   transactions: unknown[]
   pages: number
   truncated: boolean
+  passes: Array<{ name: string; count: number; pages: number }>
 }
 
-/** Descarga todo el historial disponible (strategy=longest + paginación) */
-export async function getAllAccountTransactions(
-  accountUid: string
-): Promise<FetchAllTransactionsResult> {
-  const all: unknown[] = []
-  let continuationKey: string | undefined
-  let pages = 0
-  const maxPages = 100
-
-  const dateFrom = new Date()
-  dateFrom.setFullYear(dateFrom.getFullYear() - 2)
-  const dateFromStr = dateFrom.toISOString().slice(0, 10)
-
-  do {
-    const page = (await getAccountTransactions(
-      accountUid,
-      continuationKey
-        ? { continuation_key: continuationKey }
-        : {
-            transaction_status: 'BOOK',
-            date_from: dateFromStr,
-            strategy: 'longest',
-          }
-    )) as { transactions?: unknown[]; continuation_key?: string | null }
-
-    if (Array.isArray(page.transactions)) {
-      all.push(...page.transactions)
-    }
-
-    continuationKey =
-      typeof page.continuation_key === 'string' && page.continuation_key
-        ? page.continuation_key
-        : undefined
-    pages++
-  } while (continuationKey && pages < maxPages)
-
-  return {
-    transactions: all,
-    pages,
-    truncated: Boolean(continuationKey && pages >= maxPages),
-  }
-}
+export { getAllAccountTransactions } from './transaction-fetch'
 
 export function extractOwnAccountIban(details: unknown): string | null {
   if (!details || typeof details !== 'object') return null

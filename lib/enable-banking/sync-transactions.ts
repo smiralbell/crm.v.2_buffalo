@@ -62,6 +62,21 @@ async function getOrCreateEnableBankingAccount(
   return id
 }
 
+async function getDbDateRange(accountId: string): Promise<{
+  oldest: string | null
+  newest: string | null
+}> {
+  const row = await query<{ oldest: string | null; newest: string | null }>(
+    `SELECT MIN(date)::text AS oldest, MAX(date)::text AS newest
+     FROM bank_transactions WHERE account_id = $1`,
+    [accountId]
+  )
+  return {
+    oldest: row.rows[0]?.oldest ?? null,
+    newest: row.rows[0]?.newest ?? null,
+  }
+}
+
 async function repairFromApiBatch(
   accountId: string,
   transactions: ReturnType<typeof parseEbTransactions>
@@ -71,7 +86,6 @@ async function repairFromApiBatch(
   for (const tx of transactions) {
     const absAmt = Math.abs(tx.amount)
 
-    // 1) Por entry_reference en descripción o fila única fecha+importe
     if (tx.entry_reference) {
       const byRef = await query(
         `UPDATE bank_transactions
@@ -83,14 +97,7 @@ async function repairFromApiBatch(
              OR date = $5 AND ABS(amount) = $6
            )
          RETURNING id`,
-        [
-          tx.amount,
-          tx.balance,
-          accountId,
-          tx.description,
-          tx.date,
-          absAmt,
-        ]
+        [tx.amount, tx.balance, accountId, tx.description, tx.date, absAmt]
       )
       if (byRef.rowCount && byRef.rowCount > 0) {
         repaired += byRef.rowCount
@@ -98,7 +105,6 @@ async function repairFromApiBatch(
       }
     }
 
-    // 2) Corregir positivos que deberían ser gastos
     if (tx.amount < 0) {
       const fixDebit = await query(
         `UPDATE bank_transactions
@@ -119,7 +125,6 @@ async function repairFromApiBatch(
       }
     }
 
-    // 3) Cualquier fila con mismo día e importe absoluto pero signo distinto
     const fixSign = await query(
       `UPDATE bank_transactions
        SET amount = $1, balance = COALESCE($2, balance)
@@ -172,60 +177,61 @@ async function repairFromStoredBalances(accountId: string): Promise<number> {
   return repaired
 }
 
-export async function syncEnableBankingTransactions(): Promise<{
+async function syncOneAccount(accountUid: string): Promise<{
   inserted: number
-  updated: number
   duplicates: number
   total: number
   repaired: number
   balance_repaired: number
-  oldest_date: string | null
-  newest_date: string | null
+  api_oldest: string | null
+  api_newest: string | null
+  db_oldest: string | null
+  db_newest: string | null
   pages_fetched: number
   truncated: boolean
+  passes: Array<{ name: string; count: number; pages: number }>
 }> {
-  const session = await getLatestBankTestSession()
-  if (!session) {
-    throw new Error('No hay conexión bancaria activa')
-  }
-
-  const accountUid = session.account_uid
+  const accountId = await getOrCreateEnableBankingAccount(accountUid)
+  const dbBefore = await getDbDateRange(accountId)
 
   const [detailsRaw, balancesRaw, fetchResult] = await Promise.all([
     getAccountDetails(accountUid).catch(() => null),
     getAccountBalances(accountUid).catch(() => null),
-    getAllAccountTransactions(accountUid),
+    getAllAccountTransactions(accountUid, { sinceDate: dbBefore.newest }),
   ])
 
-  const transactionsRaw = { transactions: fetchResult.transactions }
-
   const ownIban = extractOwnAccountIban(detailsRaw)
-  const accountId = await getOrCreateEnableBankingAccount(accountUid, ownIban)
+  if (ownIban) {
+    await getOrCreateEnableBankingAccount(accountUid, ownIban)
+  }
 
-  const transactions = parseEbTransactions(transactionsRaw, {
-    ownAccountIban: ownIban,
-    inferFromBalance: true,
-  })
+  const transactions = parseEbTransactions(
+    { transactions: fetchResult.transactions },
+    { ownAccountIban: ownIban, inferFromBalance: true }
+  )
 
   if (transactions.length === 0) {
     const balanceRepaired = await repairFromStoredBalances(accountId)
+    const dbAfter = await getDbDateRange(accountId)
     return {
       inserted: 0,
-      updated: 0,
       duplicates: 0,
       total: 0,
       repaired: 0,
       balance_repaired: balanceRepaired,
-      oldest_date: null,
-      newest_date: null,
+      api_oldest: null,
+      api_newest: null,
+      db_oldest: dbAfter.oldest,
+      db_newest: dbAfter.newest,
       pages_fetched: fetchResult.pages,
       truncated: fetchResult.truncated,
+      passes: fetchResult.passes,
     }
   }
 
   const sortedDates = transactions.map((t) => t.date).sort()
-  const oldestDate = sortedDates[0] ?? null
-  const newestDate = sortedDates[sortedDates.length - 1] ?? null
+  const apiOldest = sortedDates[0] ?? null
+  const apiNewest = sortedDates[sortedDates.length - 1] ?? null
 
   let inserted = 0
   let duplicates = 0
@@ -234,13 +240,12 @@ export async function syncEnableBankingTransactions(): Promise<{
   const balanceRepaired = await repairFromStoredBalances(accountId)
   repaired += balanceRepaired
 
-  const dates = transactions.map((t) => t.date).sort()
-  const periodStart = dates[0]
-  const periodEnd = dates[dates.length - 1]
+  const periodStart = sortedDates[0]
+  const periodEnd = sortedDates[sortedDates.length - 1]
   const statementId = uuidv4()
   const fileHash = createHash('sha256')
     .update(
-      `${accountUid}:${periodStart}:${periodEnd}:${transactions.length}:v3:${normalizeIban(ownIban) || ''}`
+      `${accountUid}:${periodStart}:${periodEnd}:${transactions.length}:v4:${normalizeIban(ownIban) || ''}`
     )
     .digest('hex')
 
@@ -324,16 +329,114 @@ export async function syncEnableBankingTransactions(): Promise<{
     }
   }
 
+  const dbAfter = await getDbDateRange(accountId)
+
   return {
     inserted,
-    updated: 0,
     duplicates,
     total: transactions.length,
     repaired,
     balance_repaired: balanceRepaired,
-    oldest_date: oldestDate,
-    newest_date: newestDate,
+    api_oldest: apiOldest,
+    api_newest: apiNewest,
+    db_oldest: dbAfter.oldest,
+    db_newest: dbAfter.newest,
     pages_fetched: fetchResult.pages,
     truncated: fetchResult.truncated,
+    passes: fetchResult.passes,
+  }
+}
+
+function minDate(a: string | null, b: string | null): string | null {
+  if (!a) return b
+  if (!b) return a
+  return a < b ? a : b
+}
+
+function maxDate(a: string | null, b: string | null): string | null {
+  if (!a) return b
+  if (!b) return a
+  return a > b ? a : b
+}
+
+export async function syncEnableBankingTransactions(): Promise<{
+  inserted: number
+  updated: number
+  duplicates: number
+  total: number
+  repaired: number
+  balance_repaired: number
+  oldest_date: string | null
+  newest_date: string | null
+  api_oldest: string | null
+  api_newest: string | null
+  db_oldest: string | null
+  db_newest: string | null
+  pages_fetched: number
+  truncated: boolean
+  accounts_synced: number
+  passes: Array<{ name: string; count: number; pages: number }>
+}> {
+  const session = await getLatestBankTestSession()
+  if (!session) {
+    throw new Error('No hay conexión bancaria activa')
+  }
+
+  const accountUids = session.account_uids.length > 0 ? session.account_uids : [session.account_uid]
+
+  let inserted = 0
+  let duplicates = 0
+  let total = 0
+  let repaired = 0
+  let balanceRepaired = 0
+  let apiOldest: string | null = null
+  let apiNewest: string | null = null
+  let dbOldest: string | null = null
+  let dbNewest: string | null = null
+  let pagesFetched = 0
+  let truncated = false
+  const allPasses: Array<{ name: string; count: number; pages: number }> = []
+
+  for (const uid of accountUids) {
+    const r = await syncOneAccount(uid)
+    inserted += r.inserted
+    duplicates += r.duplicates
+    total += r.total
+    repaired += r.repaired
+    balanceRepaired += r.balance_repaired
+    apiOldest = minDate(apiOldest, r.api_oldest)
+    apiNewest = maxDate(apiNewest, r.api_newest)
+    dbOldest = minDate(dbOldest, r.db_oldest)
+    dbNewest = maxDate(dbNewest, r.db_newest)
+    pagesFetched += r.pages_fetched
+    truncated = truncated || r.truncated
+    for (const p of r.passes) {
+      const existing = allPasses.find((x) => x.name === p.name)
+      if (existing) {
+        existing.count += p.count
+        existing.pages += p.pages
+      } else {
+        allPasses.push({ ...p })
+      }
+    }
+  }
+
+  return {
+    inserted,
+    updated: 0,
+    duplicates,
+    total,
+    repaired,
+    balance_repaired: balanceRepaired,
+    oldest_date: apiOldest,
+    newest_date: apiNewest,
+    api_oldest: apiOldest,
+    api_newest: apiNewest,
+    db_oldest: dbOldest,
+    db_newest: dbNewest,
+    pages_fetched: pagesFetched,
+    truncated,
+    accounts_synced: accountUids.length,
+    passes: allPasses,
   }
 }

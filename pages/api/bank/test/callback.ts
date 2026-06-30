@@ -44,9 +44,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const session = await authorizeSession(code)
-    const accountUid = session.accounts?.[0]?.uid
+    const accountUids =
+      session.accounts?.map((a) => a.uid).filter((uid): uid is string => Boolean(uid)) ?? []
 
-    if (!accountUid) {
+    if (accountUids.length === 0) {
       return res.redirect(
         buildFrontendReturnUrl(req, {
           status: 'error',
@@ -55,7 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       )
     }
 
-    await saveBankTestSession(accountUid, resolveValidUntil(session))
+    await saveBankTestSession(accountUids, resolveValidUntil(session))
 
     try {
       await syncEnableBankingTransactions()

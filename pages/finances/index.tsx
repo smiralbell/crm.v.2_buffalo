@@ -338,13 +338,24 @@ export default function FinancesDashboard({
       }
       if (data.inserted > 0) {
         let msg = `${data.inserted} movimientos nuevos sincronizados`
-        if (data.oldest_date && data.newest_date) {
-          msg += ` · del ${format(new Date(data.oldest_date), 'dd/MM/yyyy')} al ${format(new Date(data.newest_date), 'dd/MM/yyyy')}`
+        const newest = data.db_newest || data.newest_date
+        const oldest = data.db_oldest || data.oldest_date
+        if (oldest && newest) {
+          msg += ` · del ${format(new Date(oldest), 'dd/MM/yyyy')} al ${format(new Date(newest), 'dd/MM/yyyy')}`
         }
         setSyncMessage(msg)
-      } else if (data.total > 0 && data.oldest_date && data.newest_date) {
+      } else if (data.total > 0) {
+        const newest = data.db_newest || data.newest_date
+        const oldest = data.db_oldest || data.oldest_date
+        if (oldest && newest) {
+          setSyncMessage(
+            `${data.total} movimientos en banco · ${format(new Date(oldest), 'dd/MM/yyyy')} – ${format(new Date(newest), 'dd/MM/yyyy')}`
+          )
+        }
+      } else if (data.db_newest || data.newest_date) {
+        const newest = data.db_newest || data.newest_date
         setSyncMessage(
-          `${data.total} movimientos en banco · ${format(new Date(data.oldest_date), 'dd/MM/yyyy')} – ${format(new Date(data.newest_date), 'dd/MM/yyyy')}`
+          `Último movimiento en base de datos: ${format(new Date(newest), 'dd/MM/yyyy')}`
         )
       } else if (data.repaired > 0 || data.balance_repaired > 0) {
         const parts: string[] = []

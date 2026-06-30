@@ -191,7 +191,11 @@ export function parseEbTransactions(
   for (let i = 0; i < list.length; i++) {
     const item = list[i]
     const tx = item as RawTx
-    if (tx.status && tx.status.toUpperCase() === 'PDNG') continue
+    const status = tx.status?.toUpperCase()
+    if (status === 'PDNG') {
+      const hasDate = Boolean(tx.booking_date || tx.value_date || tx.transaction_date)
+      if (!hasDate) continue
+    }
 
     const dateRaw = tx.booking_date || tx.value_date || tx.transaction_date
     if (!dateRaw) continue
