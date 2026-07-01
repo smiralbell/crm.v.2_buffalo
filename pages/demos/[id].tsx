@@ -16,15 +16,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import DemoFormDialog, { type DemoFormValues } from '@/components/demos/DemoFormDialog'
+import DemoConversationDialog from '@/components/demos/DemoConversationDialog'
 import type { DemoDetail, DemoListItem } from '@/lib/demos/types'
+import { Input } from '@/components/ui/input'
 import {
   ArrowLeft,
   Bot,
   CheckCircle2,
+  ChevronRight,
   Edit,
   Eraser,
   MessageSquare,
   RefreshCw,
+  Search,
   Users,
   XCircle,
 } from 'lucide-react'
@@ -66,6 +70,9 @@ export default function DemoDetailPage() {
   const [saving, setSaving] = useState(false)
   const [clearOpen, setClearOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [search, setSearch] = useState('')
+  const [selectedPhone, setSelectedPhone] = useState<string | null>(null)
+  const [conversationOpen, setConversationOpen] = useState(false)
 
   const load = useCallback(async () => {
     if (!Number.isFinite(id)) return
@@ -132,6 +139,27 @@ export default function DemoDetailPage() {
       : '—'
 
   const m = detail?.metrics
+
+  const sessions = m?.sessions ?? []
+  const searchNorm = search.trim().toLowerCase().replace(/\s/g, '')
+  const filteredSessions = searchNorm
+    ? sessions.filter((s) => {
+        const phoneNorm = s.phone.toLowerCase().replace(/\s/g, '')
+        const maskedNorm = s.phone_masked.toLowerCase().replace(/\s/g, '')
+        const digits = s.phone.replace(/\D/g, '')
+        const qDigits = searchNorm.replace(/\D/g, '')
+        return (
+          phoneNorm.includes(searchNorm) ||
+          maskedNorm.includes(searchNorm) ||
+          (qDigits.length >= 3 && digits.includes(qDigits))
+        )
+      })
+    : sessions
+
+  const openConversation = (phone: string) => {
+    setSelectedPhone(phone)
+    setConversationOpen(true)
+  }
 
   return (
     <Layout>
@@ -255,17 +283,32 @@ export default function DemoDetailPage() {
             </p>
 
             <Card className="border border-gray-200 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base">Sesiones de prueba</CardTitle>
+              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle className="text-base">Usuarios que probaron la demo</CardTitle>
+                {sessions.length > 0 && (
+                  <div className="relative w-full sm:max-w-xs">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Buscar por teléfono…"
+                      className="rounded-xl border-gray-200 pl-9"
+                    />
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="p-0">
-                {m.sessions.length === 0 ? (
+                {sessions.length === 0 ? (
                   <div className="flex flex-col items-center py-12 text-center text-gray-500">
                     <Bot className="mb-2 h-8 w-8 text-gray-300" />
                     <p>Nadie ha probado esta demo todavía</p>
                     <p className="mt-1 text-xs text-gray-400">
                       Cuando alguien escriba por WhatsApp, aparecerá aquí
                     </p>
+                  </div>
+                ) : filteredSessions.length === 0 ? (
+                  <div className="py-12 text-center text-sm text-gray-500">
+                    Ningún usuario coincide con «{search}»
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -276,12 +319,17 @@ export default function DemoDetailPage() {
                           <th className="p-4">Estado</th>
                           <th className="p-4">Mensajes</th>
                           <th className="p-4">Última actividad</th>
+                          <th className="p-4 w-10" />
                         </tr>
                       </thead>
                       <tbody>
-                        {m.sessions.map((s) => (
-                          <tr key={s.phone} className="border-b border-gray-50">
-                            <td className="p-4 font-mono text-sm text-gray-700">{s.phone_masked}</td>
+                        {filteredSessions.map((s) => (
+                          <tr
+                            key={s.phone}
+                            onClick={() => openConversation(s.phone)}
+                            className="cursor-pointer border-b border-gray-50 transition-colors hover:bg-gray-50"
+                          >
+                            <td className="p-4 font-mono text-sm text-gray-800">{s.phone}</td>
                             <td className="p-4">
                               <Badge className={sessionStatusClass[s.status]}>
                                 {sessionStatusLabel[s.status]}
@@ -291,6 +339,9 @@ export default function DemoDetailPage() {
                               {s.user_messages} usuario · {s.assistant_messages} agente
                             </td>
                             <td className="p-4 text-sm text-gray-500">{fmtDate(s.updated_at)}</td>
+                            <td className="p-4 text-gray-400">
+                              <ChevronRight className="h-4 w-4" />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -312,6 +363,13 @@ export default function DemoDetailPage() {
           saving={saving}
         />
       )}
+
+      <DemoConversationDialog
+        open={conversationOpen}
+        onOpenChange={setConversationOpen}
+        demoId={id}
+        phone={selectedPhone}
+      />
 
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>
         <DialogContent className="rounded-2xl">

@@ -301,6 +301,28 @@ export async function getConversationMessages(
   return []
 }
 
+export async function getConversationDetail(
+  demoId: number,
+  phone: string
+): Promise<{ phone: string; messages: DemoMessage[]; updated_at: string | null } | null> {
+  const result = await query<{ messages: DemoMessage[] | string; updated_at: Date }>(
+    `SELECT messages, updated_at FROM demo_conversaciones
+     WHERE demo_id = $1 AND numero_telefono = $2
+     LIMIT 1`,
+    [demoId, phone]
+  )
+  const row = result.rows[0]
+  if (!row) return null
+
+  const messages = await getConversationMessages(demoId, phone)
+  const updated_at =
+    row.updated_at instanceof Date
+      ? row.updated_at.toISOString()
+      : new Date(row.updated_at).toISOString()
+
+  return { phone, messages, updated_at }
+}
+
 const MAX_HISTORY_MESSAGES = 40
 
 export async function saveConversationMessages(

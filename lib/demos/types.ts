@@ -63,3 +63,9 @@ export interface DemoSessionRow {
 export interface DemoDetail extends DemoListItem {
   metrics: DemoMetrics
 }
+
+export interface DemoConversationDetail {
+  phone: string
+  messages: DemoMessage[]
+  updated_at: string | null
+}
