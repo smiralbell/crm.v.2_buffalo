@@ -39,6 +39,8 @@ export interface ParsedWasenderMessage {
   text: string
   fromMe: boolean
   event: string | null
+  mediaType: 'text' | 'image' | 'audio' | null
+  hasMedia: boolean
 }
 
 export type ParseWasenderResult =
@@ -58,6 +60,25 @@ function dig(obj: unknown, ...keys: string[]): unknown {
     cur = (cur as Record<string, unknown>)[key]
   }
   return cur
+}
+
+function detectMediaType(
+  msgObj: Record<string, unknown>
+): 'image' | 'audio' | null {
+  const inner = msgObj.message as Record<string, unknown> | undefined
+  if (!inner || typeof inner !== 'object') return null
+  if (inner.imageMessage) return 'image'
+  if (inner.audioMessage || inner.pttMessage) return 'audio'
+  return null
+}
+
+function extractCaption(msgObj: Record<string, unknown>, mediaType: 'image' | 'audio' | null): string {
+  if (!mediaType) return ''
+  const inner = msgObj.message as Record<string, unknown> | undefined
+  if (!inner) return ''
+  const media = (inner.imageMessage || inner.audioMessage) as Record<string, unknown> | undefined
+  const caption = media?.caption
+  return typeof caption === 'string' ? caption.trim() : ''
 }
 
 function extractMessageObject(body: Record<string, unknown>): Record<string, unknown> | null {
@@ -126,6 +147,9 @@ export function parseWasenderWebhook(body: unknown): ParseWasenderResult {
     (typeof key?.remoteJid === 'string' && key.remoteJid.replace(/@.*$/, '')) ||
     ''
 
+  const mediaType = detectMediaType(msgObj)
+  const hasMedia = mediaType !== null
+
   const text =
     (typeof msgObj.messageBody === 'string' && msgObj.messageBody.trim()) ||
     (typeof dig(msgObj, 'message', 'conversation') === 'string'
@@ -133,7 +157,8 @@ export function parseWasenderWebhook(body: unknown): ParseWasenderResult {
       : '') ||
     (typeof dig(msgObj, 'message', 'extendedTextMessage', 'text') === 'string'
       ? (dig(msgObj, 'message', 'extendedTextMessage', 'text') as string).trim()
-      : '')
+      : '') ||
+    extractCaption(msgObj, mediaType)
 
   if (!senderRaw) {
     return {
@@ -145,11 +170,11 @@ export function parseWasenderWebhook(body: unknown): ParseWasenderResult {
     }
   }
 
-  if (!text) {
+  if (!text && !hasMedia) {
     return {
       ok: false,
-      reason: 'Mensaje sin texto (¿audio/imagen sin caption?)',
-      reason_code: 'no_text',
+      reason: 'Mensaje sin texto ni multimedia soportada',
+      reason_code: 'no_content',
       event,
       debug: { sender_raw: senderRaw },
     }
@@ -163,6 +188,8 @@ export function parseWasenderWebhook(body: unknown): ParseWasenderResult {
       text,
       fromMe,
       event,
+      mediaType: hasMedia ? mediaType : 'text',
+      hasMedia,
     },
   }
 }

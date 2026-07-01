@@ -195,35 +195,27 @@ export default function DemosPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Demos</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Agentes de WhatsApp de demostración para clientes
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={load}
-              disabled={loading}
-              className="rounded-xl border-gray-200"
-              title="Actualizar"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-            <Button
-              onClick={() => {
-                setEditing(null)
-                setFormOpen(true)
-              }}
-              className="rounded-xl"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Nueva Demo
-            </Button>
-          </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={load}
+            disabled={loading}
+            className="rounded-xl border-gray-200"
+            title="Actualizar"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button
+            onClick={() => {
+              setEditing(null)
+              setFormOpen(true)
+            }}
+            className="rounded-xl"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Nueva Demo
+          </Button>
         </div>
 
         {error && (

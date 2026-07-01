@@ -1,5 +1,87 @@
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
+type MultimodalPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
+function openRouterHeaders(): Record<string, string> {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY no está configurada')
+  const siteUrl = process.env.OPENROUTER_HTTP_REFERER || process.env.NEXT_PUBLIC_BASE_URL || ''
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+    ...(siteUrl ? { 'HTTP-Referer': siteUrl } : {}),
+    'X-OpenRouter-Title': 'Buffalo CRM - demos WhatsApp',
+  }
+}
+
+export async function openRouterTranscribeAudio(
+  base64: string,
+  format: string
+): Promise<string> {
+  const model = process.env.DEMO_STT_MODEL || 'openai/whisper-large-v3'
+
+  const res = await fetch('https://openrouter.ai/api/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: openRouterHeaders(),
+    body: JSON.stringify({
+      model,
+      input_audio: { data: base64, format },
+      language: 'es',
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`OpenRouter STT ${res.status}: ${errText.slice(0, 500)}`)
+  }
+
+  const data = (await res.json()) as { text?: string }
+  return data.text?.trim() || ''
+}
+
+export async function openRouterDescribeImage(
+  base64: string,
+  mimetype: string
+): Promise<string> {
+  const model =
+    process.env.DEMO_VISION_MODEL || 'google/gemini-2.0-flash-001'
+
+  const dataUrl = `data:${mimetype};base64,${base64}`
+  const userContent: MultimodalPart[] = [
+    {
+      type: 'text',
+      text: 'Describe esta imagen de forma concisa en español. Si hay texto visible, transcríbelo. Si es un documento o captura, resume el contenido relevante.',
+    },
+    { type: 'image_url', image_url: { url: dataUrl } },
+  ]
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: openRouterHeaders(),
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: userContent }],
+      temperature: 0.2,
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`OpenRouter vision ${res.status}: ${errText.slice(0, 500)}`)
+  }
+
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>
+  }
+  const content = data.choices?.[0]?.message?.content
+  if (!content || typeof content !== 'string') {
+    throw new Error('OpenRouter vision sin contenido')
+  }
+  return content
+}
+
 export async function openRouterChatCompletion(
   messages: ChatMessage[],
   options?: { model?: string; temperature?: number }

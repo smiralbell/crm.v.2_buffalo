@@ -12,6 +12,7 @@ import {
 } from './format-output'
 import { buildMessageDedupKey, claimIncomingDemoMessage, pruneOldProcessedMessages } from './dedup'
 import { parseWasenderWebhook, sendWasenderMessageSequence } from './wasender'
+import { resolveUserMessageFromWebhook } from './resolve-user-message'
 import { logDemoWebhook } from './webhook-log'
 
 export async function handleDemoWasenderWebhook(body: unknown): Promise<{
@@ -46,13 +47,15 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
 
   const { data } = parsed
 
+  const previewText = data.text || (data.hasMedia ? `[${data.mediaType}]` : '')
+
   await logDemoWebhook({
     step: 'parsed',
     level: 'info',
-    message: `Mensaje: "${data.text.slice(0, 80)}${data.text.length > 80 ? '…' : ''}"`,
+    message: `Mensaje${data.hasMedia ? ` (${data.mediaType})` : ''}: "${previewText.slice(0, 80)}${previewText.length > 80 ? '…' : ''}"`,
     event: data.event,
     phone: data.senderPhone,
-    details: { fromMe: data.fromMe, sender_raw: data.senderPhone },
+    details: { fromMe: data.fromMe, sender_raw: data.senderPhone, has_media: data.hasMedia },
   })
 
   const phone = normalizeWasenderPhone(data.senderPhone)
@@ -127,7 +130,11 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
     details: { message_id: data.messageId },
   })
 
-  const dedupKey = buildMessageDedupKey(data.messageId, phone, data.text)
+  const dedupKey = buildMessageDedupKey(
+    data.messageId,
+    phone,
+    data.text || (data.hasMedia ? String(data.mediaType) : '')
+  )
   const claimed = await claimIncomingDemoMessage(dedupKey, demo.demo_id, phone)
   if (!claimed) {
     await logDemoWebhook({
@@ -143,6 +150,51 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
   }
 
   void pruneOldProcessedMessages()
+
+  let userText = data.text
+
+  if (data.hasMedia) {
+    try {
+      await logDemoWebhook({
+        step: 'media',
+        level: 'info',
+        message: `Procesando ${data.mediaType}…`,
+        event: data.event,
+        phone,
+        demo_id: demo.demo_id,
+        details: { media_type: data.mediaType },
+      })
+
+      const resolved = await resolveUserMessageFromWebhook(body, {
+        text: data.text,
+        mediaType: data.mediaType,
+        hasMedia: data.hasMedia,
+      })
+      userText = resolved.text
+
+      await logDemoWebhook({
+        step: 'media',
+        level: 'info',
+        message: `Contenido resuelto (${resolved.source})`,
+        event: data.event,
+        phone,
+        demo_id: demo.demo_id,
+        details: { preview: userText.slice(0, 120) },
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error procesando multimedia'
+      await logDemoWebhook({
+        step: 'media',
+        level: 'error',
+        message: msg,
+        event: data.event,
+        phone,
+        demo_id: demo.demo_id,
+        details: { media_type: data.mediaType },
+      })
+      return { handled: false, reason: 'media_error' }
+    }
+  }
 
   try {
     const history = await getConversationMessages(demo.demo_id, phone)
@@ -160,7 +212,7 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
       demo.prompt,
       demo.base_conocimiento,
       history,
-      data.text
+      userText
     )
 
     const replyParts = splitReplyIntoWhatsAppMessages(replyRaw)
@@ -169,7 +221,7 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
     const now = new Date().toISOString()
     const updatedHistory = [
       ...history,
-      { role: 'user' as const, content: data.text, at: now },
+      { role: 'user' as const, content: userText, at: now },
       { role: 'assistant' as const, content: replyStored, at: now },
     ]
 
