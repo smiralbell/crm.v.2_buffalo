@@ -177,12 +177,37 @@ export default function DemoDetailPage() {
                   {detail?.nombre_cliente || 'Demo'}
                 </h1>
                 {detail && (
-                  <Badge className={estadoClass[detail.estado]}>
-                    {detail.estado === 'activa' ? 'Activa' : 'Pausada'}
-                  </Badge>
+                  <>
+                    <Badge className={estadoClass[detail.estado]}>
+                      {detail.estado === 'activa' ? 'Activa' : 'Pausada'}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={
+                        detail.tipo === 'voz'
+                          ? 'border-violet-200 bg-violet-50 text-violet-800'
+                          : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                      }
+                    >
+                      {detail.tipo === 'voz' ? 'Voz' : 'WhatsApp'}
+                    </Badge>
+                    {detail.tipo === 'voz' && detail.direccion && (
+                      <Badge variant="outline" className="border-gray-200 text-gray-600">
+                        {detail.direccion === 'inbound'
+                          ? 'Inbound'
+                          : detail.direccion === 'outbound'
+                            ? 'Outbound'
+                            : 'Ambos'}
+                      </Badge>
+                    )}
+                  </>
                 )}
               </div>
-              <p className="mt-1 text-sm text-gray-500">Métricas y pruebas del agente</p>
+              <p className="mt-1 text-sm text-gray-500">
+                {detail?.tipo === 'voz'
+                  ? 'Agente de voz Retell AI'
+                  : 'Métricas y pruebas del agente WhatsApp'}
+              </p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -199,7 +224,7 @@ export default function DemoDetailPage() {
               variant="outline"
               onClick={() => setClearOpen(true)}
               className="rounded-xl border-gray-200"
-              disabled={!detail || (m?.testers_count ?? 0) === 0}
+              disabled={!detail || detail.tipo === 'voz' || (m?.testers_count ?? 0) === 0}
             >
               <Eraser className="mr-2 h-4 w-4" />
               Borrar memoria
@@ -229,6 +254,24 @@ export default function DemoDetailPage() {
           </div>
         ) : detail && m ? (
           <>
+            {detail.tipo === 'voz' ? (
+              <Card className="border border-gray-200 shadow-sm">
+                <CardContent className="space-y-3 p-5 text-sm text-gray-600">
+                  <p>
+                    <span className="font-medium text-gray-800">Voice ID:</span>{' '}
+                    <span className="font-mono">{detail.voz_id || '—'}</span>
+                  </p>
+                  <p>
+                    <span className="font-medium text-gray-800">Agente Retell:</span>{' '}
+                    <span className="font-mono text-xs">{detail.retell_agent_id || '—'}</span>
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Teléfonos configurados: {detail.numeros.join(', ') || 'ninguno'}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Card className="border border-gray-200 shadow-sm">
                 <CardContent className="flex items-center gap-4 p-5">
@@ -350,6 +393,8 @@ export default function DemoDetailPage() {
                 )}
               </CardContent>
             </Card>
+              </>
+            )}
           </>
         ) : null}
       </div>

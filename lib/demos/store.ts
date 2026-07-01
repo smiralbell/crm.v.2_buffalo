@@ -1,13 +1,16 @@
 import { query } from '@/lib/db'
 import { PhoneNumberConflictError } from './errors'
 import type {
+  DemoDireccion,
   DemoEstado,
   DemoInput,
   DemoListItem,
   DemoMessage,
   DemoRow,
   DemoSaveOptions,
+  DemoTipo,
   PhoneConflict,
+  VoiceDemoMatch,
 } from './types'
 import { normalizePhoneNumber } from './phone'
 
@@ -17,6 +20,12 @@ function mapDemoRow(row: {
   prompt: string
   base_conocimiento: string
   estado: string
+  tipo?: string | null
+  retell_agent_id?: string | null
+  retell_llm_id?: string | null
+  retell_kb_id?: string | null
+  voz_id?: string | null
+  direccion?: string | null
   created_at: Date | string
 }): DemoRow {
   return {
@@ -25,12 +34,21 @@ function mapDemoRow(row: {
     prompt: row.prompt,
     base_conocimiento: row.base_conocimiento,
     estado: row.estado as DemoEstado,
+    tipo: (row.tipo === 'voz' ? 'voz' : 'whatsapp') as DemoTipo,
+    retell_agent_id: row.retell_agent_id ?? null,
+    retell_llm_id: row.retell_llm_id ?? null,
+    retell_kb_id: row.retell_kb_id ?? null,
+    voz_id: row.voz_id ?? null,
+    direccion: (row.direccion as DemoDireccion | null) ?? null,
     created_at:
       row.created_at instanceof Date
         ? row.created_at.toISOString()
         : new Date(row.created_at).toISOString(),
   }
 }
+
+const DEMO_SELECT = `id, nombre_cliente, prompt, base_conocimiento, estado,
+  tipo, retell_agent_id, retell_llm_id, retell_kb_id, voz_id, direccion, created_at`
 
 export async function listDemos(): Promise<DemoListItem[]> {
   const demos = await query<{
@@ -39,9 +57,15 @@ export async function listDemos(): Promise<DemoListItem[]> {
     prompt: string
     base_conocimiento: string
     estado: string
+    tipo: string
+    retell_agent_id: string | null
+    retell_llm_id: string | null
+    retell_kb_id: string | null
+    voz_id: string | null
+    direccion: string | null
     created_at: Date
   }>(
-    `SELECT id, nombre_cliente, prompt, base_conocimiento, estado, created_at
+    `SELECT ${DEMO_SELECT}
      FROM demos
      ORDER BY created_at DESC`
   )
@@ -74,10 +98,15 @@ export async function getDemoById(id: number): Promise<DemoListItem | null> {
     prompt: string
     base_conocimiento: string
     estado: string
+    tipo: string
+    retell_agent_id: string | null
+    retell_llm_id: string | null
+    retell_kb_id: string | null
+    voz_id: string | null
+    direccion: string | null
     created_at: Date
   }>(
-    `SELECT id, nombre_cliente, prompt, base_conocimiento, estado, created_at
-     FROM demos WHERE id = $1`,
+    `SELECT ${DEMO_SELECT} FROM demos WHERE id = $1`,
     [id]
   )
   const row = result.rows[0]
@@ -166,11 +195,28 @@ export async function createDemo(
     throw new PhoneNumberConflictError(preConflicts)
   }
 
+  const tipo: DemoTipo = input.tipo === 'voz' ? 'voz' : 'whatsapp'
+
   const result = await query<{ id: number; created_at: Date }>(
-    `INSERT INTO demos (nombre_cliente, prompt, base_conocimiento, estado)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO demos (
+       nombre_cliente, prompt, base_conocimiento, estado,
+       tipo, voz_id, direccion,
+       retell_agent_id, retell_llm_id, retell_kb_id
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING id, created_at`,
-    [input.nombre_cliente, input.prompt, input.base_conocimiento, input.estado]
+    [
+      input.nombre_cliente,
+      input.prompt,
+      input.base_conocimiento,
+      input.estado,
+      tipo,
+      tipo === 'voz' ? input.voz_id?.trim() || null : null,
+      tipo === 'voz' ? input.direccion || 'inbound' : null,
+      null,
+      null,
+      null,
+    ]
   )
   const row = result.rows[0]
   if (!row) throw new Error('No se pudo crear la demo')
@@ -199,12 +245,16 @@ export async function updateDemo(
   const prompt = input.prompt ?? existing.prompt
   const base = input.base_conocimiento ?? existing.base_conocimiento
   const estado = input.estado ?? existing.estado
+  const vozId = input.voz_id !== undefined ? input.voz_id.trim() || null : existing.voz_id
+  const direccion =
+    input.direccion !== undefined ? input.direccion : existing.direccion
 
   await query(
     `UPDATE demos
-     SET nombre_cliente = $1, prompt = $2, base_conocimiento = $3, estado = $4
-     WHERE id = $5`,
-    [nombre, prompt, base, estado, id]
+     SET nombre_cliente = $1, prompt = $2, base_conocimiento = $3, estado = $4,
+         voz_id = $5, direccion = $6
+     WHERE id = $7`,
+    [nombre, prompt, base, estado, vozId, direccion, id]
   )
 
   if (input.numeros) {
@@ -212,6 +262,22 @@ export async function updateDemo(
   }
 
   return getDemoById(id)
+}
+
+export async function updateDemoRetellIds(
+  id: number,
+  ids: {
+    retell_agent_id: string
+    retell_llm_id: string
+    retell_kb_id: string
+  }
+): Promise<void> {
+  await query(
+    `UPDATE demos
+     SET retell_agent_id = $1, retell_llm_id = $2, retell_kb_id = $3
+     WHERE id = $4`,
+    [ids.retell_agent_id, ids.retell_llm_id, ids.retell_kb_id, id]
+  )
 }
 
 export async function deleteDemo(id: number): Promise<boolean> {
@@ -247,10 +313,42 @@ export async function findActiveDemoByPhone(phone: string): Promise<ActiveDemoMa
      FROM demo_numeros n
      JOIN demos d ON d.id = n.demo_id
      WHERE n.numero_telefono = $1 AND d.estado = 'activa'
+       AND (d.tipo = 'whatsapp' OR d.tipo IS NULL)
      LIMIT 1`,
     [phone]
   )
   return result.rows[0] ?? null
+}
+
+/** Demo de voz activa para llamadas inbound desde un número autorizado */
+export async function findActiveVoiceDemoByPhone(
+  phone: string
+): Promise<VoiceDemoMatch | null> {
+  const result = await query<{
+    demo_id: number
+    nombre_cliente: string
+    retell_agent_id: string
+    direccion: string
+  }>(
+    `SELECT d.id AS demo_id, d.nombre_cliente, d.retell_agent_id, d.direccion
+     FROM demo_numeros n
+     JOIN demos d ON d.id = n.demo_id
+     WHERE n.numero_telefono = $1
+       AND d.estado = 'activa'
+       AND d.tipo = 'voz'
+       AND d.direccion IN ('inbound', 'ambos')
+       AND d.retell_agent_id IS NOT NULL
+     LIMIT 1`,
+    [phone]
+  )
+  const row = result.rows[0]
+  if (!row) return null
+  return {
+    demo_id: row.demo_id,
+    nombre_cliente: row.nombre_cliente,
+    retell_agent_id: row.retell_agent_id,
+    direccion: row.direccion as DemoDireccion,
+  }
 }
 
 /** Lista todos los números autorizados en demos activas (para debug) */

@@ -14,8 +14,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import DemoFormDialog, { type DemoFormValues } from '@/components/demos/DemoFormDialog'
+import DemoCallDialog from '@/components/demos/DemoCallDialog'
 import PhoneConflictDialog from '@/components/demos/PhoneConflictDialog'
-import type { DemoListItem, PhoneConflict } from '@/lib/demos/types'
+import type { DemoDireccion, DemoListItem, PhoneConflict } from '@/lib/demos/types'
 import Link from 'next/link'
 import {
   Bot,
@@ -32,6 +33,27 @@ import {
 const estadoClass: Record<string, string> = {
   activa: 'bg-emerald-50 text-emerald-800',
   pausada: 'bg-amber-50 text-amber-800',
+}
+
+const tipoClass: Record<string, string> = {
+  whatsapp: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  voz: 'bg-violet-50 text-violet-800 border-violet-200',
+}
+
+const direccionLabel: Record<DemoDireccion, string> = {
+  inbound: 'Inbound',
+  outbound: 'Outbound',
+  ambos: 'Ambos',
+}
+
+function canOutboundCall(demo: DemoListItem): boolean {
+  return (
+    demo.tipo === 'voz' &&
+    demo.estado === 'activa' &&
+    Boolean(demo.direccion && ['outbound', 'ambos'].includes(demo.direccion)) &&
+    demo.numeros_count > 0 &&
+    Boolean(demo.retell_agent_id)
+  )
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -56,6 +78,7 @@ export default function DemosPage() {
   const [pendingSave, setPendingSave] = useState<DemoFormValues | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
   const [movingPhones, setMovingPhones] = useState(false)
+  const [callTarget, setCallTarget] = useState<DemoListItem | null>(null)
 
   const saveDemo = async (
     values: DemoFormValues,
@@ -255,6 +278,7 @@ export default function DemosPage() {
                   <thead>
                     <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                       <th className="p-4">Cliente</th>
+                      <th className="p-4">Tipo</th>
                       <th className="p-4">Estado</th>
                       <th className="p-4">Teléfonos</th>
                       <th className="p-4">Creada</th>
@@ -280,6 +304,21 @@ export default function DemosPage() {
                           </Link>
                         </td>
                         <td className="p-4">
+                          <div className="flex flex-col gap-1">
+                            <Badge
+                              variant="outline"
+                              className={tipoClass[demo.tipo] || 'bg-gray-100 text-gray-700'}
+                            >
+                              {demo.tipo === 'voz' ? 'Voz' : 'WhatsApp'}
+                            </Badge>
+                            {demo.tipo === 'voz' && demo.direccion && (
+                              <span className="text-xs text-gray-500">
+                                {direccionLabel[demo.direccion]}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-4">
                           <Badge className={estadoClass[demo.estado] || 'bg-gray-100 text-gray-700'}>
                             {demo.estado === 'activa' ? 'Activa' : 'Pausada'}
                           </Badge>
@@ -298,8 +337,18 @@ export default function DemosPage() {
                         </td>
                         <td className="p-4 text-sm text-gray-600">{fmtDate(demo.created_at)}</td>
                         <td className="p-4">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" title="Ver métricas" asChild>
+                          <div className="flex flex-wrap justify-end gap-1">
+                            {canOutboundCall(demo) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="rounded-lg border-violet-200 text-violet-800 hover:bg-violet-50"
+                                onClick={() => setCallTarget(demo)}
+                              >
+                                📞 Llamar ahora
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" title="Ver detalle" asChild>
                               <Link href={`/demos/${demo.id}`}>
                                 <ChevronRight className="h-4 w-4" />
                               </Link>
@@ -357,6 +406,12 @@ export default function DemosPage() {
         demo={editing}
         onSubmit={editing ? handleUpdate : handleCreate}
         saving={saving}
+      />
+
+      <DemoCallDialog
+        open={Boolean(callTarget)}
+        onOpenChange={(open) => !open && setCallTarget(null)}
+        demo={callTarget}
       />
 
       <PhoneConflictDialog

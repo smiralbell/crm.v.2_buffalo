@@ -3,7 +3,9 @@ import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import { isPhoneNumberConflictError } from '@/lib/demos/errors'
 import { getDemoWithMetrics } from '@/lib/demos/demo-detail'
-import { deleteDemo, parseNumerosInput, updateDemo } from '@/lib/demos/store'
+import { RetellApiError } from '@/lib/demos/retell'
+import { getDemoById, parseNumerosInput, updateDemo } from '@/lib/demos/store'
+import { deleteVoiceDemo, updateVoiceDemoInRetell } from '@/lib/demos/voice'
 
 const updateSchema = z.object({
   nombre_cliente: z.string().min(1).max(200).optional(),
@@ -12,7 +14,15 @@ const updateSchema = z.object({
   estado: z.enum(['activa', 'pausada']).optional(),
   numeros: z.array(z.string()).optional(),
   mover_numeros: z.boolean().optional(),
+  voz_id: z.string().optional(),
+  direccion: z.enum(['inbound', 'outbound', 'ambos']).optional(),
 })
+
+function retellErrorMessage(err: unknown): string {
+  if (err instanceof RetellApiError) return err.message
+  if (err instanceof Error) return err.message
+  return 'Error con la API de Retell'
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -40,6 +50,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'PUT') {
     try {
+      const existing = await getDemoById(id)
+      if (!existing) return res.status(404).json({ error: 'Demo no encontrada' })
+
       const parsed = updateSchema.parse(req.body)
       const payload: Parameters<typeof updateDemo>[1] = {}
       const options = { mover_numeros: parsed.mover_numeros }
@@ -54,6 +67,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (parsed.estado !== undefined) payload.estado = parsed.estado
       if (parsed.numeros !== undefined) {
         payload.numeros = parseNumerosInput(parsed.numeros)
+      }
+      if (parsed.voz_id !== undefined) payload.voz_id = parsed.voz_id.trim()
+      if (parsed.direccion !== undefined) payload.direccion = parsed.direccion
+
+      if (existing.tipo === 'voz') {
+        await updateVoiceDemoInRetell(existing, payload)
+        const demo = await updateDemo(id, payload, options)
+        if (!demo) return res.status(404).json({ error: 'Demo no encontrada' })
+        return res.status(200).json({ demo })
       }
 
       const demo = await updateDemo(id, payload, options)
@@ -70,7 +92,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           conflicts: err.conflicts,
         })
       }
-      const msg = err instanceof Error ? err.message : 'Error interno'
+      const msg = retellErrorMessage(err)
       if (process.env.NODE_ENV === 'development') console.error('[demos/[id] PUT]', err)
       return res.status(500).json({ error: msg })
     }
@@ -78,11 +100,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'DELETE') {
     try {
-      const ok = await deleteDemo(id)
+      const ok = await deleteVoiceDemo(id)
       if (!ok) return res.status(404).json({ error: 'Demo no encontrada' })
       return res.status(200).json({ ok: true })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Error interno'
+      const msg = retellErrorMessage(err)
       if (process.env.NODE_ENV === 'development') console.error('[demos/[id] DELETE]', err)
       return res.status(500).json({ error: msg })
     }

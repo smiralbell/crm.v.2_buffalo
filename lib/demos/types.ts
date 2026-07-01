@@ -1,4 +1,6 @@
 export type DemoEstado = 'activa' | 'pausada'
+export type DemoTipo = 'whatsapp' | 'voz'
+export type DemoDireccion = 'inbound' | 'outbound' | 'ambos'
 
 export interface DemoMessage {
   role: 'user' | 'assistant'
@@ -12,6 +14,12 @@ export interface DemoRow {
   prompt: string
   base_conocimiento: string
   estado: DemoEstado
+  tipo: DemoTipo
+  retell_agent_id: string | null
+  retell_llm_id: string | null
+  retell_kb_id: string | null
+  voz_id: string | null
+  direccion: DemoDireccion | null
   created_at: string
 }
 
@@ -26,6 +34,9 @@ export interface DemoInput {
   base_conocimiento: string
   estado: DemoEstado
   numeros: string[]
+  tipo?: DemoTipo
+  voz_id?: string
+  direccion?: DemoDireccion
 }
 
 export interface PhoneConflict {
@@ -68,4 +79,11 @@ export interface DemoConversationDetail {
   phone: string
   messages: DemoMessage[]
   updated_at: string | null
+}
+
+export interface VoiceDemoMatch {
+  demo_id: number
+  nombre_cliente: string
+  retell_agent_id: string
+  direccion: DemoDireccion
 }

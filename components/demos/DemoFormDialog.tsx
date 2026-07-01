@@ -19,7 +19,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { AlertTriangle, Plus, X } from 'lucide-react'
-import type { DemoEstado, DemoListItem, PhoneConflict } from '@/lib/demos/types'
+import type {
+  DemoDireccion,
+  DemoEstado,
+  DemoListItem,
+  DemoTipo,
+  PhoneConflict,
+} from '@/lib/demos/types'
 
 export interface DemoFormValues {
   nombre_cliente: string
@@ -27,6 +33,9 @@ export interface DemoFormValues {
   base_conocimiento: string
   estado: DemoEstado
   numeros: string[]
+  tipo: DemoTipo
+  voz_id: string
+  direccion: DemoDireccion
 }
 
 interface DemoFormDialogProps {
@@ -43,6 +52,22 @@ const emptyForm: DemoFormValues = {
   base_conocimiento: '',
   estado: 'activa',
   numeros: [''],
+  tipo: 'whatsapp',
+  voz_id: '',
+  direccion: 'inbound',
+}
+
+const direccionLabel: Record<DemoDireccion, string> = {
+  inbound: 'Inbound',
+  outbound: 'Outbound',
+  ambos: 'Ambos',
+}
+
+function numerosLabel(tipo: DemoTipo, direccion: DemoDireccion): string {
+  if (tipo !== 'voz') return 'Números autorizados'
+  if (direccion === 'outbound') return 'Número del cliente a llamar'
+  if (direccion === 'inbound') return 'Números autorizados a llamar'
+  return 'Números (inbound y outbound)'
 }
 
 export default function DemoFormDialog({
@@ -58,6 +83,8 @@ export default function DemoFormDialog({
   const [checkingPhone, setCheckingPhone] = useState<number | null>(null)
 
   const exceptDemoId = demo?.id
+  const isEdit = Boolean(demo)
+  const isVoz = form.tipo === 'voz'
 
   useEffect(() => {
     if (!open) return
@@ -70,6 +97,9 @@ export default function DemoFormDialog({
         base_conocimiento: demo.base_conocimiento,
         estado: demo.estado,
         numeros: demo.numeros.length > 0 ? demo.numeros : [''],
+        tipo: demo.tipo,
+        voz_id: demo.voz_id || '',
+        direccion: demo.direccion || 'inbound',
       })
     } else {
       setForm(emptyForm)
@@ -147,6 +177,10 @@ export default function DemoFormDialog({
       setError('El prompt de instrucciones es obligatorio')
       return
     }
+    if (isVoz && !form.voz_id.trim()) {
+      setError('El Voice ID de Retell es obligatorio para demos de voz')
+      return
+    }
 
     const numeros = form.numeros.map((n) => n.trim()).filter(Boolean)
     try {
@@ -166,12 +200,37 @@ export default function DemoFormDialog({
         <DialogHeader>
           <DialogTitle>{demo ? 'Editar demo' : 'Nueva demo'}</DialogTitle>
           <DialogDescription>
-            Configura el agente de WhatsApp para el cliente. Cada número solo puede estar en una
-            demo a la vez.
+            {isVoz
+              ? 'Configura un agente de voz con Retell AI para el cliente.'
+              : 'Configura el agente de WhatsApp para el cliente. Cada número solo puede estar en una demo a la vez.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Tipo de demo</Label>
+            {isEdit ? (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                {form.tipo === 'voz' ? 'Voz (Retell AI)' : 'WhatsApp'}
+              </div>
+            ) : (
+              <Select
+                value={form.tipo}
+                onValueChange={(v) =>
+                  setForm((p) => ({ ...p, tipo: v as DemoTipo }))
+                }
+              >
+                <SelectTrigger className="rounded-xl border-gray-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                  <SelectItem value="voz">Voz (Retell AI)</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="nombre_cliente">Nombre del cliente</Label>
             <Input
@@ -183,6 +242,40 @@ export default function DemoFormDialog({
             />
           </div>
 
+          {isVoz && (
+            <>
+              <div className="space-y-2">
+                <Label>Dirección</Label>
+                <Select
+                  value={form.direccion}
+                  onValueChange={(v) =>
+                    setForm((p) => ({ ...p, direccion: v as DemoDireccion }))
+                  }
+                >
+                  <SelectTrigger className="rounded-xl border-gray-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inbound">Inbound</SelectItem>
+                    <SelectItem value="outbound">Outbound</SelectItem>
+                    <SelectItem value="ambos">Ambos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="voz_id">Voice ID (Retell)</Label>
+                <Input
+                  id="voz_id"
+                  value={form.voz_id}
+                  onChange={(e) => setForm((p) => ({ ...p, voz_id: e.target.value }))}
+                  placeholder="ej: elevenlabs-Jessica o retell-Cimo"
+                  className="rounded-xl border-gray-200 font-mono text-sm"
+                />
+              </div>
+            </>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="base_conocimiento">Base de conocimiento</Label>
             <Textarea
@@ -193,10 +286,12 @@ export default function DemoFormDialog({
               rows={8}
               className="min-h-[160px] rounded-xl border-gray-200 font-mono text-sm"
             />
-            <p className="text-xs text-gray-500">
-              El agente recibe todo este texto en cada mensaje (contexto completo, no búsqueda
-              vectorial).
-            </p>
+            {!isVoz && (
+              <p className="text-xs text-gray-500">
+                El agente recibe todo este texto en cada mensaje (contexto completo, no búsqueda
+                vectorial).
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -213,7 +308,7 @@ export default function DemoFormDialog({
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Números autorizados</Label>
+              <Label>{numerosLabel(form.tipo, form.direccion)}</Label>
               <Button type="button" variant="outline" size="sm" onClick={addNumero} className="rounded-lg">
                 <Plus className="mr-1 h-3.5 w-3.5" />
                 Añadir
