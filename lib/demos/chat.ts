@@ -21,7 +21,12 @@ export async function generateDemoReply(
 BASE DE CONOCIMIENTO DEL CLIENTE:
 ${knowledgeBase.trim()}
 
-Responde en el mismo idioma que use el usuario. Sé conciso y útil. No inventes datos que no estén en la base de conocimiento; si no sabes algo, dilo con naturalidad.`
+Responde en el mismo idioma que use el usuario. Sé conciso y útil. No inventes datos que no estén en la base de conocimiento; si no sabes algo, dilo con naturalidad.
+
+FORMATO DE RESPUESTA (importante):
+- NO uses markdown, negritas ni asteriscos (*).
+- Separa cada idea o frase en una línea distinta; cada línea se enviará como un mensaje de WhatsApp separado.
+- Escribe de forma natural y conversacional, como un humano en chat.`
 
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: system },

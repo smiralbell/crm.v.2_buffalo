@@ -4,9 +4,13 @@ import {
   listAuthorizedPhones,
   saveConversationMessages,
 } from './store'
-import { normalizeWasenderPhone, phoneToWasenderRecipient } from './phone'
+import { normalizeWasenderPhone, phoneToWasenderJid, phoneToWasenderRecipient } from './phone'
 import { generateDemoReply } from './chat'
-import { parseWasenderWebhook, sendWasenderTextMessage } from './wasender'
+import {
+  joinWhatsAppMessages,
+  splitReplyIntoWhatsAppMessages,
+} from './format-output'
+import { parseWasenderWebhook, sendWasenderMessageSequence } from './wasender'
 import { logDemoWebhook } from './webhook-log'
 
 export async function handleDemoWasenderWebhook(body: unknown): Promise<{
@@ -133,38 +137,43 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
       details: { history_messages: history.length },
     })
 
-    const reply = await generateDemoReply(
+    const replyRaw = await generateDemoReply(
       demo.prompt,
       demo.base_conocimiento,
       history,
       data.text
     )
 
+    const replyParts = splitReplyIntoWhatsAppMessages(replyRaw)
+    const replyStored = joinWhatsAppMessages(replyParts)
+
     const now = new Date().toISOString()
     const updatedHistory = [
       ...history,
       { role: 'user' as const, content: data.text, at: now },
-      { role: 'assistant' as const, content: reply, at: now },
+      { role: 'assistant' as const, content: replyStored, at: now },
     ]
 
     await saveConversationMessages(demo.demo_id, phone, updatedHistory)
 
     const recipient = phoneToWasenderRecipient(phone)
+    const jid = phoneToWasenderJid(phone)
+
     await logDemoWebhook({
       step: 'wasender_send',
       level: 'info',
-      message: `Enviando respuesta a ${recipient}…`,
+      message: `Enviando ${replyParts.length} mensaje(s) a ${recipient}…`,
       phone,
       demo_id: demo.demo_id,
-      details: { reply_preview: reply.slice(0, 120) },
+      details: { parts: replyParts, reply_preview: replyStored.slice(0, 120) },
     })
 
-    await sendWasenderTextMessage(recipient, reply)
+    await sendWasenderMessageSequence(recipient, jid, replyParts)
 
     await logDemoWebhook({
       step: 'done',
       level: 'success',
-      message: 'Respuesta enviada correctamente',
+      message: `${replyParts.length} mensaje(s) enviados correctamente`,
       phone,
       demo_id: demo.demo_id,
     })

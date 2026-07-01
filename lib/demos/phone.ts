@@ -27,3 +27,8 @@ export function normalizeWasenderPhone(raw: string): string | null {
 export function phoneToWasenderRecipient(phone: string): string {
   return phone.replace(/\D/g, '')
 }
+
+/** JID de WhatsApp para presence (escribiendo…) */
+export function phoneToWasenderJid(phone: string): string {
+  return `${phoneToWasenderRecipient(phone)}@s.whatsapp.net`
+}

@@ -1,6 +1,28 @@
 const WASENDER_API_BASE =
   process.env.WASENDER_API_BASE_URL || 'https://www.wasenderapi.com'
 
+function wasenderHeaders(): Record<string, string> {
+  const apiKey = process.env.WASENDER_API_KEY
+  if (!apiKey) throw new Error('WASENDER_API_KEY no está configurada')
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Duración del indicador "escribiendo…" según longitud del mensaje */
+export function typingDelayMs(text: string): number {
+  const base = 700
+  const perChar = 28
+  const max = 4500
+  const min = 600
+  return Math.min(max, Math.max(min, base + text.length * perChar))
+}
+
 const INCOMING_EVENTS = new Set([
   'messages.received',
   'messages.upsert',
@@ -140,23 +162,60 @@ export function parseWasenderWebhook(body: unknown): ParseWasenderResult {
   }
 }
 
-export async function sendWasenderTextMessage(to: string, text: string): Promise<void> {
-  const apiKey = process.env.WASENDER_API_KEY
-  if (!apiKey) {
-    throw new Error('WASENDER_API_KEY no está configurada')
-  }
+export async function sendWasenderPresenceComposing(
+  jid: string,
+  delayMs?: number
+): Promise<void> {
+  const body: Record<string, unknown> = { jid, type: 'composing' }
+  if (delayMs && delayMs > 0) body.delayMs = delayMs
 
+  const res = await fetch(`${WASENDER_API_BASE}/api/send-presence-update`, {
+    method: 'POST',
+    headers: wasenderHeaders(),
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    console.warn(`[wasender] presence composing ${res.status}: ${errText.slice(0, 200)}`)
+  }
+}
+
+export async function sendWasenderTextMessage(to: string, text: string): Promise<void> {
   const res = await fetch(`${WASENDER_API_BASE}/api/send-message`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: wasenderHeaders(),
     body: JSON.stringify({ to, text }),
   })
 
   if (!res.ok) {
     const errText = await res.text()
     throw new Error(`Wasender ${res.status}: ${errText.slice(0, 500)}`)
+  }
+}
+
+/**
+ * Envía varios mensajes con pausas e indicador "escribiendo…" entre ellos.
+ */
+export async function sendWasenderMessageSequence(
+  recipient: string,
+  jid: string,
+  messages: string[]
+): Promise<void> {
+  if (messages.length === 0) return
+
+  for (let i = 0; i < messages.length; i++) {
+    const text = messages[i]
+    const delay = typingDelayMs(text)
+
+    await sendWasenderPresenceComposing(jid, delay)
+    await sleep(delay)
+
+    await sendWasenderTextMessage(recipient, text)
+
+    if (i < messages.length - 1) {
+      const gap = 400 + Math.min(1200, text.length * 15)
+      await sleep(gap)
+    }
   }
 }
