@@ -125,47 +125,82 @@ export async function getDemoById(id: number): Promise<DemoListItem | null> {
   }
 }
 
-async function replaceDemoNumeros(demoId: number, numeros: string[]): Promise<void> {
+async function replaceDemoNumeros(
+  demoId: number,
+  numeros: string[],
+  canal: DemoTipo
+): Promise<void> {
   await query(`DELETE FROM demo_numeros WHERE demo_id = $1`, [demoId])
 
   const unique = Array.from(new Set(numeros))
   for (const num of unique) {
-    await query(
-      `INSERT INTO demo_numeros (demo_id, numero_telefono) VALUES ($1, $2)`,
-      [demoId, num]
-    )
+    try {
+      await query(
+        `INSERT INTO demo_numeros (demo_id, numero_telefono, canal) VALUES ($1, $2, $3)`,
+        [demoId, num, canal]
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ''
+      if (msg.includes('canal')) {
+        await query(
+          `INSERT INTO demo_numeros (demo_id, numero_telefono) VALUES ($1, $2)`,
+          [demoId, num]
+        )
+      } else {
+        throw err
+      }
+    }
   }
 }
 
-/** Números que ya pertenecen a otra demo (excluye la demo indicada) */
+/** Números que ya pertenecen a otra demo del mismo canal (WhatsApp o voz) */
 export async function findPhoneConflicts(
   phones: string[],
-  exceptDemoId?: number
+  exceptDemoId?: number,
+  canal: DemoTipo = 'whatsapp'
 ): Promise<PhoneConflict[]> {
   if (phones.length === 0) return []
 
-  const result = await query<PhoneConflict>(
-    `SELECT n.numero_telefono, d.id AS demo_id, d.nombre_cliente
+  const result = await query<PhoneConflict & { demo_tipo: string }>(
+    `SELECT n.numero_telefono, d.id AS demo_id, d.nombre_cliente,
+            COALESCE(d.tipo, 'whatsapp') AS demo_tipo
      FROM demo_numeros n
      JOIN demos d ON d.id = n.demo_id
      WHERE n.numero_telefono = ANY($1::text[])
        AND ($2::int IS NULL OR n.demo_id <> $2)
+       AND COALESCE(d.tipo, 'whatsapp') = $3
      ORDER BY d.nombre_cliente`,
-    [phones, exceptDemoId ?? null]
+    [phones, exceptDemoId ?? null, canal]
   )
-  return result.rows
+  return result.rows.map((r) => ({
+    numero_telefono: r.numero_telefono,
+    demo_id: r.demo_id,
+    nombre_cliente: r.nombre_cliente,
+    demo_tipo: r.demo_tipo as DemoTipo,
+  }))
 }
 
-async function movePhonesFromOtherDemos(phones: string[], targetDemoId: number): Promise<void> {
+async function movePhonesFromOtherDemos(
+  phones: string[],
+  targetDemoId: number,
+  canal: DemoTipo
+): Promise<void> {
   for (const phone of phones) {
+    if (canal === 'whatsapp') {
+      await query(
+        `DELETE FROM demo_conversaciones
+         WHERE numero_telefono = $1 AND demo_id <> $2`,
+        [phone, targetDemoId]
+      )
+    }
     await query(
-      `DELETE FROM demo_conversaciones
-       WHERE numero_telefono = $1 AND demo_id <> $2`,
-      [phone, targetDemoId]
-    )
-    await query(
-      `DELETE FROM demo_numeros WHERE numero_telefono = $1 AND demo_id <> $2`,
-      [phone, targetDemoId]
+      `DELETE FROM demo_numeros n
+       USING demos d
+       WHERE n.demo_id = d.id
+         AND n.numero_telefono = $1
+         AND n.demo_id <> $2
+         AND COALESCE(d.tipo, 'whatsapp') = $3`,
+      [phone, targetDemoId, canal]
     )
   }
 }
@@ -173,29 +208,33 @@ async function movePhonesFromOtherDemos(phones: string[], targetDemoId: number):
 async function assignDemoNumeros(
   demoId: number,
   numeros: string[],
-  options?: DemoSaveOptions
+  options?: DemoSaveOptions,
+  canalOverride?: DemoTipo
 ): Promise<void> {
-  const conflicts = await findPhoneConflicts(numeros, demoId)
+  const demo = await getDemoById(demoId)
+  const canal = canalOverride ?? demo?.tipo ?? 'whatsapp'
+
+  const conflicts = await findPhoneConflicts(numeros, demoId, canal)
   if (conflicts.length > 0 && !options?.mover_numeros) {
     throw new PhoneNumberConflictError(conflicts)
   }
   if (conflicts.length > 0 && options?.mover_numeros) {
     const toMove = Array.from(new Set(conflicts.map((c) => c.numero_telefono)))
-    await movePhonesFromOtherDemos(toMove, demoId)
+    await movePhonesFromOtherDemos(toMove, demoId, canal)
   }
-  await replaceDemoNumeros(demoId, numeros)
+  await replaceDemoNumeros(demoId, numeros, canal)
 }
 
 export async function createDemo(
   input: DemoInput,
   options?: DemoSaveOptions
 ): Promise<DemoListItem> {
-  const preConflicts = await findPhoneConflicts(input.numeros)
+  const tipo: DemoTipo = input.tipo === 'voz' ? 'voz' : 'whatsapp'
+
+  const preConflicts = await findPhoneConflicts(input.numeros, undefined, tipo)
   if (preConflicts.length > 0 && !options?.mover_numeros) {
     throw new PhoneNumberConflictError(preConflicts)
   }
-
-  const tipo: DemoTipo = input.tipo === 'voz' ? 'voz' : 'whatsapp'
 
   const result = await query<{ id: number; created_at: Date }>(
     `INSERT INTO demos (
@@ -222,7 +261,7 @@ export async function createDemo(
   if (!row) throw new Error('No se pudo crear la demo')
 
   try {
-    await assignDemoNumeros(row.id, input.numeros, options)
+    await assignDemoNumeros(row.id, input.numeros, options, tipo)
   } catch (err) {
     await query(`DELETE FROM demos WHERE id = $1`, [row.id])
     throw err

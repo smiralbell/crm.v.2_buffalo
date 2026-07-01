@@ -43,6 +43,7 @@ export interface PhoneConflict {
   numero_telefono: string
   demo_id: number
   nombre_cliente: string
+  demo_tipo?: DemoTipo
 }
 
 export interface DemoSaveOptions {

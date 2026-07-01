@@ -27,6 +27,14 @@ import type {
   PhoneConflict,
 } from '@/lib/demos/types'
 
+type RetellVoice = {
+  voice_id: string
+  voice_name?: string
+  provider?: string
+  gender?: string
+  accent?: string
+}
+
 export interface DemoFormValues {
   nombre_cliente: string
   prompt: string
@@ -81,6 +89,9 @@ export default function DemoFormDialog({
   const [error, setError] = useState('')
   const [phoneConflicts, setPhoneConflicts] = useState<Record<number, PhoneConflict | null>>({})
   const [checkingPhone, setCheckingPhone] = useState<number | null>(null)
+  const [voices, setVoices] = useState<RetellVoice[]>([])
+  const [voicesLoading, setVoicesLoading] = useState(false)
+  const [voicesError, setVoicesError] = useState('')
 
   const exceptDemoId = demo?.id
   const isEdit = Boolean(demo)
@@ -106,6 +117,31 @@ export default function DemoFormDialog({
     }
   }, [open, demo])
 
+  useEffect(() => {
+    if (!open || form.tipo !== 'voz') return
+    let cancelled = false
+    setVoicesLoading(true)
+    setVoicesError('')
+    fetch('/api/demos/retell-voices')
+      .then(async (res) => {
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Error al cargar voces')
+        if (!cancelled) setVoices(data.voices || [])
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setVoicesError(e instanceof Error ? e.message : 'Error al cargar voces')
+          setVoices([])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setVoicesLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, form.tipo])
+
   const checkPhoneConflict = useCallback(
     async (index: number, rawValue: string) => {
       const trimmed = rawValue.trim()
@@ -122,6 +158,7 @@ export default function DemoFormDialog({
           body: JSON.stringify({
             numeros: [trimmed],
             except_demo_id: exceptDemoId,
+            tipo: form.tipo,
           }),
         })
         const data = await res.json()
@@ -133,7 +170,7 @@ export default function DemoFormDialog({
         setCheckingPhone(null)
       }
     },
-    [exceptDemoId]
+    [exceptDemoId, form.tipo]
   )
 
   const updateNumero = (index: number, value: string) => {
@@ -178,7 +215,7 @@ export default function DemoFormDialog({
       return
     }
     if (isVoz && !form.voz_id.trim()) {
-      setError('El Voice ID de Retell es obligatorio para demos de voz')
+      setError('Selecciona una voz de Retell')
       return
     }
 
@@ -264,14 +301,35 @@ export default function DemoFormDialog({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="voz_id">Voice ID (Retell)</Label>
-                <Input
-                  id="voz_id"
-                  value={form.voz_id}
-                  onChange={(e) => setForm((p) => ({ ...p, voz_id: e.target.value }))}
-                  placeholder="ej: elevenlabs-Jessica o retell-Cimo"
-                  className="rounded-xl border-gray-200 font-mono text-sm"
-                />
+                <Label>Voz (Retell)</Label>
+                {voicesLoading ? (
+                  <p className="text-sm text-gray-500">Cargando voces de Retell…</p>
+                ) : voicesError ? (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {voicesError}
+                  </p>
+                ) : (
+                  <Select
+                    value={form.voz_id || undefined}
+                    onValueChange={(v) => setForm((p) => ({ ...p, voz_id: v }))}
+                  >
+                    <SelectTrigger className="rounded-xl border-gray-200">
+                      <SelectValue placeholder="Selecciona una voz…" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {voices.map((v) => (
+                        <SelectItem key={v.voice_id} value={v.voice_id}>
+                          {v.voice_name || v.voice_id}
+                          {v.provider ? ` · ${v.provider}` : ''}
+                          {v.accent ? ` · ${v.accent}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {form.voz_id && (
+                  <p className="font-mono text-xs text-gray-400">{form.voz_id}</p>
+                )}
               </div>
             </>
           )}
@@ -347,8 +405,9 @@ export default function DemoFormDialog({
                     {conflict && (
                       <p className="flex items-start gap-1.5 text-xs text-amber-800">
                         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        Ya está en la demo <strong>{conflict.nombre_cliente}</strong>. Al guardar
-                        podrás moverlo a esta demo.
+                        Ya está en la demo <strong>{conflict.nombre_cliente}</strong>
+                        {conflict.demo_tipo ? ` (${conflict.demo_tipo === 'voz' ? 'voz' : 'WhatsApp'})` : ''}.
+                        Al guardar podrás moverlo a esta demo.
                       </p>
                     )}
                   </div>

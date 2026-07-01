@@ -36,12 +36,15 @@ export async function createVoiceDemo(
   )
 
   try {
-    const retell = await retellProvisionVoiceDemo({
-      nombre_cliente: demo.nombre_cliente,
-      prompt: demo.prompt,
-      base_conocimiento: demo.base_conocimiento,
-      voz_id: input.voz_id.trim(),
-    })
+    const retell = await retellProvisionVoiceDemo(
+      {
+        nombre_cliente: demo.nombre_cliente,
+        prompt: demo.prompt,
+        base_conocimiento: demo.base_conocimiento,
+        voz_id: input.voz_id.trim(),
+      },
+      demo.id
+    )
 
     await updateDemoRetellIds(demo.id, {
       retell_agent_id: retell.agent_id,
@@ -79,15 +82,15 @@ export async function updateVoiceDemoInRetell(
   }
 
   if (baseChanged) {
-    await retellUpdateKnowledgeBase(existing.retell_kb_id, nombre, base)
+    await retellUpdateKnowledgeBase(existing.retell_kb_id, nombre, base, existing.id)
   }
 
   if (promptChanged || baseChanged) {
-    await retellUpdateLlm(existing.retell_llm_id, prompt, existing.retell_kb_id)
+    await retellUpdateLlm(existing.retell_llm_id, prompt, existing.retell_kb_id, existing.id)
   }
 
   if (vozChanged && vozId) {
-    await retellUpdateAgentVoice(existing.retell_agent_id, vozId)
+    await retellUpdateAgentVoice(existing.retell_agent_id, vozId, existing.id)
   }
 }
 

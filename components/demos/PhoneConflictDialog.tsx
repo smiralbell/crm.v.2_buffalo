@@ -35,9 +35,13 @@ export default function PhoneConflictDialog({
         <DialogHeader>
           <DialogTitle>Número ya asignado a otra demo</DialogTitle>
           <DialogDescription>
-            Cada teléfono solo puede pertenecer a una demo. Si continúas, se quitará de la demo
-            anterior y pasará a <strong>{targetDemoName}</strong> (el historial de chat anterior se
-            borrará).
+            Cada teléfono solo puede estar en una demo del mismo tipo (WhatsApp o voz).
+            El mismo número sí puede estar en una demo WhatsApp y otra de voz.
+            Si continúas, se quitará de la demo anterior del mismo tipo y pasará a{' '}
+            <strong>{targetDemoName}</strong>
+            {conflicts[0]?.demo_tipo === 'whatsapp'
+              ? ' (se borrará el historial de chat anterior).'
+              : '.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -54,6 +58,7 @@ export default function PhoneConflictDialog({
               <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
                 <span className="rounded-md bg-white px-2 py-0.5 text-gray-700">
                   {c.nombre_cliente}
+                  {c.demo_tipo ? ` (${c.demo_tipo === 'voz' ? 'Voz' : 'WhatsApp'})` : ''}
                 </span>
                 <ArrowRight className="h-3.5 w-3.5 text-gray-400" />
                 <span className="rounded-md bg-gray-900 px-2 py-0.5 font-medium text-white">
