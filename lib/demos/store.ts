@@ -319,3 +319,16 @@ export async function saveConversationMessages(
     [demoId, phone, json]
   )
 }
+
+export async function clearDemoMemory(demoId: number): Promise<number> {
+  const result = await query(
+    `DELETE FROM demo_conversaciones WHERE demo_id = $1`,
+    [demoId]
+  )
+  try {
+    await query(`DELETE FROM demo_webhook_logs WHERE demo_id = $1`, [demoId])
+  } catch {
+    // tabla de logs puede no existir
+  }
+  return result.rowCount ?? 0
+}

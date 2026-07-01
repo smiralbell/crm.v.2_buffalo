@@ -38,3 +38,28 @@ export interface DemoSaveOptions {
   /** Quita el número de la demo anterior y lo asigna a esta */
   mover_numeros?: boolean
 }
+
+export type DemoSessionStatus = 'ok' | 'error' | 'pending'
+
+export interface DemoMetrics {
+  testers_count: number
+  successful_count: number
+  failed_count: number
+  total_user_messages: number
+  total_assistant_messages: number
+  last_activity_at: string | null
+  sessions: DemoSessionRow[]
+}
+
+export interface DemoSessionRow {
+  phone: string
+  phone_masked: string
+  user_messages: number
+  assistant_messages: number
+  status: DemoSessionStatus
+  updated_at: string
+}
+
+export interface DemoDetail extends DemoListItem {
+  metrics: DemoMetrics
+}

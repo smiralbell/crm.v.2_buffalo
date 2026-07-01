@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import { isPhoneNumberConflictError } from '@/lib/demos/errors'
+import { getDemoWithMetrics } from '@/lib/demos/demo-detail'
 import { deleteDemo, parseNumerosInput, updateDemo } from '@/lib/demos/store'
 
 const updateSchema = z.object({
@@ -23,6 +24,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const id = parseInt(req.query.id as string, 10)
   if (!Number.isFinite(id) || id < 1) {
     return res.status(400).json({ error: 'ID inválido' })
+  }
+
+  if (req.method === 'GET') {
+    try {
+      const detail = await getDemoWithMetrics(id)
+      if (!detail) return res.status(404).json({ error: 'Demo no encontrada' })
+      return res.status(200).json(detail)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error interno'
+      if (process.env.NODE_ENV === 'development') console.error('[demos/[id] GET]', err)
+      return res.status(500).json({ error: msg })
+    }
   }
 
   if (req.method === 'PUT') {

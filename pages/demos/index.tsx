@@ -15,10 +15,11 @@ import {
 } from '@/components/ui/dialog'
 import DemoFormDialog, { type DemoFormValues } from '@/components/demos/DemoFormDialog'
 import PhoneConflictDialog from '@/components/demos/PhoneConflictDialog'
-import DemoWebhookLogsPanel from '@/components/demos/DemoWebhookLogsPanel'
 import type { DemoListItem, PhoneConflict } from '@/lib/demos/types'
+import Link from 'next/link'
 import {
   Bot,
+  ChevronRight,
   Edit,
   Pause,
   Play,
@@ -231,8 +232,6 @@ export default function DemosPage() {
           </div>
         )}
 
-        <DemoWebhookLogsPanel />
-
         <Card className="border border-gray-200 shadow-sm">
           <CardContent className="p-0">
             {loading && demos.length === 0 ? (
@@ -274,11 +273,19 @@ export default function DemosPage() {
                     {demos.map((demo) => (
                       <tr key={demo.id} className="border-b border-gray-50 hover:bg-gray-50/80">
                         <td className="p-4">
-                          <div className="font-medium text-gray-900">{demo.nombre_cliente}</div>
-                          <div className="mt-0.5 line-clamp-1 text-xs text-gray-400">
-                            {demo.prompt.slice(0, 80)}
-                            {demo.prompt.length > 80 ? '…' : ''}
-                          </div>
+                          <Link
+                            href={`/demos/${demo.id}`}
+                            className="group block"
+                          >
+                            <div className="flex items-center gap-1 font-medium text-gray-900 group-hover:text-gray-700">
+                              {demo.nombre_cliente}
+                              <ChevronRight className="h-4 w-4 text-gray-300 opacity-0 transition group-hover:opacity-100" />
+                            </div>
+                            <div className="mt-0.5 line-clamp-1 text-xs text-gray-400">
+                              {demo.prompt.slice(0, 80)}
+                              {demo.prompt.length > 80 ? '…' : ''}
+                            </div>
+                          </Link>
                         </td>
                         <td className="p-4">
                           <Badge className={estadoClass[demo.estado] || 'bg-gray-100 text-gray-700'}>
@@ -300,6 +307,11 @@ export default function DemosPage() {
                         <td className="p-4 text-sm text-gray-600">{fmtDate(demo.created_at)}</td>
                         <td className="p-4">
                           <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" title="Ver métricas" asChild>
+                              <Link href={`/demos/${demo.id}`}>
+                                <ChevronRight className="h-4 w-4" />
+                              </Link>
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
