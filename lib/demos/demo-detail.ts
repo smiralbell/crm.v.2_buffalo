@@ -6,6 +6,11 @@ import {
   normalizeOutboundFormConfig,
   type OutboundFormFieldConfig,
 } from './outbound-form'
+import {
+  DEFAULT_OUTBOUND_FORM_BRANDING,
+  normalizeOutboundFormBranding,
+  type OutboundFormBranding,
+} from './form-branding'
 import { getFormPublicAccess } from './public-form-store'
 import type { DemoMetrics } from './types'
 import { getDemoById } from './store'
@@ -30,6 +35,30 @@ export async function updateDemoFormularioOutbound(
 ): Promise<OutboundFormFieldConfig[]> {
   const normalized = normalizeOutboundFormConfig(fields)
   await query(`UPDATE demos SET formulario_outbound = $1::jsonb WHERE id = $2`, [
+    JSON.stringify(normalized),
+    demoId,
+  ])
+  return normalized
+}
+
+export async function getDemoFormularioBranding(demoId: number): Promise<OutboundFormBranding> {
+  try {
+    const result = await query<{ formulario_branding: unknown }>(
+      `SELECT formulario_branding FROM demos WHERE id = $1`,
+      [demoId]
+    )
+    return normalizeOutboundFormBranding(result.rows[0]?.formulario_branding)
+  } catch {
+    return { ...DEFAULT_OUTBOUND_FORM_BRANDING }
+  }
+}
+
+export async function updateDemoFormularioBranding(
+  demoId: number,
+  branding: OutboundFormBranding
+): Promise<OutboundFormBranding> {
+  const normalized = normalizeOutboundFormBranding(branding)
+  await query(`UPDATE demos SET formulario_branding = $1::jsonb WHERE id = $2`, [
     JSON.stringify(normalized),
     demoId,
   ])
@@ -77,13 +106,22 @@ export async function getDemoWithMetrics(demoId: number) {
   if (!demo) return null
 
   if (demo.tipo === 'voz') {
-    const [voice_metrics, formulario_outbound, form_access] = await Promise.all([
-      getDemoVoiceMetrics(demoId),
-      getDemoFormularioOutbound(demoId),
-      getFormPublicAccess(demoId),
-    ])
+    const [voice_metrics, formulario_outbound, form_access, formulario_branding] =
+      await Promise.all([
+        getDemoVoiceMetrics(demoId),
+        getDemoFormularioOutbound(demoId),
+        getFormPublicAccess(demoId),
+        getDemoFormularioBranding(demoId),
+      ])
     const metrics = await getDemoMetrics(demoId)
-    return { ...demo, metrics, voice_metrics, formulario_outbound, form_access }
+    return {
+      ...demo,
+      metrics,
+      voice_metrics,
+      formulario_outbound,
+      form_access,
+      formulario_branding,
+    }
   }
 
   const metrics = await getDemoMetrics(demoId)

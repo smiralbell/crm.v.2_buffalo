@@ -24,8 +24,10 @@ import type {
   DemoSessionRow,
   DemoVoiceSessionRow,
   FormPublicAccess,
+  OutboundFormBrandingRef,
   OutboundFormFieldRef,
 } from '@/lib/demos/types'
+import { DEFAULT_OUTBOUND_FORM_BRANDING } from '@/lib/demos/form-branding'
 import { DEFAULT_OUTBOUND_FORM_FIELDS } from '@/lib/demos/outbound-form'
 import { Input } from '@/components/ui/input'
 import {
@@ -92,6 +94,9 @@ export default function DemoDetailPage() {
     public_url: null,
     has_password: false,
   })
+  const [formBranding, setFormBranding] = useState<OutboundFormBrandingRef>(
+    DEFAULT_OUTBOUND_FORM_BRANDING
+  )
   const [linkCopied, setLinkCopied] = useState(false)
 
   const load = useCallback(async () => {
@@ -105,6 +110,7 @@ export default function DemoDetailPage() {
       setDetail(data)
       if (data.formulario_outbound) setFormFields(data.formulario_outbound)
       if (data.form_access) setFormAccess(data.form_access)
+      if (data.formulario_branding) setFormBranding(data.formulario_branding)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar')
       setDetail(null)
@@ -558,13 +564,23 @@ export default function DemoDetailPage() {
           open={formConfigOpen}
           onOpenChange={setFormConfigOpen}
           demoId={id}
+          demoNombre={detail?.nombre_cliente ?? 'Demo'}
           initialFields={outboundFields}
           initialAccess={formAccess}
-          onSaved={(fields, access) => {
+          initialBranding={formBranding}
+          onSaved={(fields, access, branding) => {
             setFormFields(fields)
             setFormAccess(access)
+            setFormBranding(branding)
             setDetail((d) =>
-              d ? { ...d, formulario_outbound: fields, form_access: access } : d
+              d
+                ? {
+                    ...d,
+                    formulario_outbound: fields,
+                    form_access: access,
+                    formulario_branding: branding,
+                  }
+                : d
             )
           }}
         />

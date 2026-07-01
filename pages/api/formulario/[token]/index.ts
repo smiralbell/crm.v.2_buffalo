@@ -1,6 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
-import { getDemoFormularioOutbound } from '@/lib/demos/demo-detail'
+import {
+  getDemoFormularioBranding,
+  getDemoFormularioOutbound,
+} from '@/lib/demos/demo-detail'
 import {
   formSessionCookieHeader,
   readFormSessionCookie,
@@ -8,6 +11,19 @@ import {
   verifyFormSession,
 } from '@/lib/demos/form-access'
 import { getDemoByPublicToken } from '@/lib/demos/public-form-store'
+
+async function publicFormPayload(demoId: number, demoNombre: string, authenticated: boolean) {
+  const branding = await getDemoFormularioBranding(demoId)
+  const base = {
+    nombre_cliente: demoNombre,
+    requires_password: true,
+    authenticated,
+    branding,
+  }
+  if (!authenticated) return base
+  const fields = await getDemoFormularioOutbound(demoId)
+  return { ...base, fields: fields.filter((f) => f.enabled) }
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const token = req.query.token as string
@@ -25,22 +41,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!authenticated) {
       return res.status(200).json({
-        nombre_cliente: demo.nombre_cliente,
-        requires_password: true,
+        ...(await publicFormPayload(demo.demo_id, demo.nombre_cliente, false)),
         has_password: Boolean(demo.formulario_password_hash),
-        authenticated: false,
         active: demo.estado === 'activa',
       })
     }
 
-    const fields = await getDemoFormularioOutbound(demo.demo_id)
     return res.status(200).json({
-      nombre_cliente: demo.nombre_cliente,
-      requires_password: true,
+      ...(await publicFormPayload(demo.demo_id, demo.nombre_cliente, true)),
       has_password: Boolean(demo.formulario_password_hash),
-      authenticated: true,
       active: demo.estado === 'activa',
-      fields: fields.filter((f) => f.enabled),
     })
   }
 
@@ -60,13 +70,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       res.setHeader('Set-Cookie', formSessionCookieHeader(token, demo.demo_id))
-      const fields = await getDemoFormularioOutbound(demo.demo_id)
       return res.status(200).json({
         ok: true,
-        nombre_cliente: demo.nombre_cliente,
-        authenticated: true,
+        ...(await publicFormPayload(demo.demo_id, demo.nombre_cliente, true)),
         active: demo.estado === 'activa',
-        fields: fields.filter((f) => f.enabled),
       })
     } catch (err) {
       if (err instanceof z.ZodError) {

@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import type { OutboundFormFieldRef } from '@/lib/demos/types'
+import { PublicFormButton } from '@/components/demos/PublicFormShell'
+import type { OutboundFormBrandingRef, OutboundFormFieldRef } from '@/lib/demos/types'
 import { Phone } from 'lucide-react'
 
 type Props = {
   token: string
-  demoNombre: string
   fields: OutboundFormFieldRef[]
+  branding: OutboundFormBrandingRef
   disabled?: boolean
 }
 
@@ -19,7 +19,12 @@ function emptyValues(fields: OutboundFormFieldRef[]): Record<string, string> {
   return v
 }
 
-export default function PublicOutboundForm({ token, demoNombre, fields, disabled }: Props) {
+export default function PublicOutboundForm({
+  token,
+  fields,
+  branding,
+  disabled,
+}: Props) {
   const [values, setValues] = useState<Record<string, string>>(() => emptyValues(fields))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -77,10 +82,6 @@ export default function PublicOutboundForm({ token, demoNombre, fields, disabled
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <p className="text-sm text-gray-600">
-        Completa tus datos para que <strong>{demoNombre}</strong> pueda contactarte por teléfono.
-      </p>
-
       <div className="grid gap-4 sm:grid-cols-2">
         {fields.map((field) => {
           const isPhone = field.key === 'telefono'
@@ -103,7 +104,10 @@ export default function PublicOutboundForm({ token, demoNombre, fields, disabled
               ) : (
                 <div className="relative">
                   {isPhone && (
-                    <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Phone
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+                      style={{ color: branding.color_primary }}
+                    />
                   )}
                   <Input
                     type={field.key === 'email' ? 'email' : 'text'}
@@ -131,13 +135,9 @@ export default function PublicOutboundForm({ token, demoNombre, fields, disabled
         </p>
       )}
 
-      <Button
-        type="submit"
-        disabled={disabled || submitting}
-        className="w-full rounded-xl bg-violet-700 hover:bg-violet-800"
-      >
+      <PublicFormButton type="submit" disabled={disabled || submitting}>
         {submitting ? 'Enviando…' : 'Enviar y recibir llamada'}
-      </Button>
+      </PublicFormButton>
     </form>
   )
 }

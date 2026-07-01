@@ -2,9 +2,12 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import {
+  getDemoFormularioBranding,
   getDemoFormularioOutbound,
+  updateDemoFormularioBranding,
   updateDemoFormularioOutbound,
 } from '@/lib/demos/demo-detail'
+import { normalizeOutboundFormBranding } from '@/lib/demos/form-branding'
 import { normalizeOutboundFormConfig } from '@/lib/demos/outbound-form'
 import {
   getFormPublicAccess,
@@ -21,8 +24,15 @@ const fieldSchema = z.object({
   placeholder: z.string().max(200).optional(),
 })
 
+const brandingSchema = z.object({
+  logo_url: z.string().max(2000).nullable().optional(),
+  color_primary: z.string().max(20),
+  color_secondary: z.string().max(20),
+})
+
 const putSchema = z.object({
   fields: z.array(fieldSchema).min(1).optional(),
+  branding: brandingSchema.optional(),
   password: z.string().min(4, 'Mínimo 4 caracteres').max(128).optional(),
   regenerate_token: z.boolean().optional(),
 })
@@ -46,11 +56,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'GET') {
-    const [fields, access] = await Promise.all([
+    const [fields, access, branding] = await Promise.all([
       getDemoFormularioOutbound(id),
       getFormPublicAccess(id),
+      getDemoFormularioBranding(id),
     ])
-    return res.status(200).json({ fields, ...access })
+    return res.status(200).json({ fields, branding, ...access })
   }
 
   if (req.method === 'PUT') {
@@ -71,7 +82,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         fields = await updateDemoFormularioOutbound(id, normalizeOutboundFormConfig(parsed.fields))
       }
 
-      return res.status(200).json({ fields, ...access })
+      let branding = await getDemoFormularioBranding(id)
+      if (parsed.branding) {
+        branding = await updateDemoFormularioBranding(
+          id,
+          normalizeOutboundFormBranding({
+            logo_url: parsed.branding.logo_url || null,
+            color_primary: parsed.branding.color_primary,
+            color_secondary: parsed.branding.color_secondary,
+          })
+        )
+      }
+
+      return res.status(200).json({ fields, branding, ...access })
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ error: err.errors[0]?.message || 'Datos inválidos' })

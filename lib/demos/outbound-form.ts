@@ -4,7 +4,6 @@ export const RETELL_OUTBOUND_VAR_KEYS = [
   'apellidos',
   'telefono',
   'email',
-  'empresa',
   'notas',
 ] as const
 
@@ -39,14 +38,7 @@ export const DEFAULT_OUTBOUND_FORM_FIELDS: OutboundFormFieldConfig[] = [
     label: 'Email',
     enabled: true,
     required: false,
-    placeholder: 'maria@empresa.com',
-  },
-  {
-    key: 'empresa',
-    label: 'Empresa',
-    enabled: true,
-    required: false,
-    placeholder: 'Nombre de la empresa',
+    placeholder: 'maria@email.com',
   },
   {
     key: 'notas',

@@ -10,32 +10,76 @@ import {
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import type { FormPublicAccess, OutboundFormFieldRef } from '@/lib/demos/types'
+import type {
+  FormPublicAccess,
+  OutboundFormBrandingRef,
+  OutboundFormFieldRef,
+} from '@/lib/demos/types'
+import { DEFAULT_OUTBOUND_FORM_BRANDING } from '@/lib/demos/form-branding'
 import { RETELL_OUTBOUND_VAR_KEYS } from '@/lib/demos/outbound-form'
-import { Check, Copy, Link2, Lock } from 'lucide-react'
+import { Check, Copy, Link2, Lock, Palette } from 'lucide-react'
 
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
   demoId: number
+  demoNombre: string
   initialFields: OutboundFormFieldRef[]
   initialAccess: FormPublicAccess
-  onSaved: (fields: OutboundFormFieldRef[], access: FormPublicAccess) => void
+  initialBranding: OutboundFormBrandingRef
+  onSaved: (
+    fields: OutboundFormFieldRef[],
+    access: FormPublicAccess,
+    branding: OutboundFormBrandingRef
+  ) => void
 }
 
-type Step = 'access' | 'fields'
+type Step = 'access' | 'design' | 'fields'
+
+function ColorField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div className="flex gap-2">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-10 w-12 cursor-pointer rounded-lg border border-gray-200"
+        />
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="rounded-xl font-mono text-sm"
+          placeholder="#000000"
+        />
+      </div>
+    </div>
+  )
+}
 
 export default function DemoOutboundFormConfigDialog({
   open,
   onOpenChange,
   demoId,
+  demoNombre,
   initialFields,
   initialAccess,
+  initialBranding,
   onSaved,
 }: Props) {
   const [step, setStep] = useState<Step>('access')
   const [fields, setFields] = useState<OutboundFormFieldRef[]>(initialFields)
   const [access, setAccess] = useState<FormPublicAccess>(initialAccess)
+  const [branding, setBranding] = useState<OutboundFormBrandingRef>(initialBranding)
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
   const [saving, setSaving] = useState(false)
@@ -47,11 +91,12 @@ export default function DemoOutboundFormConfigDialog({
     setStep('access')
     setFields(initialFields)
     setAccess(initialAccess)
+    setBranding(initialBranding)
     setPassword('')
     setPasswordConfirm('')
     setError('')
     setCopied(false)
-  }, [open, initialFields, initialAccess])
+  }, [open, initialFields, initialAccess, initialBranding])
 
   const updateField = (key: string, patch: Partial<OutboundFormFieldRef>) => {
     setFields((prev) => prev.map((f) => (f.key === key ? { ...f, ...patch } : f)))
@@ -78,20 +123,17 @@ export default function DemoOutboundFormConfigDialog({
       setError('Define una contraseña para proteger el formulario')
       return
     } else {
-      setStep('fields')
+      setStep('design')
       return
     }
 
     setSaving(true)
     setError('')
     try {
-      const body: Record<string, unknown> = {}
-      if (password) body.password = password
-
       const res = await fetch(`/api/demos/${demoId}/formulario`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ password }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'No se pudo guardar')
@@ -104,7 +146,30 @@ export default function DemoOutboundFormConfigDialog({
       setAccess(nextAccess)
       setPassword('')
       setPasswordConfirm('')
-      onSaved(fields, nextAccess)
+      onSaved(fields, nextAccess, branding)
+      setStep('design')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveDesign = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/demos/${demoId}/formulario`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ branding }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo guardar')
+
+      const nextBranding = data.branding as OutboundFormBrandingRef
+      setBranding(nextBranding)
+      onSaved(fields, access, nextBranding)
       setStep('fields')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al guardar')
@@ -130,7 +195,7 @@ export default function DemoOutboundFormConfigDialog({
         has_password: data.has_password,
       }
       setAccess(nextAccess)
-      onSaved(fields, nextAccess)
+      onSaved(fields, nextAccess, branding)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
     } finally {
@@ -149,7 +214,7 @@ export default function DemoOutboundFormConfigDialog({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'No se pudo guardar')
-      onSaved(data.fields, access)
+      onSaved(data.fields, access, branding)
       onOpenChange(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al guardar')
@@ -158,16 +223,26 @@ export default function DemoOutboundFormConfigDialog({
     }
   }
 
+  const stepDescription =
+    step === 'access'
+      ? 'Protege el formulario con contraseña y comparte el enlace público con tu cliente.'
+      : step === 'design'
+        ? 'Personaliza logo y colores que verá el cliente en el formulario público.'
+        : `Campos del formulario. Variables Retell: ${RETELL_OUTBOUND_VAR_KEYS.map((k) => `{{${k}}}`).join(', ')}`
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Configurar formulario outbound</DialogTitle>
-          <DialogDescription>
-            {step === 'access'
-              ? 'Protege el formulario con contraseña y comparte el enlace público con tu cliente.'
-              : `Personaliza los campos. Variables Retell: ${RETELL_OUTBOUND_VAR_KEYS.map((k) => `{{${k}}}`).join(', ')}`}
-          </DialogDescription>
+          <DialogDescription>{stepDescription}</DialogDescription>
+          <div className="flex gap-1 pt-2 text-[10px] font-medium uppercase tracking-wide text-gray-400">
+            <span className={step === 'access' ? 'text-violet-700' : ''}>1. Acceso</span>
+            <span>·</span>
+            <span className={step === 'design' ? 'text-violet-700' : ''}>2. Diseño</span>
+            <span>·</span>
+            <span className={step === 'fields' ? 'text-violet-700' : ''}>3. Campos</span>
+          </div>
         </DialogHeader>
 
         {step === 'access' && (
@@ -191,7 +266,11 @@ export default function DemoOutboundFormConfigDialog({
                     className="shrink-0 rounded-xl"
                     onClick={copyLink}
                   >
-                    {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                    {copied ? (
+                      <Check className="h-4 w-4 text-emerald-600" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
                   </Button>
                 </div>
               ) : (
@@ -240,10 +319,61 @@ export default function DemoOutboundFormConfigDialog({
                   className="rounded-xl"
                 />
               </div>
-              <p className="text-xs text-gray-500">
-                Comparte el enlace y esta contraseña con tu cliente. Solo verá el formulario, sin
-                acceso al CRM.
-              </p>
+            </div>
+          </div>
+        )}
+
+        {step === 'design' && (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>URL del logo del cliente</Label>
+              <Input
+                value={branding.logo_url ?? ''}
+                onChange={(e) =>
+                  setBranding((b) => ({ ...b, logo_url: e.target.value.trim() || null }))
+                }
+                placeholder="https://ejemplo.com/logo.png"
+                className="rounded-xl"
+              />
+              <p className="text-xs text-gray-500">PNG o SVG con fondo transparente recomendado.</p>
+            </div>
+
+            <ColorField
+              label="Color principal (botones y acentos)"
+              value={branding.color_primary}
+              onChange={(v) => setBranding((b) => ({ ...b, color_primary: v }))}
+            />
+            <ColorField
+              label="Color secundario (fondo)"
+              value={branding.color_secondary}
+              onChange={(v) => setBranding((b) => ({ ...b, color_secondary: v }))}
+            />
+
+            <div
+              className="rounded-xl border border-gray-200 p-4 text-center"
+              style={{
+                background: `linear-gradient(to bottom, ${branding.color_secondary}, #fff)`,
+              }}
+            >
+              <p className="mb-3 text-xs font-medium text-gray-500">Vista previa</p>
+              {branding.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={branding.logo_url}
+                  alt="Logo"
+                  className="mx-auto mb-2 max-h-12 max-w-[160px] object-contain"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
+              ) : null}
+              <p className="text-sm font-semibold text-gray-900">{demoNombre}</p>
+              <div
+                className="mx-auto mt-3 inline-block rounded-lg px-4 py-2 text-xs font-medium text-white"
+                style={{ backgroundColor: branding.color_primary }}
+              >
+                Botón de ejemplo
+              </div>
             </div>
           </div>
         )}
@@ -308,24 +438,45 @@ export default function DemoOutboundFormConfigDialog({
         )}
 
         <DialogFooter className="gap-2 sm:gap-0">
-          {step === 'fields' && (
+          {step === 'design' && (
             <Button
               variant="outline"
               onClick={() => setStep('access')}
               className="rounded-xl"
               disabled={saving}
             >
-              Volver a acceso
+              Volver
+            </Button>
+          )}
+          {step === 'fields' && (
+            <Button
+              variant="outline"
+              onClick={() => setStep('design')}
+              className="rounded-xl"
+              disabled={saving}
+            >
+              Volver
             </Button>
           )}
           <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl">
             Cancelar
           </Button>
-          {step === 'access' ? (
+          {step === 'access' && (
             <Button onClick={saveAccess} disabled={saving} className="rounded-xl">
-              {saving ? 'Guardando…' : access.has_password && !password ? 'Continuar a campos' : 'Guardar y continuar'}
+              {saving
+                ? 'Guardando…'
+                : access.has_password && !password
+                  ? 'Continuar'
+                  : 'Guardar y continuar'}
             </Button>
-          ) : (
+          )}
+          {step === 'design' && (
+            <Button onClick={saveDesign} disabled={saving} className="rounded-xl">
+              <Palette className="mr-2 h-4 w-4" />
+              {saving ? 'Guardando…' : 'Guardar diseño'}
+            </Button>
+          )}
+          {step === 'fields' && (
             <Button onClick={saveFields} disabled={saving} className="rounded-xl">
               {saving ? 'Guardando…' : 'Guardar campos'}
             </Button>

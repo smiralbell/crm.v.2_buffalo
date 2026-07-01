@@ -77,6 +77,7 @@ export interface DemoDetail extends DemoListItem {
   voice_metrics?: DemoVoiceMetrics
   formulario_outbound?: OutboundFormFieldRef[]
   form_access?: FormPublicAccess
+  formulario_branding?: OutboundFormBrandingRef
 }
 
 export interface FormPublicAccess {
@@ -85,13 +86,18 @@ export interface FormPublicAccess {
   has_password: boolean
 }
 
-/** Re-export shape for API responses */
 export type OutboundFormFieldRef = {
   key: string
   label: string
   enabled: boolean
   required: boolean
   placeholder?: string
+}
+
+export type OutboundFormBrandingRef = {
+  logo_url: string | null
+  color_primary: string
+  color_secondary: string
 }
 
 export interface DemoVoiceSessionRow {
