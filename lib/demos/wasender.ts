@@ -29,12 +29,12 @@ function randomBetween(min: number, max: number): number {
 
 const INCOMING_EVENTS = new Set([
   'messages.received',
-  'messages.upsert',
   'messages-personal.received',
   'message.received',
 ])
 
 export interface ParsedWasenderMessage {
+  messageId: string | null
   senderPhone: string
   text: string
   fromMe: boolean
@@ -158,6 +158,7 @@ export function parseWasenderWebhook(body: unknown): ParseWasenderResult {
   return {
     ok: true,
     data: {
+      messageId: typeof key?.id === 'string' && key.id ? key.id : null,
       senderPhone: senderRaw,
       text,
       fromMe,

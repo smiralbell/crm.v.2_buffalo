@@ -10,6 +10,7 @@ import {
   joinWhatsAppMessages,
   splitReplyIntoWhatsAppMessages,
 } from './format-output'
+import { buildMessageDedupKey, claimIncomingDemoMessage, pruneOldProcessedMessages } from './dedup'
 import { parseWasenderWebhook, sendWasenderMessageSequence } from './wasender'
 import { logDemoWebhook } from './webhook-log'
 
@@ -123,7 +124,25 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
     event: data.event,
     phone,
     demo_id: demo.demo_id,
+    details: { message_id: data.messageId },
   })
+
+  const dedupKey = buildMessageDedupKey(data.messageId, phone, data.text)
+  const claimed = await claimIncomingDemoMessage(dedupKey, demo.demo_id, phone)
+  if (!claimed) {
+    await logDemoWebhook({
+      step: 'duplicate',
+      level: 'info',
+      message: 'Mensaje duplicado ignorado (webhook ya procesado)',
+      event: data.event,
+      phone,
+      demo_id: demo.demo_id,
+      details: { message_id: data.messageId, dedup_key: dedupKey },
+    })
+    return { handled: false, reason: 'duplicate' }
+  }
+
+  void pruneOldProcessedMessages()
 
   try {
     const history = await getConversationMessages(demo.demo_id, phone)
