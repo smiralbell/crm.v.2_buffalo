@@ -14,13 +14,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Duración del indicador "escribiendo…" según longitud del mensaje */
+/** Duración total estimada de escritura humana */
 export function typingDelayMs(text: string): number {
-  const base = 700
-  const perChar = 28
-  const max = 4500
-  const min = 600
+  const base = 1200
+  const perChar = 35
+  const max = 9000
+  const min = 1500
   return Math.min(max, Math.max(min, base + text.length * perChar))
+}
+
+function randomBetween(min: number, max: number): number {
+  return min + Math.random() * (max - min)
 }
 
 const INCOMING_EVENTS = new Set([
@@ -162,11 +166,12 @@ export function parseWasenderWebhook(body: unknown): ParseWasenderResult {
   }
 }
 
-export async function sendWasenderPresenceComposing(
+export async function sendWasenderPresence(
   jid: string,
+  type: 'composing' | 'recording' | 'available' | 'unavailable' | 'paused',
   delayMs?: number
 ): Promise<void> {
-  const body: Record<string, unknown> = { jid, type: 'composing' }
+  const body: Record<string, unknown> = { jid, type }
   if (delayMs && delayMs > 0) body.delayMs = delayMs
 
   const res = await fetch(`${WASENDER_API_BASE}/api/send-presence-update`, {
@@ -177,7 +182,32 @@ export async function sendWasenderPresenceComposing(
 
   if (!res.ok) {
     const errText = await res.text()
-    console.warn(`[wasender] presence composing ${res.status}: ${errText.slice(0, 200)}`)
+    console.warn(`[wasender] presence ${type} ${res.status}: ${errText.slice(0, 200)}`)
+  }
+}
+
+export async function sendWasenderPresenceComposing(
+  jid: string,
+  delayMs?: number
+): Promise<void> {
+  await sendWasenderPresence(jid, 'composing', delayMs)
+}
+
+/** Simula escritura humana: escribiendo → pausa → escribiendo → … */
+async function simulateHumanTyping(jid: string, text: string): Promise<void> {
+  const totalMs = typingDelayMs(text)
+  const pulses =
+    text.length > 400 ? 4 : text.length > 200 ? 3 : text.length > 80 ? 3 : 2
+
+  for (let p = 0; p < pulses; p++) {
+    const composeMs = randomBetween(totalMs / pulses * 0.45, totalMs / pulses * 0.75)
+    await sendWasenderPresence(jid, 'composing', composeMs)
+    await sleep(composeMs)
+
+    if (p < pulses - 1) {
+      await sendWasenderPresence(jid, 'paused')
+      await sleep(randomBetween(400, 1100))
+    }
   }
 }
 
@@ -195,7 +225,7 @@ export async function sendWasenderTextMessage(to: string, text: string): Promise
 }
 
 /**
- * Envía varios mensajes con pausas e indicador "escribiendo…" entre ellos.
+ * Envía varios mensajes con indicador "escribiendo…" natural entre ellos.
  */
 export async function sendWasenderMessageSequence(
   recipient: string,
@@ -206,16 +236,13 @@ export async function sendWasenderMessageSequence(
 
   for (let i = 0; i < messages.length; i++) {
     const text = messages[i]
-    const delay = typingDelayMs(text)
 
-    await sendWasenderPresenceComposing(jid, delay)
-    await sleep(delay)
-
+    await simulateHumanTyping(jid, text)
     await sendWasenderTextMessage(recipient, text)
 
     if (i < messages.length - 1) {
-      const gap = 400 + Math.min(1200, text.length * 15)
-      await sleep(gap)
+      await sendWasenderPresence(jid, 'paused')
+      await sleep(randomBetween(600, 1400))
     }
   }
 }
