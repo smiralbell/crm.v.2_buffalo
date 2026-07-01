@@ -14,7 +14,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import DemoFormDialog, { type DemoFormValues } from '@/components/demos/DemoFormDialog'
-import DemoCallDialog from '@/components/demos/DemoCallDialog'
 import PhoneConflictDialog from '@/components/demos/PhoneConflictDialog'
 import type { DemoDireccion, DemoListItem, PhoneConflict } from '@/lib/demos/types'
 import Link from 'next/link'
@@ -46,16 +45,6 @@ const direccionLabel: Record<DemoDireccion, string> = {
   ambos: 'Ambos',
 }
 
-function canOutboundCall(demo: DemoListItem): boolean {
-  return (
-    demo.tipo === 'voz' &&
-    demo.estado === 'activa' &&
-    Boolean(demo.direccion && ['outbound', 'ambos'].includes(demo.direccion)) &&
-    demo.numeros_count > 0 &&
-    Boolean(demo.retell_agent_id)
-  )
-}
-
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
     await requireAuth(context)
@@ -78,7 +67,6 @@ export default function DemosPage() {
   const [pendingSave, setPendingSave] = useState<DemoFormValues | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
   const [movingPhones, setMovingPhones] = useState(false)
-  const [callTarget, setCallTarget] = useState<DemoListItem | null>(null)
 
   const saveDemo = async (
     values: DemoFormValues,
@@ -338,16 +326,6 @@ export default function DemosPage() {
                         <td className="p-4 text-sm text-gray-600">{fmtDate(demo.created_at)}</td>
                         <td className="p-4">
                           <div className="flex flex-wrap justify-end gap-1">
-                            {canOutboundCall(demo) && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="rounded-lg border-violet-200 text-violet-800 hover:bg-violet-50"
-                                onClick={() => setCallTarget(demo)}
-                              >
-                                📞 Llamar ahora
-                              </Button>
-                            )}
                             <Button variant="ghost" size="icon" title="Ver detalle" asChild>
                               <Link href={`/demos/${demo.id}`}>
                                 <ChevronRight className="h-4 w-4" />
@@ -406,12 +384,6 @@ export default function DemosPage() {
         demo={editing}
         onSubmit={editing ? handleUpdate : handleCreate}
         saving={saving}
-      />
-
-      <DemoCallDialog
-        open={Boolean(callTarget)}
-        onOpenChange={(open) => !open && setCallTarget(null)}
-        demo={callTarget}
       />
 
       <PhoneConflictDialog

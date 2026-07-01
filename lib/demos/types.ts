@@ -74,6 +74,42 @@ export interface DemoSessionRow {
 
 export interface DemoDetail extends DemoListItem {
   metrics: DemoMetrics
+  voice_metrics?: DemoVoiceMetrics
+  formulario_outbound?: OutboundFormFieldRef[]
+  form_access?: FormPublicAccess
+}
+
+export interface FormPublicAccess {
+  public_token: string | null
+  public_url: string | null
+  has_password: boolean
+}
+
+/** Re-export shape for API responses */
+export type OutboundFormFieldRef = {
+  key: string
+  label: string
+  enabled: boolean
+  required: boolean
+  placeholder?: string
+}
+
+export interface DemoVoiceSessionRow {
+  phone: string
+  phone_masked: string
+  nombre: string | null
+  calls_count: number
+  status: DemoSessionStatus
+  updated_at: string
+}
+
+export interface DemoVoiceMetrics {
+  testers_count: number
+  successful_count: number
+  failed_count: number
+  total_calls: number
+  last_activity_at: string | null
+  sessions: DemoVoiceSessionRow[]
 }
 
 export interface DemoConversationDetail {

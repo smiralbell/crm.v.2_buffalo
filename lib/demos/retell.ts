@@ -445,11 +445,12 @@ export async function retellCreatePhoneCall(input: {
   to_number: string
   override_agent_id: string
   demo_id?: number
+  retell_llm_dynamic_variables?: Record<string, string>
 }) {
   const from_number = normalizeRetellE164(input.from_number)
   const to_number = normalizeRetellE164(input.to_number)
 
-  const body = {
+  const body: Record<string, unknown> = {
     from_number,
     to_number,
     override_agent_id: input.override_agent_id,
@@ -457,6 +458,10 @@ export async function retellCreatePhoneCall(input: {
       demo_id: input.demo_id ? String(input.demo_id) : undefined,
       source: 'engranaje_demos',
     },
+  }
+
+  if (input.retell_llm_dynamic_variables && Object.keys(input.retell_llm_dynamic_variables).length > 0) {
+    body.retell_llm_dynamic_variables = input.retell_llm_dynamic_variables
   }
 
   const result = await retellJsonRequest<Record<string, unknown>>('/v2/create-phone-call', {

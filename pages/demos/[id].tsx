@@ -17,7 +17,16 @@ import {
 } from '@/components/ui/dialog'
 import DemoFormDialog, { type DemoFormValues } from '@/components/demos/DemoFormDialog'
 import DemoConversationDialog from '@/components/demos/DemoConversationDialog'
-import type { DemoDetail, DemoListItem } from '@/lib/demos/types'
+import DemoOutboundFormConfigDialog from '@/components/demos/DemoOutboundFormConfigDialog'
+import type {
+  DemoDetail,
+  DemoListItem,
+  DemoSessionRow,
+  DemoVoiceSessionRow,
+  FormPublicAccess,
+  OutboundFormFieldRef,
+} from '@/lib/demos/types'
+import { DEFAULT_OUTBOUND_FORM_FIELDS } from '@/lib/demos/outbound-form'
 import { Input } from '@/components/ui/input'
 import {
   ArrowLeft,
@@ -26,9 +35,12 @@ import {
   ChevronRight,
   Edit,
   Eraser,
+  Link2,
   MessageSquare,
+  PhoneCall,
   RefreshCw,
   Search,
+  Settings2,
   Users,
   XCircle,
 } from 'lucide-react'
@@ -73,6 +85,14 @@ export default function DemoDetailPage() {
   const [search, setSearch] = useState('')
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null)
   const [conversationOpen, setConversationOpen] = useState(false)
+  const [formConfigOpen, setFormConfigOpen] = useState(false)
+  const [formFields, setFormFields] = useState<OutboundFormFieldRef[]>([])
+  const [formAccess, setFormAccess] = useState<FormPublicAccess>({
+    public_token: null,
+    public_url: null,
+    has_password: false,
+  })
+  const [linkCopied, setLinkCopied] = useState(false)
 
   const load = useCallback(async () => {
     if (!Number.isFinite(id)) return
@@ -83,6 +103,8 @@ export default function DemoDetailPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al cargar')
       setDetail(data)
+      if (data.formulario_outbound) setFormFields(data.formulario_outbound)
+      if (data.form_access) setFormAccess(data.form_access)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar')
       setDetail(null)
@@ -139,8 +161,15 @@ export default function DemoDetailPage() {
       : '—'
 
   const m = detail?.metrics
+  const vm = detail?.voice_metrics
 
-  const sessions = m?.sessions ?? []
+  const isVoice = detail?.tipo === 'voz'
+  const canOutbound =
+    isVoice &&
+    detail?.estado === 'activa' &&
+    Boolean(detail.direccion && ['outbound', 'ambos'].includes(detail.direccion))
+
+  const sessions = isVoice ? (vm?.sessions ?? []) : (m?.sessions ?? [])
   const searchNorm = search.trim().toLowerCase().replace(/\s/g, '')
   const filteredSessions = searchNorm
     ? sessions.filter((s) => {
@@ -148,13 +177,25 @@ export default function DemoDetailPage() {
         const maskedNorm = s.phone_masked.toLowerCase().replace(/\s/g, '')
         const digits = s.phone.replace(/\D/g, '')
         const qDigits = searchNorm.replace(/\D/g, '')
+        const voiceNombre =
+          isVoice && 'nombre' in s
+            ? ((s as DemoVoiceSessionRow).nombre || '').toLowerCase()
+            : ''
         return (
           phoneNorm.includes(searchNorm) ||
           maskedNorm.includes(searchNorm) ||
+          voiceNombre.includes(searchNorm) ||
           (qDigits.length >= 3 && digits.includes(qDigits))
         )
       })
     : sessions
+
+  const outboundFields =
+    formFields.length > 0
+      ? formFields
+      : detail?.formulario_outbound?.length
+        ? detail.formulario_outbound
+        : DEFAULT_OUTBOUND_FORM_FIELDS
 
   const openConversation = (phone: string) => {
     setSelectedPhone(phone)
@@ -224,7 +265,7 @@ export default function DemoDetailPage() {
               variant="outline"
               onClick={() => setClearOpen(true)}
               className="rounded-xl border-gray-200"
-              disabled={!detail || detail.tipo === 'voz' || (m?.testers_count ?? 0) === 0}
+              disabled={!detail || isVoice || (m?.testers_count ?? 0) === 0}
             >
               <Eraser className="mr-2 h-4 w-4" />
               Borrar memoria
@@ -252,26 +293,8 @@ export default function DemoDetailPage() {
             <RefreshCw className="mr-2 h-5 w-5 animate-spin" />
             Cargando…
           </div>
-        ) : detail && m ? (
+        ) : detail && (isVoice ? vm : m) ? (
           <>
-            {detail.tipo === 'voz' ? (
-              <Card className="border border-gray-200 shadow-sm">
-                <CardContent className="space-y-3 p-5 text-sm text-gray-600">
-                  <p>
-                    <span className="font-medium text-gray-800">Voice ID:</span>{' '}
-                    <span className="font-mono">{detail.voz_id || '—'}</span>
-                  </p>
-                  <p>
-                    <span className="font-medium text-gray-800">Agente Retell:</span>{' '}
-                    <span className="font-mono text-xs">{detail.retell_agent_id || '—'}</span>
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Teléfonos configurados: {detail.numeros.join(', ') || 'ninguno'}
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Card className="border border-gray-200 shadow-sm">
                 <CardContent className="flex items-center gap-4 p-5">
@@ -279,8 +302,12 @@ export default function DemoDetailPage() {
                     <Users className="h-5 w-5 text-gray-700" />
                   </div>
                   <div>
-                    <p className="text-2xl font-semibold text-gray-900">{m.testers_count}</p>
-                    <p className="text-sm text-gray-500">Personas que probaron</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {isVoice ? vm!.testers_count : m!.testers_count}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {isVoice ? 'Contactos llamados' : 'Personas que probaron'}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -290,8 +317,12 @@ export default function DemoDetailPage() {
                     <CheckCircle2 className="h-5 w-5 text-emerald-700" />
                   </div>
                   <div>
-                    <p className="text-2xl font-semibold text-gray-900">{m.successful_count}</p>
-                    <p className="text-sm text-gray-500">Pruebas satisfactorias</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {isVoice ? vm!.successful_count : m!.successful_count}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {isVoice ? 'Llamadas correctas' : 'Pruebas satisfactorias'}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -301,33 +332,107 @@ export default function DemoDetailPage() {
                     <XCircle className="h-5 w-5 text-red-600" />
                   </div>
                   <div>
-                    <p className="text-2xl font-semibold text-gray-900">{m.failed_count}</p>
-                    <p className="text-sm text-gray-500">Pruebas con error</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {isVoice ? vm!.failed_count : m!.failed_count}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {isVoice ? 'Llamadas con error' : 'Pruebas con error'}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
               <Card className="border border-gray-200 shadow-sm">
                 <CardContent className="flex items-center gap-4 p-5">
-                  <div className="rounded-xl bg-sky-50 p-3">
-                    <MessageSquare className="h-5 w-5 text-sky-700" />
+                  <div className={`rounded-xl p-3 ${isVoice ? 'bg-violet-50' : 'bg-sky-50'}`}>
+                    {isVoice ? (
+                      <PhoneCall className="h-5 w-5 text-violet-700" />
+                    ) : (
+                      <MessageSquare className="h-5 w-5 text-sky-700" />
+                    )}
                   </div>
                   <div>
                     <p className="text-2xl font-semibold text-gray-900">
-                      {m.total_user_messages + m.total_assistant_messages}
+                      {isVoice
+                        ? vm!.total_calls
+                        : m!.total_user_messages + m!.total_assistant_messages}
                     </p>
-                    <p className="text-sm text-gray-500">Mensajes totales</p>
+                    <p className="text-sm text-gray-500">
+                      {isVoice ? 'Llamadas totales' : 'Mensajes totales'}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
             <p className="text-sm text-gray-500">
-              Última actividad: {fmtDate(m.last_activity_at)}
+              Última actividad:{' '}
+              {fmtDate(isVoice ? vm!.last_activity_at : m!.last_activity_at)}
             </p>
+
+            {canOutbound && (
+              <Card className="border border-violet-200 shadow-sm">
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="text-base">Formulario público para clientes</CardTitle>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Configura contraseña y enlace. El cliente accede sin CRM, rellena el
+                      formulario y se lanza la llamada con sus datos a Retell.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl border-violet-200 text-violet-800"
+                    onClick={() => setFormConfigOpen(true)}
+                  >
+                    <Settings2 className="mr-2 h-4 w-4" />
+                    Configurar formulario
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {formAccess.public_url ? (
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <div className="flex flex-1 items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                        <Link2 className="h-4 w-4 shrink-0 text-violet-600" />
+                        <span className="truncate font-mono text-xs text-gray-700">
+                          {formAccess.public_url}
+                        </span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={async () => {
+                          if (!formAccess.public_url) return
+                          await navigator.clipboard.writeText(formAccess.public_url)
+                          setLinkCopied(true)
+                          setTimeout(() => setLinkCopied(false), 2000)
+                        }}
+                      >
+                        {linkCopied ? 'Copiado' : 'Copiar enlace'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-amber-800">
+                      Aún no hay enlace público. Pulsa «Configurar formulario» y define una
+                      contraseña.
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    Estado:{' '}
+                    {formAccess.has_password
+                      ? 'Contraseña configurada — listo para compartir'
+                      : 'Falta configurar contraseña'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             <Card className="border border-gray-200 shadow-sm">
               <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <CardTitle className="text-base">Usuarios que probaron la demo</CardTitle>
+                <CardTitle className="text-base">
+                  {isVoice ? 'Contactos de esta demo' : 'Usuarios que probaron la demo'}
+                </CardTitle>
                 {sessions.length > 0 && (
                   <div className="relative w-full sm:max-w-xs">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -344,9 +449,11 @@ export default function DemoDetailPage() {
                 {sessions.length === 0 ? (
                   <div className="flex flex-col items-center py-12 text-center text-gray-500">
                     <Bot className="mb-2 h-8 w-8 text-gray-300" />
-                    <p>Nadie ha probado esta demo todavía</p>
+                    <p>{isVoice ? 'Aún no hay llamadas registradas' : 'Nadie ha probado esta demo todavía'}</p>
                     <p className="mt-1 text-xs text-gray-400">
-                      Cuando alguien escriba por WhatsApp, aparecerá aquí
+                      {isVoice
+                        ? 'Cuando lances una llamada outbound, aparecerá aquí'
+                        : 'Cuando alguien escriba por WhatsApp, aparecerá aquí'}
                     </p>
                   </div>
                 ) : filteredSessions.length === 0 ? (
@@ -359,41 +466,71 @@ export default function DemoDetailPage() {
                       <thead>
                         <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
                           <th className="p-4">Teléfono</th>
+                          {isVoice && <th className="p-4">Nombre</th>}
                           <th className="p-4">Estado</th>
-                          <th className="p-4">Mensajes</th>
+                          <th className="p-4">{isVoice ? 'Llamadas' : 'Mensajes'}</th>
                           <th className="p-4">Última actividad</th>
-                          <th className="p-4 w-10" />
+                          {!isVoice && <th className="p-4 w-10" />}
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredSessions.map((s) => (
+                        {filteredSessions.map((s) => {
+                          const voiceSession = isVoice ? (s as DemoVoiceSessionRow) : null
+                          const waSession = !isVoice ? (s as DemoSessionRow) : null
+
+                          return (
                           <tr
                             key={s.phone}
-                            onClick={() => openConversation(s.phone)}
-                            className="cursor-pointer border-b border-gray-50 transition-colors hover:bg-gray-50"
+                            onClick={() => !isVoice && openConversation(s.phone)}
+                            className={`border-b border-gray-50 transition-colors ${
+                              isVoice ? '' : 'cursor-pointer hover:bg-gray-50'
+                            }`}
                           >
                             <td className="p-4 font-mono text-sm text-gray-800">{s.phone}</td>
+                            {isVoice && (
+                              <td className="p-4 text-sm text-gray-700">
+                                {voiceSession?.nombre || '—'}
+                              </td>
+                            )}
                             <td className="p-4">
                               <Badge className={sessionStatusClass[s.status]}>
                                 {sessionStatusLabel[s.status]}
                               </Badge>
                             </td>
                             <td className="p-4 text-sm text-gray-600">
-                              {s.user_messages} usuario · {s.assistant_messages} agente
+                              {isVoice
+                                ? `${voiceSession?.calls_count ?? 0} llamada(s)`
+                                : `${waSession?.user_messages ?? 0} usuario · ${waSession?.assistant_messages ?? 0} agente`}
                             </td>
                             <td className="p-4 text-sm text-gray-500">{fmtDate(s.updated_at)}</td>
-                            <td className="p-4 text-gray-400">
-                              <ChevronRight className="h-4 w-4" />
-                            </td>
+                            {!isVoice && (
+                              <td className="p-4 text-gray-400">
+                                <ChevronRight className="h-4 w-4" />
+                              </td>
+                            )}
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
                 )}
               </CardContent>
             </Card>
-              </>
+
+            {isVoice && (
+              <Card className="border border-gray-200 shadow-sm">
+                <CardContent className="space-y-2 p-5 text-sm text-gray-600">
+                  <p>
+                    <span className="font-medium text-gray-800">Voice ID:</span>{' '}
+                    <span className="font-mono">{detail.voz_id || '—'}</span>
+                  </p>
+                  <p>
+                    <span className="font-medium text-gray-800">Agente Retell:</span>{' '}
+                    <span className="font-mono text-xs">{detail.retell_agent_id || '—'}</span>
+                  </p>
+                </CardContent>
+              </Card>
             )}
           </>
         ) : null}
@@ -415,6 +552,23 @@ export default function DemoDetailPage() {
         demoId={id}
         phone={selectedPhone}
       />
+
+      {isVoice && (
+        <DemoOutboundFormConfigDialog
+          open={formConfigOpen}
+          onOpenChange={setFormConfigOpen}
+          demoId={id}
+          initialFields={outboundFields}
+          initialAccess={formAccess}
+          onSaved={(fields, access) => {
+            setFormFields(fields)
+            setFormAccess(access)
+            setDetail((d) =>
+              d ? { ...d, formulario_outbound: fields, form_access: access } : d
+            )
+          }}
+        />
+      )}
 
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>
         <DialogContent className="rounded-2xl">
