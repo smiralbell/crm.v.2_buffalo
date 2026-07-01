@@ -43,43 +43,61 @@ export async function openRouterTranscribeAudio(
 
 export async function openRouterDescribeImage(
   base64: string,
-  mimetype: string
+  mimetype: string,
+  userPrompt?: string
 ): Promise<string> {
-  const model =
-    process.env.DEMO_VISION_MODEL || 'google/gemini-2.0-flash-001'
+  const models = [
+    process.env.DEMO_VISION_MODEL,
+    'openai/gpt-4o-mini',
+    'google/gemini-2.0-flash-001',
+    'google/gemini-flash-1.5',
+  ].filter((m): m is string => Boolean(m))
+
+  const instruction = userPrompt?.trim()
+    ? `El usuario envió esta imagen con este mensaje: «${userPrompt.trim()}». Analiza la imagen y responde directamente a lo que pregunta o pide. Si hay texto visible en la imagen, transcríbelo. Responde en español, de forma clara y concisa.`
+    : 'Describe esta imagen de forma concisa en español. Si hay texto visible, transcríbelo. Si es un documento o captura, resume el contenido relevante.'
 
   const dataUrl = `data:${mimetype};base64,${base64}`
   const userContent: MultimodalPart[] = [
-    {
-      type: 'text',
-      text: 'Describe esta imagen de forma concisa en español. Si hay texto visible, transcríbelo. Si es un documento o captura, resume el contenido relevante.',
-    },
+    { type: 'text', text: instruction },
     { type: 'image_url', image_url: { url: dataUrl } },
   ]
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: openRouterHeaders(),
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: userContent }],
-      temperature: 0.2,
-    }),
-  })
+  let lastError = 'OpenRouter vision sin respuesta'
 
-  if (!res.ok) {
-    const errText = await res.text()
-    throw new Error(`OpenRouter vision ${res.status}: ${errText.slice(0, 500)}`)
+  for (const model of models) {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: openRouterHeaders(),
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: userContent }],
+        temperature: 0.2,
+      }),
+    })
+
+    if (!res.ok) {
+      const errText = await res.text()
+      lastError = `OpenRouter vision ${model} ${res.status}: ${errText.slice(0, 300)}`
+      const retryable =
+        res.status === 404 ||
+        errText.includes('No endpoints found') ||
+        errText.includes('not a valid model')
+      if (retryable) continue
+      throw new Error(lastError)
+    }
+
+    const data = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string } }>
+    }
+    const content = data.choices?.[0]?.message?.content
+    if (content && typeof content === 'string' && content.trim()) {
+      return content.trim()
+    }
+    lastError = `OpenRouter vision ${model} sin contenido`
   }
 
-  const data = (await res.json()) as {
-    choices?: Array<{ message?: { content?: string } }>
-  }
-  const content = data.choices?.[0]?.message?.content
-  if (!content || typeof content !== 'string') {
-    throw new Error('OpenRouter vision sin contenido')
-  }
-  return content
+  throw new Error(lastError)
 }
 
 export async function openRouterChatCompletion(

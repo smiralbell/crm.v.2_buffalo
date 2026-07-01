@@ -39,8 +39,10 @@ export interface ParsedWasenderMessage {
   text: string
   fromMe: boolean
   event: string | null
-  mediaType: 'text' | 'image' | 'audio' | null
+  mediaType: DemoMediaKind | 'text'
   hasMedia: boolean
+  mediaReadable: boolean
+  mediaCaption: string
 }
 
 export type ParseWasenderResult =
@@ -62,24 +64,12 @@ function dig(obj: unknown, ...keys: string[]): unknown {
   return cur
 }
 
-function detectMediaType(
-  msgObj: Record<string, unknown>
-): 'image' | 'audio' | null {
-  const inner = msgObj.message as Record<string, unknown> | undefined
-  if (!inner || typeof inner !== 'object') return null
-  if (inner.imageMessage) return 'image'
-  if (inner.audioMessage || inner.pttMessage) return 'audio'
-  return null
-}
+import {
+  findMediaInMessage,
+  type DemoMediaKind,
+} from './media'
 
-function extractCaption(msgObj: Record<string, unknown>, mediaType: 'image' | 'audio' | null): string {
-  if (!mediaType) return ''
-  const inner = msgObj.message as Record<string, unknown> | undefined
-  if (!inner) return ''
-  const media = (inner.imageMessage || inner.audioMessage) as Record<string, unknown> | undefined
-  const caption = media?.caption
-  return typeof caption === 'string' ? caption.trim() : ''
-}
+export type { DemoMediaKind }
 
 function extractMessageObject(body: Record<string, unknown>): Record<string, unknown> | null {
   const data = body.data
@@ -147,8 +137,11 @@ export function parseWasenderWebhook(body: unknown): ParseWasenderResult {
     (typeof key?.remoteJid === 'string' && key.remoteJid.replace(/@.*$/, '')) ||
     ''
 
-  const mediaType = detectMediaType(msgObj)
-  const hasMedia = mediaType !== null
+  const mediaInfo = findMediaInMessage(msgObj.message as Record<string, unknown> | undefined)
+  const hasMedia = mediaInfo !== null
+  const mediaType: DemoMediaKind | 'text' = mediaInfo?.kind ?? 'text'
+  const mediaReadable = mediaInfo?.readable ?? false
+  const mediaCaption = mediaInfo?.caption ?? ''
 
   const text =
     (typeof msgObj.messageBody === 'string' && msgObj.messageBody.trim()) ||
@@ -158,7 +151,7 @@ export function parseWasenderWebhook(body: unknown): ParseWasenderResult {
     (typeof dig(msgObj, 'message', 'extendedTextMessage', 'text') === 'string'
       ? (dig(msgObj, 'message', 'extendedTextMessage', 'text') as string).trim()
       : '') ||
-    extractCaption(msgObj, mediaType)
+    mediaCaption
 
   if (!senderRaw) {
     return {
@@ -188,8 +181,10 @@ export function parseWasenderWebhook(body: unknown): ParseWasenderResult {
       text,
       fromMe,
       event,
-      mediaType: hasMedia ? mediaType : 'text',
+      mediaType,
       hasMedia,
+      mediaReadable,
+      mediaCaption,
     },
   }
 }

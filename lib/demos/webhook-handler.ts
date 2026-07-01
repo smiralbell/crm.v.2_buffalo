@@ -169,6 +169,8 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
         text: data.text,
         mediaType: data.mediaType,
         hasMedia: data.hasMedia,
+        mediaReadable: data.mediaReadable,
+        mediaCaption: data.mediaCaption,
       })
       userText = resolved.text
 
@@ -192,7 +194,15 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
         demo_id: demo.demo_id,
         details: { media_type: data.mediaType },
       })
-      return { handled: false, reason: 'media_error' }
+
+      const caption = data.mediaCaption || data.text.trim()
+      if (data.mediaType === 'image' && caption) {
+        userText = `[No pude analizar la imagen adjunta] El usuario escribió: «${caption}». Responde a su mensaje y dile amablemente que no has podido ver la imagen.`
+      } else if (caption) {
+        userText = `[No pude procesar el archivo adjunto] El usuario escribió: «${caption}». Responde a su mensaje.`
+      } else {
+        return { handled: false, reason: 'media_error' }
+      }
     }
   }
 

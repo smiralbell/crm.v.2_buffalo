@@ -2,11 +2,16 @@ import {
   openRouterDescribeImage,
   openRouterTranscribeAudio,
 } from '@/lib/openrouter'
+import {
+  buildUnsupportedMediaUserText,
+  normalizeVisionMimetype,
+  type DemoMediaKind,
+} from './media'
 import { decryptWasenderMedia, fetchMediaAsBase64, mimetypeToAudioFormat } from './wasender-media'
 
 export type ResolvedUserInput = {
   text: string
-  source: 'text' | 'audio' | 'image'
+  source: 'text' | 'audio' | 'image' | 'unsupported_media'
   rawCaption?: string
 }
 
@@ -14,17 +19,30 @@ export async function resolveUserMessageFromWebhook(
   body: unknown,
   parsed: {
     text: string
-    mediaType: 'text' | 'image' | 'audio' | null
+    mediaType: DemoMediaKind | 'text'
     hasMedia: boolean
+    mediaReadable: boolean
+    mediaCaption: string
   }
 ): Promise<ResolvedUserInput> {
   if (parsed.text && !parsed.hasMedia) {
     return { text: parsed.text, source: 'text' }
   }
 
+  if (parsed.hasMedia && !parsed.mediaReadable) {
+    const caption = parsed.mediaCaption || parsed.text.trim()
+    return {
+      text: buildUnsupportedMediaUserText(parsed.mediaType as DemoMediaKind, caption),
+      source: 'unsupported_media',
+      rawCaption: caption || undefined,
+    }
+  }
+
   if (!parsed.hasMedia) {
     throw new Error('Mensaje sin texto ni archivo multimedia')
   }
+
+  const caption = parsed.mediaCaption || parsed.text.trim()
 
   const { publicUrl, mimetype } = await decryptWasenderMedia(body)
   const { base64, mimetype: fetchedMime } = await fetchMediaAsBase64(publicUrl)
@@ -40,12 +58,21 @@ export async function resolveUserMessageFromWebhook(
   }
 
   if (parsed.mediaType === 'image') {
-    const description = await openRouterDescribeImage(base64, mime)
-    const caption = parsed.text.trim()
-    const parts = [`[Imagen enviada por el usuario]: ${description.trim()}`]
-    if (caption) parts.push(`[Texto con la imagen]: ${caption}`)
+    const visionMime = normalizeVisionMimetype(mime)
+    const description = await openRouterDescribeImage(base64, visionMime, caption)
+
+    const parts: string[] = []
+    if (caption) {
+      parts.push(`El usuario envió una imagen con este mensaje: «${caption}»`)
+      parts.push(`Contenido de la imagen (para responder a su pregunta): ${description.trim()}`)
+      parts.push('Responde directamente a lo que pregunta o comenta el usuario sobre la imagen.')
+    } else {
+      parts.push(`El usuario envió una imagen.`)
+      parts.push(`Contenido de la imagen: ${description.trim()}`)
+    }
+
     return {
-      text: parts.join('\n'),
+      text: parts.join('\n\n'),
       source: 'image',
       rawCaption: caption || undefined,
     }
