@@ -1,7 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
-import { RetellApiError, retellCreatePhoneCall, retellPhoneNumber } from '@/lib/demos/retell'
+import { matchAuthorizedDemoPhone } from '@/lib/demos/phone-match'
+import {
+  RetellApiError,
+  retellCreatePhoneCall,
+  retellResolveFromNumber,
+} from '@/lib/demos/retell'
 import { getDemoById } from '@/lib/demos/store'
 
 const bodySchema = z.object({
@@ -42,23 +47,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'La demo no tiene agente Retell configurado' })
     }
 
-    const destino = numero_destino.trim()
-    if (!demo.numeros.includes(destino)) {
+    const destinoAutorizado = matchAuthorizedDemoPhone(demo.numeros, numero_destino)
+    if (!destinoAutorizado) {
       return res.status(400).json({
-        error: 'El número de destino no está autorizado en esta demo',
+        error: `El número ${numero_destino.trim()} no está autorizado en esta demo`,
+        numeros_autorizados: demo.numeros,
       })
     }
 
+    const fromNumber = await retellResolveFromNumber(id)
+
     const result = await retellCreatePhoneCall({
-      from_number: retellPhoneNumber(),
-      to_number: destino,
+      from_number: fromNumber,
+      to_number: destinoAutorizado,
       override_agent_id: demo.retell_agent_id,
+      demo_id: id,
     })
 
     return res.status(200).json({
       ok: true,
       call: result,
-      numero_destino: destino,
+      call_id: result?.call_id ?? null,
+      call_status: result?.call_status ?? null,
+      from_number: fromNumber,
+      numero_destino: destinoAutorizado,
     })
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -70,7 +82,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         : err instanceof Error
           ? err.message
           : 'Error al iniciar la llamada'
-    if (process.env.NODE_ENV === 'development') console.error('[demos/llamar POST]', err)
-    return res.status(500).json({ error: msg })
+    console.error('[demos/llamar POST]', err)
+    return res.status(500).json({
+      error: msg,
+      hint:
+        err instanceof RetellApiError && err.status === 422
+          ? 'Comprueba que RETELL_PHONE_NUMBER coincide con un número de tu cuenta Retell y que el destino está en formato +34XXXXXXXXX'
+          : undefined,
+    })
   }
 }

@@ -1,4 +1,5 @@
 import { logRetellStep } from './retell-log'
+import { normalizeRetellE164, phoneDigits } from './phone-match'
 
 const RETELL_API_BASE = 'https://api.retellai.com'
 
@@ -382,24 +383,106 @@ export async function retellDeleteVoiceResources(ids: {
   await retellRollback(ids)
 }
 
+export async function retellListPhoneNumbers(): Promise<
+  Array<{ phone_number: string; nickname?: string | null }>
+> {
+  const data = await retellJsonRequest<{
+    items?: Array<{ phone_number: string; nickname?: string | null }>
+  }>('/v2/list-phone-numbers', {
+    method: 'GET',
+    step: 'list_phone_numbers',
+  })
+  return data?.items ?? []
+}
+
+/** Resuelve el from_number: env RETELL_PHONE_NUMBER o primer número de la cuenta Retell */
+export async function retellResolveFromNumber(demoId?: number): Promise<string> {
+  const numbers = await retellListPhoneNumbers()
+
+  if (numbers.length === 0) {
+    throw new Error(
+      'No hay números de teléfono en tu cuenta Retell. Compra o importa uno en el dashboard de Retell.'
+    )
+  }
+
+  const envRaw = process.env.RETELL_PHONE_NUMBER?.trim().replace(/[.\s]+$/g, '')
+  if (envRaw) {
+    let envNorm: string
+    try {
+      envNorm = normalizeRetellE164(envRaw)
+    } catch {
+      throw new Error(
+        `RETELL_PHONE_NUMBER no es válido (${envRaw}). Usa formato E.164, ej. +34612345678`
+      )
+    }
+
+    const match = numbers.find(
+      (n) =>
+        n.phone_number === envNorm ||
+        phoneDigits(n.phone_number) === phoneDigits(envNorm)
+    )
+
+    if (match) return match.phone_number
+
+    const available = numbers.map((n) => n.phone_number).join(', ')
+    throw new Error(
+      `RETELL_PHONE_NUMBER (${envNorm}) no está en tu cuenta Retell. Números disponibles: ${available}`
+    )
+  }
+
+  await logRetellStep({
+    step: 'from_number',
+    level: 'warn',
+    message: `RETELL_PHONE_NUMBER no configurado, usando ${numbers[0].phone_number}`,
+    demo_id: demoId,
+  })
+
+  return numbers[0].phone_number
+}
+
 export async function retellCreatePhoneCall(input: {
   from_number: string
   to_number: string
   override_agent_id: string
+  demo_id?: number
 }) {
-  return retellJsonRequest<Record<string, unknown>>('/v2/create-phone-call', {
-    method: 'POST',
-    body: {
-      from_number: input.from_number,
-      to_number: input.to_number,
-      override_agent_id: input.override_agent_id,
+  const from_number = normalizeRetellE164(input.from_number)
+  const to_number = normalizeRetellE164(input.to_number)
+
+  const body = {
+    from_number,
+    to_number,
+    override_agent_id: input.override_agent_id,
+    metadata: {
+      demo_id: input.demo_id ? String(input.demo_id) : undefined,
+      source: 'engranaje_demos',
     },
+  }
+
+  const result = await retellJsonRequest<Record<string, unknown>>('/v2/create-phone-call', {
+    method: 'POST',
+    body,
     step: 'create_phone_call',
+    demoId: input.demo_id,
   })
+
+  await logRetellStep({
+    step: 'create_phone_call',
+    level: 'success',
+    message: `Llamada registrada ${from_number} → ${to_number}`,
+    demo_id: input.demo_id,
+    details: {
+      call_id: result?.call_id,
+      call_status: result?.call_status,
+      agent_id: result?.agent_id,
+    },
+  })
+
+  return result
 }
 
 export function retellPhoneNumber(): string {
-  const num = process.env.RETELL_PHONE_NUMBER?.trim()
-  if (!num) throw new Error('RETELL_PHONE_NUMBER no está configurada')
-  return num
+  const raw = process.env.RETELL_PHONE_NUMBER?.trim().replace(/[.\s]+$/g, '')
+  if (!raw) throw new Error('RETELL_PHONE_NUMBER no está configurada')
+  return normalizeRetellE164(raw)
 }
