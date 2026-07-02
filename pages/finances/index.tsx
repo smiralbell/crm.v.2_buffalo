@@ -13,6 +13,7 @@ import FinanceAiPanel from '@/components/finances/FinanceAiPanel'
 import FinanceKpiCard from '@/components/finances/FinanceKpiCard'
 import AnnualGoalCard from '@/components/finances/AnnualGoalCard'
 import RecurringExpensesPanel from '@/components/finances/RecurringExpensesPanel'
+import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
 import PeriodInsightCard from '@/components/finances/PeriodInsightCard'
 import { buildPeriodInsights } from '@/lib/finance/kpi-details'
 
@@ -737,7 +738,7 @@ export default function FinancesDashboard({
                       Gastos recurrentes
                     </CardTitle>
                     <p className="text-xs text-gray-400 font-normal">
-                      Proveedores con pagos repetidos · ahorro potencial si cortas
+                      Nóminas, SaaS, developers y marketing · ahorro potencial si cortas
                     </p>
                   </CardHeader>
                   <CardContent>
@@ -773,12 +774,16 @@ export default function FinancesDashboard({
               <Card className="border border-gray-200 shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base font-semibold text-gray-900">MRR por cliente</CardTitle>
-                  <p className="text-xs text-gray-400 font-normal">Ingresos recurrentes detectados en movimientos bancarios</p>
+                  <p className="text-xs text-gray-400 font-normal">
+                    Solo cobros marcados como mensualidad en Ingresos
+                  </p>
                 </CardHeader>
                 <CardContent>
                   <MrrByClientChart data={executive.mrr_by_client} />
                 </CardContent>
               </Card>
+
+              <PaymentConceptGuide />
             </div>
 
             {/* Alertas + IA */}

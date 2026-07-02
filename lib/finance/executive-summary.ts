@@ -347,11 +347,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
       date: t.date,
     }))
   )
-  const recurringSummaryBase = recurringExpensesSummary(recurringItems)
-  const recurring_expenses = {
-    ...recurringSummaryBase,
-    items: recurringItems.slice(0, 20),
-  }
+  const recurring_expenses = recurringExpensesSummary(recurringItems)
 
   const mrr_by_client = bankMrr.by_client
 

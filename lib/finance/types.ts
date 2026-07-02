@@ -48,7 +48,7 @@ export interface CategorySlice {
 export interface MrrClientRow {
   name: string
   amount: number
-  source?: 'tagged' | 'detected'
+  source?: 'tagged'
 }
 
 export interface NetTrendPoint {
@@ -128,6 +128,8 @@ export interface PeriodInsight {
 export interface RecurringExpenseRow {
   vendor_key: string
   label: string
+  bucket: string
+  bucket_label: string
   category_id: string
   category_label: string
   frequency: string
@@ -138,11 +140,21 @@ export interface RecurringExpenseRow {
   last_date: string
 }
 
+export interface RecurringExpenseGroup {
+  bucket: string
+  label: string
+  monthly_total: number
+  annual_total: number
+  count: number
+  items: RecurringExpenseRow[]
+}
+
 export interface RecurringExpensesSummary {
   monthly_total: number
   annual_total: number
   count: number
   items: RecurringExpenseRow[]
+  groups: RecurringExpenseGroup[]
 }
 
 export interface ExecutiveSummary {

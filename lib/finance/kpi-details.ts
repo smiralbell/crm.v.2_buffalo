@@ -25,7 +25,7 @@ export interface BuildKpiInput {
   pipeline_deals: number
   profit_this_month: number
   ytdInvoiced: number
-  mrr_source?: 'tagged' | 'detected' | 'mixed'
+  mrr_source?: 'tagged' | 'none'
   mrr_tagged_count?: number
 }
 
@@ -125,7 +125,7 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
   const mrrFooter =
     input.mrr_source === 'tagged'
       ? `ARR implícito: ${fmtEur(input.arr)} · ${input.mrr_tagged_count ?? 0} cobros marcados como mensualidad`
-      : `ARR implícito: ${fmtEur(input.arr)} · detectado automáticamente (marca mensualidades en Ingresos)`
+      : `Marca ingresos recurrentes en Ingresos → botón «Marcar MRR»`
 
   return [
     {

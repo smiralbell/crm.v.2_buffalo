@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import RecurringExpensesPanel from '@/components/finances/RecurringExpensesPanel'
+import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
 import {
   detectRecurringExpenses,
   recurringExpensesSummary,
@@ -67,7 +68,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         expenses: [],
-        recurringExpenses: { monthly_total: 0, annual_total: 0, count: 0, items: [] },
+        recurringExpenses: { monthly_total: 0, annual_total: 0, count: 0, items: [], groups: [] },
         invoices: [],
         unmatchedExpenses: [],
         totalVat: 0,
@@ -308,7 +309,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         expenses: [],
-        recurringExpenses: { monthly_total: 0, annual_total: 0, count: 0, items: [] },
+        recurringExpenses: { monthly_total: 0, annual_total: 0, count: 0, items: [], groups: [] },
         invoices: [],
         unmatchedExpenses: [],
         totalVat: 0,
@@ -596,9 +597,9 @@ export default function ExpensesPage({
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="border border-gray-200 shadow-sm lg:col-span-2">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold">Gastos recurrentes detectados</CardTitle>
+              <CardTitle className="text-lg font-semibold">Gastos recurrentes por categoría</CardTitle>
               <p className="text-xs text-gray-400 font-normal">
-                Agrupados por proveedor · {formatCurrency(recurringTotal)}/mes en total
+                Nóminas · plataformas · developers · marketing · {formatCurrency(recurringTotal)}/mes
               </p>
             </CardHeader>
             <CardContent>
@@ -621,6 +622,8 @@ export default function ExpensesPage({
             </CardContent>
           </Card>
         </div>
+
+        <PaymentConceptGuide className="mb-4" />
 
         {/* Acciones rápidas para gastos */}
         <div className="grid gap-4 md:grid-cols-1">

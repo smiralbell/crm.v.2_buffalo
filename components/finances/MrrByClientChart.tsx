@@ -27,8 +27,10 @@ export default function MrrByClientChart({ data }: { data: MrrClientRow[] }) {
   if (data.length === 0) {
     return (
       <div className="h-52 flex flex-col items-center justify-center text-sm text-gray-400 gap-1 px-4 text-center">
-        <p>Sin ingresos recurrentes en banco</p>
-        <p className="text-xs">MRR calculado desde cobros mensuales en movimientos bancarios (desde ene 2025)</p>
+        <p>MRR = 0 € — ningún ingreso marcado como mensualidad</p>
+        <p className="text-xs">
+          Ve a Ingresos y pulsa «Marcar MRR» en cada cobro recurrente de cliente
+        </p>
       </div>
     )
   }

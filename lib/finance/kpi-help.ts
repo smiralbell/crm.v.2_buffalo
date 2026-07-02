@@ -1,7 +1,7 @@
 /** Textos de ayuda para KPIs y métricas de Finanzas */
 
 export const KPI_HELP: Record<string, string> = {
-  mrr: 'Monthly Recurring Revenue: ingreso mensual recurrente. Suma las mensualidades que marcas en Ingresos (o las detecta el banco si cobras 2+ meses seguidos al mismo cliente).',
+  mrr: 'Monthly Recurring Revenue: ingreso mensual recurrente. Solo cuenta cobros que marques manualmente en Ingresos con «Marcar MRR». Sin etiquetas, MRR = 0 €.',
   arr: 'Annual Recurring Revenue: MRR × 12. Proyección anual si se mantuvieran las mismas mensualidades. El objetivo de la empresa es 250.000 €/año.',
   cash: 'Saldo disponible en cuenta según el último movimiento sincronizado del banco. Incluye variación respecto al mes anterior.',
   runway: 'Meses que puedes operar con la caja actual si el gasto medio mensual se mantiene. Caja ÷ gasto medio (últimos 3 meses).',
