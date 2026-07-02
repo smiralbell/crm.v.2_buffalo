@@ -165,14 +165,8 @@ export async function getAccountTransactions(
   return enableBankingRequest(path)
 }
 
-export interface FetchAllTransactionsResult {
-  transactions: unknown[]
-  pages: number
-  truncated: boolean
-  passes: Array<{ name: string; count: number; pages: number }>
-}
-
-export { getAllAccountTransactions, getIncrementalAccountTransactions } from './transaction-fetch'
+export { getAllAccountTransactions, getIncrementalAccountTransactions, getFullAccountTransactionsWithLogs } from './transaction-fetch'
+export type { EnableBankingApiLogEntry, FetchAllTransactionsResult } from './transaction-fetch'
 
 export function extractOwnAccountIban(details: unknown): string | null {
   if (!details || typeof details !== 'object') return null

@@ -19,6 +19,7 @@ export type BankApiDebugSample = {
     description?: string
     credit_debit_indicator?: string
   }>
+  error?: string
 }
 
 function summarizeTx(tx: unknown): BankApiDebugSample['all_transactions_preview'][0] {
@@ -45,24 +46,42 @@ export async function fetchSampleMonthApiDebug(accountUid: string): Promise<Bank
     strategy: 'default' as const,
   }
 
-  const raw = (await getAccountTransactions(accountUid, request)) as Record<string, unknown>
-  const txs = Array.isArray(raw.transactions) ? raw.transactions : []
-  const first = txs[0] ?? null
-  const ck = raw.continuation_key
+  try {
+    const raw = (await getAccountTransactions(accountUid, request)) as Record<string, unknown>
+    const txs = Array.isArray(raw.transactions) ? raw.transactions : []
+    const first = txs[0] ?? null
+    const ck = raw.continuation_key
 
-  return {
-    month_label: month.label,
-    request: { ...request, strategy: 'default' },
-    first_page: {
-      top_level_keys: Object.keys(raw),
-      transaction_count: txs.length,
-      has_continuation_key: typeof ck === 'string' && ck.length > 0,
-      continuation_key_preview:
-        typeof ck === 'string' && ck.length > 0 ? `${ck.slice(0, 24)}…` : null,
-    },
-    sample_transaction: first,
-    sample_transaction_keys:
-      first && typeof first === 'object' ? Object.keys(first as object).sort() : [],
-    all_transactions_preview: txs.slice(0, 8).map(summarizeTx),
+    return {
+      month_label: month.label,
+      request: { ...request, strategy: 'default' },
+      first_page: {
+        top_level_keys: Object.keys(raw),
+        transaction_count: txs.length,
+        has_continuation_key: typeof ck === 'string' && ck.length > 0,
+        continuation_key_preview:
+          typeof ck === 'string' && ck.length > 0 ? `${ck.slice(0, 24)}…` : null,
+      },
+      sample_transaction: first,
+      sample_transaction_keys:
+        first && typeof first === 'object' ? Object.keys(first as object).sort() : [],
+      all_transactions_preview: txs.slice(0, 8).map(summarizeTx),
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error desconocido'
+    return {
+      month_label: month.label,
+      request: { ...request, strategy: 'default' },
+      first_page: {
+        top_level_keys: [],
+        transaction_count: 0,
+        has_continuation_key: false,
+        continuation_key_preview: null,
+      },
+      sample_transaction: null,
+      sample_transaction_keys: [],
+      all_transactions_preview: [],
+      error: message,
+    }
   }
 }

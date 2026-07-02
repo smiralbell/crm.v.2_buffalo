@@ -5,7 +5,9 @@ import {
   extractOwnAccountIban,
   getAccountBalances,
   getAccountDetails,
+  getFullAccountTransactionsWithLogs,
   getIncrementalAccountTransactions,
+  type EnableBankingApiLogEntry,
 } from './client'
 import {
   normalizeIban,
@@ -181,8 +183,11 @@ async function repairFromStoredBalances(accountId: string): Promise<number> {
 
 async function syncOneAccount(
   accountUid: string,
-  syncFrom: string,
-  apiDebugSample: BankApiDebugSample | null
+  options: {
+    mode: 'incremental' | 'full'
+    syncFrom: string
+    apiDebugSample: BankApiDebugSample | null
+  }
 ): Promise<{
   inserted: number
   duplicates: number
@@ -197,14 +202,19 @@ async function syncOneAccount(
   truncated: boolean
   passes: Array<{ name: string; count: number; pages: number }>
   api_debug_sample: BankApiDebugSample | null
+  incremental_api_error: string | null
+  api_logs: EnableBankingApiLogEntry[]
 }> {
   const accountId = await getOrCreateEnableBankingAccount(accountUid)
-  const dbBefore = await getDbDateRange(accountId)
 
-  const [detailsRaw, balancesRaw, fetchResult] = await Promise.all([
+  const fetchResult =
+    options.mode === 'full'
+      ? await getFullAccountTransactionsWithLogs(accountUid)
+      : await getIncrementalAccountTransactions(accountUid, options.syncFrom)
+
+  const [detailsRaw, balancesRaw] = await Promise.all([
     getAccountDetails(accountUid).catch(() => null),
     getAccountBalances(accountUid).catch(() => null),
-    getIncrementalAccountTransactions(accountUid, syncFrom),
   ])
 
   const ownIban = extractOwnAccountIban(detailsRaw)
@@ -233,7 +243,9 @@ async function syncOneAccount(
       pages_fetched: fetchResult.pages,
       truncated: fetchResult.truncated,
       passes: fetchResult.passes,
-      api_debug_sample: apiDebugSample,
+      api_debug_sample: options.apiDebugSample,
+      incremental_api_error: fetchResult.api_error ?? null,
+      api_logs: fetchResult.api_logs ?? [],
     }
   }
 
@@ -352,7 +364,9 @@ async function syncOneAccount(
     pages_fetched: fetchResult.pages,
     truncated: fetchResult.truncated,
     passes: fetchResult.passes,
-    api_debug_sample: apiDebugSample,
+    api_debug_sample: options.apiDebugSample,
+    incremental_api_error: fetchResult.api_error ?? null,
+    api_logs: fetchResult.api_logs ?? [],
   }
 }
 
@@ -368,7 +382,9 @@ function maxDate(a: string | null, b: string | null): string | null {
   return a > b ? a : b
 }
 
-export async function syncEnableBankingTransactions(): Promise<{
+export async function syncEnableBankingTransactions(options?: {
+  mode?: 'incremental' | 'full'
+}): Promise<{
   inserted: number
   updated: number
   duplicates: number
@@ -392,34 +408,49 @@ export async function syncEnableBankingTransactions(): Promise<{
   margin_days: number
   anchor_source: 'last_sync' | 'session_created'
   api_debug_sample: BankApiDebugSample | null
+  api_debug_error: string | null
+  incremental_api_error: string | null
+  api_logs: EnableBankingApiLogEntry[]
+  sync_mode: 'incremental' | 'full'
 }> {
+  const mode = options?.mode ?? 'incremental'
   const session = await getLatestBankTestSession()
   if (!session) {
     throw new Error('No hay conexión bancaria activa')
   }
 
   const window = computeSyncFromDate(session.last_synced_at, session.created_at)
+  const syncFrom = mode === 'full' ? '2025-01-01' : window.from
   const lastSyncedBefore = session.last_synced_at?.toISOString() ?? null
 
   let apiDebugSample: BankApiDebugSample | null = null
-  try {
-    apiDebugSample = await fetchSampleMonthApiDebug(session.account_uid)
-    console.info(
-      '[enable-banking] sample month debug',
-      JSON.stringify(
-        {
-          month: apiDebugSample.month_label,
-          keys: apiDebugSample.first_page.top_level_keys,
-          tx_count: apiDebugSample.first_page.transaction_count,
-          tx_fields: apiDebugSample.sample_transaction_keys,
-          preview: apiDebugSample.all_transactions_preview,
-        },
-        null,
-        2
-      )
-    )
-  } catch (err) {
-    console.warn('[enable-banking] sample month debug failed:', err)
+  let apiDebugError: string | null = null
+  if (mode === 'incremental') {
+    try {
+      apiDebugSample = await fetchSampleMonthApiDebug(session.account_uid)
+      if (apiDebugSample.error) {
+        apiDebugError = apiDebugSample.error
+        console.warn('[enable-banking] sample month debug error:', apiDebugSample.error)
+      } else {
+        console.info(
+          '[enable-banking] sample month debug',
+          JSON.stringify(
+            {
+              month: apiDebugSample.month_label,
+              keys: apiDebugSample.first_page.top_level_keys,
+              tx_count: apiDebugSample.first_page.transaction_count,
+              tx_fields: apiDebugSample.sample_transaction_keys,
+              preview: apiDebugSample.all_transactions_preview,
+            },
+            null,
+            2
+          )
+        )
+      }
+    } catch (err) {
+      apiDebugError = err instanceof Error ? err.message : 'Error desconocido'
+      console.warn('[enable-banking] sample month debug failed:', err)
+    }
   }
 
   const accountUids = session.account_uids.length > 0 ? session.account_uids : [session.account_uid]
@@ -435,10 +466,16 @@ export async function syncEnableBankingTransactions(): Promise<{
   let dbNewest: string | null = null
   let pagesFetched = 0
   let truncated = false
+  let incrementalApiError: string | null = null
+  const allApiLogs: EnableBankingApiLogEntry[] = []
   const allPasses: Array<{ name: string; count: number; pages: number }> = []
 
   for (const uid of accountUids) {
-    const r = await syncOneAccount(uid, window.from, uid === session.account_uid ? apiDebugSample : null)
+    const r = await syncOneAccount(uid, {
+      mode,
+      syncFrom,
+      apiDebugSample: uid === session.account_uid ? apiDebugSample : null,
+    })
     inserted += r.inserted
     duplicates += r.duplicates
     total += r.total
@@ -450,6 +487,8 @@ export async function syncEnableBankingTransactions(): Promise<{
     dbNewest = maxDate(dbNewest, r.db_newest)
     pagesFetched += r.pages_fetched
     truncated = truncated || r.truncated
+    if (r.incremental_api_error) incrementalApiError = r.incremental_api_error
+    if (r.api_logs.length > 0) allApiLogs.push(...r.api_logs)
     for (const p of r.passes) {
       const existing = allPasses.find((x) => x.name === p.name)
       if (existing) {
@@ -481,12 +520,16 @@ export async function syncEnableBankingTransactions(): Promise<{
     truncated,
     accounts_synced: accountUids.length,
     passes: allPasses,
-    sync_from: window.from,
+    sync_from: syncFrom,
     sync_to: new Date().toISOString().slice(0, 10),
     last_synced_at_before: lastSyncedBefore,
     last_synced_at_after: syncedAt.toISOString(),
     margin_days: BANK_SYNC_MARGIN_DAYS,
-    anchor_source: window.anchor_source,
+    anchor_source: mode === 'full' ? 'session_created' : window.anchor_source,
     api_debug_sample: apiDebugSample,
+    api_debug_error: apiDebugError,
+    incremental_api_error: incrementalApiError,
+    api_logs: allApiLogs,
+    sync_mode: mode,
   }
 }

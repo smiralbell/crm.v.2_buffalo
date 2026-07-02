@@ -329,7 +329,7 @@ export default function FinancesDashboard({
     setSyncMessage(null)
     setSyncDebug(null)
     try {
-      const response = await fetch('/api/bank/sync', { method: 'POST' })
+      const response = await fetch('/api/bank/sync?mode=full', { method: 'POST' })
       const data = await response.json()
       if (!response.ok) {
         if (process.env.NODE_ENV === 'development') {
@@ -364,6 +364,9 @@ export default function FinancesDashboard({
         }
         if (data.sync_from) {
           msg += ` · pedido desde ${format(new Date(data.sync_from), 'dd/MM/yyyy')}`
+        }
+        if (data.sync_mode === 'full') {
+          msg += ` · modo completo`
         }
         if (data.truncated) {
           msg += ' · advertencia: paginación incompleta'
@@ -401,6 +404,7 @@ export default function FinancesDashboard({
       }
 
       setSyncDebug({
+        sync_mode: data.sync_mode,
         sync_from: data.sync_from,
         sync_to: data.sync_to,
         margin_days: data.margin_days,
@@ -408,7 +412,14 @@ export default function FinancesDashboard({
         last_synced_at_before: data.last_synced_at_before,
         last_synced_at_after: data.last_synced_at_after,
         api_debug_sample: data.api_debug_sample,
+        incremental_api_error: data.incremental_api_error,
+        api_logs: data.api_logs,
         passes: data.passes,
+        inserted: data.inserted,
+        total: data.total,
+        db_oldest: data.db_oldest,
+        db_newest: data.db_newest,
+        truncated: data.truncated,
       })
 
       if (sample?.month_label && !data.inserted && !data.total) {
@@ -647,7 +658,11 @@ export default function FinancesDashboard({
               {syncDebug && (
                 <details className="w-full text-left text-[11px] text-gray-600">
                   <summary className="cursor-pointer text-violet-700 font-medium">
-                    Ver logs sync / muestra API (mes anterior)
+                    Ver logs Enable Banking (
+                    {Array.isArray(syncDebug.api_logs)
+                      ? (syncDebug.api_logs as unknown[]).length
+                      : 0}{' '}
+                    llamadas API)
                   </summary>
                   <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-gray-50 p-3 text-[10px] leading-relaxed">
                     {JSON.stringify(syncDebug, null, 2)}

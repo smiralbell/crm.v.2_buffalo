@@ -15,7 +15,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const result = await syncEnableBankingTransactions()
+    const mode = req.query.mode === 'full' ? 'full' : 'incremental'
+    const result = await syncEnableBankingTransactions({ mode })
     return res.status(200).json({ ok: true, ...result })
   } catch (err) {
     if (err instanceof EnableBankingConfigError) {
