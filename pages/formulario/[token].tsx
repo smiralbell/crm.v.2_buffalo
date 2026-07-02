@@ -5,7 +5,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import PublicOutboundForm from '@/components/demos/PublicOutboundForm'
 import PublicFormShell, { PublicFormButton } from '@/components/demos/PublicFormShell'
-import { DEFAULT_OUTBOUND_FORM_BRANDING } from '@/lib/demos/form-branding'
+import {
+  DEFAULT_OUTBOUND_FORM_BRANDING,
+  FORM_FONT_OPTIONS,
+  googleFontsHref,
+  normalizeFormFontId,
+  resolveFormFontFamily,
+  type FormFontId,
+} from '@/lib/demos/form-branding'
 import type { OutboundFormBrandingRef, OutboundFormFieldRef } from '@/lib/demos/types'
 import { Lock } from 'lucide-react'
 
@@ -27,9 +34,16 @@ export default function PublicFormularioPage() {
   const applyMeta = (data: Record<string, unknown>) => {
     setNombreCliente(String(data.nombre_cliente || 'Demo'))
     if (data.branding && typeof data.branding === 'object') {
-      setBranding(data.branding as OutboundFormBrandingRef)
+      const b = data.branding as OutboundFormBrandingRef
+      setBranding({
+        ...DEFAULT_OUTBOUND_FORM_BRANDING,
+        ...b,
+        font_id: normalizeFormFontId(b.font_id),
+      })
     }
   }
+
+  const fontHref = googleFontsHref(normalizeFormFontId(branding.font_id))
 
   const loadMeta = useCallback(async () => {
     if (!token) return
@@ -99,6 +113,7 @@ export default function PublicFormularioPage() {
     <>
       <Head>
         <title>{nombreCliente ? `${nombreCliente} — Formulario` : 'Formulario'}</title>
+        {fontHref && <link rel="stylesheet" href={fontHref} />}
       </Head>
       <PublicFormShell nombreCliente={nombreCliente} branding={branding}>
         {gate === 'loading' && <p className="text-center text-sm text-gray-500">Cargando…</p>}

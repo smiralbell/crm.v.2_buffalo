@@ -98,6 +98,7 @@ export type OutboundFormBrandingRef = {
   logo_url: string | null
   color_primary: string
   color_secondary: string
+  font_id: string
 }
 
 export interface DemoVoiceSessionRow {

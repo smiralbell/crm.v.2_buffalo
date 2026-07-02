@@ -1,16 +1,98 @@
+import type { CSSProperties } from 'react'
+
+export type FormFontId =
+  | 'system'
+  | 'inter'
+  | 'poppins'
+  | 'dm-sans'
+  | 'playfair'
+  | 'roboto'
+  | 'montserrat'
+
+export const FORM_FONT_OPTIONS: Array<{
+  id: FormFontId
+  label: string
+  family: string
+  google?: string
+}> = [
+  {
+    id: 'system',
+    label: 'Sistema',
+    family:
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  },
+  {
+    id: 'inter',
+    label: 'Inter',
+    family: '"Inter", sans-serif',
+    google: 'Inter:wght@400;600',
+  },
+  {
+    id: 'poppins',
+    label: 'Poppins',
+    family: '"Poppins", sans-serif',
+    google: 'Poppins:wght@400;600',
+  },
+  {
+    id: 'dm-sans',
+    label: 'DM Sans',
+    family: '"DM Sans", sans-serif',
+    google: 'DM+Sans:wght@400;600',
+  },
+  {
+    id: 'roboto',
+    label: 'Roboto',
+    family: '"Roboto", sans-serif',
+    google: 'Roboto:wght@400;500;700',
+  },
+  {
+    id: 'montserrat',
+    label: 'Montserrat',
+    family: '"Montserrat", sans-serif',
+    google: 'Montserrat:wght@400;600',
+  },
+  {
+    id: 'playfair',
+    label: 'Playfair Display',
+    family: '"Playfair Display", serif',
+    google: 'Playfair+Display:wght@400;600',
+  },
+]
+
 export interface OutboundFormBranding {
   logo_url: string | null
   color_primary: string
   color_secondary: string
+  font_id: FormFontId
 }
 
 export const DEFAULT_OUTBOUND_FORM_BRANDING: OutboundFormBranding = {
   logo_url: null,
   color_primary: '#6d28d9',
-  color_secondary: '#ede9fe',
+  color_secondary: '#f5f3ff',
+  font_id: 'system',
 }
 
 const HEX_RE = /^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})$/
+
+const FONT_IDS = new Set(FORM_FONT_OPTIONS.map((f) => f.id))
+
+export function normalizeFormFontId(raw: unknown): FormFontId {
+  if (typeof raw === 'string' && FONT_IDS.has(raw as FormFontId)) {
+    return raw as FormFontId
+  }
+  return 'system'
+}
+
+export function resolveFormFontFamily(fontId: FormFontId): string {
+  return FORM_FONT_OPTIONS.find((f) => f.id === fontId)?.family ?? FORM_FONT_OPTIONS[0].family
+}
+
+export function googleFontsHref(fontId: FormFontId): string | null {
+  const opt = FORM_FONT_OPTIONS.find((f) => f.id === fontId)
+  if (!opt?.google) return null
+  return `https://fonts.googleapis.com/css2?family=${opt.google}&display=swap`
+}
 
 export function normalizeHexColor(raw: string, fallback: string): string {
   const trimmed = raw.trim()
@@ -42,6 +124,7 @@ export function normalizeOutboundFormBranding(raw: unknown): OutboundFormBrandin
       typeof row.color_secondary === 'string' ? row.color_secondary : def.color_secondary,
       def.color_secondary
     ),
+    font_id: normalizeFormFontId(row.font_id),
   }
 }
 
@@ -55,12 +138,11 @@ export function darkenHexColor(hex: string, amount = 18): string {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
 }
 
-import type { CSSProperties } from 'react'
-
 export function brandingToCssVars(branding: OutboundFormBranding): CSSProperties {
   return {
     ['--form-primary' as string]: branding.color_primary,
     ['--form-primary-hover' as string]: darkenHexColor(branding.color_primary),
     ['--form-secondary' as string]: branding.color_secondary,
+    fontFamily: resolveFormFontFamily(branding.font_id),
   }
 }

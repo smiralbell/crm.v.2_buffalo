@@ -15,7 +15,7 @@ import type {
   OutboundFormBrandingRef,
   OutboundFormFieldRef,
 } from '@/lib/demos/types'
-import { DEFAULT_OUTBOUND_FORM_BRANDING } from '@/lib/demos/form-branding'
+import { DEFAULT_OUTBOUND_FORM_BRANDING, FORM_FONT_OPTIONS, resolveFormFontFamily, type FormFontId } from '@/lib/demos/form-branding'
 import { RETELL_OUTBOUND_VAR_KEYS } from '@/lib/demos/outbound-form'
 import { Check, Copy, Link2, Lock, Palette } from 'lucide-react'
 
@@ -27,6 +27,7 @@ type Props = {
   initialFields: OutboundFormFieldRef[]
   initialAccess: FormPublicAccess
   initialBranding: OutboundFormBrandingRef
+  initialStep?: FormConfigStep
   onSaved: (
     fields: OutboundFormFieldRef[],
     access: FormPublicAccess,
@@ -35,6 +36,14 @@ type Props = {
 }
 
 type Step = 'access' | 'design' | 'fields'
+
+export type FormConfigStep = Step
+
+const STEPS: { id: Step; label: string }[] = [
+  { id: 'access', label: 'Acceso' },
+  { id: 'design', label: 'Logo y colores' },
+  { id: 'fields', label: 'Campos' },
+]
 
 function ColorField({
   label,
@@ -74,9 +83,10 @@ export default function DemoOutboundFormConfigDialog({
   initialFields,
   initialAccess,
   initialBranding,
+  initialStep = 'access',
   onSaved,
 }: Props) {
-  const [step, setStep] = useState<Step>('access')
+  const [step, setStep] = useState<Step>(initialStep)
   const [fields, setFields] = useState<OutboundFormFieldRef[]>(initialFields)
   const [access, setAccess] = useState<FormPublicAccess>(initialAccess)
   const [branding, setBranding] = useState<OutboundFormBrandingRef>(initialBranding)
@@ -88,7 +98,7 @@ export default function DemoOutboundFormConfigDialog({
 
   useEffect(() => {
     if (!open) return
-    setStep('access')
+    setStep(initialStep)
     setFields(initialFields)
     setAccess(initialAccess)
     setBranding(initialBranding)
@@ -96,7 +106,7 @@ export default function DemoOutboundFormConfigDialog({
     setPasswordConfirm('')
     setError('')
     setCopied(false)
-  }, [open, initialFields, initialAccess, initialBranding])
+  }, [open, initialFields, initialAccess, initialBranding, initialStep])
 
   const updateField = (key: string, patch: Partial<OutboundFormFieldRef>) => {
     setFields((prev) => prev.map((f) => (f.key === key ? { ...f, ...patch } : f)))
@@ -236,12 +246,24 @@ export default function DemoOutboundFormConfigDialog({
         <DialogHeader>
           <DialogTitle>Configurar formulario outbound</DialogTitle>
           <DialogDescription>{stepDescription}</DialogDescription>
-          <div className="flex gap-1 pt-2 text-[10px] font-medium uppercase tracking-wide text-gray-400">
-            <span className={step === 'access' ? 'text-violet-700' : ''}>1. Acceso</span>
-            <span>·</span>
-            <span className={step === 'design' ? 'text-violet-700' : ''}>2. Diseño</span>
-            <span>·</span>
-            <span className={step === 'fields' ? 'text-violet-700' : ''}>3. Campos</span>
+          <div className="flex flex-wrap gap-2 pt-2">
+            {STEPS.map((s, i) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  setStep(s.id)
+                  setError('')
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  step === s.id
+                    ? 'bg-violet-100 text-violet-800'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {i + 1}. {s.label}
+              </button>
+            ))}
           </div>
         </DialogHeader>
 
@@ -326,33 +348,55 @@ export default function DemoOutboundFormConfigDialog({
         {step === 'design' && (
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label>URL del logo del cliente</Label>
+              <Label>Logo del cliente</Label>
               <Input
                 value={branding.logo_url ?? ''}
                 onChange={(e) =>
                   setBranding((b) => ({ ...b, logo_url: e.target.value.trim() || null }))
                 }
-                placeholder="https://ejemplo.com/logo.png"
+                placeholder="https://tu-cliente.com/logo.png"
                 className="rounded-xl"
               />
-              <p className="text-xs text-gray-500">PNG o SVG con fondo transparente recomendado.</p>
+              <p className="text-xs text-gray-500">
+                Pega la URL pública de la imagen (PNG, JPG o SVG).
+              </p>
             </div>
 
             <ColorField
-              label="Color principal (botones y acentos)"
+              label="Color principal"
               value={branding.color_primary}
               onChange={(v) => setBranding((b) => ({ ...b, color_primary: v }))}
             />
             <ColorField
-              label="Color secundario (fondo)"
+              label="Color secundario"
               value={branding.color_secondary}
               onChange={(v) => setBranding((b) => ({ ...b, color_secondary: v }))}
             />
 
+            <div className="space-y-1.5">
+              <Label>Tipografía</Label>
+              <select
+                value={branding.font_id}
+                onChange={(e) =>
+                  setBranding((b) => ({ ...b, font_id: e.target.value as FormFontId }))
+                }
+                className="flex h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm"
+              >
+                {FORM_FONT_OPTIONS.map((font) => (
+                  <option key={font.id} value={font.id}>
+                    {font.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div
               className="rounded-xl border border-gray-200 p-4 text-center"
               style={{
-                background: `linear-gradient(to bottom, ${branding.color_secondary}, #fff)`,
+                backgroundColor: branding.color_secondary,
+                fontFamily: resolveFormFontFamily(
+                  (branding.font_id || 'system') as FormFontId
+                ),
               }}
             >
               <p className="mb-3 text-xs font-medium text-gray-500">Vista previa</p>
@@ -368,11 +412,13 @@ export default function DemoOutboundFormConfigDialog({
                 />
               ) : null}
               <p className="text-sm font-semibold text-gray-900">{demoNombre}</p>
-              <div
-                className="mx-auto mt-3 inline-block rounded-lg px-4 py-2 text-xs font-medium text-white"
-                style={{ backgroundColor: branding.color_primary }}
-              >
-                Botón de ejemplo
+              <div className="mx-auto mt-3 max-w-xs rounded-xl border border-gray-200/80 bg-white p-3 shadow-sm">
+                <div
+                  className="inline-block rounded-lg px-4 py-2 text-xs font-medium text-white"
+                  style={{ backgroundColor: branding.color_primary }}
+                >
+                  Botón de ejemplo
+                </div>
               </div>
             </div>
           </div>

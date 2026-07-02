@@ -17,7 +17,9 @@ import {
 } from '@/components/ui/dialog'
 import DemoFormDialog, { type DemoFormValues } from '@/components/demos/DemoFormDialog'
 import DemoConversationDialog from '@/components/demos/DemoConversationDialog'
-import DemoOutboundFormConfigDialog from '@/components/demos/DemoOutboundFormConfigDialog'
+import DemoOutboundFormConfigDialog, {
+  type FormConfigStep,
+} from '@/components/demos/DemoOutboundFormConfigDialog'
 import type {
   DemoDetail,
   DemoListItem,
@@ -27,7 +29,7 @@ import type {
   OutboundFormBrandingRef,
   OutboundFormFieldRef,
 } from '@/lib/demos/types'
-import { DEFAULT_OUTBOUND_FORM_BRANDING } from '@/lib/demos/form-branding'
+import { DEFAULT_OUTBOUND_FORM_BRANDING, FORM_FONT_OPTIONS, normalizeOutboundFormBranding } from '@/lib/demos/form-branding'
 import { DEFAULT_OUTBOUND_FORM_FIELDS } from '@/lib/demos/outbound-form'
 import { Input } from '@/components/ui/input'
 import {
@@ -39,6 +41,7 @@ import {
   Eraser,
   Link2,
   MessageSquare,
+  Palette,
   PhoneCall,
   RefreshCw,
   Search,
@@ -88,6 +91,7 @@ export default function DemoDetailPage() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null)
   const [conversationOpen, setConversationOpen] = useState(false)
   const [formConfigOpen, setFormConfigOpen] = useState(false)
+  const [formConfigStep, setFormConfigStep] = useState<FormConfigStep>('access')
   const [formFields, setFormFields] = useState<OutboundFormFieldRef[]>([])
   const [formAccess, setFormAccess] = useState<FormPublicAccess>({
     public_token: null,
@@ -110,7 +114,7 @@ export default function DemoDetailPage() {
       setDetail(data)
       if (data.formulario_outbound) setFormFields(data.formulario_outbound)
       if (data.form_access) setFormAccess(data.form_access)
-      if (data.formulario_branding) setFormBranding(data.formulario_branding)
+      if (data.formulario_branding) setFormBranding(normalizeOutboundFormBranding(data.formulario_branding))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar')
       setDetail(null)
@@ -195,6 +199,11 @@ export default function DemoDetailPage() {
         )
       })
     : sessions
+
+  const openFormConfig = (step: FormConfigStep = 'access') => {
+    setFormConfigStep(step)
+    setFormConfigOpen(true)
+  }
 
   const outboundFields =
     formFields.length > 0
@@ -377,25 +386,82 @@ export default function DemoDetailPage() {
 
             {canOutbound && (
               <Card className="border border-violet-200 shadow-sm">
-                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <CardTitle className="text-base">Formulario público para clientes</CardTitle>
                     <p className="mt-1 text-sm text-gray-500">
-                      Configura contraseña y enlace. El cliente accede sin CRM, rellena el
-                      formulario y se lanza la llamada con sus datos a Retell.
+                      Enlace con contraseña, logo y colores de marca del cliente.
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-xl border-violet-200 text-violet-800"
-                    onClick={() => setFormConfigOpen(true)}
-                  >
-                    <Settings2 className="mr-2 h-4 w-4" />
-                    Configurar formulario
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl border-violet-200 text-violet-800"
+                      onClick={() => openFormConfig('design')}
+                    >
+                      <Palette className="mr-2 h-4 w-4" />
+                      Logo y colores
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl border-violet-200 text-violet-800"
+                      onClick={() => openFormConfig('access')}
+                    >
+                      <Settings2 className="mr-2 h-4 w-4" />
+                      Configurar formulario
+                    </Button>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-4">
+                  <div
+                    className="rounded-xl border border-gray-200 p-4"
+                    style={{ backgroundColor: formBranding.color_secondary }}
+                  >
+                    <p className="mb-3 text-xs font-medium text-gray-500">Vista previa del diseño</p>
+                    <div className="flex items-center gap-4">
+                      {formBranding.logo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={formBranding.logo_url}
+                          alt="Logo"
+                          className="h-10 max-w-[120px] object-contain"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/80">
+                          <PhoneCall
+                            className="h-5 w-5"
+                            style={{ color: formBranding.color_primary }}
+                          />
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <div className="text-center">
+                          <div
+                            className="h-8 w-8 rounded-lg border border-gray-200"
+                            style={{ backgroundColor: formBranding.color_primary }}
+                            title="Color principal"
+                          />
+                          <p className="mt-1 font-mono text-[10px] text-gray-500">Principal</p>
+                        </div>
+                        <div className="text-center">
+                          <div
+                            className="h-8 w-8 rounded-lg border border-gray-200"
+                            style={{ backgroundColor: formBranding.color_secondary }}
+                            title="Color secundario"
+                          />
+                          <p className="mt-1 font-mono text-[10px] text-gray-500">Secundario</p>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-gray-600">
+                      Tipografía:{' '}
+                      {FORM_FONT_OPTIONS.find((f) => f.id === formBranding.font_id)?.label ||
+                        'Sistema'}
+                    </p>
+                  </div>
+
                   {formAccess.public_url ? (
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                       <div className="flex flex-1 items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
@@ -568,6 +634,7 @@ export default function DemoDetailPage() {
           initialFields={outboundFields}
           initialAccess={formAccess}
           initialBranding={formBranding}
+          initialStep={formConfigStep}
           onSaved={(fields, access, branding) => {
             setFormFields(fields)
             setFormAccess(access)

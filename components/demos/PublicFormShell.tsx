@@ -1,5 +1,5 @@
 import type { OutboundFormBrandingRef } from '@/lib/demos/types'
-import { brandingToCssVars } from '@/lib/demos/form-branding'
+import { brandingToCssVars, normalizeFormFontId, resolveFormFontFamily } from '@/lib/demos/form-branding'
 import { PhoneCall } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -10,14 +10,20 @@ type Props = {
 }
 
 export default function PublicFormShell({ nombreCliente, branding, children }: Props) {
-  const cssVars = brandingToCssVars(branding)
+  const normalized = {
+    ...branding,
+    font_id: normalizeFormFontId(branding.font_id),
+  }
+  const cssVars = brandingToCssVars(normalized)
+  const fontFamily = resolveFormFontFamily(normalized.font_id)
 
   return (
     <div
       className="min-h-screen px-4 py-10"
       style={{
         ...cssVars,
-        background: `linear-gradient(to bottom, ${branding.color_secondary}, #ffffff)`,
+        backgroundColor: branding.color_secondary,
+        fontFamily,
       }}
     >
       <div className="mx-auto max-w-lg">
@@ -33,8 +39,7 @@ export default function PublicFormShell({ nombreCliente, branding, children }: P
             </div>
           ) : (
             <div
-              className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl"
-              style={{ backgroundColor: branding.color_secondary }}
+              className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/80"
             >
               <PhoneCall className="h-6 w-6" style={{ color: branding.color_primary }} />
             </div>
@@ -42,9 +47,7 @@ export default function PublicFormShell({ nombreCliente, branding, children }: P
           <h1 className="text-xl font-semibold text-gray-900">{nombreCliente}</h1>
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">{children}</div>
-
-        <p className="mt-6 text-center text-xs text-gray-400">Powered by Engranaje</p>
+        <div className="rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm">{children}</div>
       </div>
     </div>
   )
