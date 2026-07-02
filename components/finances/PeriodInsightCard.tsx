@@ -1,9 +1,13 @@
 import type { PeriodInsight } from '@/lib/finance/types'
+import FinanceInfoTip from './FinanceInfoTip'
 
 export default function PeriodInsightCard({ insight }: { insight: PeriodInsight }) {
   return (
     <div className="border border-gray-200 rounded-lg bg-white p-4 shadow-sm hover:shadow-md transition-shadow h-full">
-      <p className="text-sm font-medium text-gray-500">{insight.label}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-sm font-medium text-gray-500">{insight.label}</p>
+        {insight.help && <FinanceInfoTip text={insight.help} />}
+      </div>
       <p className="text-2xl font-semibold text-gray-900 mt-1 tabular-nums">{insight.primary}</p>
       {insight.rows.length > 0 && (
         <dl className="mt-3 space-y-1.5">

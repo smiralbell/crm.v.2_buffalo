@@ -48,6 +48,7 @@ export interface CategorySlice {
 export interface MrrClientRow {
   name: string
   amount: number
+  source?: 'tagged' | 'detected'
 }
 
 export interface NetTrendPoint {
@@ -112,6 +113,7 @@ export interface RichKpiCard {
   primary: string
   rows: KpiRow[]
   footer?: string
+  help?: string
   accent?: 'warning' | 'critical' | null
 }
 
@@ -120,6 +122,27 @@ export interface PeriodInsight {
   primary: string
   rows: KpiRow[]
   footer?: string
+  help?: string
+}
+
+export interface RecurringExpenseRow {
+  vendor_key: string
+  label: string
+  category_id: string
+  category_label: string
+  frequency: string
+  average_amount: number
+  monthly_equivalent: number
+  annual_cost: number
+  count: number
+  last_date: string
+}
+
+export interface RecurringExpensesSummary {
+  monthly_total: number
+  annual_total: number
+  count: number
+  items: RecurringExpenseRow[]
 }
 
 export interface ExecutiveSummary {
@@ -137,6 +160,7 @@ export interface ExecutiveSummary {
   alerts: FinanceAlert[]
   pending_invoices: PendingInvoiceRow[]
   project_economics: ProjectEconomicsRow[]
+  recurring_expenses: RecurringExpensesSummary
   generated_at: string
 }
 

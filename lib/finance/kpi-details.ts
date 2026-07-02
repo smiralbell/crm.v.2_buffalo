@@ -1,4 +1,5 @@
 import { fmtEur, ANNUAL_TARGET } from './chart-theme'
+import { KPI_HELP, PERIOD_INSIGHT_HELP } from './kpi-help'
 import type { AnnualGoalDetail, PeriodInsight, RichKpiCard } from './types'
 
 export type { AnnualGoalDetail, PeriodInsight, RichKpiCard }
@@ -24,6 +25,8 @@ export interface BuildKpiInput {
   pipeline_deals: number
   profit_this_month: number
   ytdInvoiced: number
+  mrr_source?: 'tagged' | 'detected' | 'mixed'
+  mrr_tagged_count?: number
 }
 
 function pctChange(curr: number, prev: number): string | null {
@@ -119,11 +122,17 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
     runwayDate = d.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
   }
 
+  const mrrFooter =
+    input.mrr_source === 'tagged'
+      ? `ARR implícito: ${fmtEur(input.arr)} · ${input.mrr_tagged_count ?? 0} cobros marcados como mensualidad`
+      : `ARR implícito: ${fmtEur(input.arr)} · detectado automáticamente (marca mensualidades en Ingresos)`
+
   return [
     {
       id: 'mrr',
       title: 'MRR',
       primary: fmtEur(input.mrr),
+      help: KPI_HELP.mrr,
       rows: [
         { label: 'Clientes activos', value: String(input.active_clients) },
         { label: 'Ticket medio', value: fmtEur(mrrPerClient) },
@@ -133,12 +142,13 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
           value: mrrCoversBurn == null ? '—' : mrrCoversBurn ? 'Sí' : 'No',
         },
       ],
-      footer: `ARR implícito: ${fmtEur(input.arr)} · desde banco`,
+      footer: mrrFooter,
     },
     {
       id: 'arr',
       title: 'ARR',
       primary: fmtEur(input.arr),
+      help: KPI_HELP.arr,
       rows: [
         { label: 'MRR × 12', value: fmtEur(input.mrr) },
         { label: '% del objetivo 250k', value: `${arrPctOfTarget}%` },
@@ -157,6 +167,7 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
       id: 'cash',
       title: 'Caja',
       primary: fmtEur(input.cash_balance),
+      help: KPI_HELP.cash,
       rows: [
         {
           label: 'vs mes anterior',
@@ -180,6 +191,7 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
       id: 'runway',
       title: 'Runway',
       primary: input.runway_months != null ? `${input.runway_months}m` : '—',
+      help: KPI_HELP.runway,
       rows: [
         { label: 'Caja actual', value: fmtEur(input.cash_balance) },
         { label: 'Burn rate', value: fmtEur(input.avg_monthly_burn) },
@@ -203,6 +215,7 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
       id: 'invoiced',
       title: 'Facturado',
       primary: fmtEur(input.invoiced_this_month),
+      help: KPI_HELP.invoiced,
       rows: [
         { label: 'Mes anterior', value: fmtEur(input.invoiced_last_month) },
         { label: 'Variación', value: invMom ?? '—' },
@@ -218,6 +231,7 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
       id: 'collected',
       title: 'Cobrado',
       primary: fmtEur(input.collected_this_month),
+      help: KPI_HELP.collected,
       rows: [
         { label: 'Mes anterior', value: fmtEur(input.collected_last_month) },
         { label: 'Variación', value: collMom ?? '—' },
@@ -234,6 +248,7 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
       id: 'gap',
       title: 'Brecha cobro',
       primary: fmtEur(input.collection_gap),
+      help: KPI_HELP.gap,
       rows: [
         { label: 'Facturado mes', value: fmtEur(input.invoiced_this_month) },
         { label: 'Cobrado mes', value: fmtEur(input.collected_this_month) },
@@ -253,6 +268,7 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
       id: 'pipeline',
       title: 'Pipeline',
       primary: fmtEur(input.pipeline_value),
+      help: KPI_HELP.pipeline,
       rows: [
         { label: 'Oportunidades', value: String(input.pipeline_deals) },
         { label: 'Ticket medio', value: fmtEur(avgDeal) },
@@ -288,6 +304,7 @@ export function buildPeriodInsights(stats: {
     {
       label: 'Dinero en cuenta',
       primary: fmtEur(stats.currentBalance),
+      help: PERIOD_INSIGHT_HELP['Dinero en cuenta'],
       rows: [
         { label: 'Saldo al cierre del período', value: 'Último movimiento' },
         { label: 'Días en rango', value: String(stats.periodDays) },
@@ -297,6 +314,7 @@ export function buildPeriodInsights(stats: {
     {
       label: 'Ingresos',
       primary: fmtEur(stats.income),
+      help: PERIOD_INSIGHT_HELP.Ingresos,
       rows: [
         { label: 'Media diaria', value: fmtEur(stats.income / days) },
         { label: '% del volumen', value: stats.income + stats.expenses > 0 ? `${Math.round((stats.income / (stats.income + stats.expenses)) * 100)}%` : '—' },
@@ -307,6 +325,7 @@ export function buildPeriodInsights(stats: {
     {
       label: 'Gastos',
       primary: fmtEur(stats.expenses),
+      help: PERIOD_INSIGHT_HELP.Gastos,
       rows: [
         { label: 'Media diaria', value: fmtEur(stats.expenses / days) },
         { label: '% del volumen', value: stats.income + stats.expenses > 0 ? `${Math.round((stats.expenses / (stats.income + stats.expenses)) * 100)}%` : '—' },
@@ -317,6 +336,7 @@ export function buildPeriodInsights(stats: {
     {
       label: 'Beneficio bruto',
       primary: fmtEur(stats.profit),
+      help: PERIOD_INSIGHT_HELP['Beneficio bruto'],
       rows: [
         { label: 'Ingresos − gastos', value: fmtEur(stats.income - stats.expenses) },
         { label: 'Margen', value: `${marginPct}%` },
@@ -326,6 +346,7 @@ export function buildPeriodInsights(stats: {
     {
       label: 'IVA a deber',
       primary: fmtEur(stats.ivaToPay),
+      help: PERIOD_INSIGHT_HELP['IVA a deber'],
       rows: [
         { label: 'Sobre beneficio', value: stats.profit > 0 ? `${Math.round((stats.ivaToPay / stats.profit) * 100)}%` : '—' },
         { label: 'Carga fiscal total', value: fmtEur(taxTotal) },
@@ -335,6 +356,7 @@ export function buildPeriodInsights(stats: {
     {
       label: 'Beneficio neto',
       primary: fmtEur(stats.netProfit),
+      help: PERIOD_INSIGHT_HELP['Beneficio neto'],
       rows: [
         { label: 'Tras IVA', value: fmtEur(stats.profit - stats.ivaToPay) },
         { label: 'Margen neto', value: stats.income > 0 ? `${Math.round((stats.netProfit / stats.income) * 100)}%` : '—' },
@@ -343,6 +365,7 @@ export function buildPeriodInsights(stats: {
     {
       label: 'Imp. sociedades',
       primary: fmtEur(stats.estimatedCorporateTax),
+      help: PERIOD_INSIGHT_HELP['Imp. sociedades'],
       rows: [
         { label: 'Tipo aplicado', value: '15%' },
         { label: 'Base', value: fmtEur(stats.netProfit) },
@@ -352,6 +375,7 @@ export function buildPeriodInsights(stats: {
     {
       label: 'Beneficio final',
       primary: fmtEur(stats.netProfitAfterCorporateTax),
+      help: PERIOD_INSIGHT_HELP['Beneficio final'],
       rows: [
         { label: 'Margen final', value: `${netMarginPct}%` },
         { label: 'Media diaria', value: fmtEur(stats.netProfitAfterCorporateTax / days) },

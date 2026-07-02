@@ -7,7 +7,7 @@ import { query } from '@/lib/db'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Link2 } from 'lucide-react'
+import { ArrowLeft, Link2, Repeat } from 'lucide-react'
 import Link from 'next/link'
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth } from 'date-fns'
 import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
@@ -34,6 +34,7 @@ interface IncomeRow {
   description: string
   account_name: string
   matched: boolean
+  is_recurring_income: boolean
   linkedInvoice?: LinkedInvoice
 }
 
@@ -97,19 +98,39 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       amount: number
       description: string
       account_name: string | null
+      is_recurring_income: boolean
     }>(
       `SELECT 
         bt.id,
         bt.date,
         bt.amount,
         bt.description,
-        ba.name as account_name
+        ba.name as account_name,
+        COALESCE(bt.is_recurring_income, false) AS is_recurring_income
        FROM bank_transactions bt
        LEFT JOIN bank_accounts ba ON bt.account_id = ba.id
        WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount > 0
        ORDER BY bt.date DESC`,
       [startStr, endStr]
-    )
+    ).catch(async () => {
+      const fallback = await query<{
+        id: string
+        date: string | Date
+        amount: number
+        description: string
+        account_name: string | null
+      }>(
+        `SELECT bt.id, bt.date, bt.amount, bt.description, ba.name as account_name
+         FROM bank_transactions bt
+         LEFT JOIN bank_accounts ba ON bt.account_id = ba.id
+         WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount > 0
+         ORDER BY bt.date DESC`,
+        [startStr, endStr]
+      )
+      return {
+        rows: fallback.rows.map((r) => ({ ...r, is_recurring_income: false })),
+      }
+    })
 
     const incomesBase = incomesResult.rows.map((i) => ({
       id: i.id,
@@ -117,6 +138,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       amount: Number(i.amount),
       description: i.description ?? '',
       account_name: i.account_name ?? '',
+      is_recurring_income: Boolean(i.is_recurring_income),
     }))
 
     let linkedByBtId = new Map<string | null, LinkedInvoice>()
@@ -240,6 +262,7 @@ export default function IncomesPage({
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('')
   const [linkLoading, setLinkLoading] = useState(false)
   const [linkError, setLinkError] = useState<string | null>(null)
+  const [recurringLoadingId, setRecurringLoadingId] = useState<string | null>(null)
 
   useEffect(() => {
     setIncomes(initialIncomes)
@@ -281,6 +304,7 @@ export default function IncomesPage({
 
   const totalIncome = incomes.reduce((sum, i) => sum + i.amount, 0)
   const matchedCount = incomes.filter((i) => i.matched).length
+  const recurringCount = incomes.filter((i) => i.is_recurring_income).length
   const unmatchedCount = incomes.length - matchedCount
   const currentDateRange = dateRange || defaultRange
 
@@ -338,6 +362,29 @@ export default function IncomesPage({
     setLinkLoading(false)
   }
 
+  const handleToggleRecurring = async (incomeId: string, next: boolean) => {
+    setRecurringLoadingId(incomeId)
+    try {
+      const res = await fetch(`/api/finance/bank-transactions/${incomeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_recurring_income: next }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        alert(data.error || 'No se pudo actualizar la mensualidad')
+        return
+      }
+      setIncomes((prev) =>
+        prev.map((i) => (i.id === incomeId ? { ...i, is_recurring_income: next } : i))
+      )
+    } catch {
+      alert('Error de conexión')
+    } finally {
+      setRecurringLoadingId(null)
+    }
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -350,7 +397,7 @@ export default function IncomesPage({
           <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={currentDateRange} />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           <Card className="border border-gray-200 shadow-sm">
             <CardContent className="pt-6">
               <p className="text-sm font-medium text-gray-500 mb-2">Total ingresos del período</p>
@@ -367,6 +414,13 @@ export default function IncomesPage({
             <CardContent className="pt-6">
               <p className="text-sm font-medium text-gray-500 mb-2">Sin factura emitida</p>
               <p className="text-2xl font-semibold text-red-700">{unmatchedCount}</p>
+            </CardContent>
+          </Card>
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="pt-6">
+              <p className="text-sm font-medium text-gray-500 mb-2">Marcados como mensualidad</p>
+              <p className="text-2xl font-semibold text-violet-700">{recurringCount}</p>
+              <p className="text-xs text-gray-400 mt-1">Cuentan para el MRR en Finanzas</p>
             </CardContent>
           </Card>
           <Card className="border border-gray-200 shadow-sm">
@@ -393,6 +447,7 @@ export default function IncomesPage({
                       <th className="text-left p-3 font-medium text-sm text-gray-700">Concepto</th>
                       <th className="text-left p-3 font-medium text-sm text-gray-700">Cuenta</th>
                       <th className="text-right p-3 font-medium text-sm text-gray-700">Importe</th>
+                      <th className="text-left p-3 font-medium text-sm text-gray-700">Mensualidad</th>
                       <th className="text-left p-3 font-medium text-sm text-gray-700">Relacionado con factura</th>
                       <th className="text-right p-3 font-medium text-sm text-gray-700">Acciones</th>
                     </tr>
@@ -412,6 +467,25 @@ export default function IncomesPage({
                         <td className="p-3 text-sm text-gray-600">{income.account_name || '—'}</td>
                         <td className="p-3 text-right text-sm font-medium text-gray-900">
                           {formatCurrency(income.amount)}
+                        </td>
+                        <td className="p-3 text-sm">
+                          <Button
+                            type="button"
+                            variant={income.is_recurring_income ? 'default' : 'outline'}
+                            size="sm"
+                            className={
+                              income.is_recurring_income
+                                ? 'bg-violet-600 hover:bg-violet-700 text-white h-8'
+                                : 'h-8'
+                            }
+                            disabled={recurringLoadingId === income.id}
+                            onClick={() =>
+                              handleToggleRecurring(income.id, !income.is_recurring_income)
+                            }
+                          >
+                            <Repeat className="h-3.5 w-3.5 mr-1" />
+                            {income.is_recurring_income ? 'MRR' : 'Marcar MRR'}
+                          </Button>
                         </td>
                         <td className="p-3 text-sm text-gray-600">
                           {income.linkedInvoice ? (

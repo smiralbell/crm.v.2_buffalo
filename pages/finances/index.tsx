@@ -12,6 +12,7 @@ import FinanceAlertsPanel from '@/components/finances/FinanceAlertsPanel'
 import FinanceAiPanel from '@/components/finances/FinanceAiPanel'
 import FinanceKpiCard from '@/components/finances/FinanceKpiCard'
 import AnnualGoalCard from '@/components/finances/AnnualGoalCard'
+import RecurringExpensesPanel from '@/components/finances/RecurringExpensesPanel'
 import PeriodInsightCard from '@/components/finances/PeriodInsightCard'
 import { buildPeriodInsights } from '@/lib/finance/kpi-details'
 
@@ -713,20 +714,37 @@ export default function FinancesDashboard({
                 </Card>
               </div>
 
-              <Card className="border border-gray-200 shadow-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-semibold text-gray-900">Distribución de gastos</CardTitle>
-                  <p className="text-xs text-gray-400 font-normal">
-                    {executive.period_label} · {executive.expense_source_label}
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <FinanceCategoryDonut
-                    data={executive.expense_breakdown}
-                    emptyMessage="Sin gastos en este período — sincroniza el banco o registra gastos en el CRM"
-                  />
-                </CardContent>
-              </Card>
+              <div className="grid gap-4 lg:grid-cols-3">
+                <Card className="border border-gray-200 shadow-sm lg:col-span-2">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base font-semibold text-gray-900">
+                      Distribución de gastos
+                    </CardTitle>
+                    <p className="text-xs text-gray-400 font-normal">
+                      {executive.period_label} · {executive.expense_source_label}
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <FinanceCategoryDonut
+                      data={executive.expense_breakdown}
+                      emptyMessage="Sin gastos en este período — sincroniza el banco o registra gastos en el CRM"
+                    />
+                  </CardContent>
+                </Card>
+                <Card className="border border-gray-200 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-1.5">
+                      Gastos recurrentes
+                    </CardTitle>
+                    <p className="text-xs text-gray-400 font-normal">
+                      Proveedores con pagos repetidos · ahorro potencial si cortas
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <RecurringExpensesPanel data={executive.recurring_expenses} compact />
+                  </CardContent>
+                </Card>
+              </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <Card className="border border-gray-200 shadow-sm">

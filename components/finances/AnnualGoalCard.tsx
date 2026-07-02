@@ -1,6 +1,8 @@
-import { cn } from '@/lib/utils'
-import type { AnnualGoalDetail } from '@/lib/finance/types'
 import { fmtEur } from '@/lib/finance/chart-theme'
+import type { AnnualGoalDetail } from '@/lib/finance/types'
+import FinanceInfoTip from './FinanceInfoTip'
+import { ANNUAL_GOAL_HELP } from '@/lib/finance/kpi-help'
+import { cn } from '@/lib/utils'
 
 export default function AnnualGoalCard({ goal }: { goal: AnnualGoalDetail }) {
   const paceBadge =
@@ -15,7 +17,10 @@ export default function AnnualGoalCard({ goal }: { goal: AnnualGoalDetail }) {
       <div className="px-5 pt-5 pb-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
           <div>
-            <p className="text-sm font-semibold text-gray-900">Objetivo anual de facturación</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-gray-900">Objetivo anual de facturación</p>
+              <FinanceInfoTip text={ANNUAL_GOAL_HELP} />
+            </div>
             <p className="text-xs text-gray-500 mt-0.5">
               Meta {fmtEur(goal.target)} · {goal.months_remaining} meses restantes
             </p>

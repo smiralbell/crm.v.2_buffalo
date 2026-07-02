@@ -10,6 +10,7 @@ import {
 } from './expense-sources'
 import { computeBankMrr } from './mrr-from-bank'
 import { buildAnnualGoalDetail, buildRichKpiCards } from './kpi-details'
+import { detectRecurringExpenses, recurringExpensesSummary } from './recurring-expenses'
 import { formatPeriodLabel, getDefaultPeriodRange, clampPeriodStart, periodDays, type PeriodRange } from './period-presets'
 import type {
   ExecutiveSummary,
@@ -339,6 +340,19 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   const expense_source_label = expenseLoad.source_label
   const net_trend = cashFlow.map((c) => ({ month: c.month, net: c.net }))
 
+  const recurringItems = detectRecurringExpenses(
+    expenseTx.map((t) => ({
+      description: t.description,
+      amount: t.amount,
+      date: t.date,
+    }))
+  )
+  const recurringSummaryBase = recurringExpensesSummary(recurringItems)
+  const recurring_expenses = {
+    ...recurringSummaryBase,
+    items: recurringItems.slice(0, 20),
+  }
+
   const mrr_by_client = bankMrr.by_client
 
   const alertsFinal = buildFinanceAlerts({
@@ -390,6 +404,8 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
     pipeline_deals: pipelineDeals,
     profit_this_month: profitThisMonth,
     ytdInvoiced,
+    mrr_source: bankMrr.source,
+    mrr_tagged_count: bankMrr.tagged_count,
   })
 
   return {
@@ -421,6 +437,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
     alerts: alertsFinal,
     pending_invoices: pendingInvoices,
     project_economics: [],
+    recurring_expenses,
     generated_at: now.toISOString(),
   }
 }

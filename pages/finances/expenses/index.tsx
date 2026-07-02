@@ -19,6 +19,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import RecurringExpensesPanel from '@/components/finances/RecurringExpensesPanel'
+import {
+  detectRecurringExpenses,
+  recurringExpensesSummary,
+} from '@/lib/finance/recurring-expenses'
+import type { RecurringExpensesSummary } from '@/lib/finance/types'
 
 interface ExpensesPageProps {
   expenses: Array<{
@@ -29,13 +35,7 @@ interface ExpensesPageProps {
     account_name: string
     matched: boolean
   }>
-  recurringExpenses: Array<{
-    description: string
-    frequency: string
-    averageAmount: number
-    count: number
-    lastDate: string
-  }>
+  recurringExpenses: RecurringExpensesSummary
   invoices: Array<{
     id: number
     invoice_number: string
@@ -67,7 +67,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         expenses: [],
-        recurringExpenses: [],
+        recurringExpenses: { monthly_total: 0, annual_total: 0, count: 0, items: [] },
         invoices: [],
         unmatchedExpenses: [],
         totalVat: 0,
@@ -212,72 +212,18 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       }
     })
 
-    // Detectar gastos recurrentes: agrupar por descripción normalizada y analizar frecuencia
-    const expensesByDescription = new Map<string, Array<{ date: string; amount: number }>>()
-    
-    normalizedExpenses.forEach((expense) => {
-      const normalizedDesc = expense.description
-        .toUpperCase()
-        .trim()
-        .replace(/\s+/g, ' ')
-      
-      if (!expensesByDescription.has(normalizedDesc)) {
-        expensesByDescription.set(normalizedDesc, [])
-      }
-      expensesByDescription.get(normalizedDesc)!.push({
-        date: expense.date,
-        amount: expense.amount,
-      })
-    })
-
-    // Identificar gastos recurrentes (más de 1 ocurrencia)
-    const recurringExpenses: Array<{
-      description: string
-      frequency: string
-      averageAmount: number
-      count: number
-      lastDate: string
-    }> = []
-
-    expensesByDescription.forEach((occurrences, description) => {
-      if (occurrences.length > 1) {
-        // Ordenar por fecha
-        occurrences.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        
-        // Calcular frecuencia promedio
-        const dates = occurrences.map(o => new Date(o.date).getTime())
-        const intervals: number[] = []
-        for (let i = 1; i < dates.length; i++) {
-          intervals.push(dates[i] - dates[i - 1])
-        }
-        const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length
-        const avgIntervalDays = avgInterval / (1000 * 60 * 60 * 24)
-        
-        let frequency = 'Variable'
-        if (avgIntervalDays >= 25 && avgIntervalDays <= 35) {
-          frequency = 'Mensual'
-        } else if (avgIntervalDays >= 85 && avgIntervalDays <= 95) {
-          frequency = 'Trimestral'
-        } else if (avgIntervalDays >= 175 && avgIntervalDays <= 185) {
-          frequency = 'Semestral'
-        } else if (avgIntervalDays >= 360 && avgIntervalDays <= 370) {
-          frequency = 'Anual'
-        }
-
-        const averageAmount = occurrences.reduce((sum, o) => sum + o.amount, 0) / occurrences.length
-
-        recurringExpenses.push({
-          description,
-          frequency,
-          averageAmount,
-          count: occurrences.length,
-          lastDate: new Date(occurrences[occurrences.length - 1].date).toISOString()
-        })
-      }
-    })
-
-    // Ordenar gastos recurrentes por frecuencia de ocurrencia
-    recurringExpenses.sort((a, b) => b.count - a.count)
+    const recurringItems = detectRecurringExpenses(
+      normalizedExpensesBase.map((e) => ({
+        description: e.description,
+        amount: -e.amount,
+        date: e.date,
+      }))
+    )
+    const recurringSummary = recurringExpensesSummary(recurringItems)
+    const recurringExpenses = {
+      ...recurringSummary,
+      items: recurringItems,
+    }
 
     // Obtener facturas en el mismo rango de fechas (por fecha de emisión)
     const invoicesRaw = await prisma.invoice.findMany({
@@ -362,7 +308,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         expenses: [],
-        recurringExpenses: [],
+        recurringExpenses: { monthly_total: 0, annual_total: 0, count: 0, items: [] },
         invoices: [],
         unmatchedExpenses: [],
         totalVat: 0,
@@ -583,7 +529,7 @@ export default function ExpensesPage({
 
   // Calcular totales
   const expensesTotal = displayExpenses.reduce((sum, e) => sum + e.amount, 0)
-  const recurringTotal = recurringExpenses.reduce((sum, r) => sum + r.averageAmount, 0)
+  const recurringTotal = recurringExpenses.monthly_total
   const matchedExpenses = displayExpenses.filter((e) => e.matched)
   const unmatchedExpensesAll = displayExpenses.filter((e) => !e.matched)
   const matchedTotal = matchedExpenses.reduce((sum, e) => sum + e.amount, 0)
@@ -643,6 +589,35 @@ export default function ExpensesPage({
               <p className="text-sm font-medium text-gray-500 mb-2">IRPF Acumulado (Gastos)</p>
               <p className="text-2xl font-semibold text-gray-900">{formatCurrency(totalIrpf)}</p>
               <p className="text-xs text-gray-400 mt-1">Suma de IRPF de todas las facturas de gasto</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card className="border border-gray-200 shadow-sm lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Gastos recurrentes detectados</CardTitle>
+              <p className="text-xs text-gray-400 font-normal">
+                Agrupados por proveedor · {formatCurrency(recurringTotal)}/mes en total
+              </p>
+            </CardHeader>
+            <CardContent>
+              <RecurringExpensesPanel data={recurringExpenses} compact />
+            </CardContent>
+          </Card>
+          <Card className="border border-gray-200 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Ahorro potencial</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-gray-600">
+              <p>
+                Si cancelaras todos los servicios recurrentes detectados, ahorrarías aproximadamente{' '}
+                <span className="font-semibold text-gray-900">{formatCurrency(recurringTotal)}/mes</span>{' '}
+                ({formatCurrency(recurringExpenses.annual_total)}/año).
+              </p>
+              <p className="text-xs text-gray-400">
+                Revisa cada línea: nóminas e impuestos no son “cortables”, pero SaaS e infra sí.
+              </p>
             </CardContent>
           </Card>
         </div>

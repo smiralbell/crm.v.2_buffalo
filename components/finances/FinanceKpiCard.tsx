@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
 import type { RichKpiCard } from '@/lib/finance/types'
+import FinanceInfoTip from './FinanceInfoTip'
 
 export default function FinanceKpiCard({ card }: { card: RichKpiCard }) {
   return (
@@ -10,7 +11,10 @@ export default function FinanceKpiCard({ card }: { card: RichKpiCard }) {
         card.accent === 'warning' && 'border-gray-300'
       )}
     >
-      <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">{card.title}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">{card.title}</p>
+        {card.help && <FinanceInfoTip text={card.help} />}
+      </div>
       <p className="text-xl font-bold text-gray-900 mt-1 tabular-nums">{card.primary}</p>
       <dl className="mt-3 space-y-1.5 flex-1">
         {card.rows.map((row) => (
