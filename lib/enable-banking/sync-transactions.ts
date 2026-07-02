@@ -5,14 +5,16 @@ import {
   extractOwnAccountIban,
   getAccountBalances,
   getAccountDetails,
-  getAllAccountTransactions,
+  getIncrementalAccountTransactions,
 } from './client'
 import {
   normalizeIban,
   parseEbTransactions,
   resignAmountsFromBalanceSeries,
 } from './parse-transactions'
-import { getLatestBankTestSession } from './session-store'
+import { getLatestBankTestSession, updateBankLastSyncedAt } from './session-store'
+import { fetchSampleMonthApiDebug, type BankApiDebugSample } from './sync-debug'
+import { BANK_SYNC_MARGIN_DAYS, computeSyncFromDate } from './sync-window'
 
 function normalizeDescription(description: string): string {
   return description.trim().toUpperCase().replace(/\s+/g, ' ')
@@ -177,7 +179,11 @@ async function repairFromStoredBalances(accountId: string): Promise<number> {
   return repaired
 }
 
-async function syncOneAccount(accountUid: string): Promise<{
+async function syncOneAccount(
+  accountUid: string,
+  syncFrom: string,
+  apiDebugSample: BankApiDebugSample | null
+): Promise<{
   inserted: number
   duplicates: number
   total: number
@@ -190,6 +196,7 @@ async function syncOneAccount(accountUid: string): Promise<{
   pages_fetched: number
   truncated: boolean
   passes: Array<{ name: string; count: number; pages: number }>
+  api_debug_sample: BankApiDebugSample | null
 }> {
   const accountId = await getOrCreateEnableBankingAccount(accountUid)
   const dbBefore = await getDbDateRange(accountId)
@@ -197,7 +204,7 @@ async function syncOneAccount(accountUid: string): Promise<{
   const [detailsRaw, balancesRaw, fetchResult] = await Promise.all([
     getAccountDetails(accountUid).catch(() => null),
     getAccountBalances(accountUid).catch(() => null),
-    getAllAccountTransactions(accountUid, { sinceDate: dbBefore.newest }),
+    getIncrementalAccountTransactions(accountUid, syncFrom),
   ])
 
   const ownIban = extractOwnAccountIban(detailsRaw)
@@ -226,6 +233,7 @@ async function syncOneAccount(accountUid: string): Promise<{
       pages_fetched: fetchResult.pages,
       truncated: fetchResult.truncated,
       passes: fetchResult.passes,
+      api_debug_sample: apiDebugSample,
     }
   }
 
@@ -344,6 +352,7 @@ async function syncOneAccount(accountUid: string): Promise<{
     pages_fetched: fetchResult.pages,
     truncated: fetchResult.truncated,
     passes: fetchResult.passes,
+    api_debug_sample: apiDebugSample,
   }
 }
 
@@ -376,10 +385,41 @@ export async function syncEnableBankingTransactions(): Promise<{
   truncated: boolean
   accounts_synced: number
   passes: Array<{ name: string; count: number; pages: number }>
+  sync_from: string
+  sync_to: string
+  last_synced_at_before: string | null
+  last_synced_at_after: string
+  margin_days: number
+  anchor_source: 'last_sync' | 'session_created'
+  api_debug_sample: BankApiDebugSample | null
 }> {
   const session = await getLatestBankTestSession()
   if (!session) {
     throw new Error('No hay conexión bancaria activa')
+  }
+
+  const window = computeSyncFromDate(session.last_synced_at, session.created_at)
+  const lastSyncedBefore = session.last_synced_at?.toISOString() ?? null
+
+  let apiDebugSample: BankApiDebugSample | null = null
+  try {
+    apiDebugSample = await fetchSampleMonthApiDebug(session.account_uid)
+    console.info(
+      '[enable-banking] sample month debug',
+      JSON.stringify(
+        {
+          month: apiDebugSample.month_label,
+          keys: apiDebugSample.first_page.top_level_keys,
+          tx_count: apiDebugSample.first_page.transaction_count,
+          tx_fields: apiDebugSample.sample_transaction_keys,
+          preview: apiDebugSample.all_transactions_preview,
+        },
+        null,
+        2
+      )
+    )
+  } catch (err) {
+    console.warn('[enable-banking] sample month debug failed:', err)
   }
 
   const accountUids = session.account_uids.length > 0 ? session.account_uids : [session.account_uid]
@@ -398,7 +438,7 @@ export async function syncEnableBankingTransactions(): Promise<{
   const allPasses: Array<{ name: string; count: number; pages: number }> = []
 
   for (const uid of accountUids) {
-    const r = await syncOneAccount(uid)
+    const r = await syncOneAccount(uid, window.from, uid === session.account_uid ? apiDebugSample : null)
     inserted += r.inserted
     duplicates += r.duplicates
     total += r.total
@@ -421,6 +461,9 @@ export async function syncEnableBankingTransactions(): Promise<{
     }
   }
 
+  const syncedAt = new Date()
+  await updateBankLastSyncedAt(session.id, syncedAt)
+
   return {
     inserted,
     updated: 0,
@@ -438,5 +481,12 @@ export async function syncEnableBankingTransactions(): Promise<{
     truncated,
     accounts_synced: accountUids.length,
     passes: allPasses,
+    sync_from: window.from,
+    sync_to: new Date().toISOString().slice(0, 10),
+    last_synced_at_before: lastSyncedBefore,
+    last_synced_at_after: syncedAt.toISOString(),
+    margin_days: BANK_SYNC_MARGIN_DAYS,
+    anchor_source: window.anchor_source,
+    api_debug_sample: apiDebugSample,
   }
 }

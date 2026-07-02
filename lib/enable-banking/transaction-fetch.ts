@@ -1,4 +1,3 @@
-import { FINANCE_BANK_MIN_DATE } from '@/lib/finance/period-presets'
 import { getAccountTransactions, EnableBankingApiError } from './client'
 
 type RawTx = {
@@ -15,6 +14,8 @@ export interface FetchAllTransactionsResult {
   pages: number
   truncated: boolean
   passes: Array<{ name: string; count: number; pages: number; truncated?: boolean }>
+  date_from: string
+  date_to: string
 }
 
 function txDedupKey(tx: unknown): string {
@@ -35,7 +36,7 @@ type PageParams = {
 async function paginateTransactions(
   accountUid: string,
   firstPageParams: PageParams,
-  maxPages = 200
+  maxPages = 100
 ): Promise<{ transactions: unknown[]; pages: number; truncated: boolean }> {
   const out: unknown[] = []
   let continuationKey: string | undefined
@@ -65,172 +66,75 @@ async function paginateTransactions(
   }
 }
 
-async function safePaginate(
-  accountUid: string,
-  name: string,
-  params: PageParams,
-  maxPages = 200
-): Promise<{
-  name: string
-  transactions: unknown[]
-  pages: number
-  truncated: boolean
-}> {
-  try {
-    const r = await paginateTransactions(accountUid, params, maxPages)
-    return { name, ...r }
-  } catch (err) {
-    if (err instanceof EnableBankingApiError) {
-      console.warn(`[enable-banking] pass "${name}" failed:`, err.message)
-      return { name, transactions: [], pages: 0, truncated: false }
-    }
-    throw err
-  }
-}
-
-function mergeTransactions(batches: unknown[][]): unknown[] {
-  const map = new Map<string, unknown>()
-  for (const batch of batches) {
-    for (const tx of batch) {
-      map.set(txDedupKey(tx), tx)
-    }
-  }
-  return Array.from(map.values())
-}
-
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-/** Rangos mensuales [from, to] inclusivos para no perder historial por límite de páginas */
-function buildMonthlyRanges(fromIso: string, toIso: string): Array<{ from: string; to: string; label: string }> {
-  const ranges: Array<{ from: string; to: string; label: string }> = []
-  const start = new Date(fromIso)
-  const end = new Date(toIso)
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return ranges
+/**
+ * Sync incremental: solo movimientos desde dateFrom (con margen ya aplicado) hasta hoy.
+ */
+export async function getIncrementalAccountTransactions(
+  accountUid: string,
+  dateFrom: string
+): Promise<FetchAllTransactionsResult> {
+  const today = isoDate(new Date())
 
-  let y = start.getFullYear()
-  let m = start.getMonth()
+  let transactions: unknown[] = []
+  let pages = 0
+  let truncated = false
 
-  while (true) {
-    const monthStart = new Date(y, m, 1)
-    if (monthStart > end) break
-
-    const monthEnd = new Date(y, m + 1, 0)
-    const rangeEnd = monthEnd > end ? end : monthEnd
-
-    ranges.push({
-      from: isoDate(monthStart),
-      to: isoDate(rangeEnd),
-      label: `${y}-${String(m + 1).padStart(2, '0')}`,
-    })
-
-    m++
-    if (m > 11) {
-      m = 0
-      y++
+  try {
+    const r = await paginateTransactions(
+      accountUid,
+      { strategy: 'default', date_from: dateFrom, date_to: today },
+      100
+    )
+    transactions = r.transactions
+    pages = r.pages
+    truncated = r.truncated
+  } catch (err) {
+    if (err instanceof EnableBankingApiError) {
+      console.warn(`[enable-banking] incremental ${dateFrom}→${today} failed:`, err.message)
+    } else {
+      throw err
     }
   }
 
-  return ranges
+  const dates = (transactions as RawTx[])
+    .map((t) => t.booking_date || t.value_date || t.transaction_date || '')
+    .filter(Boolean)
+    .sort()
+
+  console.info(
+    `[enable-banking] incremental sync ${dateFrom} → ${today}: ` +
+      `${transactions.length} txs, ${pages} pages, truncated=${truncated}, ` +
+      `api range ${dates[0] ?? '—'} → ${dates[dates.length - 1] ?? '—'}`
+  )
+
+  return {
+    transactions,
+    pages,
+    truncated,
+    date_from: dateFrom,
+    date_to: today,
+    passes: [
+      {
+        name: 'incremental',
+        count: transactions.length,
+        pages,
+        truncated,
+      },
+    ],
+  }
 }
 
-/**
- * Descarga todo el historial disponible desde FINANCE_BANK_MIN_DATE:
- * 1) strategy=longest (máximo historial del banco)
- * 2) Un pase por cada mes (evita truncar por paginación en rangos largos)
- */
+/** @deprecated usar getIncrementalAccountTransactions */
 export async function getAllAccountTransactions(
   accountUid: string,
   options?: { sinceDate?: string | null }
 ): Promise<FetchAllTransactionsResult> {
-  const today = isoDate(new Date())
-  const fromHistory = FINANCE_BANK_MIN_DATE
-
-  const passes: FetchAllTransactionsResult['passes'] = []
-  const batches: unknown[][] = []
-  let totalPages = 0
-  let truncated = false
-
-  const longest = await safePaginate(
-    accountUid,
-    'longest',
-    { strategy: 'longest', date_from: fromHistory },
-    500
-  )
-  batches.push(longest.transactions)
-  passes.push({
-    name: 'longest',
-    count: longest.transactions.length,
-    pages: longest.pages,
-    truncated: longest.truncated,
-  })
-  totalPages += longest.pages
-  truncated = truncated || longest.truncated
-
-  const months = buildMonthlyRanges(fromHistory, today)
-  for (const month of months) {
-    const pass = await safePaginate(
-      accountUid,
-      `month_${month.label}`,
-      {
-        strategy: 'default',
-        date_from: month.from,
-        date_to: month.to,
-      },
-      80
-    )
-    batches.push(pass.transactions)
-    passes.push({
-      name: pass.name,
-      count: pass.transactions.length,
-      pages: pass.pages,
-      truncated: pass.truncated,
-    })
-    totalPages += pass.pages
-    truncated = truncated || pass.truncated
-  }
-
-  if (options?.sinceDate) {
-    const fromDb = isoDate(new Date(new Date(options.sinceDate).getTime() - 14 * 24 * 60 * 60 * 1000))
-    const incremental = await safePaginate(
-      accountUid,
-      'incremental',
-      {
-        strategy: 'default',
-        date_from: fromDb,
-        date_to: today,
-      },
-      100
-    )
-    batches.push(incremental.transactions)
-    passes.push({
-      name: 'incremental',
-      count: incremental.transactions.length,
-      pages: incremental.pages,
-      truncated: incremental.truncated,
-    })
-    totalPages += incremental.pages
-    truncated = truncated || incremental.truncated
-  }
-
-  const merged = mergeTransactions(batches)
-
-  if (merged.length > 0) {
-    const dates = (merged as RawTx[])
-      .map((t) => t.booking_date || t.value_date || t.transaction_date || '')
-      .filter(Boolean)
-      .sort()
-    console.info(
-      `[enable-banking] fetched ${merged.length} txs, ${passes.length} passes, ` +
-        `range ${dates[0] ?? '?'} → ${dates[dates.length - 1] ?? '?'}, truncated=${truncated}`
-    )
-  }
-
-  return {
-    transactions: merged,
-    pages: totalPages,
-    truncated,
-    passes,
-  }
+  const from = options?.sinceDate
+    ? isoDate(new Date(new Date(options.sinceDate).getTime() - 2 * 24 * 60 * 60 * 1000))
+    : isoDate(new Date(Date.now() - 31 * 24 * 60 * 60 * 1000))
+  return getIncrementalAccountTransactions(accountUid, from)
 }

@@ -6,6 +6,7 @@ export interface BankTestSession {
   account_uids: string[]
   valid_until: Date
   created_at: Date
+  last_synced_at: Date | null
 }
 
 function parseAccountUids(primary: string, raw: string | null | undefined): string[] {
@@ -22,6 +23,34 @@ function parseAccountUids(primary: string, raw: string | null | undefined): stri
   return [primary]
 }
 
+function parseLastSynced(raw: unknown): Date | null {
+  if (!raw) return null
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw
+  if (typeof raw === 'string') {
+    const d = new Date(raw)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  return null
+}
+
+function mapSessionRow(row: {
+  id: string
+  account_uid: string
+  account_uids?: string | null
+  valid_until: Date
+  created_at: Date
+  last_synced_at?: Date | null
+}): BankTestSession {
+  return {
+    id: row.id,
+    account_uid: row.account_uid,
+    account_uids: parseAccountUids(row.account_uid, row.account_uids),
+    valid_until: row.valid_until instanceof Date ? row.valid_until : new Date(row.valid_until),
+    created_at: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+    last_synced_at: parseLastSynced(row.last_synced_at),
+  }
+}
+
 export async function saveBankTestSession(
   accountUids: string | string[],
   validUntil: Date
@@ -34,21 +63,22 @@ export async function saveBankTestSession(
 
   try {
     const rows = await prisma.$queryRaw<
-      { id: string; account_uid: string; account_uids: string | null; valid_until: Date; created_at: Date }[]
+      {
+        id: string
+        account_uid: string
+        account_uids: string | null
+        valid_until: Date
+        created_at: Date
+        last_synced_at: Date | null
+      }[]
     >`
-      INSERT INTO bank_connections (account_uid, account_uids, valid_until)
-      VALUES (${primary}, ${JSON.stringify(uids)}, ${validUntil})
-      RETURNING id, account_uid, account_uids, valid_until, created_at
+      INSERT INTO bank_connections (account_uid, account_uids, valid_until, last_synced_at)
+      VALUES (${primary}, ${JSON.stringify(uids)}, ${validUntil}, NOW())
+      RETURNING id, account_uid, account_uids, valid_until, created_at, last_synced_at
     `
     const row = rows[0]
     if (!row) throw new Error('No se pudo guardar la conexión bancaria')
-    return {
-      id: row.id,
-      account_uid: row.account_uid,
-      account_uids: parseAccountUids(row.account_uid, row.account_uids),
-      valid_until: row.valid_until instanceof Date ? row.valid_until : new Date(row.valid_until),
-      created_at: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
-    }
+    return mapSessionRow(row)
   } catch {
     const rows = await prisma.$queryRaw<
       { id: string; account_uid: string; valid_until: Date; created_at: Date }[]
@@ -60,11 +90,9 @@ export async function saveBankTestSession(
     const row = rows[0]
     if (!row) throw new Error('No se pudo guardar la conexión bancaria')
     return {
-      id: row.id,
-      account_uid: row.account_uid,
+      ...mapSessionRow({ ...row, account_uids: null }),
       account_uids: uids,
-      valid_until: row.valid_until instanceof Date ? row.valid_until : new Date(row.valid_until),
-      created_at: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+      last_synced_at: new Date(),
     }
   }
 }
@@ -76,11 +104,12 @@ export async function getLatestBankTestSession(): Promise<BankTestSession | null
     account_uids?: string | null
     valid_until: Date
     created_at: Date
+    last_synced_at?: Date | null
   }>
 
   try {
     rows = await prisma.$queryRaw`
-      SELECT id, account_uid, account_uids, valid_until, created_at
+      SELECT id, account_uid, account_uids, valid_until, created_at, last_synced_at
       FROM bank_connections
       ORDER BY created_at DESC
       LIMIT 1
@@ -101,12 +130,16 @@ export async function getLatestBankTestSession(): Promise<BankTestSession | null
     row.valid_until instanceof Date ? row.valid_until : new Date(row.valid_until)
   if (validUntil.getTime() <= Date.now()) return null
 
-  return {
-    id: row.id,
-    account_uid: row.account_uid,
-    account_uids: parseAccountUids(row.account_uid, row.account_uids),
-    valid_until: validUntil,
-    created_at: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
+  return mapSessionRow(row)
+}
+
+export async function updateBankLastSyncedAt(connectionId: string, at: Date): Promise<void> {
+  try {
+    await prisma.$executeRaw`
+      UPDATE bank_connections SET last_synced_at = ${at} WHERE id = ${connectionId}::uuid
+    `
+  } catch (err) {
+    console.warn('[bank] no se pudo guardar last_synced_at (¿columna pendiente de migrar?)', err)
   }
 }
 

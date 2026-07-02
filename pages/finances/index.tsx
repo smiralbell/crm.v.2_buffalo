@@ -306,6 +306,7 @@ export default function FinancesDashboard({
   const [connecting, setConnecting] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  const [syncDebug, setSyncDebug] = useState<Record<string, unknown> | null>(null)
   const [executive, setExecutive] = useState<ExecutiveSummary | null>(null)
   const [loadingExecutive, setLoadingExecutive] = useState(true)
   const [transactions, setTransactions] = useState<Array<{
@@ -326,16 +327,34 @@ export default function FinancesDashboard({
   const runSync = useCallback(async (reloadAfter = false) => {
     setSyncing(true)
     setSyncMessage(null)
+    setSyncDebug(null)
     try {
       const response = await fetch('/api/bank/sync', { method: 'POST' })
       const data = await response.json()
       if (!response.ok) {
-        // No mostrar errores de API (p. ej. límite de consentimiento HUB046) en la UI
         if (process.env.NODE_ENV === 'development') {
           console.warn('[bank/sync]', data.message || data.error)
         }
         return false
       }
+
+      if (data.api_debug_sample) {
+        console.info('[bank/sync] muestra API mes anterior:', data.api_debug_sample)
+      }
+      if (data.sync_from) {
+        console.info(
+          `[bank/sync] incremental ${data.sync_from} → ${data.sync_to} ` +
+            `(margen ${data.margin_days}d, ancla: ${data.anchor_source})`
+        )
+      }
+
+      const sample = data.api_debug_sample as {
+        month_label?: string
+        first_page?: { transaction_count?: number; top_level_keys?: string[] }
+        sample_transaction_keys?: string[]
+        all_transactions_preview?: unknown[]
+      } | null
+
       if (data.inserted > 0) {
         let msg = `${data.inserted} movimientos nuevos sincronizados`
         const newest = data.db_newest || data.newest_date
@@ -343,8 +362,11 @@ export default function FinancesDashboard({
         if (oldest && newest) {
           msg += ` · del ${format(new Date(oldest), 'dd/MM/yyyy')} al ${format(new Date(newest), 'dd/MM/yyyy')}`
         }
+        if (data.sync_from) {
+          msg += ` · pedido desde ${format(new Date(data.sync_from), 'dd/MM/yyyy')}`
+        }
         if (data.truncated) {
-          msg += ' · advertencia: puede haber más historial (paginación incompleta)'
+          msg += ' · advertencia: paginación incompleta'
         }
         setSyncMessage(msg)
       } else if (data.total > 0) {
@@ -353,13 +375,18 @@ export default function FinancesDashboard({
         if (oldest && newest) {
           setSyncMessage(
             `${data.total} movimientos en banco · ${format(new Date(oldest), 'dd/MM/yyyy')} – ${format(new Date(newest), 'dd/MM/yyyy')}` +
-              (data.truncated ? ' · revisa si falta historial antiguo' : '')
+              (data.sync_from ? ` · pedido desde ${format(new Date(data.sync_from), 'dd/MM/yyyy')}` : '')
           )
         }
       } else if (data.db_oldest && data.db_newest) {
         setSyncMessage(
           `Historial en BD: ${format(new Date(data.db_oldest), 'dd/MM/yyyy')} – ${format(new Date(data.db_newest), 'dd/MM/yyyy')}` +
+            (data.sync_from ? ` · sync desde ${format(new Date(data.sync_from), 'dd/MM/yyyy')}` : '') +
             (data.inserted === 0 ? ' (sin movimientos nuevos)' : '')
+        )
+      } else if (data.sync_from) {
+        setSyncMessage(
+          `Sync incremental desde ${format(new Date(data.sync_from), 'dd/MM/yyyy')} · sin movimientos nuevos`
         )
       } else if (data.db_newest || data.newest_date) {
         const newest = data.db_newest || data.newest_date
@@ -371,6 +398,24 @@ export default function FinancesDashboard({
         if (data.repaired > 0) parts.push(`${data.repaired} corregidos`)
         if (data.balance_repaired > 0) parts.push(`${data.balance_repaired} por saldo`)
         setSyncMessage(`Movimientos ${parts.join(', ')} (ingreso/gasto)`)
+      }
+
+      setSyncDebug({
+        sync_from: data.sync_from,
+        sync_to: data.sync_to,
+        margin_days: data.margin_days,
+        anchor_source: data.anchor_source,
+        last_synced_at_before: data.last_synced_at_before,
+        last_synced_at_after: data.last_synced_at_after,
+        api_debug_sample: data.api_debug_sample,
+        passes: data.passes,
+      })
+
+      if (sample?.month_label && !data.inserted && !data.total) {
+        setSyncMessage((prev) =>
+          prev ??
+          `Muestra API mes ${sample.month_label}: ${sample.first_page?.transaction_count ?? 0} movimientos en 1ª página`
+        )
       }
       if (
         reloadAfter ||
@@ -599,6 +644,16 @@ export default function FinancesDashboard({
                 </p>
               )}
               {syncMessage && <p className="text-green-700">{syncMessage}</p>}
+              {syncDebug && (
+                <details className="w-full text-left text-[11px] text-gray-600">
+                  <summary className="cursor-pointer text-violet-700 font-medium">
+                    Ver logs sync / muestra API (mes anterior)
+                  </summary>
+                  <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-gray-50 p-3 text-[10px] leading-relaxed">
+                    {JSON.stringify(syncDebug, null, 2)}
+                  </pre>
+                </details>
+              )}
             </div>
           ) : null}
         </div>

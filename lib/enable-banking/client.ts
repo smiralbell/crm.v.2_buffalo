@@ -172,7 +172,7 @@ export interface FetchAllTransactionsResult {
   passes: Array<{ name: string; count: number; pages: number }>
 }
 
-export { getAllAccountTransactions } from './transaction-fetch'
+export { getAllAccountTransactions, getIncrementalAccountTransactions } from './transaction-fetch'
 
 export function extractOwnAccountIban(details: unknown): string | null {
   if (!details || typeof details !== 'object') return null
