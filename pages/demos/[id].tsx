@@ -417,7 +417,7 @@ export default function DemoDetailPage() {
                 <CardContent className="space-y-4">
                   <div
                     className="rounded-xl border border-gray-200 p-4"
-                    style={{ backgroundColor: formBranding.color_secondary }}
+                    style={{ backgroundColor: formBranding.color_primary }}
                   >
                     <p className="mb-3 text-xs font-medium text-gray-500">Vista previa del diseño</p>
                     <div className="flex items-center gap-4">
@@ -429,10 +429,10 @@ export default function DemoDetailPage() {
                           className="h-10 max-w-[120px] object-contain"
                         />
                       ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/80">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20">
                           <PhoneCall
                             className="h-5 w-5"
-                            style={{ color: formBranding.color_primary }}
+                            style={{ color: formBranding.color_secondary }}
                           />
                         </div>
                       )}
@@ -441,17 +441,25 @@ export default function DemoDetailPage() {
                           <div
                             className="h-8 w-8 rounded-lg border border-gray-200"
                             style={{ backgroundColor: formBranding.color_primary }}
-                            title="Color principal"
+                            title="Fondo"
                           />
-                          <p className="mt-1 font-mono text-[10px] text-gray-500">Principal</p>
+                          <p className="mt-1 font-mono text-[10px] text-gray-500">Fondo</p>
+                        </div>
+                        <div className="text-center">
+                          <div
+                            className="h-8 w-8 rounded-lg border border-gray-200"
+                            style={{ backgroundColor: formBranding.color_text }}
+                            title="Texto"
+                          />
+                          <p className="mt-1 font-mono text-[10px] text-gray-500">Texto</p>
                         </div>
                         <div className="text-center">
                           <div
                             className="h-8 w-8 rounded-lg border border-gray-200"
                             style={{ backgroundColor: formBranding.color_secondary }}
-                            title="Color secundario"
+                            title="Botón"
                           />
-                          <p className="mt-1 font-mono text-[10px] text-gray-500">Secundario</p>
+                          <p className="mt-1 font-mono text-[10px] text-gray-500">Botón</p>
                         </div>
                       </div>
                     </div>

@@ -15,7 +15,7 @@ import type {
   OutboundFormBrandingRef,
   OutboundFormFieldRef,
 } from '@/lib/demos/types'
-import { DEFAULT_OUTBOUND_FORM_BRANDING, FORM_FONT_OPTIONS, resolveFormFontFamily, type FormFontId } from '@/lib/demos/form-branding'
+import { DEFAULT_OUTBOUND_FORM_BRANDING, FORM_FONT_OPTIONS, normalizeOutboundFormBranding, resolveFormFontFamily, type FormFontId } from '@/lib/demos/form-branding'
 import { RETELL_OUTBOUND_VAR_KEYS } from '@/lib/demos/outbound-form'
 import { Check, Copy, Link2, Lock, Palette } from 'lucide-react'
 
@@ -101,7 +101,7 @@ export default function DemoOutboundFormConfigDialog({
     setStep(initialStep)
     setFields(initialFields)
     setAccess(initialAccess)
-    setBranding(initialBranding)
+    setBranding(normalizeOutboundFormBranding(initialBranding))
     setPassword('')
     setPasswordConfirm('')
     setError('')
@@ -352,23 +352,29 @@ export default function DemoOutboundFormConfigDialog({
               <Input
                 value={branding.logo_url ?? ''}
                 onChange={(e) =>
-                  setBranding((b) => ({ ...b, logo_url: e.target.value.trim() || null }))
+                  setBranding((b) => ({ ...b, logo_url: e.target.value || null }))
                 }
-                placeholder="https://tu-cliente.com/logo.png"
-                className="rounded-xl"
+                placeholder="https://…/logo.png"
+                className="rounded-xl font-mono text-xs"
               />
               <p className="text-xs text-gray-500">
-                Pega la URL pública de la imagen (PNG, JPG o SVG).
+                Pega un enlace directo a la imagen (URL pública, incl. enlaces firmados de
+                Google Drive, Cloud Storage, etc.).
               </p>
             </div>
 
             <ColorField
-              label="Color principal"
+              label="Color de fondo"
               value={branding.color_primary}
               onChange={(v) => setBranding((b) => ({ ...b, color_primary: v }))}
             />
             <ColorField
-              label="Color secundario"
+              label="Color de texto"
+              value={branding.color_text}
+              onChange={(v) => setBranding((b) => ({ ...b, color_text: v }))}
+            />
+            <ColorField
+              label="Color de botón"
               value={branding.color_secondary}
               onChange={(v) => setBranding((b) => ({ ...b, color_secondary: v }))}
             />
@@ -393,13 +399,14 @@ export default function DemoOutboundFormConfigDialog({
             <div
               className="rounded-xl border border-gray-200 p-4 text-center"
               style={{
-                backgroundColor: branding.color_secondary,
+                backgroundColor: branding.color_primary,
+                color: branding.color_text,
                 fontFamily: resolveFormFontFamily(
                   (branding.font_id || 'system') as FormFontId
                 ),
               }}
             >
-              <p className="mb-3 text-xs font-medium text-gray-500">Vista previa</p>
+              <p className="mb-3 text-xs font-medium opacity-70">Vista previa</p>
               {branding.logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -411,11 +418,14 @@ export default function DemoOutboundFormConfigDialog({
                   }}
                 />
               ) : null}
-              <p className="text-sm font-semibold text-gray-900">{demoNombre}</p>
-              <div className="mx-auto mt-3 max-w-xs rounded-xl border border-gray-200/80 bg-white p-3 shadow-sm">
+              <p className="text-sm font-semibold">{demoNombre}</p>
+              <div
+                className="mx-auto mt-3 max-w-xs rounded-xl border p-3"
+                style={{ borderColor: `${branding.color_text}22` }}
+              >
                 <div
                   className="inline-block rounded-lg px-4 py-2 text-xs font-medium text-white"
-                  style={{ backgroundColor: branding.color_primary }}
+                  style={{ backgroundColor: branding.color_secondary }}
                 >
                   Botón de ejemplo
                 </div>

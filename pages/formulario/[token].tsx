@@ -133,7 +133,7 @@ export default function PublicFormularioPage() {
         {gate === 'password' && (
           <form onSubmit={submitPassword} className="space-y-4">
             <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Lock className="h-4 w-4" style={{ color: branding.color_primary }} />
+              <Lock className="h-4 w-4" style={{ color: branding.color_secondary }} />
               Introduce la contraseña que te han facilitado para acceder.
             </div>
             <div className="space-y-1.5">

@@ -22,7 +22,8 @@ export default function PublicFormShell({ nombreCliente, branding, children }: P
       className="min-h-screen px-4 py-10"
       style={{
         ...cssVars,
-        backgroundColor: branding.color_secondary,
+        backgroundColor: branding.color_primary,
+        color: branding.color_text,
         fontFamily,
       }}
     >
@@ -38,16 +39,24 @@ export default function PublicFormShell({ nombreCliente, branding, children }: P
               />
             </div>
           ) : (
-            <div
-              className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/80"
-            >
-              <PhoneCall className="h-6 w-6" style={{ color: branding.color_primary }} />
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20">
+              <PhoneCall className="h-6 w-6" style={{ color: branding.color_secondary }} />
             </div>
           )}
-          <h1 className="text-xl font-semibold text-gray-900">{nombreCliente}</h1>
+          <h1 className="text-xl font-semibold" style={{ color: branding.color_text }}>
+            {nombreCliente}
+          </h1>
         </div>
 
-        <div className="rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm">{children}</div>
+        <div
+          className="rounded-2xl border p-6 shadow-sm"
+          style={{
+            borderColor: `${branding.color_text}22`,
+            backgroundColor: `${branding.color_text}08`,
+          }}
+        >
+          {children}
+        </div>
       </div>
     </div>
   )
@@ -71,13 +80,13 @@ export function PublicFormButton({
       onClick={onClick}
       className="inline-flex h-10 w-full items-center justify-center rounded-xl px-4 text-sm font-medium text-white transition-opacity disabled:opacity-50"
       style={{
-        backgroundColor: 'var(--form-primary)',
+        backgroundColor: 'var(--form-accent)',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = 'var(--form-primary-hover)'
+        e.currentTarget.style.backgroundColor = 'var(--form-accent-hover)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = 'var(--form-primary)'
+        e.currentTarget.style.backgroundColor = 'var(--form-accent)'
       }}
     >
       {children}

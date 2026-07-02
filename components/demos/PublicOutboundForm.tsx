@@ -81,7 +81,7 @@ export default function PublicOutboundForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} className="space-y-4" style={{ color: branding.color_text }}>
       <div className="grid gap-4 sm:grid-cols-2">
         {fields.map((field) => {
           const isPhone = field.key === 'telefono'
@@ -106,7 +106,7 @@ export default function PublicOutboundForm({
                   {isPhone && (
                     <Phone
                       className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
-                      style={{ color: branding.color_primary }}
+                      style={{ color: branding.color_secondary }}
                     />
                   )}
                   <Input

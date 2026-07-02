@@ -25,8 +25,9 @@ const fieldSchema = z.object({
 })
 
 const brandingSchema = z.object({
-  logo_url: z.string().max(2000).nullable().optional(),
+  logo_url: z.string().max(4000).nullable().optional(),
   color_primary: z.string().max(20),
+  color_text: z.string().max(20),
   color_secondary: z.string().max(20),
   font_id: z.string().max(40).optional(),
 })
@@ -90,6 +91,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           normalizeOutboundFormBranding({
             logo_url: parsed.branding.logo_url || null,
             color_primary: parsed.branding.color_primary,
+            color_text: parsed.branding.color_text,
             color_secondary: parsed.branding.color_secondary,
             font_id: parsed.branding.font_id,
           })
