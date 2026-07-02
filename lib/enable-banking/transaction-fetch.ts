@@ -107,7 +107,7 @@ export async function getAllAccountTransactions(
   options?: { sinceDate?: string | null }
 ): Promise<FetchAllTransactionsResult> {
   const today = isoDate(new Date())
-  const from90 = isoDate(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000))
+  const fromHistory = '2025-01-01'
 
   const passes: Array<{ name: string; count: number; pages: number }> = []
   const batches: unknown[][] = []
@@ -120,13 +120,13 @@ export async function getAllAccountTransactions(
   totalPages += longest.pages
   truncated = truncated || longest.truncated
 
-  const recent = await safePaginate(accountUid, 'recent_90d', {
+  const recent = await safePaginate(accountUid, 'since_2025', {
     strategy: 'default',
-    date_from: from90,
+    date_from: fromHistory,
     date_to: today,
   })
   batches.push(recent.transactions)
-  passes.push({ name: 'recent_90d', count: recent.transactions.length, pages: recent.pages })
+  passes.push({ name: 'since_2025', count: recent.transactions.length, pages: recent.pages })
   totalPages += recent.pages
   truncated = truncated || recent.truncated
 

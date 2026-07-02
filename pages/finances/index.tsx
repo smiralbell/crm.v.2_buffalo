@@ -676,7 +676,7 @@ export default function FinancesDashboard({
               <Card className="border border-gray-200 shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base font-semibold text-gray-900">MRR por cliente</CardTitle>
-                  <p className="text-xs text-gray-400 font-normal">Proyectos activos con mensualidad</p>
+                  <p className="text-xs text-gray-400 font-normal">Ingresos recurrentes detectados en movimientos bancarios</p>
                 </CardHeader>
                 <CardContent>
                   <MrrByClientChart data={executive.mrr_by_client} />
@@ -706,50 +706,6 @@ export default function FinancesDashboard({
                 </CardContent>
               </Card>
             </div>
-
-            {/* Economía por proyecto */}
-            {executive.project_economics.length > 0 && (
-              <Card className="border border-gray-200 shadow-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-semibold">Rentabilidad por cliente (MRR vs coste operativo)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs text-gray-500 border-b">
-                          <th className="pb-2 pr-4">Proyecto</th>
-                          <th className="pb-2 pr-4 text-right">MRR</th>
-                          <th className="pb-2 pr-4 text-right">Coste LLM+infra</th>
-                          <th className="pb-2 pr-4 text-right">Margen</th>
-                          <th className="pb-2">Señales</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {executive.project_economics.map((p) => (
-                          <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50">
-                            <td className="py-2 pr-4 font-medium text-gray-900">
-                              <Link href={`/retencion/${p.id}`} className="hover:underline">{p.name}</Link>
-                            </td>
-                            <td className="py-2 pr-4 text-right">{formatCurrency(p.monthly_fee_eur)}</td>
-                            <td className="py-2 pr-4 text-right text-gray-600">{formatCurrency(p.total_cost_eur)}</td>
-                            <td className={`py-2 pr-4 text-right font-semibold ${p.margin_pct != null && p.margin_pct < 30 ? 'text-gray-900 underline decoration-gray-300' : 'text-gray-700'}`}>
-                              {p.margin_pct != null ? `${p.margin_pct}%` : '—'}
-                            </td>
-                            <td className="py-2 text-xs text-gray-500">
-                              {p.days_inactive_streak != null && p.days_inactive_streak > 7 && (
-                                <span className="text-amber-600">Inactivo {p.days_inactive_streak}d · </span>
-                              )}
-                              {p.nps_score_avg != null && <span>NPS {p.nps_score_avg}</span>}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </>
         ) : null}
 

@@ -154,10 +154,11 @@ export function buildFinanceAlerts(ctx: AlertContext): FinanceAlert[] {
     alerts.push({
       id: 'no-recurring',
       priority: 'medium',
-      title: 'Sin MRR registrado',
-      message: 'No hay proyectos con mensualidad. Activa clientes en Retención o registra fees en proyectos.',
-      action_label: 'Retención',
-      action_href: '/retencion',
+      title: 'Sin MRR detectado en banco',
+      message:
+        'No hay ingresos recurrentes identificados en movimientos bancarios. Sincroniza el banco o revisa los cobros de mensualidad.',
+      action_label: 'Sincronizar banco',
+      action_href: '/finances',
     })
   }
 

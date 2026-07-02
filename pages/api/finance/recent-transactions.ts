@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { query } from '@/lib/db'
+import { FINANCE_BANK_MIN_DATE } from '@/lib/finance/period-presets'
 
 export default async function handler(
   req: NextApiRequest,
@@ -19,21 +20,14 @@ export default async function handler(
   try {
     const limit = parseInt(req.query.limit as string) || 10
     const offset = parseInt(req.query.offset as string) || 0
-    const startDate = req.query.start_date as string
+    const startDate = (req.query.start_date as string) || FINANCE_BANK_MIN_DATE
     const endDate = req.query.end_date as string
 
-    // Construir query con filtro de fechas si está presente (sin fecha mínima)
-    let dateFilter = ''
-    const queryParams: any[] = []
+    let dateFilter = 'WHERE bt.date >= $1'
+    const queryParams: any[] = [startDate]
 
-    if (startDate && endDate) {
-      dateFilter = 'WHERE bt.date >= $1 AND bt.date <= $2'
-      queryParams.push(startDate, endDate)
-    } else if (startDate) {
-      dateFilter = 'WHERE bt.date >= $1'
-      queryParams.push(startDate)
-    } else if (endDate) {
-      dateFilter = 'WHERE bt.date <= $1'
+    if (endDate) {
+      dateFilter += ' AND bt.date <= $2'
       queryParams.push(endDate)
     }
 

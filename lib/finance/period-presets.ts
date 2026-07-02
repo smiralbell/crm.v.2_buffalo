@@ -11,6 +11,26 @@ import {
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 
+/** Finanzas: no mostrar movimientos anteriores a esta fecha */
+export const FINANCE_BANK_MIN_DATE = '2025-01-01'
+
+export function getFinanceMinDate(): Date {
+  return startOfDay(new Date(FINANCE_BANK_MIN_DATE))
+}
+
+export function clampPeriodStart(start: Date): Date {
+  const min = getFinanceMinDate()
+  const normalized = startOfDay(start)
+  return normalized < min ? min : normalized
+}
+
+export function clampPeriodRange(range: PeriodRange): PeriodRange {
+  return {
+    start: clampPeriodStart(range.start),
+    end: range.end,
+  }
+}
+
 export type PeriodPresetId =
   | '7d'
   | '30d'
@@ -39,7 +59,7 @@ export const PERIOD_PRESETS: Array<{ id: PeriodPresetId; label: string }> = [
 
 export function getDefaultPeriodRange(now = new Date()): PeriodRange {
   return {
-    start: startOfYear(now),
+    start: getFinanceMinDate(),
     end: endOfMonth(now),
   }
 }
@@ -47,27 +67,37 @@ export function getDefaultPeriodRange(now = new Date()): PeriodRange {
 export function getPeriodRangeForPreset(preset: PeriodPresetId, now = new Date()): PeriodRange {
   const today = endOfDay(now)
 
+  let range: PeriodRange
+
   switch (preset) {
     case '7d':
-      return { start: startOfDay(subDays(today, 6)), end: today }
+      range = { start: startOfDay(subDays(today, 6)), end: today }
+      break
     case '30d':
-      return { start: startOfDay(subDays(today, 29)), end: today }
+      range = { start: startOfDay(subDays(today, 29)), end: today }
+      break
     case '90d':
-      return { start: startOfDay(subDays(today, 89)), end: today }
+      range = { start: startOfDay(subDays(today, 89)), end: today }
+      break
     case 'month':
-      return { start: startOfMonth(now), end: endOfMonth(now) }
+      range = { start: startOfMonth(now), end: endOfMonth(now) }
+      break
     case 'prev_month': {
       const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      return { start: startOfMonth(prev), end: endOfMonth(prev) }
+      range = { start: startOfMonth(prev), end: endOfMonth(prev) }
+      break
     }
     case 'quarter':
-      return { start: startOfQuarter(now), end: endOfQuarter(now) }
+      range = { start: startOfQuarter(now), end: endOfQuarter(now) }
+      break
     case 'year':
-      return getDefaultPeriodRange(now)
     case 'custom':
     default:
-      return getDefaultPeriodRange(now)
+      range = getDefaultPeriodRange(now)
+      break
   }
+
+  return clampPeriodRange(range)
 }
 
 export function periodDays(start: Date, end: Date): number {
@@ -112,7 +142,7 @@ export function parsePeriodFromQuery(
     const start = startOfDay(new Date(startParam))
     const end = endOfDay(new Date(endParam))
     if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
-      return { start, end }
+      return clampPeriodRange({ start, end })
     }
   }
   return getDefaultPeriodRange()

@@ -133,7 +133,7 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
           value: mrrCoversBurn == null ? '—' : mrrCoversBurn ? 'Sí' : 'No',
         },
       ],
-      footer: `ARR implícito: ${fmtEur(input.arr)}`,
+      footer: `ARR implícito: ${fmtEur(input.arr)} · desde banco`,
     },
     {
       id: 'arr',

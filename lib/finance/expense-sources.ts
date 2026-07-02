@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
 import type { CategorizedTransaction } from './categorize-transactions'
+import { clampPeriodStart } from './period-presets'
 
 export interface ExpenseLoadResult {
   transactions: CategorizedTransaction[]
@@ -13,7 +14,7 @@ export async function loadExpenseTransactionsForPeriod(
   start: Date,
   end: Date
 ): Promise<ExpenseLoadResult> {
-  const startStr = start.toISOString().slice(0, 10)
+  const startStr = clampPeriodStart(start).toISOString().slice(0, 10)
   const endStr = end.toISOString().slice(0, 10)
   const transactions: CategorizedTransaction[] = []
   let bank_count = 0
@@ -123,47 +124,8 @@ export async function loadExpenseTransactionsYtd(
 export async function loadMrrByClient(): Promise<
   Array<{ name: string; amount: number }>
 > {
-  try {
-    const rows = await prisma.$queryRaw<Array<{ name: string; amount: string | number }>>`
-      SELECT name, monthly_fee_eur AS amount
-      FROM proyectos
-      WHERE monthly_fee_eur IS NOT NULL
-        AND monthly_fee_eur > 0
-        AND status NOT IN ('churned', 'paused')
-      ORDER BY monthly_fee_eur DESC
-      LIMIT 12
-    `
-    if (rows.length > 0) {
-      return rows.map((r) => ({ name: r.name, amount: Number(r.amount) }))
-    }
-  } catch {
-    // proyectos puede no existir
-  }
-
-  try {
-    const incomes = await prisma.financialIncome.groupBy({
-      by: ['client_name'],
-      where: {
-        deleted_at: null,
-        status: { in: ['paid', 'pending'] },
-        date: { gte: new Date(new Date().getFullYear(), new Date().getMonth() - 2, 1) },
-      },
-      _sum: { total_amount: true },
-    })
-    const sorted = incomes
-      .sort((a, b) => Number(b._sum.total_amount ?? 0) - Number(a._sum.total_amount ?? 0))
-      .slice(0, 10)
-    if (sorted.length > 0) {
-      return sorted.map((i) => ({
-        name: i.client_name,
-        amount: Number(i._sum.total_amount ?? 0) / 3,
-      }))
-    }
-  } catch {
-    // fallback
-  }
-
-  return []
+  const { loadMrrByClientFromBank } = await import('./mrr-from-bank')
+  return loadMrrByClientFromBank()
 }
 
 export async function countUnclassifiedExpenses(
@@ -174,7 +136,7 @@ export async function countUnclassifiedExpenses(
   unlinked_manual_total: number
   bank_without_manual: number
 }> {
-  const startStr = start.toISOString().slice(0, 10)
+  const startStr = clampPeriodStart(start).toISOString().slice(0, 10)
   const endStr = (end ?? new Date()).toISOString().slice(0, 10)
   let unlinked_manual = 0
   let unlinked_manual_total = 0

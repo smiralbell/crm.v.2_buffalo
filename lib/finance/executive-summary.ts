@@ -7,19 +7,16 @@ import { ANNUAL_TARGET } from './chart-theme'
 import {
   countUnclassifiedExpenses,
   loadExpenseTransactionsForPeriod,
-  loadMrrByClient,
 } from './expense-sources'
+import { computeBankMrr } from './mrr-from-bank'
 import { buildAnnualGoalDetail, buildRichKpiCards } from './kpi-details'
-import { formatPeriodLabel, getDefaultPeriodRange, periodDays, type PeriodRange } from './period-presets'
+import { formatPeriodLabel, getDefaultPeriodRange, clampPeriodStart, periodDays, type PeriodRange } from './period-presets'
 import type {
   ExecutiveSummary,
   MonthlyCashFlow,
   MonthlyInvoicedCollected,
   PendingInvoiceRow,
-  ProjectEconomicsRow,
 } from './types'
-
-const USD_TO_EUR = 0.93
 
 const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
@@ -49,7 +46,7 @@ function endOfDay(d: Date): Date {
 export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<ExecutiveSummary> {
   const now = new Date()
   const period = periodInput ?? getDefaultPeriodRange(now)
-  const periodStart = new Date(period.start)
+  const periodStart = clampPeriodStart(new Date(period.start))
   const periodEnd = endOfDay(period.end)
   const periodStartStr = periodStart.toISOString().slice(0, 10)
   const periodEndStr = periodEnd.toISOString().slice(0, 10)
@@ -65,7 +62,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   const endLastMonth = endOfMonth(new Date(y, m - 1, 1))
 
   const [
-    mrrRows,
+    bankMrr,
     balanceResult,
     cashFlowRaw,
     burnRaw,
@@ -78,15 +75,9 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
     balanceLastMonthResult,
     pipelineCards,
     pendingInvoicesRaw,
-    projectEconRaw,
     bankConnection,
   ] = await Promise.all([
-    prisma.$queryRaw<Array<{ mrr: string | number; count: bigint }>>`
-      SELECT COALESCE(SUM(monthly_fee_eur), 0) AS mrr, COUNT(*)::bigint AS count
-      FROM proyectos
-      WHERE monthly_fee_eur IS NOT NULL AND monthly_fee_eur > 0
-        AND status NOT IN ('churned', 'paused')
-    `,
+    computeBankMrr(),
     query<{ balance: number }>(
       `SELECT balance FROM bank_transactions
        WHERE balance IS NOT NULL
@@ -202,31 +193,6 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
         due_date: true,
       },
     }),
-    prisma.$queryRaw<
-      Array<{
-        id: string
-        name: string
-        monthly_fee_eur: string | number | null
-        llm_cost_usd: string | number | null
-        infra_cost_usd: string | number | null
-        days_inactive_streak: number | null
-        nps_score_avg: string | number | null
-      }>
-    >`
-      SELECT p.id, p.name, p.monthly_fee_eur,
-        ed.llm_cost_usd, ed.infra_cost_usd, ed.days_inactive_streak, ed.nps_score_avg
-      FROM proyectos p
-      LEFT JOIN LATERAL (
-        SELECT llm_cost_usd, infra_cost_usd, days_inactive_streak, nps_score_avg
-        FROM engranaje5_data
-        WHERE project_id = p.id
-        ORDER BY year DESC, month DESC
-        LIMIT 1
-      ) ed ON true
-      WHERE p.status = 'active' AND p.has_mensualidad = true
-      ORDER BY p.monthly_fee_eur DESC NULLS LAST
-      LIMIT 12
-    `,
     getBankConnectionStatus().catch(() => ({
       connected: false,
       account_uid: null,
@@ -236,8 +202,8 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
     })),
   ])
 
-  const mrr = Number(mrrRows[0]?.mrr ?? 0)
-  const activeClients = Number(mrrRows[0]?.count ?? 0)
+  const mrr = bankMrr.mrr
+  const activeClients = bankMrr.active_clients
   const cashBalance = balanceResult.rows[0]?.balance ? Number(balanceResult.rows[0].balance) : 0
   const avgMonthlyBurn = Number(burnRaw.rows[0]?.avg_burn ?? 0)
   const runwayMonths =
@@ -348,32 +314,8 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
 
   const pendingCollectionTotal = pendingInvoices.reduce((s, i) => s + i.total, 0)
 
-  const projectEconomics: ProjectEconomicsRow[] = projectEconRaw.map((p) => {
-    const fee = Number(p.monthly_fee_eur ?? 0)
-    const llm = Number(p.llm_cost_usd ?? 0) * USD_TO_EUR
-    const infra = Number(p.infra_cost_usd ?? 0) * USD_TO_EUR
-    const totalCost = llm + infra
-    const marginPct = fee > 0 ? Math.round(((fee - totalCost) / fee) * 100) : null
-    return {
-      id: p.id,
-      name: p.name,
-      monthly_fee_eur: fee,
-      llm_cost_eur: Math.round(llm * 100) / 100,
-      infra_cost_eur: Math.round(infra * 100) / 100,
-      total_cost_eur: Math.round(totalCost * 100) / 100,
-      margin_pct: marginPct,
-      days_inactive_streak: p.days_inactive_streak,
-      nps_score_avg: p.nps_score_avg != null ? Number(p.nps_score_avg) : null,
-    }
-  })
-
-  const highCostProjects = projectEconomics.filter(
-    (p) => p.margin_pct !== null && p.margin_pct < 30 && p.monthly_fee_eur > 0
-  )
-
-  const [expenseLoad, mrr_by_client, unclassified] = await Promise.all([
+  const [expenseLoad, unclassified] = await Promise.all([
     loadExpenseTransactionsForPeriod(periodStart, periodEnd),
-    loadMrrByClient(),
     countUnclassifiedExpenses(periodStart, periodEnd),
   ])
 
@@ -397,6 +339,8 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   const expense_source_label = expenseLoad.source_label
   const net_trend = cashFlow.map((c) => ({ month: c.month, net: c.net }))
 
+  const mrr_by_client = bankMrr.by_client
+
   const alertsFinal = buildFinanceAlerts({
     bankConnection,
     collectionGap,
@@ -405,7 +349,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
     draftCount,
     runwayMonths,
     cashBalance,
-    highCostProjects,
+    highCostProjects: [],
     mrr,
     pipelineValue,
     unlinkedManualExpenses: unclassified.unlinked_manual,
@@ -476,7 +420,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
     net_trend,
     alerts: alertsFinal,
     pending_invoices: pendingInvoices,
-    project_economics: projectEconomics,
+    project_economics: [],
     generated_at: now.toISOString(),
   }
 }
