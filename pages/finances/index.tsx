@@ -343,15 +343,24 @@ export default function FinancesDashboard({
         if (oldest && newest) {
           msg += ` · del ${format(new Date(oldest), 'dd/MM/yyyy')} al ${format(new Date(newest), 'dd/MM/yyyy')}`
         }
+        if (data.truncated) {
+          msg += ' · advertencia: puede haber más historial (paginación incompleta)'
+        }
         setSyncMessage(msg)
       } else if (data.total > 0) {
         const newest = data.db_newest || data.newest_date
         const oldest = data.db_oldest || data.oldest_date
         if (oldest && newest) {
           setSyncMessage(
-            `${data.total} movimientos en banco · ${format(new Date(oldest), 'dd/MM/yyyy')} – ${format(new Date(newest), 'dd/MM/yyyy')}`
+            `${data.total} movimientos en banco · ${format(new Date(oldest), 'dd/MM/yyyy')} – ${format(new Date(newest), 'dd/MM/yyyy')}` +
+              (data.truncated ? ' · revisa si falta historial antiguo' : '')
           )
         }
+      } else if (data.db_oldest && data.db_newest) {
+        setSyncMessage(
+          `Historial en BD: ${format(new Date(data.db_oldest), 'dd/MM/yyyy')} – ${format(new Date(data.db_newest), 'dd/MM/yyyy')}` +
+            (data.inserted === 0 ? ' (sin movimientos nuevos)' : '')
+        )
       } else if (data.db_newest || data.newest_date) {
         const newest = data.db_newest || data.newest_date
         setSyncMessage(
