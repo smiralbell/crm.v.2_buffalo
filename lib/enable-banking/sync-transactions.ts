@@ -209,7 +209,9 @@ async function syncOneAccount(
 
   const fetchResult =
     options.mode === 'full'
-      ? await getFullAccountTransactionsWithLogs(accountUid)
+      ? await getFullAccountTransactionsWithLogs(accountUid, {
+          dateFromSuggestion: options.syncFrom,
+        })
       : await getIncrementalAccountTransactions(accountUid, options.syncFrom)
 
   const [detailsRaw, balancesRaw] = await Promise.all([
@@ -420,7 +422,8 @@ export async function syncEnableBankingTransactions(options?: {
   }
 
   const window = computeSyncFromDate(session.last_synced_at, session.created_at)
-  const syncFrom = mode === 'full' ? '2025-01-01' : window.from
+  const sessionStart = session.created_at.toISOString().slice(0, 10)
+  const syncFrom = mode === 'full' ? sessionStart : window.from
   const lastSyncedBefore = session.last_synced_at?.toISOString() ?? null
 
   let apiDebugSample: BankApiDebugSample | null = null

@@ -50,15 +50,6 @@ type PageParams = {
   date_to?: string
 }
 
-function txDedupKey(tx: unknown): string {
-  const t = tx as RawTx
-  if (t.entry_reference) return `ref:${t.entry_reference}`
-  const date = t.booking_date || t.value_date || t.transaction_date || ''
-  const amt = t.transaction_amount?.amount ?? ''
-  const desc = t.remittance_information?.[0] ?? ''
-  return `k:${date}|${amt}|${desc}`
-}
-
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
@@ -66,47 +57,6 @@ function isoDate(d: Date): string {
 function ckPreview(key: string | null | undefined): string | null {
   if (!key || typeof key !== 'string') return null
   return key.length > 32 ? `${key.slice(0, 32)}…` : key
-}
-
-function buildMonthlyRanges(
-  fromIso: string,
-  toIso: string
-): Array<{ from: string; to: string; label: string }> {
-  const ranges: Array<{ from: string; to: string; label: string }> = []
-  const start = new Date(fromIso)
-  const end = new Date(toIso)
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return ranges
-
-  let y = start.getFullYear()
-  let m = start.getMonth()
-
-  while (true) {
-    const monthStart = new Date(y, m, 1)
-    if (monthStart > end) break
-    const monthEnd = new Date(y, m + 1, 0)
-    const rangeEnd = monthEnd > end ? end : monthEnd
-    ranges.push({
-      from: isoDate(monthStart),
-      to: isoDate(rangeEnd),
-      label: `${y}-${String(m + 1).padStart(2, '0')}`,
-    })
-    m++
-    if (m > 11) {
-      m = 0
-      y++
-    }
-  }
-  return ranges
-}
-
-function mergeTransactions(batches: unknown[][]): unknown[] {
-  const map = new Map<string, unknown>()
-  for (const batch of batches) {
-    for (const tx of batch) {
-      map.set(txDedupKey(tx), tx)
-    }
-  }
-  return Array.from(map.values())
 }
 
 async function paginatePassWithLogs(
@@ -131,7 +81,12 @@ async function paginatePassWithLogs(
     do {
       const pageNum = pages + 1
       const requestParams: EnableBankingApiLogEntry['request'] = continuationKey
-        ? { continuation_key_preview: ckPreview(continuationKey) }
+        ? {
+            strategy: firstPageParams.strategy,
+            date_from: firstPageParams.date_from,
+            date_to: firstPageParams.date_to,
+            continuation_key_preview: ckPreview(continuationKey),
+          }
         : {
             strategy: firstPageParams.strategy,
             date_from: firstPageParams.date_from,
@@ -140,11 +95,11 @@ async function paginatePassWithLogs(
 
       const started = Date.now()
       let raw: Record<string, unknown>
+      const apiParams = continuationKey
+        ? { ...firstPageParams, continuation_key: continuationKey }
+        : firstPageParams
       try {
-        raw = (await getAccountTransactions(
-          accountUid,
-          continuationKey ? { continuation_key: continuationKey } : firstPageParams
-        )) as Record<string, unknown>
+        raw = (await getAccountTransactions(accountUid, apiParams)) as Record<string, unknown>
       } catch (err) {
         const message =
           err instanceof EnableBankingApiError
@@ -207,89 +162,51 @@ async function paginatePassWithLogs(
 }
 
 /**
- * Histórico completo desde ene 2025 con log de cada petición/respuesta a Enable Banking.
+ * Histórico completo vía strategy=longest (paginación con continuation_key).
+ * No hace un pase por mes: evita 422 por periodos inexistentes y el límite 429 del consentimiento.
  */
 export async function getFullAccountTransactionsWithLogs(
-  accountUid: string
+  accountUid: string,
+  options?: { dateFromSuggestion?: string }
 ): Promise<FetchAllTransactionsResult> {
   const today = isoDate(new Date())
-  const fromHistory = FINANCE_BANK_MIN_DATE
-
-  const passes: FetchAllTransactionsResult['passes'] = []
-  const batches: unknown[][] = []
-  const api_logs: EnableBankingApiLogEntry[] = []
-  let totalPages = 0
-  let truncated = false
-  const passErrors: string[] = []
+  const fromSuggestion = options?.dateFromSuggestion ?? FINANCE_BANK_MIN_DATE
 
   const longest = await paginatePassWithLogs(
     accountUid,
     'longest',
-    { strategy: 'longest', date_from: fromHistory },
+    { strategy: 'longest', date_from: fromSuggestion },
     500
   )
-  batches.push(longest.transactions)
-  api_logs.push(...longest.logs)
-  passes.push({
-    name: 'longest',
-    count: longest.transactions.length,
-    pages: longest.pages,
-    truncated: longest.truncated,
-  })
-  totalPages += longest.pages
-  truncated = truncated || longest.truncated
-  if (longest.error) passErrors.push(`longest: ${longest.error}`)
 
-  for (const month of buildMonthlyRanges(fromHistory, today)) {
-    const pass = await paginatePassWithLogs(
-      accountUid,
-      `month_${month.label}`,
-      { strategy: 'default', date_from: month.from, date_to: month.to },
-      80
-    )
-    batches.push(pass.transactions)
-    api_logs.push(...pass.logs)
-    passes.push({
-      name: `month_${month.label}`,
-      count: pass.transactions.length,
-      pages: pass.pages,
-      truncated: pass.truncated,
-    })
-    totalPages += pass.pages
-    truncated = truncated || pass.truncated
-    if (pass.error) passErrors.push(`${month.label}: ${pass.error}`)
-  }
-
-  const merged = mergeTransactions(batches)
+  const merged = longest.transactions
   const dates = (merged as RawTx[])
     .map((t) => t.booking_date || t.value_date || t.transaction_date || '')
     .filter(Boolean)
     .sort()
 
   console.info(
-    `[enable-banking] full sync ${fromHistory}→${today}: ${merged.length} txs, ` +
-      `${api_logs.length} api calls logged, range ${dates[0] ?? '—'}→${dates[dates.length - 1] ?? '—'}`
+    `[enable-banking] full sync longest ${fromSuggestion}→${today}: ${merged.length} txs, ` +
+      `${longest.logs.length} api calls, range ${dates[0] ?? '—'}→${dates[dates.length - 1] ?? '—'}`
   )
 
   return {
     transactions: merged,
-    pages: totalPages,
-    truncated,
-    date_from: fromHistory,
+    pages: longest.pages,
+    truncated: longest.truncated,
+    date_from: dates[0] ?? fromSuggestion,
     date_to: today,
-    api_error: passErrors.length > 0 ? passErrors.join(' | ') : undefined,
-    api_logs,
-    passes,
+    api_error: longest.error,
+    api_logs: longest.logs,
+    passes: [
+      {
+        name: 'longest',
+        count: merged.length,
+        pages: longest.pages,
+        truncated: longest.truncated,
+      },
+    ],
   }
-}
-
-async function paginateTransactions(
-  accountUid: string,
-  firstPageParams: PageParams,
-  maxPages = 100
-): Promise<{ transactions: unknown[]; pages: number; truncated: boolean }> {
-  const r = await paginatePassWithLogs(accountUid, 'inline', firstPageParams, maxPages)
-  return { transactions: r.transactions, pages: r.pages, truncated: r.truncated }
 }
 
 /**
