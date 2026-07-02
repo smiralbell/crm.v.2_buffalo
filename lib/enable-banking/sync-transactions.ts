@@ -89,19 +89,27 @@ async function repairFromApiBatch(
 
   for (const tx of transactions) {
     const absAmt = Math.abs(tx.amount)
+    const hash = generateTransactionHash(
+      accountId,
+      tx.date,
+      tx.amount,
+      tx.description,
+      tx.entry_reference
+    )
 
     if (tx.entry_reference) {
       const byRef = await query(
         `UPDATE bank_transactions
-         SET amount = $1, balance = COALESCE($2, balance)
-         WHERE account_id = $3
+         SET amount = $1,
+             balance = COALESCE($2, balance),
+             hash = $3,
+             description = $4,
+             entry_reference = $5
+         WHERE account_id = $6
+           AND entry_reference = $5
            AND amount <> $1
-           AND (
-             description = $4
-             OR date = $5 AND ABS(amount) = $6
-           )
          RETURNING id`,
-        [tx.amount, tx.balance, accountId, tx.description, tx.date, absAmt]
+        [tx.amount, tx.balance, hash, tx.description, tx.entry_reference, accountId]
       )
       if (byRef.rowCount && byRef.rowCount > 0) {
         repaired += byRef.rowCount
@@ -112,16 +120,17 @@ async function repairFromApiBatch(
     if (tx.amount < 0) {
       const fixDebit = await query(
         `UPDATE bank_transactions
-         SET amount = $1, balance = COALESCE($2, balance)
+         SET amount = $1, balance = COALESCE($2, balance), hash = $3
          WHERE id = (
            SELECT id FROM bank_transactions
-           WHERE account_id = $3 AND date = $4
-             AND ABS(amount) = $5 AND amount > 0
+           WHERE account_id = $4 AND date = $5
+             AND description = $6
+             AND ABS(amount) = $7 AND amount > 0
            ORDER BY created_at ASC
            LIMIT 1
          )
          RETURNING id`,
-        [tx.amount, tx.balance, accountId, tx.date, absAmt]
+        [tx.amount, tx.balance, hash, accountId, tx.date, tx.description, absAmt]
       )
       if (fixDebit.rowCount && fixDebit.rowCount > 0) {
         repaired += fixDebit.rowCount
@@ -131,11 +140,11 @@ async function repairFromApiBatch(
 
     const fixSign = await query(
       `UPDATE bank_transactions
-       SET amount = $1, balance = COALESCE($2, balance)
-       WHERE account_id = $3 AND date = $4
-         AND ABS(amount) = $5 AND amount <> $1
+       SET amount = $1, balance = COALESCE($2, balance), hash = $3
+       WHERE account_id = $4 AND date = $5 AND description = $6
+         AND ABS(amount) = $7 AND amount <> $1
        RETURNING id`,
-      [tx.amount, tx.balance, accountId, tx.date, absAmt]
+      [tx.amount, tx.balance, hash, accountId, tx.date, tx.description, absAmt]
     )
     if (fixSign.rowCount && fixSign.rowCount > 0) {
       repaired += fixSign.rowCount
@@ -294,6 +303,30 @@ async function syncOneAccount(
       tx.entry_reference
     )
 
+    if (tx.entry_reference) {
+      const byRef = await query<{ id: string; amount: number }>(
+        `SELECT id, amount FROM bank_transactions
+         WHERE account_id = $1 AND entry_reference = $2
+         LIMIT 1`,
+        [accountId, tx.entry_reference]
+      )
+      if (byRef.rows[0]) {
+        const row = byRef.rows[0]
+        if (Number(row.amount) !== tx.amount) {
+          await query(
+            `UPDATE bank_transactions
+             SET amount = $1, balance = COALESCE($2, balance), hash = $3, description = $4
+             WHERE id = $5`,
+            [tx.amount, tx.balance, hash, tx.description, row.id]
+          )
+          repaired++
+        } else {
+          duplicates++
+        }
+        continue
+      }
+    }
+
     const existing = await query<{ id: string; amount: number }>(
       `SELECT id, amount FROM bank_transactions
        WHERE account_id = $1 AND hash = $2
@@ -319,12 +352,23 @@ async function syncOneAccount(
 
     const result = await query(
       `INSERT INTO bank_transactions
-       (id, account_id, statement_id, date, amount, description, hash, balance, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+       (id, account_id, statement_id, date, amount, description, hash, balance, entry_reference, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
        ON CONFLICT (account_id, hash) DO UPDATE SET
          amount = EXCLUDED.amount,
-         balance = COALESCE(EXCLUDED.balance, bank_transactions.balance)`,
-      [uuidv4(), accountId, statementId, tx.date, tx.amount, tx.description, hash, tx.balance]
+         balance = COALESCE(EXCLUDED.balance, bank_transactions.balance),
+         entry_reference = COALESCE(EXCLUDED.entry_reference, bank_transactions.entry_reference)`,
+      [
+        uuidv4(),
+        accountId,
+        statementId,
+        tx.date,
+        tx.amount,
+        tx.description,
+        hash,
+        tx.balance,
+        tx.entry_reference ?? null,
+      ]
     )
     if (result.rowCount && result.rowCount > 0) inserted++
     else duplicates++
