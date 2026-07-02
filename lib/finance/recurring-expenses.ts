@@ -1,8 +1,11 @@
 import {
   PAYMENT_BUCKET_LABELS,
   parsePaymentConcept,
+  platformLabelFromDescription,
   type PaymentBucket,
 } from './payment-concepts'
+
+export type DetectionSource = 'concept' | 'pattern' | 'recurrence'
 
 export interface RecurringExpenseRow {
   vendor_key: string
@@ -17,6 +20,8 @@ export interface RecurringExpenseRow {
   annual_cost: number
   count: number
   last_date: string
+  months_active: number
+  detection_source: DetectionSource
 }
 
 export interface RecurringExpenseGroup {
@@ -59,7 +64,6 @@ function monthlyEquivalent(averageAmount: number, frequency: string): number {
   return averageAmount
 }
 
-/** Mínimo de repeticiones según tipo de gasto */
 function minOccurrencesForBucket(bucket: PaymentBucket): number {
   if (bucket === 'payroll') return 2
   if (bucket === 'platform') return 2
@@ -67,8 +71,14 @@ function minOccurrencesForBucket(bucket: PaymentBucket): number {
   return 2
 }
 
+function countDistinctMonths(dates: string[]): number {
+  return new Set(dates.map((d) => d.slice(0, 7))).size
+}
+
 /**
- * Detecta gastos recurrentes usando conceptos bancarios normalizados.
+ * Detecta gastos recurrentes.
+ * - Transferencias propias: clasificación por concepto (NOMINA, DEV, MKT, PLT).
+ * - Cargos de tarjeta: patrón conocido o recurrencia 2+ meses → plataforma.
  */
 export function detectRecurringExpenses(expenses: ExpenseInput[]): RecurringExpenseRow[] {
   const byKey = new Map<
@@ -77,6 +87,8 @@ export function detectRecurringExpenses(expenses: ExpenseInput[]): RecurringExpe
       label: string
       bucket: PaymentBucket
       bucket_label: string
+      detection_source: DetectionSource
+      sample_description: string
       items: Array<{ date: string; amount: number }>
     }
   >()
@@ -90,6 +102,8 @@ export function detectRecurringExpenses(expenses: ExpenseInput[]): RecurringExpe
         label: parsed.display_label,
         bucket: parsed.bucket,
         bucket_label: parsed.bucket_label,
+        detection_source: parsed.detection_source === 'none' ? 'pattern' : parsed.detection_source,
+        sample_description: e.description || '',
         items: [],
       })
     }
@@ -99,8 +113,23 @@ export function detectRecurringExpenses(expenses: ExpenseInput[]): RecurringExpe
   const rows: RecurringExpenseRow[] = []
 
   for (const [vendor_key, group] of Array.from(byKey.entries())) {
-    const minOcc = minOccurrencesForBucket(group.bucket)
-    if (group.items.length < minOcc) continue
+    const months_active = countDistinctMonths(group.items.map((i) => i.date))
+
+    let bucket = group.bucket
+    let bucket_label = group.bucket_label
+    let label = group.label
+    let detection_source = group.detection_source
+
+    // Mismo concepto 2+ meses → muy probable plataforma/SaaS (cargo automático)
+    if (months_active >= 2 && bucket === 'other') {
+      bucket = 'platform'
+      bucket_label = PAYMENT_BUCKET_LABELS.platform
+      label = platformLabelFromDescription(group.sample_description)
+      detection_source = 'recurrence'
+    }
+
+    const minOcc = minOccurrencesForBucket(bucket)
+    if (group.items.length < minOcc && !(bucket === 'platform' && months_active >= 2)) continue
 
     group.items.sort((a, b) => a.date.localeCompare(b.date))
     const dates = group.items.map((i) => new Date(i.date).getTime())
@@ -111,9 +140,11 @@ export function detectRecurringExpenses(expenses: ExpenseInput[]): RecurringExpe
     const avgInterval =
       intervals.length > 0 ? intervals.reduce((a, b) => a + b, 0) / intervals.length : 30
     const frequency =
-      group.bucket === 'payroll' && intervals.length === 0
+      bucket === 'payroll' && intervals.length === 0
         ? 'Mensual'
-        : inferFrequency(avgInterval)
+        : months_active >= 2 && bucket === 'platform' && intervals.length === 0
+          ? 'Mensual'
+          : inferFrequency(avgInterval)
     const amounts = group.items.map((i) => i.amount)
     const average_amount =
       Math.round((amounts.reduce((a, b) => a + b, 0) / amounts.length) * 100) / 100
@@ -121,17 +152,19 @@ export function detectRecurringExpenses(expenses: ExpenseInput[]): RecurringExpe
 
     rows.push({
       vendor_key,
-      label: group.label,
-      bucket: group.bucket,
-      bucket_label: group.bucket_label,
-      category_id: group.bucket,
-      category_label: group.bucket_label,
+      label,
+      bucket,
+      bucket_label,
+      category_id: bucket,
+      category_label: bucket_label,
       frequency,
       average_amount,
       monthly_equivalent,
       annual_cost: Math.round(monthly_equivalent * 12 * 100) / 100,
       count: group.items.length,
       last_date: group.items[group.items.length - 1].date,
+      months_active,
+      detection_source,
     })
   }
 

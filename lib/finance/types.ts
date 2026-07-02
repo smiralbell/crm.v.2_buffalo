@@ -138,6 +138,8 @@ export interface RecurringExpenseRow {
   annual_cost: number
   count: number
   last_date: string
+  months_active?: number
+  detection_source?: 'concept' | 'pattern' | 'recurrence'
 }
 
 export interface RecurringExpenseGroup {

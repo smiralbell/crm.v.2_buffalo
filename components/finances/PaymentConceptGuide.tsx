@@ -29,8 +29,8 @@ export default function PaymentConceptGuide({ className = '' }: { className?: st
         </table>
       </div>
       <p className="text-[10px] text-gray-500 mt-3">
-        Cargos de tarjeta (TWILIO, CURSOR, etc.) se detectan solos. Las nóminas antiguas con «NOMINA
-        JUNIO» también.
+        Transferencias propias: usa NOMINA, DEV, MKT o PLT. Los cargos de tarjeta (TWILIO, CURSOR…) se
+        detectan solos; si el mismo concepto aparece 2+ meses, se clasifica como plataforma automáticamente.
       </p>
     </div>
   )

@@ -11,6 +11,7 @@ function ExpenseRow({ item }: { item: RecurringExpensesSummary['items'][0] }) {
           <p className="text-sm font-medium text-gray-900 truncate">{item.label}</p>
           <p className="text-[10px] text-gray-400 mt-0.5">
             {item.frequency} · {item.count} pagos
+            {item.months_active != null && item.months_active > 0 && ` · ${item.months_active} meses`}
           </p>
         </div>
         <div className="text-right shrink-0">
@@ -21,9 +22,21 @@ function ExpenseRow({ item }: { item: RecurringExpensesSummary['items'][0] }) {
         </div>
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
-        <Badge variant="outline" className="text-[10px] font-normal">
-          Ahorro si cortas: −{fmtEur(item.monthly_equivalent)}/mes
-        </Badge>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Badge variant="outline" className="text-[10px] font-normal">
+            Ahorro si cortas: −{fmtEur(item.monthly_equivalent)}/mes
+          </Badge>
+          {item.detection_source === 'recurrence' && (
+            <Badge variant="secondary" className="text-[9px] font-normal">
+              Auto · 2+ meses
+            </Badge>
+          )}
+          {item.detection_source === 'pattern' && item.bucket === 'platform' && (
+            <Badge variant="secondary" className="text-[9px] font-normal">
+              Tarjeta
+            </Badge>
+          )}
+        </div>
         <span className="text-[10px] text-gray-400 tabular-nums">
           último {item.last_date.slice(8, 10)}/{item.last_date.slice(5, 7)}
         </span>

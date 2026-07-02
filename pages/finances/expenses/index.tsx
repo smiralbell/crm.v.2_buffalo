@@ -1,4 +1,5 @@
 import { GetServerSideProps } from 'next'
+import dynamic from 'next/dynamic'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
@@ -25,8 +26,39 @@ import {
   detectRecurringExpenses,
   recurringExpensesSummary,
 } from '@/lib/finance/recurring-expenses'
+import { buildExpenseAnalytics, buildBucketBreakdown, type ExpenseAnalytics } from '@/lib/finance/expense-analytics'
 import type { RecurringExpensesSummary } from '@/lib/finance/types'
 
+const ExpenseBucketTimelineChart = dynamic(
+  () => import('@/components/finances/ExpenseBucketTimelineChart'),
+  { ssr: false }
+)
+const FinanceCategoryDonut = dynamic(() => import('@/components/finances/FinanceCategoryDonut'), {
+  ssr: false,
+})
+const ExpenseSavingsSimulator = dynamic(
+  () => import('@/components/finances/ExpenseSavingsSimulator'),
+  { ssr: false }
+)
+const ProjectSpendChart = dynamic(() => import('@/components/finances/ProjectSpendChart'), {
+  ssr: false,
+})
+
+const EMPTY_ANALYTICS: ExpenseAnalytics = {
+  bucket_breakdown: [],
+  monthly_timeline: [],
+  project_spend: [],
+  recurring: { monthly_total: 0, annual_total: 0, count: 0, items: [], groups: [] },
+  cuttable_items: [],
+  totals: {
+    period_total: 0,
+    recurring_monthly: 0,
+    platform_monthly: 0,
+    payroll_monthly: 0,
+    developer_monthly: 0,
+    marketing_monthly: 0,
+  },
+}
 interface ExpensesPageProps {
   expenses: Array<{
     id: string
@@ -37,6 +69,7 @@ interface ExpensesPageProps {
     matched: boolean
   }>
   recurringExpenses: RecurringExpensesSummary
+  expenseAnalytics: ExpenseAnalytics
   invoices: Array<{
     id: number
     invoice_number: string
@@ -69,9 +102,11 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       props: {
         expenses: [],
         recurringExpenses: { monthly_total: 0, annual_total: 0, count: 0, items: [], groups: [] },
+        expenseAnalytics: EMPTY_ANALYTICS,
         invoices: [],
         unmatchedExpenses: [],
         totalVat: 0,
+        totalIrpf: 0,
         dateRange: {
           start: startOfMonth(now).toISOString(),
           end: endOfMonth(now).toISOString(),
@@ -103,9 +138,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       startDate = startOfDay(new Date(startParam))
       endDate = endOfDay(new Date(endParam))
     } else {
-      // Por defecto: mes actual
       const now = new Date()
-      startDate = startOfMonth(now)
+      startDate = startOfYear(now)
       endDate = endOfMonth(now)
     }
 
@@ -226,6 +260,30 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       items: recurringItems,
     }
 
+    // Analytics: últimos 12 meses hasta fin del período (gráficos + proyección)
+    const analyticsStart = new Date(endDate.getFullYear(), endDate.getMonth() - 11, 1)
+    const analyticsStartStr = format(analyticsStart, 'yyyy-MM-dd')
+    const analyticsResult = await query<{ date: string; amount: number; description: string }>(
+      `SELECT bt.date::text AS date, bt.amount, bt.description
+       FROM bank_transactions bt
+       WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0
+       ORDER BY bt.date`,
+      [analyticsStartStr, endStr]
+    )
+    const analyticsExpenses = analyticsResult.rows.map((e) => ({
+      description: e.description || '',
+      amount: Number(e.amount),
+      date: e.date.slice(0, 10),
+    }))
+    const expenseAnalytics = buildExpenseAnalytics(analyticsExpenses)
+    expenseAnalytics.bucket_breakdown = buildBucketBreakdown(
+      normalizedExpensesBase.map((e) => ({
+        description: e.description,
+        amount: -e.amount,
+        date: e.date,
+      }))
+    )
+
     // Obtener facturas en el mismo rango de fechas (por fecha de emisión)
     const invoicesRaw = await prisma.invoice.findMany({
       where: {
@@ -290,6 +348,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       props: {
         expenses: normalizedExpenses,
         recurringExpenses,
+        expenseAnalytics,
         invoices,
         unmatchedExpenses,
         totalVat,
@@ -310,6 +369,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       props: {
         expenses: [],
         recurringExpenses: { monthly_total: 0, annual_total: 0, count: 0, items: [], groups: [] },
+        expenseAnalytics: EMPTY_ANALYTICS,
         invoices: [],
         unmatchedExpenses: [],
         totalVat: 0,
@@ -326,6 +386,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 export default function ExpensesPage({
   expenses,
   recurringExpenses,
+  expenseAnalytics,
   invoices,
   unmatchedExpenses,
   dateRange: initialDateRange,
@@ -530,7 +591,6 @@ export default function ExpensesPage({
 
   // Calcular totales
   const expensesTotal = displayExpenses.reduce((sum, e) => sum + e.amount, 0)
-  const recurringTotal = recurringExpenses.monthly_total
   const matchedExpenses = displayExpenses.filter((e) => e.matched)
   const unmatchedExpensesAll = displayExpenses.filter((e) => !e.matched)
   const matchedTotal = matchedExpenses.reduce((sum, e) => sum + e.amount, 0)
@@ -594,30 +654,124 @@ export default function ExpensesPage({
           </Card>
         </div>
 
+        {/* Inteligencia de gastos — ventana 12 meses */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card className="border border-indigo-100 bg-indigo-50/30 shadow-sm">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-xs font-medium text-indigo-700">Plataformas / SaaS</p>
+              <p className="text-xl font-bold text-gray-900 tabular-nums mt-1">
+                {formatCurrency(expenseAnalytics.totals.platform_monthly)}/mes
+              </p>
+              <p className="text-[10px] text-gray-500 mt-1">Recurrente estimado · auto-detectado</p>
+            </CardContent>
+          </Card>
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-xs font-medium text-gray-500">Nóminas</p>
+              <p className="text-xl font-bold text-gray-900 tabular-nums mt-1">
+                {formatCurrency(expenseAnalytics.totals.payroll_monthly)}/mes
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border border-violet-100 bg-violet-50/30 shadow-sm">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-xs font-medium text-violet-700">Developers / proyectos</p>
+              <p className="text-xl font-bold text-gray-900 tabular-nums mt-1">
+                {formatCurrency(expenseAnalytics.totals.developer_monthly)}/mes
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border border-pink-100 bg-pink-50/30 shadow-sm">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-xs font-medium text-pink-700">Marketing</p>
+              <p className="text-xl font-bold text-gray-900 tabular-nums mt-1">
+                {formatCurrency(expenseAnalytics.totals.marketing_monthly)}/mes
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card className="border border-gray-200 shadow-sm lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Evolución temporal por categoría</CardTitle>
+              <p className="text-xs text-gray-400 font-normal">Últimos 12 meses · apilado por tipo de gasto</p>
+            </CardHeader>
+            <CardContent>
+              <ExpenseBucketTimelineChart data={expenseAnalytics.monthly_timeline} />
+            </CardContent>
+          </Card>
+          <Card className="border border-gray-200 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Distribución del período filtrado</CardTitle>
+              <p className="text-xs text-gray-400 font-normal">Por concepto bancario normalizado</p>
+            </CardHeader>
+            <CardContent>
+              <FinanceCategoryDonut
+                data={expenseAnalytics.bucket_breakdown}
+                emptyMessage="Sin gastos en el período seleccionado"
+                variant="expense"
+              />
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="border border-gray-200 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Simulador de ahorro</CardTitle>
+              <p className="text-xs text-gray-400 font-normal">
+                Marca plataformas a cancelar y mira el impacto mensual y a 12 meses
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ExpenseSavingsSimulator
+                items={expenseAnalytics.cuttable_items}
+                currentRecurringMonthly={expenseAnalytics.totals.recurring_monthly}
+              />
+            </CardContent>
+          </Card>
+          <Card className="border border-gray-200 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Gasto por proyecto (DEV)</CardTitle>
+              <p className="text-xs text-gray-400 font-normal">
+                Pagos con concepto DEV {`{nombre}`} {`{proyecto-id}`}
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ProjectSpendChart data={expenseAnalytics.project_spend} />
+            </CardContent>
+          </Card>
+        </div>
+
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="border border-gray-200 shadow-sm lg:col-span-2">
             <CardHeader>
               <CardTitle className="text-lg font-semibold">Gastos recurrentes por categoría</CardTitle>
               <p className="text-xs text-gray-400 font-normal">
-                Nóminas · plataformas · developers · marketing · {formatCurrency(recurringTotal)}/mes
+                Nóminas · plataformas · developers · marketing ·{' '}
+                {formatCurrency(expenseAnalytics.totals.recurring_monthly)}/mes
               </p>
             </CardHeader>
             <CardContent>
-              <RecurringExpensesPanel data={recurringExpenses} compact />
+              <RecurringExpensesPanel data={expenseAnalytics.recurring} compact />
             </CardContent>
           </Card>
           <Card className="border border-gray-200 shadow-sm">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold">Ahorro potencial</CardTitle>
+              <CardTitle className="text-lg font-semibold">Resumen recurrente</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-gray-600">
               <p>
-                Si cancelaras todos los servicios recurrentes detectados, ahorrarías aproximadamente{' '}
-                <span className="font-semibold text-gray-900">{formatCurrency(recurringTotal)}/mes</span>{' '}
-                ({formatCurrency(recurringExpenses.annual_total)}/año).
+                Gasto fijo estimado:{' '}
+                <span className="font-semibold text-gray-900">
+                  {formatCurrency(expenseAnalytics.totals.recurring_monthly)}/mes
+                </span>{' '}
+                ({formatCurrency(expenseAnalytics.recurring.annual_total)}/año).
               </p>
               <p className="text-xs text-gray-400">
-                Revisa cada línea: nóminas e impuestos no son “cortables”, pero SaaS e infra sí.
+                Plataformas con el mismo cargo 2+ meses se detectan solas. Nóminas e impuestos no son
+                cortables; SaaS y marketing sí.
               </p>
             </CardContent>
           </Card>
