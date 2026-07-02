@@ -1,5 +1,10 @@
 import type { OutboundFormBrandingRef } from '@/lib/demos/types'
-import { brandingToCssVars, normalizeFormFontId, resolveFormFontFamily } from '@/lib/demos/form-branding'
+import {
+  brandingToCssVars,
+  normalizeFormFontId,
+  readableTextOnBg,
+  resolveFormFontFamily,
+} from '@/lib/demos/form-branding'
 import { PhoneCall } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -22,7 +27,7 @@ export default function PublicFormShell({ nombreCliente, branding, children }: P
       className="min-h-screen px-4 py-10"
       style={{
         ...cssVars,
-        backgroundColor: branding.color_primary,
+        backgroundColor: branding.color_screen,
         color: branding.color_text,
         fontFamily,
       }}
@@ -39,8 +44,8 @@ export default function PublicFormShell({ nombreCliente, branding, children }: P
               />
             </div>
           ) : (
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20">
-              <PhoneCall className="h-6 w-6" style={{ color: branding.color_secondary }} />
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-black/10">
+              <PhoneCall className="h-6 w-6" style={{ color: branding.color_button }} />
             </div>
           )}
           <h1 className="text-xl font-semibold" style={{ color: branding.color_text }}>
@@ -52,7 +57,7 @@ export default function PublicFormShell({ nombreCliente, branding, children }: P
           className="rounded-2xl border p-6 shadow-sm"
           style={{
             borderColor: `${branding.color_text}22`,
-            backgroundColor: `${branding.color_text}08`,
+            backgroundColor: branding.color_form,
           }}
         >
           {children}
@@ -67,26 +72,31 @@ export function PublicFormButton({
   disabled,
   type = 'button',
   onClick,
+  branding,
 }: {
   children: ReactNode
   disabled?: boolean
   type?: 'button' | 'submit'
   onClick?: () => void
+  branding?: OutboundFormBrandingRef
 }) {
+  const buttonText = branding ? readableTextOnBg(branding.color_button) : 'var(--form-button-text)'
+
   return (
     <button
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex h-10 w-full items-center justify-center rounded-xl px-4 text-sm font-medium text-white transition-opacity disabled:opacity-50"
+      className="inline-flex h-10 w-full items-center justify-center rounded-xl px-4 text-sm font-medium transition-opacity disabled:opacity-50"
       style={{
-        backgroundColor: 'var(--form-accent)',
+        backgroundColor: 'var(--form-button)',
+        color: buttonText,
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = 'var(--form-accent-hover)'
+        e.currentTarget.style.backgroundColor = 'var(--form-button-hover)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = 'var(--form-accent)'
+        e.currentTarget.style.backgroundColor = 'var(--form-button)'
       }}
     >
       {children}

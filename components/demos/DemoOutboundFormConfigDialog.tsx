@@ -15,7 +15,7 @@ import type {
   OutboundFormBrandingRef,
   OutboundFormFieldRef,
 } from '@/lib/demos/types'
-import { DEFAULT_OUTBOUND_FORM_BRANDING, FORM_FONT_OPTIONS, normalizeOutboundFormBranding, resolveFormFontFamily, type FormFontId } from '@/lib/demos/form-branding'
+import { DEFAULT_OUTBOUND_FORM_BRANDING, FORM_FONT_OPTIONS, brandingInputStyle, normalizeOutboundFormBranding, readableTextOnBg, resolveFormFontFamily, type FormFontId } from '@/lib/demos/form-branding'
 import { RETELL_OUTBOUND_VAR_KEYS } from '@/lib/demos/outbound-form'
 import { Check, Copy, Link2, Lock, Palette } from 'lucide-react'
 
@@ -237,7 +237,7 @@ export default function DemoOutboundFormConfigDialog({
     step === 'access'
       ? 'Protege el formulario con contraseña y comparte el enlace público con tu cliente.'
       : step === 'design'
-        ? 'Personaliza logo y colores que verá el cliente en el formulario público.'
+        ? 'Personaliza logo, colores y tipografía del formulario público.'
         : `Campos del formulario. Variables Retell: ${RETELL_OUTBOUND_VAR_KEYS.map((k) => `{{${k}}}`).join(', ')}`
 
   return (
@@ -364,19 +364,29 @@ export default function DemoOutboundFormConfigDialog({
             </div>
 
             <ColorField
-              label="Color de fondo"
-              value={branding.color_primary}
-              onChange={(v) => setBranding((b) => ({ ...b, color_primary: v }))}
+              label="Fondo de pantalla"
+              value={branding.color_screen}
+              onChange={(v) => setBranding((b) => ({ ...b, color_screen: v }))}
             />
             <ColorField
-              label="Color de texto"
-              value={branding.color_text}
-              onChange={(v) => setBranding((b) => ({ ...b, color_text: v }))}
+              label="Fondo del formulario"
+              value={branding.color_form}
+              onChange={(v) => setBranding((b) => ({ ...b, color_form: v }))}
             />
             <ColorField
               label="Color de botón"
-              value={branding.color_secondary}
-              onChange={(v) => setBranding((b) => ({ ...b, color_secondary: v }))}
+              value={branding.color_button}
+              onChange={(v) => setBranding((b) => ({ ...b, color_button: v }))}
+            />
+            <ColorField
+              label="Fondo de campos"
+              value={branding.color_input}
+              onChange={(v) => setBranding((b) => ({ ...b, color_input: v }))}
+            />
+            <ColorField
+              label="Color de letras"
+              value={branding.color_text}
+              onChange={(v) => setBranding((b) => ({ ...b, color_text: v }))}
             />
 
             <div className="space-y-1.5">
@@ -397,16 +407,16 @@ export default function DemoOutboundFormConfigDialog({
             </div>
 
             <div
-              className="rounded-xl border border-gray-200 p-4 text-center"
+              className="rounded-xl border border-gray-200 p-4"
               style={{
-                backgroundColor: branding.color_primary,
+                backgroundColor: branding.color_screen,
                 color: branding.color_text,
                 fontFamily: resolveFormFontFamily(
                   (branding.font_id || 'system') as FormFontId
                 ),
               }}
             >
-              <p className="mb-3 text-xs font-medium opacity-70">Vista previa</p>
+              <p className="mb-3 text-center text-xs font-medium opacity-70">Vista previa</p>
               {branding.logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -418,16 +428,29 @@ export default function DemoOutboundFormConfigDialog({
                   }}
                 />
               ) : null}
-              <p className="text-sm font-semibold">{demoNombre}</p>
+              <p className="mb-3 text-center text-sm font-semibold">{demoNombre}</p>
               <div
-                className="mx-auto mt-3 max-w-xs rounded-xl border p-3"
-                style={{ borderColor: `${branding.color_text}22` }}
+                className="mx-auto max-w-xs rounded-xl border p-3 space-y-2"
+                style={{
+                  borderColor: `${branding.color_text}22`,
+                  backgroundColor: branding.color_form,
+                }}
               >
+                <p className="text-left text-xs font-medium">Nombre</p>
                 <div
-                  className="inline-block rounded-lg px-4 py-2 text-xs font-medium text-white"
-                  style={{ backgroundColor: branding.color_secondary }}
+                  className="h-8 rounded-lg border px-2 text-xs flex items-center opacity-60"
+                  style={brandingInputStyle(branding)}
                 >
-                  Botón de ejemplo
+                  Ejemplo
+                </div>
+                <div
+                  className="inline-flex w-full items-center justify-center rounded-lg px-4 py-2 text-xs font-medium"
+                  style={{
+                    backgroundColor: branding.color_button,
+                    color: readableTextOnBg(branding.color_button),
+                  }}
+                >
+                  Enviar y recibir llamada
                 </div>
               </div>
             </div>

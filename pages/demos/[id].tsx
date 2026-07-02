@@ -417,7 +417,7 @@ export default function DemoDetailPage() {
                 <CardContent className="space-y-4">
                   <div
                     className="rounded-xl border border-gray-200 p-4"
-                    style={{ backgroundColor: formBranding.color_primary }}
+                    style={{ backgroundColor: formBranding.color_screen }}
                   >
                     <p className="mb-3 text-xs font-medium text-gray-500">Vista previa del diseño</p>
                     <div className="flex items-center gap-4">
@@ -429,38 +429,30 @@ export default function DemoDetailPage() {
                           className="h-10 max-w-[120px] object-contain"
                         />
                       ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-black/10">
                           <PhoneCall
                             className="h-5 w-5"
-                            style={{ color: formBranding.color_secondary }}
+                            style={{ color: formBranding.color_button }}
                           />
                         </div>
                       )}
-                      <div className="flex gap-2">
-                        <div className="text-center">
-                          <div
-                            className="h-8 w-8 rounded-lg border border-gray-200"
-                            style={{ backgroundColor: formBranding.color_primary }}
-                            title="Fondo"
-                          />
-                          <p className="mt-1 font-mono text-[10px] text-gray-500">Fondo</p>
-                        </div>
-                        <div className="text-center">
-                          <div
-                            className="h-8 w-8 rounded-lg border border-gray-200"
-                            style={{ backgroundColor: formBranding.color_text }}
-                            title="Texto"
-                          />
-                          <p className="mt-1 font-mono text-[10px] text-gray-500">Texto</p>
-                        </div>
-                        <div className="text-center">
-                          <div
-                            className="h-8 w-8 rounded-lg border border-gray-200"
-                            style={{ backgroundColor: formBranding.color_secondary }}
-                            title="Botón"
-                          />
-                          <p className="mt-1 font-mono text-[10px] text-gray-500">Botón</p>
-                        </div>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { key: 'Pantalla', color: formBranding.color_screen },
+                          { key: 'Formulario', color: formBranding.color_form },
+                          { key: 'Botón', color: formBranding.color_button },
+                          { key: 'Campos', color: formBranding.color_input },
+                          { key: 'Letras', color: formBranding.color_text },
+                        ].map((swatch) => (
+                          <div key={swatch.key} className="text-center">
+                            <div
+                              className="h-8 w-8 rounded-lg border border-gray-200"
+                              style={{ backgroundColor: swatch.color }}
+                              title={swatch.key}
+                            />
+                            <p className="mt-1 font-mono text-[10px] text-gray-500">{swatch.key}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
                     <p className="mt-3 text-xs text-gray-600">

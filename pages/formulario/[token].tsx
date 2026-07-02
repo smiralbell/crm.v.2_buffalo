@@ -133,7 +133,7 @@ export default function PublicFormularioPage() {
         {gate === 'password' && (
           <form onSubmit={submitPassword} className="space-y-4">
             <div className="flex items-center gap-2 text-sm text-gray-600">
-              <Lock className="h-4 w-4" style={{ color: branding.color_secondary }} />
+              <Lock className="h-4 w-4" style={{ color: branding.color_button }} />
               Introduce la contraseña que te han facilitado para acceder.
             </div>
             <div className="space-y-1.5">
@@ -153,7 +153,7 @@ export default function PublicFormularioPage() {
                 {authError}
               </p>
             )}
-            <PublicFormButton type="submit" disabled={authLoading || !password.trim()}>
+            <PublicFormButton type="submit" disabled={authLoading || !password.trim()} branding={branding}>
               {authLoading ? 'Verificando…' : 'Acceder al formulario'}
             </PublicFormButton>
           </form>

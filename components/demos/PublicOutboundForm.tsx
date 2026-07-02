@@ -3,6 +3,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { PublicFormButton } from '@/components/demos/PublicFormShell'
+import { brandingInputStyle } from '@/lib/demos/form-branding'
 import type { OutboundFormBrandingRef, OutboundFormFieldRef } from '@/lib/demos/types'
 import { Phone } from 'lucide-react'
 
@@ -29,6 +30,8 @@ export default function PublicOutboundForm({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  const inputStyle = brandingInputStyle(branding)
 
   useEffect(() => {
     setValues(emptyValues(fields))
@@ -76,7 +79,7 @@ export default function PublicOutboundForm({
 
   if (fields.length === 0) {
     return (
-      <p className="text-sm text-gray-600">Este formulario no tiene campos configurados todavía.</p>
+      <p className="text-sm opacity-80">Este formulario no tiene campos configurados todavía.</p>
     )
   }
 
@@ -89,7 +92,7 @@ export default function PublicOutboundForm({
 
           return (
             <div key={field.key} className={isLong ? 'sm:col-span-2 space-y-1.5' : 'space-y-1.5'}>
-              <Label>
+              <Label style={{ color: branding.color_text }}>
                 {field.label}
                 {field.required && <span className="text-red-500"> *</span>}
               </Label>
@@ -98,7 +101,8 @@ export default function PublicOutboundForm({
                   value={values[field.key] ?? ''}
                   onChange={(e) => setField(field.key, e.target.value)}
                   placeholder={field.placeholder}
-                  className="min-h-[80px] rounded-xl"
+                  className="min-h-[80px] rounded-xl border"
+                  style={inputStyle}
                   disabled={disabled || submitting}
                 />
               ) : (
@@ -106,7 +110,7 @@ export default function PublicOutboundForm({
                   {isPhone && (
                     <Phone
                       className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
-                      style={{ color: branding.color_secondary }}
+                      style={{ color: branding.color_button }}
                     />
                   )}
                   <Input
@@ -114,7 +118,8 @@ export default function PublicOutboundForm({
                     value={values[field.key] ?? ''}
                     onChange={(e) => setField(field.key, e.target.value)}
                     placeholder={field.placeholder}
-                    className={`rounded-xl ${isPhone ? 'pl-9 font-mono' : ''}`}
+                    className={`rounded-xl border ${isPhone ? 'pl-9 font-mono' : ''}`}
+                    style={inputStyle}
                     disabled={disabled || submitting}
                   />
                 </div>
@@ -135,7 +140,7 @@ export default function PublicOutboundForm({
         </p>
       )}
 
-      <PublicFormButton type="submit" disabled={disabled || submitting}>
+      <PublicFormButton type="submit" disabled={disabled || submitting} branding={branding}>
         {submitting ? 'Enviando…' : 'Enviar y recibir llamada'}
       </PublicFormButton>
     </form>

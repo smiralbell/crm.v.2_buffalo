@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { variables } = bodySchema.parse(req.body)
     const demo = demoRowToListItem(demoRow)
-    const result = await launchOutboundCall(demo, variables)
+    const result = await launchOutboundCall(demo, variables, { publicForm: true })
 
     return res.status(200).json({
       ok: true,

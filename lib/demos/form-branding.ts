@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import type { OutboundFormBrandingRef } from '@/lib/demos/types'
 
 export type FormFontId =
   | 'system'
@@ -61,20 +62,21 @@ export const FORM_FONT_OPTIONS: Array<{
 
 export interface OutboundFormBranding {
   logo_url: string | null
-  /** Fondo del formulario */
-  color_primary: string
-  /** Color de textos y etiquetas */
+  color_screen: string
+  color_form: string
+  color_button: string
+  color_input: string
   color_text: string
-  /** Botones y acentos */
-  color_secondary: string
   font_id: FormFontId
 }
 
 export const DEFAULT_OUTBOUND_FORM_BRANDING: OutboundFormBranding = {
   logo_url: null,
-  color_primary: '#f5f3ff',
+  color_screen: '#f5f3ff',
+  color_form: '#ffffff',
+  color_button: '#6d28d9',
+  color_input: '#ffffff',
   color_text: '#111827',
-  color_secondary: '#6d28d9',
   font_id: 'system',
 }
 
@@ -125,6 +127,13 @@ export function normalizeHexColor(raw: string, fallback: string): string {
   return trimmed.toLowerCase()
 }
 
+function readHex(row: Record<string, unknown>, key: string, fallback: string): string {
+  return normalizeHexColor(
+    typeof row[key] === 'string' ? row[key] : fallback,
+    fallback
+  )
+}
+
 export function normalizeOutboundFormBranding(raw: unknown): OutboundFormBranding {
   const def = DEFAULT_OUTBOUND_FORM_BRANDING
   if (!raw || typeof raw !== 'object') return { ...def }
@@ -133,41 +142,43 @@ export function normalizeOutboundFormBranding(raw: unknown): OutboundFormBrandin
   const logo = normalizeLogoUrl(row.logo_url)
   const font_id = normalizeFormFontId(row.font_id)
 
-  const hasTextColor =
-    typeof row.color_text === 'string' && HEX_RE.test(row.color_text.trim())
-
-  if (!hasTextColor) {
-    const legacyButton = normalizeHexColor(
-      typeof row.color_primary === 'string' ? row.color_primary : def.color_secondary,
-      def.color_secondary
-    )
-    const legacyBg = normalizeHexColor(
-      typeof row.color_secondary === 'string' ? row.color_secondary : def.color_primary,
-      def.color_primary
-    )
+  if (typeof row.color_screen === 'string' && HEX_RE.test(row.color_screen.trim())) {
     return {
       logo_url: logo,
-      color_primary: legacyBg,
-      color_text: def.color_text,
-      color_secondary: legacyButton,
+      color_screen: readHex(row, 'color_screen', def.color_screen),
+      color_form: readHex(row, 'color_form', def.color_form),
+      color_button: readHex(row, 'color_button', def.color_button),
+      color_input: readHex(row, 'color_input', def.color_input),
+      color_text: readHex(row, 'color_text', def.color_text),
       font_id,
     }
   }
 
+  const hasTextColor =
+    typeof row.color_text === 'string' && HEX_RE.test(row.color_text.trim())
+
+  if (hasTextColor) {
+    return {
+      logo_url: logo,
+      color_screen: readHex(row, 'color_primary', def.color_screen),
+      color_form: def.color_form,
+      color_button: readHex(row, 'color_secondary', def.color_button),
+      color_input: def.color_input,
+      color_text: readHex(row, 'color_text', def.color_text),
+      font_id,
+    }
+  }
+
+  const legacyButton = readHex(row, 'color_primary', def.color_button)
+  const legacyBg = readHex(row, 'color_secondary', def.color_screen)
+
   return {
     logo_url: logo,
-    color_primary: normalizeHexColor(
-      typeof row.color_primary === 'string' ? row.color_primary : def.color_primary,
-      def.color_primary
-    ),
-    color_text: normalizeHexColor(
-      typeof row.color_text === 'string' ? row.color_text : def.color_text,
-      def.color_text
-    ),
-    color_secondary: normalizeHexColor(
-      typeof row.color_secondary === 'string' ? row.color_secondary : def.color_secondary,
-      def.color_secondary
-    ),
+    color_screen: legacyBg,
+    color_form: def.color_form,
+    color_button: legacyButton,
+    color_input: def.color_input,
+    color_text: def.color_text,
     font_id,
   }
 }
@@ -182,12 +193,33 @@ export function darkenHexColor(hex: string, amount = 18): string {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
 }
 
+export function readableTextOnBg(hex: string): string {
+  const n = normalizeHexColor(hex, '#000000').slice(1)
+  const num = parseInt(n, 16)
+  const r = (num >> 16) & 0xff
+  const g = (num >> 8) & 0xff
+  const b = num & 0xff
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminance > 0.55 ? '#111827' : '#ffffff'
+}
+
 export function brandingToCssVars(branding: OutboundFormBranding): CSSProperties {
   return {
-    ['--form-bg' as string]: branding.color_primary,
+    ['--form-screen' as string]: branding.color_screen,
+    ['--form-form-bg' as string]: branding.color_form,
+    ['--form-button' as string]: branding.color_button,
+    ['--form-button-hover' as string]: darkenHexColor(branding.color_button),
+    ['--form-button-text' as string]: readableTextOnBg(branding.color_button),
+    ['--form-input-bg' as string]: branding.color_input,
     ['--form-text' as string]: branding.color_text,
-    ['--form-accent' as string]: branding.color_secondary,
-    ['--form-accent-hover' as string]: darkenHexColor(branding.color_secondary),
     fontFamily: resolveFormFontFamily(branding.font_id),
+  }
+}
+
+export function brandingInputStyle(branding: OutboundFormBranding | OutboundFormBrandingRef): CSSProperties {
+  return {
+    backgroundColor: branding.color_input,
+    color: branding.color_text,
+    borderColor: `${branding.color_text}33`,
   }
 }

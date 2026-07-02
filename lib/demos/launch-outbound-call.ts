@@ -5,7 +5,7 @@ import {
   DEFAULT_OUTBOUND_FORM_FIELDS,
   validateOutboundForm,
 } from './outbound-form'
-import { matchAuthorizedDemoPhone } from './phone-match'
+import { matchAuthorizedDemoPhone, normalizeRetellE164 } from './phone-match'
 import { RetellApiError, retellCreatePhoneCall, retellResolveFromNumber } from './retell'
 import type { DemoListItem } from './types'
 
@@ -18,9 +18,15 @@ export type LaunchOutboundResult = {
   call: Record<string, unknown> | null
 }
 
+export type LaunchOutboundOptions = {
+  /** Formulario público: llama al teléfono indicado por el visitante */
+  publicForm?: boolean
+}
+
 export async function launchOutboundCall(
   demo: DemoListItem,
-  rawValues: Record<string, string>
+  rawValues: Record<string, string>,
+  options: LaunchOutboundOptions = {}
 ): Promise<LaunchOutboundResult> {
   if (demo.tipo !== 'voz') {
     throw new Error('Solo las demos de voz pueden lanzar llamadas')
@@ -42,21 +48,28 @@ export async function launchOutboundCall(
   const telefonoRaw = rawValues.telefono?.trim()
   if (!telefonoRaw) throw new Error('El teléfono de destino es obligatorio')
 
-  const destinoAutorizado = matchAuthorizedDemoPhone(demo.numeros, telefonoRaw)
-  if (!destinoAutorizado) {
-    throw new Error(`El teléfono ${telefonoRaw} no está autorizado para esta demo`)
+  const numeroDestino = options.publicForm
+    ? normalizeRetellE164(telefonoRaw)
+    : matchAuthorizedDemoPhone(demo.numeros, telefonoRaw)
+
+  if (!numeroDestino) {
+    throw new Error(
+      options.publicForm
+        ? `El teléfono ${telefonoRaw} no es válido. Usa formato internacional (+34…).`
+        : `El teléfono ${telefonoRaw} no está autorizado para esta demo`
+    )
   }
 
   const retellVariables = buildRetellVariablesFromForm(formConfig, {
     ...rawValues,
-    telefono: destinoAutorizado,
+    telefono: numeroDestino,
   })
 
   const fromNumber = await retellResolveFromNumber(demo.id)
 
   const result = await retellCreatePhoneCall({
     from_number: fromNumber,
-    to_number: destinoAutorizado,
+    to_number: numeroDestino,
     override_agent_id: demo.retell_agent_id,
     demo_id: demo.id,
     retell_llm_dynamic_variables: retellVariables as Record<string, string>,
@@ -66,7 +79,7 @@ export async function launchOutboundCall(
 
   await insertDemoLlamada({
     demo_id: demo.id,
-    numero_destino: destinoAutorizado,
+    numero_destino: numeroDestino,
     call_id: typeof result?.call_id === 'string' ? result.call_id : null,
     estado: callStatus,
     variables: retellVariables,
@@ -76,7 +89,7 @@ export async function launchOutboundCall(
     call_id: typeof result?.call_id === 'string' ? result.call_id : null,
     call_status: callStatus,
     from_number: fromNumber,
-    numero_destino: destinoAutorizado,
+    numero_destino: numeroDestino,
     variables: retellVariables as Record<string, string>,
     call: result,
   }

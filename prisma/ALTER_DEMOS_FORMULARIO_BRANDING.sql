@@ -4,4 +4,4 @@ ALTER TABLE demos
   ADD COLUMN IF NOT EXISTS formulario_branding JSONB;
 
 COMMENT ON COLUMN demos.formulario_branding IS
-  'Logo y colores del formulario público: logo_url, color_primary (fondo), color_text, color_secondary (botón)';
+  'Branding formulario público: logo_url, color_screen, color_form, color_button, color_input, color_text, font_id';
