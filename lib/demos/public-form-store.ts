@@ -111,6 +111,7 @@ export function demoRowToListItem(row: PublicFormDemoRow): DemoListItem {
     nombre_cliente: row.nombre_cliente,
     prompt: '',
     base_conocimiento: '',
+    frase_inicial: '',
     estado: row.estado as DemoListItem['estado'],
     tipo: 'voz',
     retell_agent_id: row.retell_agent_id,

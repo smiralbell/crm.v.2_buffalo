@@ -11,6 +11,7 @@ const updateSchema = z.object({
   nombre_cliente: z.string().min(1).max(200).optional(),
   prompt: z.string().min(1).optional(),
   base_conocimiento: z.string().optional(),
+  frase_inicial: z.string().max(2000).optional(),
   estado: z.enum(['activa', 'pausada']).optional(),
   numeros: z.array(z.string()).optional(),
   mover_numeros: z.boolean().optional(),
@@ -63,6 +64,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (parsed.prompt !== undefined) payload.prompt = parsed.prompt.trim()
       if (parsed.base_conocimiento !== undefined) {
         payload.base_conocimiento = parsed.base_conocimiento.trim()
+      }
+      if (parsed.frase_inicial !== undefined) {
+        payload.frase_inicial = parsed.frase_inicial.trim()
       }
       if (parsed.estado !== undefined) payload.estado = parsed.estado
       if (parsed.numeros !== undefined) {

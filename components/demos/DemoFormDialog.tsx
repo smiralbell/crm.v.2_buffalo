@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { AlertTriangle, Plus, X } from 'lucide-react'
+import RetellVariableChips, { insertTextAtSelection } from '@/components/demos/RetellVariableChips'
 import type {
   DemoDireccion,
   DemoEstado,
@@ -39,6 +40,7 @@ export interface DemoFormValues {
   nombre_cliente: string
   prompt: string
   base_conocimiento: string
+  frase_inicial: string
   estado: DemoEstado
   numeros: string[]
   tipo: DemoTipo
@@ -58,6 +60,7 @@ const emptyForm: DemoFormValues = {
   nombre_cliente: '',
   prompt: '',
   base_conocimiento: '',
+  frase_inicial: '',
   estado: 'activa',
   numeros: [''],
   tipo: 'whatsapp',
@@ -92,6 +95,10 @@ export default function DemoFormDialog({
   const [voices, setVoices] = useState<RetellVoice[]>([])
   const [voicesLoading, setVoicesLoading] = useState(false)
   const [voicesError, setVoicesError] = useState('')
+  const promptRef = useRef<HTMLTextAreaElement>(null)
+  const fraseRef = useRef<HTMLTextAreaElement>(null)
+  const [promptSel, setPromptSel] = useState({ start: 0, end: 0 })
+  const [fraseSel, setFraseSel] = useState({ start: 0, end: 0 })
 
   const exceptDemoId = demo?.id
   const isEdit = Boolean(demo)
@@ -106,6 +113,7 @@ export default function DemoFormDialog({
         nombre_cliente: demo.nombre_cliente,
         prompt: demo.prompt,
         base_conocimiento: demo.base_conocimiento,
+        frase_inicial: demo.frase_inicial ?? '',
         estado: demo.estado,
         numeros: demo.numeros.length > 0 ? demo.numeros : [''],
         tipo: demo.tipo,
@@ -171,6 +179,26 @@ export default function DemoFormDialog({
       }
     },
     [exceptDemoId, form.tipo]
+  )
+
+  const insertIntoField = useCallback(
+    (field: 'prompt' | 'frase_inicial', token: string) => {
+      const ref = field === 'prompt' ? promptRef : fraseRef
+      const sel = field === 'prompt' ? promptSel : fraseSel
+      setForm((prev) => {
+        const current = field === 'prompt' ? prev.prompt : prev.frase_inicial
+        const { value, cursor } = insertTextAtSelection(current, sel.start, sel.end, token)
+        queueMicrotask(() => {
+          const el = ref.current
+          if (el) {
+            el.focus()
+            el.setSelectionRange(cursor, cursor)
+          }
+        })
+        return field === 'prompt' ? { ...prev, prompt: value } : { ...prev, frase_inicial: value }
+      })
+    },
+    [fraseSel, promptSel]
   )
 
   const updateNumero = (index: number, value: string) => {
@@ -352,16 +380,56 @@ export default function DemoFormDialog({
             )}
           </div>
 
+          {isVoz && (
+            <div className="space-y-2">
+              <Label htmlFor="frase_inicial">Frase inicial del agente</Label>
+              <Textarea
+                ref={fraseRef}
+                id="frase_inicial"
+                value={form.frase_inicial}
+                onChange={(e) => setForm((p) => ({ ...p, frase_inicial: e.target.value }))}
+                onSelect={(e) => {
+                  const t = e.currentTarget
+                  setFraseSel({ start: t.selectionStart, end: t.selectionEnd })
+                }}
+                onFocus={(e) => {
+                  const t = e.currentTarget
+                  setFraseSel({ start: t.selectionStart, end: t.selectionEnd })
+                }}
+                placeholder="Hola {{nombre}}, te llamo de…"
+                rows={2}
+                className="min-h-[72px] rounded-xl border-gray-200"
+              />
+              <RetellVariableChips onInsert={(token) => insertIntoField('frase_inicial', token)} />
+              <p className="text-xs text-gray-500">
+                Primera frase que dice el agente al descolgar (begin_message de Retell). Puedes usar
+                variables del formulario.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="prompt">Prompt de instrucciones</Label>
             <Textarea
+              ref={promptRef}
               id="prompt"
               value={form.prompt}
               onChange={(e) => setForm((p) => ({ ...p, prompt: e.target.value }))}
+              onSelect={(e) => {
+                const t = e.currentTarget
+                setPromptSel({ start: t.selectionStart, end: t.selectionEnd })
+              }}
+              onFocus={(e) => {
+                const t = e.currentTarget
+                setPromptSel({ start: t.selectionStart, end: t.selectionEnd })
+              }}
               placeholder="Instrucciones de comportamiento del agente…"
               rows={6}
               className="min-h-[120px] rounded-xl border-gray-200"
             />
+            {isVoz && (
+              <RetellVariableChips onInsert={(token) => insertIntoField('prompt', token)} />
+            )}
           </div>
 
           <div className="space-y-2">

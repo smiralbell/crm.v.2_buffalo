@@ -9,6 +9,13 @@ export const RETELL_OUTBOUND_VAR_KEYS = [
 
 export type RetellOutboundVarKey = (typeof RETELL_OUTBOUND_VAR_KEYS)[number]
 
+export function retellVarPlaceholder(key: RetellOutboundVarKey): string {
+  return `{{${key}}}`
+}
+
+export const RETELL_DYNAMIC_VARS_HELP =
+  'Variables del formulario outbound. Retell las sustituye al llamar desde el formulario público ({{nombre}}, {{telefono}}, etc.).'
+
 export interface OutboundFormFieldConfig {
   key: RetellOutboundVarKey
   label: string

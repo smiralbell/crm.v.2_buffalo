@@ -19,6 +19,7 @@ function mapDemoRow(row: {
   nombre_cliente: string
   prompt: string
   base_conocimiento: string
+  frase_inicial?: string | null
   estado: string
   tipo?: string | null
   retell_agent_id?: string | null
@@ -33,6 +34,7 @@ function mapDemoRow(row: {
     nombre_cliente: row.nombre_cliente,
     prompt: row.prompt,
     base_conocimiento: row.base_conocimiento,
+    frase_inicial: row.frase_inicial ?? '',
     estado: row.estado as DemoEstado,
     tipo: (row.tipo === 'voz' ? 'voz' : 'whatsapp') as DemoTipo,
     retell_agent_id: row.retell_agent_id ?? null,
@@ -47,7 +49,7 @@ function mapDemoRow(row: {
   }
 }
 
-const DEMO_SELECT = `id, nombre_cliente, prompt, base_conocimiento, estado,
+const DEMO_SELECT = `id, nombre_cliente, prompt, base_conocimiento, frase_inicial, estado,
   tipo, retell_agent_id, retell_llm_id, retell_kb_id, voz_id, direccion, created_at`
 
 export async function listDemos(): Promise<DemoListItem[]> {
@@ -238,16 +240,17 @@ export async function createDemo(
 
   const result = await query<{ id: number; created_at: Date }>(
     `INSERT INTO demos (
-       nombre_cliente, prompt, base_conocimiento, estado,
+       nombre_cliente, prompt, base_conocimiento, frase_inicial, estado,
        tipo, voz_id, direccion,
        retell_agent_id, retell_llm_id, retell_kb_id
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING id, created_at`,
     [
       input.nombre_cliente,
       input.prompt,
       input.base_conocimiento,
+      input.frase_inicial?.trim() ?? '',
       input.estado,
       tipo,
       tipo === 'voz' ? input.voz_id?.trim() || null : null,
@@ -283,6 +286,8 @@ export async function updateDemo(
   const nombre = input.nombre_cliente ?? existing.nombre_cliente
   const prompt = input.prompt ?? existing.prompt
   const base = input.base_conocimiento ?? existing.base_conocimiento
+  const fraseInicial =
+    input.frase_inicial !== undefined ? input.frase_inicial.trim() : existing.frase_inicial
   const estado = input.estado ?? existing.estado
   const vozId = input.voz_id !== undefined ? input.voz_id.trim() || null : existing.voz_id
   const direccion =
@@ -290,10 +295,10 @@ export async function updateDemo(
 
   await query(
     `UPDATE demos
-     SET nombre_cliente = $1, prompt = $2, base_conocimiento = $3, estado = $4,
-         voz_id = $5, direccion = $6
-     WHERE id = $7`,
-    [nombre, prompt, base, estado, vozId, direccion, id]
+     SET nombre_cliente = $1, prompt = $2, base_conocimiento = $3, frase_inicial = $4, estado = $5,
+         voz_id = $6, direccion = $7
+     WHERE id = $8`,
+    [nombre, prompt, base, fraseInicial, estado, vozId, direccion, id]
   )
 
   if (input.numeros) {

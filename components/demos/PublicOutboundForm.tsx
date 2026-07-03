@@ -5,7 +5,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { PublicFormButton } from '@/components/demos/PublicFormShell'
 import { brandingInputStyle } from '@/lib/demos/form-branding'
 import type { OutboundFormBrandingRef, OutboundFormFieldRef } from '@/lib/demos/types'
-import { Phone } from 'lucide-react'
 
 type Props = {
   token: string
@@ -87,7 +86,6 @@ export default function PublicOutboundForm({
     <form onSubmit={submit} className="space-y-4" style={{ color: branding.color_text }}>
       <div className="grid gap-4 sm:grid-cols-2">
         {fields.map((field) => {
-          const isPhone = field.key === 'telefono'
           const isLong = field.key === 'notas'
 
           return (
@@ -106,23 +104,15 @@ export default function PublicOutboundForm({
                   disabled={disabled || submitting}
                 />
               ) : (
-                <div className="relative">
-                  {isPhone && (
-                    <Phone
-                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
-                      style={{ color: branding.color_button }}
-                    />
-                  )}
-                  <Input
-                    type={field.key === 'email' ? 'email' : 'text'}
-                    value={values[field.key] ?? ''}
-                    onChange={(e) => setField(field.key, e.target.value)}
-                    placeholder={field.placeholder}
-                    className={`rounded-xl border ${isPhone ? 'pl-9 font-mono' : ''}`}
-                    style={inputStyle}
-                    disabled={disabled || submitting}
-                  />
-                </div>
+                <Input
+                  type={field.key === 'email' ? 'email' : 'text'}
+                  value={values[field.key] ?? ''}
+                  onChange={(e) => setField(field.key, e.target.value)}
+                  placeholder={field.placeholder}
+                  className={`rounded-xl border${field.key === 'telefono' ? ' font-mono' : ''}`}
+                  style={inputStyle}
+                  disabled={disabled || submitting}
+                />
               )}
             </div>
           )

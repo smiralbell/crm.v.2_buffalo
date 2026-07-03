@@ -115,7 +115,7 @@ export default function PublicFormularioPage() {
         <title>{nombreCliente ? `${nombreCliente} — Formulario` : 'Formulario'}</title>
         {fontHref && <link rel="stylesheet" href={fontHref} />}
       </Head>
-      <PublicFormShell nombreCliente={nombreCliente} branding={branding}>
+      <PublicFormShell branding={branding}>
         {gate === 'loading' && <p className="text-center text-sm text-gray-500">Cargando…</p>}
 
         {gate === 'error' && (

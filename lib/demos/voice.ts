@@ -41,6 +41,7 @@ export async function createVoiceDemo(
         nombre_cliente: demo.nombre_cliente,
         prompt: demo.prompt,
         base_conocimiento: demo.base_conocimiento,
+        frase_inicial: demo.frase_inicial,
         voz_id: input.voz_id.trim(),
       },
       demo.id
@@ -69,12 +70,15 @@ export async function updateVoiceDemoInRetell(
 
   const prompt = input.prompt ?? existing.prompt
   const base = input.base_conocimiento ?? existing.base_conocimiento
+  const fraseInicial = input.frase_inicial ?? existing.frase_inicial
   const nombre = input.nombre_cliente ?? existing.nombre_cliente
   const vozId = input.voz_id ?? existing.voz_id
 
   const promptChanged = input.prompt !== undefined && input.prompt !== existing.prompt
   const baseChanged =
     input.base_conocimiento !== undefined && input.base_conocimiento !== existing.base_conocimiento
+  const fraseChanged =
+    input.frase_inicial !== undefined && input.frase_inicial !== existing.frase_inicial
   const vozChanged = input.voz_id !== undefined && input.voz_id !== existing.voz_id
 
   if (!existing.retell_llm_id || !existing.retell_kb_id || !existing.retell_agent_id) {
@@ -85,8 +89,14 @@ export async function updateVoiceDemoInRetell(
     await retellUpdateKnowledgeBase(existing.retell_kb_id, nombre, base, existing.id)
   }
 
-  if (promptChanged || baseChanged) {
-    await retellUpdateLlm(existing.retell_llm_id, prompt, existing.retell_kb_id, existing.id)
+  if (promptChanged || baseChanged || fraseChanged) {
+    await retellUpdateLlm(
+      existing.retell_llm_id,
+      prompt,
+      existing.retell_kb_id,
+      existing.id,
+      fraseInicial
+    )
   }
 
   if (vozChanged && vozId) {

@@ -13,6 +13,7 @@ export interface DemoRow {
   nombre_cliente: string
   prompt: string
   base_conocimiento: string
+  frase_inicial: string
   estado: DemoEstado
   tipo: DemoTipo
   retell_agent_id: string | null
@@ -32,6 +33,7 @@ export interface DemoInput {
   nombre_cliente: string
   prompt: string
   base_conocimiento: string
+  frase_inicial?: string
   estado: DemoEstado
   numeros: string[]
   tipo?: DemoTipo

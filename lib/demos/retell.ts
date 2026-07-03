@@ -196,7 +196,8 @@ export async function retellCreateKnowledgeBase(
 export async function retellCreateLlm(
   prompt: string,
   knowledgeBaseId: string,
-  demoId?: number
+  demoId?: number,
+  beginMessage = ''
 ): Promise<string> {
   const data = await retellJsonRequest<{ llm_id?: string }>('/create-retell-llm', {
     method: 'POST',
@@ -204,7 +205,7 @@ export async function retellCreateLlm(
       general_prompt: prompt,
       model: 'gpt-4o-mini',
       knowledge_base_ids: [knowledgeBaseId],
-      begin_message: '',
+      begin_message: beginMessage,
     },
     step: 'create_llm',
     demoId,
@@ -255,6 +256,7 @@ export async function retellProvisionVoiceDemo(
     nombre_cliente: string
     prompt: string
     base_conocimiento: string
+    frase_inicial?: string
     voz_id: string
   },
   demoId?: number
@@ -269,7 +271,12 @@ export async function retellProvisionVoiceDemo(
   let agent_id: string | null = null
 
   try {
-    llm_id = await retellCreateLlm(input.prompt, knowledge_base_id, demoId)
+    llm_id = await retellCreateLlm(
+      input.prompt,
+      knowledge_base_id,
+      demoId,
+      input.frase_inicial?.trim() ?? ''
+    )
     agent_id = await retellCreateAgent(
       input.nombre_cliente,
       input.voz_id,
@@ -287,14 +294,19 @@ export async function retellUpdateLlm(
   llmId: string,
   prompt: string,
   knowledgeBaseId: string,
-  demoId?: number
+  demoId?: number,
+  beginMessage?: string
 ) {
+  const body: Record<string, unknown> = {
+    general_prompt: prompt,
+    knowledge_base_ids: [knowledgeBaseId],
+  }
+  if (beginMessage !== undefined) {
+    body.begin_message = beginMessage
+  }
   await retellJsonRequest(`/update-retell-llm/${encodeURIComponent(llmId)}`, {
     method: 'PATCH',
-    body: {
-      general_prompt: prompt,
-      knowledge_base_ids: [knowledgeBaseId],
-    },
+    body,
     step: 'update_llm',
     demoId,
   })

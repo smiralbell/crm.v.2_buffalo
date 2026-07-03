@@ -20,6 +20,7 @@ import DemoConversationDialog from '@/components/demos/DemoConversationDialog'
 import DemoOutboundFormConfigDialog, {
   type FormConfigStep,
 } from '@/components/demos/DemoOutboundFormConfigDialog'
+import FinanceInfoTip from '@/components/finances/FinanceInfoTip'
 import type {
   DemoDetail,
   DemoListItem,
@@ -29,7 +30,7 @@ import type {
   OutboundFormBrandingRef,
   OutboundFormFieldRef,
 } from '@/lib/demos/types'
-import { DEFAULT_OUTBOUND_FORM_BRANDING, FORM_FONT_OPTIONS, normalizeOutboundFormBranding } from '@/lib/demos/form-branding'
+import { DEFAULT_OUTBOUND_FORM_BRANDING, normalizeOutboundFormBranding } from '@/lib/demos/form-branding'
 import { DEFAULT_OUTBOUND_FORM_FIELDS } from '@/lib/demos/outbound-form'
 import { Input } from '@/components/ui/input'
 import {
@@ -39,6 +40,7 @@ import {
   ChevronRight,
   Edit,
   Eraser,
+  ExternalLink,
   Link2,
   MessageSquare,
   Palette,
@@ -259,11 +261,9 @@ export default function DemoDetailPage() {
                   </>
                 )}
               </div>
-              <p className="mt-1 text-sm text-gray-500">
-                {detail?.tipo === 'voz'
-                  ? 'Agente de voz Retell AI'
-                  : 'Métricas y pruebas del agente WhatsApp'}
-              </p>
+              {detail?.tipo !== 'voz' && (
+                <p className="mt-1 text-sm text-gray-500">Métricas y pruebas del agente WhatsApp</p>
+              )}
             </div>
           </div>
           <div className="flex gap-2">
@@ -379,21 +379,58 @@ export default function DemoDetailPage() {
               </Card>
             </div>
 
-            <p className="text-sm text-gray-500">
-              Última actividad:{' '}
-              {fmtDate(isVoice ? vm!.last_activity_at : m!.last_activity_at)}
-            </p>
-
             {canOutbound && (
               <Card className="border border-violet-200 shadow-sm">
-                <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <CardTitle className="text-base">Formulario público para clientes</CardTitle>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Enlace con contraseña, logo y colores de marca del cliente.
-                    </p>
+                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4">
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span className="text-base font-semibold text-gray-900">Formulario</span>
+                    <FinanceInfoTip text="Enlace público con contraseña para que el cliente pida la demo por teléfono. Configura logo, colores y campos; cuando la contraseña esté lista, copia y comparte el enlace." />
                   </div>
-                  <div className="flex flex-wrap gap-2">
+
+                  {formAccess.public_url ? (
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-1.5">
+                        <Link2 className="h-4 w-4 shrink-0 text-violet-600" />
+                        <span className="truncate font-mono text-xs text-gray-700">
+                          {formAccess.public_url}
+                        </span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 rounded-xl"
+                        onClick={async () => {
+                          if (!formAccess.public_url) return
+                          await navigator.clipboard.writeText(formAccess.public_url)
+                          setLinkCopied(true)
+                          setTimeout(() => setLinkCopied(false), 2000)
+                        }}
+                      >
+                        {linkCopied ? 'Copiado' : 'Copiar'}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0 rounded-xl"
+                        asChild
+                      >
+                        <a
+                          href={formAccess.public_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Abrir formulario en nueva pestaña"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="min-w-0 flex-1 text-sm text-amber-800">
+                      Configura una contraseña para generar el enlace.
+                    </p>
+                  )}
+
+                  <div className="flex shrink-0 flex-wrap gap-2 sm:ml-auto">
                     <Button
                       variant="outline"
                       size="sm"
@@ -413,89 +450,6 @@ export default function DemoDetailPage() {
                       Configurar formulario
                     </Button>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div
-                    className="rounded-xl border border-gray-200 p-4"
-                    style={{ backgroundColor: formBranding.color_screen }}
-                  >
-                    <p className="mb-3 text-xs font-medium text-gray-500">Vista previa del diseño</p>
-                    <div className="flex items-center gap-4">
-                      {formBranding.logo_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={formBranding.logo_url}
-                          alt="Logo"
-                          className="h-10 max-w-[120px] object-contain"
-                        />
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-black/10">
-                          <PhoneCall
-                            className="h-5 w-5"
-                            style={{ color: formBranding.color_button }}
-                          />
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { key: 'Pantalla', color: formBranding.color_screen },
-                          { key: 'Formulario', color: formBranding.color_form },
-                          { key: 'Botón', color: formBranding.color_button },
-                          { key: 'Campos', color: formBranding.color_input },
-                          { key: 'Letras', color: formBranding.color_text },
-                        ].map((swatch) => (
-                          <div key={swatch.key} className="text-center">
-                            <div
-                              className="h-8 w-8 rounded-lg border border-gray-200"
-                              style={{ backgroundColor: swatch.color }}
-                              title={swatch.key}
-                            />
-                            <p className="mt-1 font-mono text-[10px] text-gray-500">{swatch.key}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <p className="mt-3 text-xs text-gray-600">
-                      Tipografía:{' '}
-                      {FORM_FONT_OPTIONS.find((f) => f.id === formBranding.font_id)?.label ||
-                        'Sistema'}
-                    </p>
-                  </div>
-
-                  {formAccess.public_url ? (
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <div className="flex flex-1 items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
-                        <Link2 className="h-4 w-4 shrink-0 text-violet-600" />
-                        <span className="truncate font-mono text-xs text-gray-700">
-                          {formAccess.public_url}
-                        </span>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={async () => {
-                          if (!formAccess.public_url) return
-                          await navigator.clipboard.writeText(formAccess.public_url)
-                          setLinkCopied(true)
-                          setTimeout(() => setLinkCopied(false), 2000)
-                        }}
-                      >
-                        {linkCopied ? 'Copiado' : 'Copiar enlace'}
-                      </Button>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-amber-800">
-                      Aún no hay enlace público. Pulsa «Configurar formulario» y define una
-                      contraseña.
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-500">
-                    Estado:{' '}
-                    {formAccess.has_password
-                      ? 'Contraseña configurada — listo para compartir'
-                      : 'Falta configurar contraseña'}
-                  </p>
                 </CardContent>
               </Card>
             )}

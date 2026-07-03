@@ -9,12 +9,11 @@ import { PhoneCall } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 type Props = {
-  nombreCliente: string
   branding: OutboundFormBrandingRef
   children: ReactNode
 }
 
-export default function PublicFormShell({ nombreCliente, branding, children }: Props) {
+export default function PublicFormShell({ branding, children }: Props) {
   const normalized = {
     ...branding,
     font_id: normalizeFormFontId(branding.font_id),
@@ -35,22 +34,19 @@ export default function PublicFormShell({ nombreCliente, branding, children }: P
       <div className="mx-auto max-w-lg">
         <div className="mb-8 text-center">
           {branding.logo_url ? (
-            <div className="mx-auto mb-4 flex h-16 max-w-[200px] items-center justify-center">
+            <div className="mx-auto flex h-16 max-w-[240px] items-center justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={branding.logo_url}
-                alt={nombreCliente}
+                alt=""
                 className="max-h-16 max-w-full object-contain"
               />
             </div>
           ) : (
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-black/10">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-black/10">
               <PhoneCall className="h-6 w-6" style={{ color: branding.color_button }} />
             </div>
           )}
-          <h1 className="text-xl font-semibold" style={{ color: branding.color_text }}>
-            {nombreCliente}
-          </h1>
         </div>
 
         <div

@@ -1,10 +1,11 @@
 import { GetServerSideProps } from 'next'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import DemoFormDialog, { type DemoFormValues } from '@/components/demos/DemoFormDialog'
 import PhoneConflictDialog from '@/components/demos/PhoneConflictDialog'
-import type { DemoDireccion, DemoListItem, PhoneConflict } from '@/lib/demos/types'
+import type { DemoListItem, PhoneConflict } from '@/lib/demos/types'
 import Link from 'next/link'
 import {
   Bot,
@@ -25,6 +26,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
   Phone,
 } from 'lucide-react'
@@ -37,12 +39,6 @@ const estadoClass: Record<string, string> = {
 const tipoClass: Record<string, string> = {
   whatsapp: 'bg-emerald-50 text-emerald-800 border-emerald-200',
   voz: 'bg-violet-50 text-violet-800 border-violet-200',
-}
-
-const direccionLabel: Record<DemoDireccion, string> = {
-  inbound: 'Inbound',
-  outbound: 'Outbound',
-  ambos: 'Ambos',
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -67,6 +63,29 @@ export default function DemosPage() {
   const [pendingSave, setPendingSave] = useState<DemoFormValues | null>(null)
   const [conflictOpen, setConflictOpen] = useState(false)
   const [movingPhones, setMovingPhones] = useState(false)
+  const [search, setSearch] = useState('')
+
+  const activeCount = useMemo(
+    () => demos.filter((d) => d.estado === 'activa').length,
+    [demos]
+  )
+
+  const filteredDemos = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return demos
+    return demos.filter((d) => {
+      const haystack = [
+        d.nombre_cliente,
+        d.tipo,
+        d.direccion ?? '',
+        d.estado,
+        String(d.numeros_count),
+      ]
+        .join(' ')
+        .toLowerCase()
+      return haystack.includes(q)
+    })
+  }, [demos, search])
 
   const saveDemo = async (
     values: DemoFormValues,
@@ -206,27 +225,49 @@ export default function DemosPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={load}
-            disabled={loading}
-            className="rounded-xl border-gray-200"
-            title="Actualizar"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </Button>
-          <Button
-            onClick={() => {
-              setEditing(null)
-              setFormOpen(true)
-            }}
-            className="rounded-xl"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Nueva Demo
-          </Button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
+            <div className="relative w-full min-w-[200px] max-w-md flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar demos…"
+                className="rounded-xl border-gray-200 pl-9"
+              />
+            </div>
+            <Badge variant="outline" className="shrink-0 border-gray-200 text-gray-700 font-normal">
+              {demos.length} {demos.length === 1 ? 'demo' : 'demos'}
+            </Badge>
+            <Badge
+              variant="outline"
+              className="shrink-0 border-emerald-200 bg-emerald-50 text-emerald-800 font-normal"
+            >
+              {activeCount} activas
+            </Badge>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={load}
+              disabled={loading}
+              className="rounded-xl border-gray-200"
+              title="Actualizar"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+            <Button
+              onClick={() => {
+                setEditing(null)
+                setFormOpen(true)
+              }}
+              className="rounded-xl"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Nueva Demo
+            </Button>
+          </div>
         </div>
 
         {error && (
@@ -260,6 +301,14 @@ export default function DemosPage() {
                   Nueva Demo
                 </Button>
               </div>
+            ) : filteredDemos.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <Search className="mb-3 h-10 w-10 text-gray-300" />
+                <p className="text-gray-600">Ninguna demo coincide con la búsqueda</p>
+                <Button variant="outline" className="mt-4 rounded-xl" onClick={() => setSearch('')}>
+                  Limpiar búsqueda
+                </Button>
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -274,7 +323,7 @@ export default function DemosPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {demos.map((demo) => (
+                    {filteredDemos.map((demo) => (
                       <tr key={demo.id} className="border-b border-gray-50 hover:bg-gray-50/80">
                         <td className="p-4">
                           <Link
@@ -285,26 +334,15 @@ export default function DemosPage() {
                               {demo.nombre_cliente}
                               <ChevronRight className="h-4 w-4 text-gray-300 opacity-0 transition group-hover:opacity-100" />
                             </div>
-                            <div className="mt-0.5 line-clamp-1 text-xs text-gray-400">
-                              {demo.prompt.slice(0, 80)}
-                              {demo.prompt.length > 80 ? '…' : ''}
-                            </div>
                           </Link>
                         </td>
                         <td className="p-4">
-                          <div className="flex flex-col gap-1">
-                            <Badge
-                              variant="outline"
-                              className={tipoClass[demo.tipo] || 'bg-gray-100 text-gray-700'}
-                            >
-                              {demo.tipo === 'voz' ? 'Voz' : 'WhatsApp'}
-                            </Badge>
-                            {demo.tipo === 'voz' && demo.direccion && (
-                              <span className="text-xs text-gray-500">
-                                {direccionLabel[demo.direccion]}
-                              </span>
-                            )}
-                          </div>
+                          <Badge
+                            variant="outline"
+                            className={tipoClass[demo.tipo] || 'bg-gray-100 text-gray-700'}
+                          >
+                            {demo.tipo === 'voz' ? 'Voz' : 'WhatsApp'}
+                          </Badge>
                         </td>
                         <td className="p-4">
                           <Badge className={estadoClass[demo.estado] || 'bg-gray-100 text-gray-700'}>
@@ -316,12 +354,6 @@ export default function DemosPage() {
                             <Phone className="h-3.5 w-3.5 text-gray-400" />
                             {demo.numeros_count}
                           </div>
-                          {demo.numeros.length > 0 && (
-                            <div className="mt-1 font-mono text-xs text-gray-400">
-                              {demo.numeros.slice(0, 2).join(', ')}
-                              {demo.numeros.length > 2 ? ` +${demo.numeros.length - 2}` : ''}
-                            </div>
-                          )}
                         </td>
                         <td className="p-4 text-sm text-gray-600">{fmtDate(demo.created_at)}</td>
                         <td className="p-4">
