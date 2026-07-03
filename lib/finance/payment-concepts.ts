@@ -69,6 +69,48 @@ export const PAYMENT_CONCEPT_EXAMPLES = [
   { category: 'Gastos varios', format: 'GTO {concepto}', example: 'GTO GESTORIA TRIMESTRE' },
 ] as const
 
+/** Plataformas que cobran por tarjeta — no requieren concepto manual */
+export const AUTO_DETECTED_SAAS = [
+  'Twilio',
+  'Cursor',
+  'Retell AI',
+  'OpenAI',
+  'Anthropic',
+  'ElevenLabs',
+  'Contabo',
+  'EasyPanel',
+  'Fireflies',
+  'NexiaIA',
+] as const
+
+/** Transferencias a personas y proveedores — convención obligatoria desde ahora */
+export const MANUAL_TRANSFER_RULES = [
+  {
+    category: 'Nóminas',
+    applies_to: 'Equipo interno (nóminas y liquidaciones)',
+    format: 'NOMINA {MES} {APELLIDO}',
+    example: 'NOMINA JUNIO MIRALBELL',
+  },
+  {
+    category: 'Developers',
+    applies_to: 'Freelancers y colaboradores por proyecto',
+    format: 'DEV {NOMBRE} {PROYECTO-ID}',
+    example: 'DEV LAURA BUF-2026-0042',
+  },
+  {
+    category: 'Marketing',
+    applies_to: 'Agencias, ads, SEO, contenido, influencers',
+    format: 'MKT {CANAL} {DETALLE}',
+    example: 'MKT ADS META CAMPANA-Q2',
+  },
+  {
+    category: 'Gastos varios',
+    applies_to: 'Gestoría, suministros u otros pagos por transferencia',
+    format: 'GTO {CONCEPTO}',
+    example: 'GTO GESTORIA TRIMESTRE',
+  },
+] as const
+
 function norm(s: string): string {
   return s.trim().replace(/\s+/g, ' ')
 }
@@ -253,4 +295,9 @@ export function parsePaymentConcept(description: string): ParsedPaymentConcept {
     },
     'none'
   )
+}
+
+/** Ingresos de plataformas SaaS (devoluciones, abonos Stripe…) → agrupar en «Otros» */
+export function isPlatformLikeDescription(description: string): boolean {
+  return parsePaymentConcept(description || '').bucket === 'platform'
 }

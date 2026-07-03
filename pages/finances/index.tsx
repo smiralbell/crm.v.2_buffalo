@@ -3,7 +3,6 @@ import dynamic from 'next/dynamic'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
 import { getBankConnectionStatus, type BankConnectionStatus } from '@/lib/enable-banking/connection-status'
 import { getLatestFinanceAiAnalysis } from '@/lib/finance/ai-analysis'
@@ -16,6 +15,10 @@ import RecurringExpensesPanel from '@/components/finances/RecurringExpensesPanel
 import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
 import PeriodInsightCard from '@/components/finances/PeriodInsightCard'
 import { buildPeriodInsights } from '@/lib/finance/kpi-details'
+import {
+  buildFiscalPeriodSummary,
+  fiscalToOverviewKpis,
+} from '@/lib/finance/fiscal-summary'
 
 const CashFlowChart = dynamic(() => import('@/components/finances/CashFlowChart'), { ssr: false })
 const InvoicedVsCollectedChart = dynamic(() => import('@/components/finances/InvoicedVsCollectedChart'), { ssr: false })
@@ -63,6 +66,14 @@ interface DashboardProps {
     netProfit: number
     netProfitAfterCorporateTax: number
   }
+  overviewKpis: {
+    income: number
+    expenses: number
+    taxes: number
+    net_result: number
+    gross_cash: number
+    has_iva_data: boolean
+  }
   bankConnection: BankConnectionStatus
   initialAiAnalysis: {
     summary: FinanceAiSummary
@@ -90,6 +101,14 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           ivaToPay: 0,
           netProfit: 0,
           netProfitAfterCorporateTax: 0,
+        },
+        overviewKpis: {
+          income: 0,
+          expenses: 0,
+          taxes: 0,
+          net_result: 0,
+          gross_cash: 0,
+          has_iva_data: false,
         },
         bankConnection: {
           connected: false,
@@ -134,82 +153,22 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
        LIMIT 1`,
       [startStr, endStr]
     )
-    const currentBalance = balanceResult.rows[0]?.balance 
-      ? Number(balanceResult.rows[0].balance) 
+    const currentBalance = balanceResult.rows[0]?.balance
+      ? Number(balanceResult.rows[0].balance)
       : 0
 
-    // Ingresos del período: suma de transacciones positivas en el rango de fechas
-    const incomeResult = await query<{ total: number }>(
-      `SELECT COALESCE(SUM(amount), 0) as total
-       FROM bank_transactions
-       WHERE date >= $1 AND date <= $2 AND amount > 0`,
-      [startStr, endStr]
-    )
-    const income = Number(incomeResult.rows[0]?.total || 0)
+    const fiscal = await buildFiscalPeriodSummary(startDate, endDate)
+    const overviewKpis = fiscalToOverviewKpis(fiscal)
 
-    // Gastos del período: suma de transacciones negativas en el rango de fechas
-    const expensesResult = await query<{ total: number }>(
-      `SELECT COALESCE(ABS(SUM(amount)), 0) as total
-       FROM bank_transactions
-       WHERE date >= $1 AND date <= $2 AND amount < 0`,
-      [startStr, endStr]
-    )
-    const expenses = Number(expensesResult.rows[0]?.total || 0)
-
-    // Beneficio del período: ingresos - gastos
-    const profit = income - expenses
-
-    // IVA de ingresos (facturas emitidas) en el período
-    const incomesIvaAgg = await prisma.financialIncome.aggregate({
-      _sum: {
-        iva_amount: true,
-      },
-      where: {
-        deleted_at: null,
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
-        // Consideramos solo facturas reales (no estimadas)
-        status: {
-          in: ['pending', 'paid'],
-        },
-      },
-    })
-    const incomesIva = Number(incomesIvaAgg._sum.iva_amount || 0)
-
-    // IVA de gastos en el período
-    const expensesIvaAgg = await prisma.expense.aggregate({
-      _sum: {
-        iva_amount: true,
-      },
-      where: {
-        deleted_at: null,
-        OR: [
-          { date_start: { gte: startDate, lte: endDate } },
-          { date_end: { gte: startDate, lte: endDate } },
-          {
-            AND: [
-              { date_start: { lte: startDate } },
-              { date_end: { gte: endDate } },
-            ],
-          },
-        ],
-      },
-    })
-    const expensesIva = Number(expensesIvaAgg._sum.iva_amount || 0)
-
-    // IVA a deber: IVA de ingresos - IVA de gastos
-    const ivaToPay = incomesIva - expensesIva
-
-    // Beneficio neto: beneficio - IVA a deber
-    const netProfit = profit - ivaToPay
-
-    // Impuesto de sociedades: 15% del beneficio neto (después del IVA)
-    const estimatedCorporateTax = (netProfit * 15) / 100
-
-    // Beneficio neto después de impuesto de sociedades
-    const netProfitAfterCorporateTax = netProfit - estimatedCorporateTax
+    const income = fiscal.income_cash
+    const expenses = fiscal.expenses_cash
+    const profit = fiscal.gross_cash
+    const ivaToPay = fiscal.has_iva_data ? fiscal.iva_liquidacion : 0
+    const estimatedCorporateTax = fiscal.corporate_tax
+    const netProfit = fiscal.has_iva_data
+      ? fiscal.fiscal_gross - Math.max(0, fiscal.iva_liquidacion)
+      : fiscal.gross_cash
+    const netProfitAfterCorporateTax = fiscal.net_result
 
     let bankConnection: BankConnectionStatus = {
       connected: false,
@@ -254,6 +213,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           netProfit,
           netProfitAfterCorporateTax,
         },
+        overviewKpis,
         bankConnection,
         initialAiAnalysis,
       },
@@ -279,6 +239,14 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           netProfit: 0,
           netProfitAfterCorporateTax: 0,
         },
+        overviewKpis: {
+          income: 0,
+          expenses: 0,
+          taxes: 0,
+          net_result: 0,
+          gross_cash: 0,
+          has_iva_data: false,
+        },
         bankConnection: {
           connected: false,
           account_uid: null,
@@ -295,6 +263,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 export default function FinancesDashboard({
   dateRange: initialDateRange,
   stats,
+  overviewKpis,
   bankConnection: initialBankConnection,
   initialAiAnalysis,
 }: DashboardProps) {
@@ -586,6 +555,40 @@ export default function FinancesDashboard({
     return buildPeriodInsights({ ...stats, periodDays: periodDaysCount })
   }, [stats, dateRange])
 
+  const periodQuery = periodToQuery(dateRange)
+  const periodQs = `start=${periodQuery.start}&end=${periodQuery.end}`
+
+  const overviewCards = [
+    {
+      href: `/finances/expenses?${periodQs}`,
+      label: 'Gastos',
+      value: overviewKpis.expenses,
+      sub: 'Pagos en banco',
+      valueClass: 'text-rose-800',
+    },
+    {
+      href: `/finances/incomes?${periodQs}`,
+      label: 'Ingresos',
+      value: overviewKpis.income,
+      sub: 'Cobros en banco',
+      valueClass: 'text-emerald-800',
+    },
+    {
+      href: `/finances/taxes?${periodQs}`,
+      label: 'Impuestos',
+      value: overviewKpis.taxes,
+      sub: overviewKpis.has_iva_data ? 'IVA + sociedades est.' : 'Solo IS est. (sin IVA vinc.)',
+      valueClass: 'text-slate-900',
+    },
+    {
+      href: `/finances/results?${periodQs}`,
+      label: 'Resultado',
+      value: overviewKpis.net_result,
+      sub: `Bruto ${formatCurrency(overviewKpis.gross_cash)}`,
+      valueClass: overviewKpis.net_result >= 0 ? 'text-slate-900' : 'text-red-600',
+    },
+  ]
+
   const quickLinks = [
     { href: '/finances/expenses', label: 'Gastos', icon: TrendingDown, color: 'text-red-600' },
     { href: '/finances/incomes', label: 'Ingresos', icon: TrendingUp, color: 'text-green-600' },
@@ -633,6 +636,8 @@ export default function FinancesDashboard({
               onChange={handlePeriodChange}
               className="flex-1 min-w-0"
             />
+
+            <PaymentConceptGuide />
           </div>
 
           {(bankConnection.connected && bankConnection.days_remaining !== null) || syncMessage ? (
@@ -673,6 +678,24 @@ export default function FinancesDashboard({
               )}
             </div>
           ) : null}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {overviewCards.map((card) => (
+            <Link key={card.href} href={card.href}>
+              <Card className="border-slate-200/80 shadow-sm bg-white hover:border-slate-300 transition-colors h-full">
+                <CardContent className="pt-5 pb-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                    {card.label}
+                  </p>
+                  <p className={`text-2xl font-semibold tabular-nums ${card.valueClass}`}>
+                    {formatCurrency(card.value)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-1">{card.sub}</p>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
         </div>
 
         {/* Centro de inteligencia financiera */}
@@ -782,8 +805,6 @@ export default function FinancesDashboard({
                   <MrrByClientChart data={executive.mrr_by_client} />
                 </CardContent>
               </Card>
-
-              <PaymentConceptGuide />
             </div>
 
             {/* Alertas + IA */}

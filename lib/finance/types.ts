@@ -189,3 +189,23 @@ export interface FinanceAiSummary {
   metricas_clave: Array<{ nombre: string; valor: string; interpretacion: string }>
   path_a_objetivo: string
 }
+
+export interface ExpenseAiSummary {
+  resumen: string
+  control_gastos_0_100: number
+  brechas: string[]
+  riesgos: string[]
+  ahorros_detectados: string[]
+  acciones_prioritarias: string[]
+  por_categoria: Array<{ categoria: string; situacion: string }>
+}
+
+export interface IncomeAiSummary {
+  resumen: string
+  salud_cobros_0_100: number
+  brechas: string[]
+  riesgos: string[]
+  oportunidades: string[]
+  acciones_prioritarias: string[]
+  por_cliente: Array<{ cliente: string; situacion: string }>
+}

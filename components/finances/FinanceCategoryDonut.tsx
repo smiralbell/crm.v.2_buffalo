@@ -4,11 +4,14 @@ import { useState, useCallback } from 'react'
 import { PieChart, Pie, Cell, Sector, ResponsiveContainer } from 'recharts'
 import type { CategorySlice } from '@/lib/finance/types'
 import { chartColor, fmtEur, fmtPct } from '@/lib/finance/chart-theme'
+import { cn } from '@/lib/utils'
 
 interface Props {
   data: CategorySlice[]
   emptyMessage: string
   variant?: 'expense' | 'income'
+  /** En columnas estrechas: donut arriba y leyenda abajo, sin recortes */
+  compact?: boolean
 }
 
 interface ActiveShapeProps {
@@ -28,7 +31,7 @@ function ActiveShape(props: ActiveShapeProps) {
       cx={cx}
       cy={cy}
       innerRadius={innerRadius}
-      outerRadius={outerRadius + 10}
+      outerRadius={outerRadius + 8}
       startAngle={startAngle}
       endAngle={endAngle}
       fill={fill}
@@ -38,7 +41,7 @@ function ActiveShape(props: ActiveShapeProps) {
   )
 }
 
-export default function FinanceCategoryDonut({ data, emptyMessage }: Props) {
+export default function FinanceCategoryDonut({ data, emptyMessage, compact = false }: Props) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
 
   const chartData = data.map((d, i) => ({
@@ -60,19 +63,34 @@ export default function FinanceCategoryDonut({ data, emptyMessage }: Props) {
     )
   }
 
+  const innerRadius = compact ? 46 : 58
+  const outerRadius = compact ? 66 : 82
+  const chartHeight = compact ? 200 : 220
+
   return (
-    <div className="flex flex-col sm:flex-row gap-4 items-stretch min-h-[240px]">
-      <div className="relative flex-1 min-w-0" style={{ minHeight: 220 }}>
-        <ResponsiveContainer width="100%" height={220}>
-          <PieChart>
+    <div
+      className={cn(
+        'flex gap-4 items-stretch',
+        compact ? 'flex-col min-h-[320px]' : 'flex-col sm:flex-row min-h-[240px]'
+      )}
+    >
+      <div
+        className={cn(
+          'relative min-w-0 overflow-visible',
+          compact ? 'w-full max-w-[220px] mx-auto' : 'flex-1'
+        )}
+        style={{ minHeight: chartHeight }}
+      >
+        <ResponsiveContainer width="100%" height={chartHeight}>
+          <PieChart margin={{ top: 12, right: 12, bottom: 12, left: 12 }}>
             <Pie
               data={chartData}
               dataKey="amount"
               nameKey="label"
               cx="50%"
               cy="50%"
-              innerRadius={58}
-              outerRadius={82}
+              innerRadius={innerRadius}
+              outerRadius={outerRadius}
               paddingAngle={2}
               activeIndex={activeIndex ?? undefined}
               activeShape={ActiveShape as unknown as React.ReactElement}
@@ -101,7 +119,14 @@ export default function FinanceCategoryDonut({ data, emptyMessage }: Props) {
         )}
       </div>
 
-      <div className="sm:w-[200px] flex flex-col justify-center border-t sm:border-t-0 sm:border-l border-gray-100 pt-4 sm:pt-0 sm:pl-4">
+      <div
+        className={cn(
+          'flex flex-col justify-center',
+          compact
+            ? 'w-full border-t border-gray-100 pt-4'
+            : 'sm:w-[200px] border-t sm:border-t-0 sm:border-l border-gray-100 pt-4 sm:pt-0 sm:pl-4'
+        )}
+      >
         {active ? (
           <div className="space-y-2">
             <div className="flex items-center gap-2">

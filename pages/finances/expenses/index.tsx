@@ -20,14 +20,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import RecurringExpensesPanel from '@/components/finances/RecurringExpensesPanel'
 import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
-import {
-  detectRecurringExpenses,
-  recurringExpensesSummary,
-} from '@/lib/finance/recurring-expenses'
-import { buildExpenseAnalytics, buildBucketBreakdown, type ExpenseAnalytics } from '@/lib/finance/expense-analytics'
-import type { RecurringExpensesSummary } from '@/lib/finance/types'
+import { buildExpenseAnalytics, type ExpenseAnalytics } from '@/lib/finance/expense-analytics'
+
+const ExpenseVendorBarChart = dynamic(() => import('@/components/finances/ExpenseVendorBarChart'), {
+  ssr: false,
+})
 
 const ExpenseBucketTimelineChart = dynamic(
   () => import('@/components/finances/ExpenseBucketTimelineChart'),
@@ -43,20 +41,24 @@ const ExpenseSavingsSimulator = dynamic(
 const ProjectSpendChart = dynamic(() => import('@/components/finances/ProjectSpendChart'), {
   ssr: false,
 })
+const ExpenseAiPanel = dynamic(() => import('@/components/finances/ExpenseAiPanel'), {
+  ssr: false,
+})
 
 const EMPTY_ANALYTICS: ExpenseAnalytics = {
   bucket_breakdown: [],
   monthly_timeline: [],
   project_spend: [],
+  vendor_spend: [],
   recurring: { monthly_total: 0, annual_total: 0, count: 0, items: [], groups: [] },
   cuttable_items: [],
   totals: {
     period_total: 0,
     recurring_monthly: 0,
-    platform_monthly: 0,
-    payroll_monthly: 0,
-    developer_monthly: 0,
-    marketing_monthly: 0,
+    platform_period: 0,
+    payroll_period: 0,
+    developer_period: 0,
+    marketing_period: 0,
   },
 }
 interface ExpensesPageProps {
@@ -68,7 +70,6 @@ interface ExpensesPageProps {
     account_name: string
     matched: boolean
   }>
-  recurringExpenses: RecurringExpensesSummary
   expenseAnalytics: ExpenseAnalytics
   invoices: Array<{
     id: number
@@ -101,7 +102,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         expenses: [],
-        recurringExpenses: { monthly_total: 0, annual_total: 0, count: 0, items: [], groups: [] },
         expenseAnalytics: EMPTY_ANALYTICS,
         invoices: [],
         unmatchedExpenses: [],
@@ -247,19 +247,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       }
     })
 
-    const recurringItems = detectRecurringExpenses(
-      normalizedExpensesBase.map((e) => ({
-        description: e.description,
-        amount: -e.amount,
-        date: e.date,
-      }))
-    )
-    const recurringSummary = recurringExpensesSummary(recurringItems)
-    const recurringExpenses = {
-      ...recurringSummary,
-      items: recurringItems,
-    }
-
     // Analytics: últimos 12 meses hasta fin del período (gráficos + proyección)
     const analyticsStart = new Date(endDate.getFullYear(), endDate.getMonth() - 11, 1)
     const analyticsStartStr = format(analyticsStart, 'yyyy-MM-dd')
@@ -275,14 +262,12 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       amount: Number(e.amount),
       date: e.date.slice(0, 10),
     }))
-    const expenseAnalytics = buildExpenseAnalytics(analyticsExpenses)
-    expenseAnalytics.bucket_breakdown = buildBucketBreakdown(
-      normalizedExpensesBase.map((e) => ({
-        description: e.description,
-        amount: -e.amount,
-        date: e.date,
-      }))
-    )
+    const periodExpenses = normalizedExpensesBase.map((e) => ({
+      description: e.description,
+      amount: -e.amount,
+      date: e.date,
+    }))
+    const expenseAnalytics = buildExpenseAnalytics(analyticsExpenses, periodExpenses)
 
     // Obtener facturas en el mismo rango de fechas (por fecha de emisión)
     const invoicesRaw = await prisma.invoice.findMany({
@@ -347,7 +332,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         expenses: normalizedExpenses,
-        recurringExpenses,
         expenseAnalytics,
         invoices,
         unmatchedExpenses,
@@ -368,7 +352,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         expenses: [],
-        recurringExpenses: { monthly_total: 0, annual_total: 0, count: 0, items: [], groups: [] },
         expenseAnalytics: EMPTY_ANALYTICS,
         invoices: [],
         unmatchedExpenses: [],
@@ -385,7 +368,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
 export default function ExpensesPage({
   expenses,
-  recurringExpenses,
   expenseAnalytics,
   invoices,
   unmatchedExpenses,
@@ -598,192 +580,163 @@ export default function ExpensesPage({
 
   return (
     <Layout>
-      <div className="space-y-6">
-        {/* Header compacto */}
-        <div className="flex items-center justify-between">
-          <Link href="/finances">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={currentDateRange} />
+      <div className="space-y-8">
+        {/* Cabecera */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/finances">
+              <Button variant="ghost" size="icon" className="text-slate-500 hover:text-slate-900">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-slate-900">Gastos</h1>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Análisis por categoría, proveedor y proyecto
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <PaymentConceptGuide />
+            <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={currentDateRange} />
+          </div>
         </div>
 
-        {/* Resumen de totales - Estilo profesional */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Total Gastos del Período</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(expensesTotal)}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {displayExpenses.length} movimientos
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Gastos con Factura</p>
-              <p className="text-2xl font-semibold text-emerald-700">{formatCurrency(matchedTotal)}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {matchedExpenses.length} movimientos trabajados (verde)
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Gastos sin Factura</p>
-              <p className="text-2xl font-semibold text-red-700">{formatCurrency(unmatchedTotal)}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {unmatchedExpensesAll.length} movimientos pendientes de relacionar
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">IVA Acumulado (Gastos)</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(totalVat)}</p>
-              <p className="text-xs text-gray-400 mt-1">Suma de IVA de todas las facturas de gasto</p>
-            </CardContent>
-          </Card>
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">IRPF Acumulado (Gastos)</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(totalIrpf)}</p>
-              <p className="text-xs text-gray-400 mt-1">Suma de IRPF de todas las facturas de gasto</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Inteligencia de gastos — ventana 12 meses */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="border border-indigo-100 bg-indigo-50/30 shadow-sm">
+        {/* KPIs del período */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Card className="border-slate-200/80 shadow-sm bg-white">
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs font-medium text-indigo-700">Plataformas / SaaS</p>
-              <p className="text-xl font-bold text-gray-900 tabular-nums mt-1">
-                {formatCurrency(expenseAnalytics.totals.platform_monthly)}/mes
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                Total del período
               </p>
-              <p className="text-[10px] text-gray-500 mt-1">Recurrente estimado · auto-detectado</p>
+              <p className="text-2xl font-semibold tabular-nums text-slate-900">{formatCurrency(expensesTotal)}</p>
+              <p className="text-[11px] text-slate-400 mt-1">{displayExpenses.length} movimientos</p>
             </CardContent>
           </Card>
-          <Card className="border border-gray-200 shadow-sm">
+          <Card className="border-emerald-200/60 shadow-sm bg-gradient-to-br from-emerald-50/40 to-white">
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs font-medium text-gray-500">Nóminas</p>
-              <p className="text-xl font-bold text-gray-900 tabular-nums mt-1">
-                {formatCurrency(expenseAnalytics.totals.payroll_monthly)}/mes
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700/80 mb-1.5">
+                Con factura
               </p>
+              <p className="text-2xl font-semibold tabular-nums text-emerald-800">{formatCurrency(matchedTotal)}</p>
+              <p className="text-[11px] text-slate-400 mt-1">{matchedExpenses.length} trabajados</p>
             </CardContent>
           </Card>
-          <Card className="border border-violet-100 bg-violet-50/30 shadow-sm">
+          <Card className="border-rose-200/60 shadow-sm bg-gradient-to-br from-rose-50/30 to-white">
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs font-medium text-violet-700">Developers / proyectos</p>
-              <p className="text-xl font-bold text-gray-900 tabular-nums mt-1">
-                {formatCurrency(expenseAnalytics.totals.developer_monthly)}/mes
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-rose-700/80 mb-1.5">
+                Sin factura
               </p>
+              <p className="text-2xl font-semibold tabular-nums text-rose-800">{formatCurrency(unmatchedTotal)}</p>
+              <p className="text-[11px] text-slate-400 mt-1">{unmatchedExpensesAll.length} pendientes</p>
             </CardContent>
           </Card>
-          <Card className="border border-pink-100 bg-pink-50/30 shadow-sm">
+          <Card className="border-slate-200/80 shadow-sm bg-white">
             <CardContent className="pt-5 pb-4">
-              <p className="text-xs font-medium text-pink-700">Marketing</p>
-              <p className="text-xl font-bold text-gray-900 tabular-nums mt-1">
-                {formatCurrency(expenseAnalytics.totals.marketing_monthly)}/mes
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                IVA acumulado
               </p>
+              <p className="text-2xl font-semibold tabular-nums text-slate-900">{formatCurrency(totalVat)}</p>
+              <p className="text-[11px] text-slate-400 mt-1">Facturas de gasto</p>
+            </CardContent>
+          </Card>
+          <Card className="border-slate-200/80 shadow-sm bg-white">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                IRPF acumulado
+              </p>
+              <p className="text-2xl font-semibold tabular-nums text-slate-900">{formatCurrency(totalIrpf)}</p>
+              <p className="text-[11px] text-slate-400 mt-1">Facturas de gasto</p>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="border border-gray-200 shadow-sm lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Evolución temporal por categoría</CardTitle>
-              <p className="text-xs text-gray-400 font-normal">Últimos 12 meses · apilado por tipo de gasto</p>
+        <Card className="border-slate-200/80 shadow-sm overflow-hidden">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
+            <CardTitle className="text-base font-semibold text-slate-900">En qué gastamos</CardTitle>
+            <p className="text-xs text-slate-500 font-normal mt-0.5">
+              Desglose del período por proveedor, nómina, marketing y más
+            </p>
+          </CardHeader>
+          <CardContent className="pt-5">
+            <ExpenseVendorBarChart data={expenseAnalytics.vendor_spend} />
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 lg:grid-cols-5">
+          <Card className="border-slate-200/80 shadow-sm lg:col-span-3">
+            <CardHeader className="border-b border-slate-100 bg-slate-50/30 pb-4">
+              <CardTitle className="text-base font-semibold text-slate-900">Evolución por categoría</CardTitle>
+              <p className="text-xs text-slate-500 font-normal mt-0.5">Últimos 12 meses · apilado por tipo</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-5">
               <ExpenseBucketTimelineChart data={expenseAnalytics.monthly_timeline} />
             </CardContent>
           </Card>
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Distribución del período filtrado</CardTitle>
-              <p className="text-xs text-gray-400 font-normal">Por concepto bancario normalizado</p>
+          <Card className="border-slate-200/80 shadow-sm lg:col-span-2">
+            <CardHeader className="border-b border-slate-100 bg-slate-50/30 pb-4">
+              <CardTitle className="text-base font-semibold text-slate-900">Distribución del período</CardTitle>
+              <p className="text-xs text-slate-500 font-normal mt-0.5">Por concepto bancario normalizado</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-5 overflow-visible">
               <FinanceCategoryDonut
                 data={expenseAnalytics.bucket_breakdown}
                 emptyMessage="Sin gastos en el período seleccionado"
                 variant="expense"
+                compact
               />
             </CardContent>
           </Card>
         </div>
 
+        <Card className="border-slate-200/80 shadow-sm">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/30 pb-4">
+            <CardTitle className="text-base font-semibold text-slate-900">Simulador de ahorro</CardTitle>
+            <p className="text-xs text-slate-500 font-normal mt-0.5">
+              Marca plataformas a cancelar y mira el impacto mensual y a 12 meses
+            </p>
+          </CardHeader>
+          <CardContent className="pt-5">
+            <ExpenseSavingsSimulator
+              items={expenseAnalytics.cuttable_items}
+              currentRecurringMonthly={expenseAnalytics.totals.recurring_monthly}
+            />
+          </CardContent>
+        </Card>
+
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Simulador de ahorro</CardTitle>
-              <p className="text-xs text-gray-400 font-normal">
-                Marca plataformas a cancelar y mira el impacto mensual y a 12 meses
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ExpenseSavingsSimulator
-                items={expenseAnalytics.cuttable_items}
-                currentRecurringMonthly={expenseAnalytics.totals.recurring_monthly}
-              />
-            </CardContent>
-          </Card>
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Gasto por proyecto (DEV)</CardTitle>
-              <p className="text-xs text-gray-400 font-normal">
+          <Card className="border-slate-200/80 shadow-sm">
+            <CardHeader className="border-b border-slate-100 bg-slate-50/30 pb-4">
+              <CardTitle className="text-base font-semibold text-slate-900">Gasto por proyecto (DEV)</CardTitle>
+              <p className="text-xs text-slate-500 font-normal mt-0.5">
                 Pagos con concepto DEV {`{nombre}`} {`{proyecto-id}`}
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-5">
               <ProjectSpendChart data={expenseAnalytics.project_spend} />
             </CardContent>
           </Card>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="border border-gray-200 shadow-sm lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Gastos recurrentes por categoría</CardTitle>
-              <p className="text-xs text-gray-400 font-normal">
-                Nóminas · plataformas · developers · marketing ·{' '}
-                {formatCurrency(expenseAnalytics.totals.recurring_monthly)}/mes
+          <Card className="border-slate-200/80 shadow-sm">
+            <CardHeader className="border-b border-slate-100 bg-slate-50/30 pb-4">
+              <CardTitle className="text-base font-semibold text-slate-900">Análisis IA de gastos</CardTitle>
+              <p className="text-xs text-slate-500 font-normal mt-0.5">
+                Brechas, riesgos y oportunidades de ahorro en el período
               </p>
             </CardHeader>
-            <CardContent>
-              <RecurringExpensesPanel data={expenseAnalytics.recurring} compact />
-            </CardContent>
-          </Card>
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Resumen recurrente</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-gray-600">
-              <p>
-                Gasto fijo estimado:{' '}
-                <span className="font-semibold text-gray-900">
-                  {formatCurrency(expenseAnalytics.totals.recurring_monthly)}/mes
-                </span>{' '}
-                ({formatCurrency(expenseAnalytics.recurring.annual_total)}/año).
-              </p>
-              <p className="text-xs text-gray-400">
-                Plataformas con el mismo cargo 2+ meses se detectan solas. Nóminas e impuestos no son
-                cortables; SaaS y marketing sí.
-              </p>
+            <CardContent className="pt-5">
+              <ExpenseAiPanel
+                periodStart={format(currentDateRange.start ?? defaultRange.start!, 'yyyy-MM-dd')}
+                periodEnd={format(currentDateRange.end ?? defaultRange.end!, 'yyyy-MM-dd')}
+              />
             </CardContent>
           </Card>
         </div>
-
-        <PaymentConceptGuide className="mb-4" />
 
         {/* Acciones rápidas para gastos */}
         <div className="grid gap-4 md:grid-cols-1">
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Alertas de gastos sin factura</CardTitle>
+          <Card className="border-slate-200/80 shadow-sm">
+            <CardHeader className="border-b border-slate-100 bg-slate-50/30 pb-4">
+              <CardTitle className="text-base font-semibold text-slate-900">Alertas sin factura</CardTitle>
             </CardHeader>
             <CardContent>
               {displayUnmatched.length === 0 ? (

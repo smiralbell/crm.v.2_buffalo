@@ -1,6 +1,7 @@
 import {
   PAYMENT_BUCKET_LABELS,
   parsePaymentConcept,
+  platformLabelFromDescription,
   type PaymentBucket,
 } from './payment-concepts'
 import {
@@ -13,13 +14,13 @@ import type { CategorySlice } from './types'
 const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
 export const BUCKET_CHART_COLORS: Record<PaymentBucket, string> = {
-  platform: '#6366F1',
-  payroll: '#111827',
-  developer: '#8B5CF6',
-  marketing: '#EC4899',
-  professional: '#6B7280',
-  tax: '#DC2626',
-  other: '#D1D5DB',
+  platform: '#4F46E5',
+  payroll: '#0F172A',
+  developer: '#7C3AED',
+  marketing: '#BE185D',
+  professional: '#64748B',
+  tax: '#B45309',
+  other: '#CBD5E1',
 }
 
 const BUCKET_KEYS: PaymentBucket[] = [
@@ -78,16 +79,27 @@ export interface CuttableExpenseItem {
 export interface ExpenseAnalyticsTotals {
   period_total: number
   recurring_monthly: number
-  platform_monthly: number
-  payroll_monthly: number
-  developer_monthly: number
-  marketing_monthly: number
+  platform_period: number
+  payroll_period: number
+  developer_period: number
+  marketing_period: number
+}
+
+export interface VendorSpendRow {
+  vendor_key: string
+  label: string
+  bucket: PaymentBucket
+  bucket_label: string
+  total: number
+  payment_count: number
+  percentage: number
 }
 
 export interface ExpenseAnalytics {
   bucket_breakdown: CategorySlice[]
   monthly_timeline: MonthlyBucketPoint[]
   project_spend: ProjectSpendRow[]
+  vendor_spend: VendorSpendRow[]
   recurring: RecurringExpensesSummary
   cuttable_items: CuttableExpenseItem[]
   totals: ExpenseAnalyticsTotals
@@ -247,6 +259,65 @@ export function buildProjectSpend(expenses: ExpenseInput[]): ProjectSpendRow[] {
     .sort((a, b) => b.total - a.total)
 }
 
+export function buildVendorSpend(expenses: ExpenseInput[]): VendorSpendRow[] {
+  const promotions = buildRecurrencePromotions(expenses)
+  const byKey = new Map<
+    string,
+    { label: string; bucket: PaymentBucket; amounts: number[] }
+  >()
+
+  for (const e of expenses) {
+    const abs = Math.abs(e.amount)
+    if (abs <= 0) continue
+    const parsed = parsePaymentConcept(e.description || 'Sin concepto')
+    const bucket = promotions.get(parsed.grouping_key) ?? parsed.bucket
+    let label = parsed.display_label
+    if (bucket === 'platform' && parsed.bucket === 'other') {
+      label = platformLabelFromDescription(e.description || '')
+    }
+
+    if (!byKey.has(parsed.grouping_key)) {
+      byKey.set(parsed.grouping_key, { label, bucket, amounts: [] })
+    }
+    const row = byKey.get(parsed.grouping_key)!
+    if (bucket === 'platform') row.bucket = 'platform'
+    row.amounts.push(abs)
+  }
+
+  const grandTotal = expenses.reduce((s, e) => s + Math.abs(e.amount), 0)
+
+  return Array.from(byKey.entries())
+    .map(([vendor_key, data]) => {
+      const total = Math.round(data.amounts.reduce((a, b) => a + b, 0) * 100) / 100
+      return {
+        vendor_key,
+        label: data.label,
+        bucket: data.bucket,
+        bucket_label: PAYMENT_BUCKET_LABELS[data.bucket],
+        total,
+        payment_count: data.amounts.length,
+        percentage: grandTotal > 0 ? Math.round((total / grandTotal) * 1000) / 10 : 0,
+      }
+    })
+    .filter((r) => r.total > 0)
+    .sort((a, b) => b.total - a.total)
+}
+
+export function bucketTotalFromBreakdown(
+  breakdown: CategorySlice[],
+  bucket: PaymentBucket
+): number {
+  return breakdown.find((s) => s.id === bucket)?.amount ?? 0
+}
+
+/** Meses naturales cubiertos por el rango (mín. 1) */
+export function countMonthsInPeriod(start: Date, end: Date): number {
+  return Math.max(
+    1,
+    (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+  )
+}
+
 function buildCuttableItems(
   recurring: ReturnType<typeof recurringExpensesSummary>
 ): CuttableExpenseItem[] {
@@ -263,32 +334,29 @@ function buildCuttableItems(
     }))
 }
 
-export function buildExpenseAnalytics(expenses: ExpenseInput[]): ExpenseAnalytics {
+export function buildExpenseAnalytics(
+  expenses: ExpenseInput[],
+  periodExpenses?: ExpenseInput[]
+): ExpenseAnalytics {
   const recurringItems = detectRecurringExpenses(expenses)
   const recurring = recurringExpensesSummary(recurringItems)
-
-  const platform_monthly =
-    recurring.groups.find((g) => g.bucket === 'platform')?.monthly_total ?? 0
-  const payroll_monthly =
-    recurring.groups.find((g) => g.bucket === 'payroll')?.monthly_total ?? 0
-  const developer_monthly =
-    recurring.groups.find((g) => g.bucket === 'developer')?.monthly_total ?? 0
-  const marketing_monthly =
-    recurring.groups.find((g) => g.bucket === 'marketing')?.monthly_total ?? 0
+  const period = periodExpenses ?? expenses
+  const breakdown = buildBucketBreakdown(period)
 
   return {
-    bucket_breakdown: buildBucketBreakdown(expenses),
+    bucket_breakdown: breakdown,
     monthly_timeline: buildMonthlyBucketTimeline(expenses),
-    project_spend: buildProjectSpend(expenses),
+    project_spend: buildProjectSpend(period),
+    vendor_spend: buildVendorSpend(period),
     recurring,
     cuttable_items: buildCuttableItems(recurring),
     totals: {
       period_total: Math.round(expenses.reduce((s, e) => s + Math.abs(e.amount), 0) * 100) / 100,
       recurring_monthly: recurring.monthly_total,
-      platform_monthly,
-      payroll_monthly,
-      developer_monthly,
-      marketing_monthly,
+      platform_period: bucketTotalFromBreakdown(breakdown, 'platform'),
+      payroll_period: bucketTotalFromBreakdown(breakdown, 'payroll'),
+      developer_period: bucketTotalFromBreakdown(breakdown, 'developer'),
+      marketing_period: bucketTotalFromBreakdown(breakdown, 'marketing'),
     },
   }
 }

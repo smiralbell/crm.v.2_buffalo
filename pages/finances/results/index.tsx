@@ -1,234 +1,120 @@
 import { GetServerSideProps } from 'next'
+import dynamic from 'next/dynamic'
 import { useState } from 'react'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
-import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfDay, endOfDay } from 'date-fns'
+import { format, startOfDay, endOfDay, startOfYear, endOfMonth } from 'date-fns'
 import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
+import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
+import {
+  buildFiscalPeriodSummary,
+  type FiscalPeriodSummary,
+} from '@/lib/finance/fiscal-summary'
+
+const ResultsMonthlyChart = dynamic(() => import('@/components/finances/ResultsMonthlyChart'), {
+  ssr: false,
+})
+
+const EMPTY_FISCAL: FiscalPeriodSummary = {
+  period_label: '',
+  income_cash: 0,
+  expenses_cash: 0,
+  gross_cash: 0,
+  has_iva_data: false,
+  base_income: 0,
+  base_expenses: 0,
+  iva_repercutido: 0,
+  iva_soportado: 0,
+  iva_liquidacion: 0,
+  fiscal_gross: 0,
+  corporate_tax_percent: 25,
+  corporate_tax: 0,
+  taxes_total: 0,
+  net_result: 0,
+  margin_cash_pct: null,
+  margin_net_pct: null,
+  linked_incomes: 0,
+  incomes_with_iva: 0,
+  expenses_with_iva: 0,
+  monthly: [],
+}
 
 interface ResultsPageProps {
-  dateRange: {
-    start: string | null
-    end: string | null
-  }
-  monthlyData: Array<{
-    month: string
-    income: number
-    expenses: number
-    profit: number
-    corporateTax: number
-    netProfit: number
-  }>
-  totals: {
-    totalIncome: number
-    totalExpenses: number
-    totalProfit: number
-    totalCorporateTax: number
-    totalNetProfit: number
-  }
+  dateRange: { start: string | null; end: string | null }
+  fiscal: FiscalPeriodSummary
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  // Durante el build, si DATABASE_URL no está disponible, retornar datos por defecto
   if (!process.env.DATABASE_URL && process.env.NEXT_PHASE === 'phase-production-build') {
     const now = new Date()
     return {
       props: {
-        dateRange: {
-          start: startOfYear(now).toISOString(),
-          end: endOfYear(now).toISOString(),
-        },
-        monthlyData: [],
-        totals: {
-          totalIncome: 0,
-          totalExpenses: 0,
-          totalProfit: 0,
-          totalCorporateTax: 0,
-          totalNetProfit: 0,
-        },
+        dateRange: { start: startOfYear(now).toISOString(), end: endOfMonth(now).toISOString() },
+        fiscal: EMPTY_FISCAL,
       },
     }
   }
 
   try {
     await requireAuth(context)
-  } catch (error) {
-    return {
-      redirect: {
-        destination: '/login',
-        permanent: false,
-      },
-    }
+  } catch {
+    return { redirect: { destination: '/login', permanent: false } }
   }
 
   try {
     const startParam = context.query.start as string
     const endParam = context.query.end as string
-    
+
     let startDate: Date
     let endDate: Date
-    
+
     if (startParam && endParam) {
       startDate = startOfDay(new Date(startParam))
       endDate = endOfDay(new Date(endParam))
     } else {
       const now = new Date()
       startDate = startOfYear(now)
-      endDate = endOfYear(now)
+      endDate = endOfMonth(now)
     }
 
-    // Obtener configuración de impuesto de sociedades
-    const settings = await prisma.financialSettings.findUnique({
-      where: { id: 1 },
-    })
-    const corporateTaxPercent = settings ? Number(settings.corporate_tax_percent) : 25
-
-    // Calcular datos mensuales
-    const monthlyData = []
-    const currentDate = new Date(startDate)
-    
-    while (currentDate <= endDate) {
-      const monthStart = startOfMonth(currentDate)
-      const monthEnd = endOfMonth(currentDate)
-      
-      // Ingresos del mes
-      const incomes = await prisma.financialIncome.findMany({
-        where: {
-          date: { gte: monthStart, lte: monthEnd },
-          deleted_at: null,
-        },
-        select: { base_amount: true },
-      })
-      const income = incomes.reduce((sum, i) => sum + Number(i.base_amount), 0)
-
-      // Gastos del mes
-      const expensesData = await prisma.expense.findMany({
-        where: {
-          OR: [
-            { date_start: { gte: monthStart, lte: monthEnd } },
-            { date_end: { gte: monthStart, lte: monthEnd } },
-            {
-              AND: [
-                { date_start: { lte: monthStart } },
-                { date_end: { gte: monthEnd } },
-              ],
-            },
-          ],
-          deleted_at: null,
-        },
-        select: { base_amount: true },
-      })
-      
-      const fixedExpenses = await prisma.fixedExpense.findMany({
-        where: {
-          is_active: true,
-          deleted_at: null,
-        },
-        select: { amount: true },
-      })
-      const fixedExpensesAmount = fixedExpenses.reduce((sum, f) => sum + Number(f.amount), 0)
-      
-      const salaries = await prisma.salary.findMany({
-        where: {
-          date: { gte: monthStart, lte: monthEnd },
-          deleted_at: null,
-        },
-        select: { amount: true },
-      })
-      const salariesAmount = salaries.reduce((sum, s) => sum + Number(s.amount), 0)
-      
-      const expenses = expensesData.reduce((sum, e) => sum + Number(e.base_amount), 0) 
-        + fixedExpensesAmount 
-        + salariesAmount
-
-      const profit = income - expenses
-      const corporateTax = profit * (corporateTaxPercent / 100)
-      const netProfit = profit - corporateTax
-
-      monthlyData.push({
-        month: format(monthStart, 'MMM yyyy'),
-        income,
-        expenses,
-        profit,
-        corporateTax,
-        netProfit,
-      })
-
-      // Avanzar al siguiente mes
-      currentDate.setMonth(currentDate.getMonth() + 1)
-    }
-
-    // Calcular totales
-    const totals = monthlyData.reduce(
-      (acc, month) => ({
-        totalIncome: acc.totalIncome + month.income,
-        totalExpenses: acc.totalExpenses + month.expenses,
-        totalProfit: acc.totalProfit + month.profit,
-        totalCorporateTax: acc.totalCorporateTax + month.corporateTax,
-        totalNetProfit: acc.totalNetProfit + month.netProfit,
-      }),
-      {
-        totalIncome: 0,
-        totalExpenses: 0,
-        totalProfit: 0,
-        totalCorporateTax: 0,
-        totalNetProfit: 0,
-      }
-    )
+    const fiscal = await buildFiscalPeriodSummary(startDate, endDate)
 
     return {
       props: {
-        dateRange: {
-          start: startDate.toISOString(),
-          end: endDate.toISOString(),
-        },
-        monthlyData,
-        totals,
+        dateRange: { start: startDate.toISOString(), end: endDate.toISOString() },
+        fiscal,
       },
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (process.env.NODE_ENV === 'development') {
       console.error('[ERROR] Error loading results:', error)
     }
     const now = new Date()
     return {
       props: {
-        dateRange: {
-          start: startOfYear(now).toISOString(),
-          end: endOfYear(now).toISOString(),
-        },
-        monthlyData: [],
-        totals: {
-          totalIncome: 0,
-          totalExpenses: 0,
-          totalProfit: 0,
-          totalCorporateTax: 0,
-          totalNetProfit: 0,
-        },
+        dateRange: { start: startOfYear(now).toISOString(), end: endOfMonth(now).toISOString() },
+        fiscal: EMPTY_FISCAL,
       },
     }
   }
 }
 
-export default function ResultsPage({ dateRange: initialDateRange, monthlyData, totals }: ResultsPageProps) {
+export default function ResultsPage({ dateRange: initialDateRange, fiscal }: ResultsPageProps) {
   const router = useRouter()
   const now = new Date()
   const defaultRange: DateRangePickerResult = {
     start: startOfYear(now),
-    end: endOfYear(now),
+    end: endOfMonth(now),
   }
 
   const [dateRange, setDateRange] = useState<DateRangePickerResult>(
     initialDateRange?.start && initialDateRange?.end
-      ? {
-          start: new Date(initialDateRange.start),
-          end: new Date(initialDateRange.end),
-        }
+      ? { start: new Date(initialDateRange.start), end: new Date(initialDateRange.end) }
       : defaultRange
   )
 
@@ -243,120 +129,199 @@ export default function ResultsPage({ dateRange: initialDateRange, monthlyData, 
     }
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 2,
-    }).format(amount)
-  }
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(amount)
 
   const currentDateRange = dateRange || defaultRange
+  const resultColor = (n: number) => (n >= 0 ? 'text-slate-900' : 'text-red-600')
 
   return (
     <Layout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <div className="space-y-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
             <Link href="/finances">
-              <Button variant="ghost" size="icon" className="rounded-xl">
+              <Button variant="ghost" size="icon" className="text-slate-500 hover:text-slate-900">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
+            <div>
+              <h1 className="text-xl font-semibold tracking-tight text-slate-900">Resultados</h1>
+              <p className="text-xs text-slate-500 mt-0.5">
+                P&amp;L del período · caja y resultado neto tras impuestos estimados
+              </p>
+            </div>
           </div>
-          <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={currentDateRange} />
+          <div className="flex flex-wrap items-center gap-2">
+            <PaymentConceptGuide />
+            <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={currentDateRange} />
+          </div>
         </div>
 
-        {/* Resumen de totales */}
-        <div className="grid gap-4 md:grid-cols-5">
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Ingresos</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(totals.totalIncome)}</p>
-              <p className="text-xs text-gray-400 mt-1">Sin IVA</p>
-            </CardContent>
-          </Card>
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Gastos</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(totals.totalExpenses)}</p>
-              <p className="text-xs text-gray-400 mt-1">Sin IVA</p>
-            </CardContent>
-          </Card>
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Beneficio Bruto</p>
-              <p className={`text-2xl font-semibold mb-1 ${totals.totalProfit >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                {formatCurrency(totals.totalProfit)}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Card className="border-slate-200/80 shadow-sm bg-white">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                Ingresos (caja)
               </p>
-              <p className="text-xs text-gray-400">Ingresos - Gastos</p>
-            </CardContent>
-          </Card>
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Imp. Sociedades</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(totals.totalCorporateTax)}</p>
-              <p className="text-xs text-gray-400 mt-1">Estimado</p>
-            </CardContent>
-          </Card>
-          <Card className="border border-gray-200 shadow-sm">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Beneficio Neto</p>
-              <p className={`text-2xl font-semibold mb-1 ${totals.totalNetProfit >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                {formatCurrency(totals.totalNetProfit)}
+              <p className="text-2xl font-semibold tabular-nums text-emerald-800">
+                {formatCurrency(fiscal.income_cash)}
               </p>
-              <p className="text-xs text-gray-400">Después de impuestos</p>
+              <p className="text-[11px] text-slate-400 mt-1">Cobros en banco</p>
+            </CardContent>
+          </Card>
+          <Card className="border-slate-200/80 shadow-sm bg-white">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                Gastos (caja)
+              </p>
+              <p className="text-2xl font-semibold tabular-nums text-rose-800">
+                {formatCurrency(fiscal.expenses_cash)}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-1">Pagos en banco</p>
+            </CardContent>
+          </Card>
+          <Card className="border-slate-200/80 shadow-sm bg-white">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                Resultado bruto
+              </p>
+              <p className={`text-2xl font-semibold tabular-nums ${resultColor(fiscal.gross_cash)}`}>
+                {formatCurrency(fiscal.gross_cash)}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Margen {fiscal.margin_cash_pct != null ? `${fiscal.margin_cash_pct}%` : '—'}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-slate-200/80 shadow-sm bg-white">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                Impuestos est.
+              </p>
+              <p className="text-2xl font-semibold tabular-nums text-slate-900">
+                {formatCurrency(fiscal.taxes_total)}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                <Link href="/finances/taxes" className="hover:underline">
+                  Ver desglose
+                </Link>
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-slate-200/80 shadow-sm bg-white">
+            <CardContent className="pt-5 pb-4">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+                Resultado neto
+              </p>
+              <p className={`text-2xl font-semibold tabular-nums ${resultColor(fiscal.net_result)}`}>
+                {formatCurrency(fiscal.net_result)}
+              </p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Margen neto {fiscal.margin_net_pct != null ? `${fiscal.margin_net_pct}%` : '—'}
+              </p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Tabla mensual */}
-        <Card className="border border-gray-200 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">Desglose Mensual</CardTitle>
+        <Card className="border-slate-200/80 shadow-sm">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/30 pb-4">
+            <CardTitle className="text-base font-semibold text-slate-900">
+              Puente resultado bruto → neto
+            </CardTitle>
+            <p className="text-xs text-slate-500 font-normal mt-0.5">{fiscal.period_label}</p>
           </CardHeader>
-          <CardContent>
-            {monthlyData.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">No hay datos para el período seleccionado</p>
+          <CardContent className="pt-5">
+            <div className="max-w-lg space-y-2 text-sm">
+              <div className="flex justify-between py-2 border-b border-slate-100">
+                <span className="text-slate-600">Ingresos − gastos (caja)</span>
+                <span className={`font-medium tabular-nums ${resultColor(fiscal.gross_cash)}`}>
+                  {formatCurrency(fiscal.gross_cash)}
+                </span>
+              </div>
+              {fiscal.has_iva_data && (
+                <>
+                  <div className="flex justify-between py-2 border-b border-slate-100 text-slate-500">
+                    <span>↳ Base fiscal (sin IVA)</span>
+                    <span className="tabular-nums">{formatCurrency(fiscal.fiscal_gross)}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <span className="text-slate-600">− IVA a ingresar (est.)</span>
+                    <span className="tabular-nums text-slate-900">
+                      {formatCurrency(Math.max(0, fiscal.iva_liquidacion))}
+                    </span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between py-2 border-b border-slate-100">
+                <span className="text-slate-600">− Imp. sociedades ({fiscal.corporate_tax_percent}%)</span>
+                <span className="tabular-nums text-slate-900">{formatCurrency(fiscal.corporate_tax)}</span>
+              </div>
+              <div className="flex justify-between py-2 font-semibold text-slate-900">
+                <span>= Resultado neto estimado</span>
+                <span className={`tabular-nums ${resultColor(fiscal.net_result)}`}>
+                  {formatCurrency(fiscal.net_result)}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200/80 shadow-sm">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/30 pb-4">
+            <CardTitle className="text-base font-semibold text-slate-900">Evolución mensual</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-5">
+            <ResultsMonthlyChart data={fiscal.monthly} />
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200/80 shadow-sm overflow-hidden">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/30 pb-4">
+            <CardTitle className="text-base font-semibold text-slate-900">Desglose mensual</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 px-0">
+            {fiscal.monthly.length === 0 ? (
+              <p className="text-center text-slate-500 py-12 text-sm">Sin datos en el período</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-gray-50">
-                      <th className="text-left p-3 font-medium text-sm text-gray-700">Mes</th>
-                      <th className="text-right p-3 font-medium text-sm text-gray-700">Ingresos</th>
-                      <th className="text-right p-3 font-medium text-sm text-gray-700">Gastos</th>
-                      <th className="text-right p-3 font-medium text-sm text-gray-700">Beneficio Bruto</th>
-                      <th className="text-right p-3 font-medium text-sm text-gray-700">Imp. Sociedades</th>
-                      <th className="text-right p-3 font-medium text-sm text-gray-700">Beneficio Neto</th>
+                    <tr className="border-b bg-slate-50">
+                      <th className="text-left p-3 font-medium text-slate-700">Mes</th>
+                      <th className="text-right p-3 font-medium text-slate-700">Ingresos</th>
+                      <th className="text-right p-3 font-medium text-slate-700">Gastos</th>
+                      <th className="text-right p-3 font-medium text-slate-700">Bruto</th>
+                      <th className="text-right p-3 font-medium text-slate-700">Neto est.</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {monthlyData.map((month, index) => (
-                      <tr key={index} className="border-b hover:bg-gray-50">
-                        <td className="p-3 text-sm font-medium text-gray-900">{month.month}</td>
-                        <td className="p-3 text-right text-sm text-gray-600">{formatCurrency(month.income)}</td>
-                        <td className="p-3 text-right text-sm text-gray-600">{formatCurrency(month.expenses)}</td>
-                        <td className={`p-3 text-right text-sm font-medium ${month.profit >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                          {formatCurrency(month.profit)}
+                    {fiscal.monthly.map((m) => (
+                      <tr key={m.month_key} className="border-b hover:bg-slate-50/80">
+                        <td className="p-3 font-medium text-slate-900">{m.month_label}</td>
+                        <td className="p-3 text-right tabular-nums text-emerald-800">
+                          {formatCurrency(m.income_cash)}
                         </td>
-                        <td className="p-3 text-right text-sm text-gray-600">{formatCurrency(month.corporateTax)}</td>
-                        <td className={`p-3 text-right text-sm font-medium ${month.netProfit >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                          {formatCurrency(month.netProfit)}
+                        <td className="p-3 text-right tabular-nums text-rose-800">
+                          {formatCurrency(m.expenses_cash)}
+                        </td>
+                        <td className={`p-3 text-right tabular-nums font-medium ${resultColor(m.gross_cash)}`}>
+                          {formatCurrency(m.gross_cash)}
+                        </td>
+                        <td className={`p-3 text-right tabular-nums font-medium ${resultColor(m.net_result)}`}>
+                          {formatCurrency(m.net_result)}
                         </td>
                       </tr>
                     ))}
-                    <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
-                      <td className="p-3 text-sm text-gray-900">Total</td>
-                      <td className="p-3 text-right text-sm text-gray-900">{formatCurrency(totals.totalIncome)}</td>
-                      <td className="p-3 text-right text-sm text-gray-900">{formatCurrency(totals.totalExpenses)}</td>
-                      <td className={`p-3 text-right text-sm ${totals.totalProfit >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                        {formatCurrency(totals.totalProfit)}
+                    <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
+                      <td className="p-3 text-slate-900">Total</td>
+                      <td className="p-3 text-right tabular-nums">{formatCurrency(fiscal.income_cash)}</td>
+                      <td className="p-3 text-right tabular-nums">{formatCurrency(fiscal.expenses_cash)}</td>
+                      <td className={`p-3 text-right tabular-nums ${resultColor(fiscal.gross_cash)}`}>
+                        {formatCurrency(fiscal.gross_cash)}
                       </td>
-                      <td className="p-3 text-right text-sm text-gray-900">{formatCurrency(totals.totalCorporateTax)}</td>
-                      <td className={`p-3 text-right text-sm ${totals.totalNetProfit >= 0 ? 'text-gray-900' : 'text-red-600'}`}>
-                        {formatCurrency(totals.totalNetProfit)}
+                      <td className={`p-3 text-right tabular-nums ${resultColor(fiscal.net_result)}`}>
+                        {formatCurrency(fiscal.net_result)}
                       </td>
                     </tr>
                   </tbody>
@@ -369,4 +334,3 @@ export default function ResultsPage({ dateRange: initialDateRange, monthlyData, 
     </Layout>
   )
 }
-
