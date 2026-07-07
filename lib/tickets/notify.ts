@@ -1,4 +1,4 @@
-export interface TicketCallbackPayload {
+export interface TicketUpdatedCallbackPayload {
   event: 'ticket.updated'
   ticket_id: string
   external_id: string | null
@@ -8,6 +8,19 @@ export interface TicketCallbackPayload {
   updated_by: string
   updated_at: string
 }
+
+export interface TicketDeletedCallbackPayload {
+  event: 'ticket.deleted'
+  ticket_id: string
+  external_id: string | null
+  project_ref: string | null
+  deleted_by: string
+  deleted_at: string
+}
+
+export type TicketCallbackPayload =
+  | TicketUpdatedCallbackPayload
+  | TicketDeletedCallbackPayload
 
 export async function notifyClientTicketUpdate(params: {
   callbackUrl: string | null | undefined

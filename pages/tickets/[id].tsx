@@ -6,7 +6,7 @@ import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, AlertCircle, Send } from 'lucide-react'
+import { ArrowLeft, AlertCircle, Send, Trash2 } from 'lucide-react'
 import {
   flattenCustomFieldsForDisplay,
   PRIORITY_LABELS,
@@ -71,6 +71,7 @@ export default function TicketDetailPage() {
   const [reply, setReply] = useState('')
   const [replyStatus, setReplyStatus] = useState('')
   const [sending, setSending] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [notifyWarning, setNotifyWarning] = useState('')
 
   const load = useCallback(async () => {
@@ -161,6 +162,33 @@ export default function TicketDetailPage() {
     }
   }
 
+  const deleteTicket = async () => {
+    if (!ticket) return
+    if (!window.confirm('¿Eliminar esta incidencia? También se notificará al dashboard del cliente si tiene callback configurado.')) {
+      return
+    }
+    setDeleting(true)
+    setError('')
+    setNotifyWarning('')
+    try {
+      const res = await fetch(`/api/tickets/${ticket.id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al eliminar')
+
+      if (data.notify && !data.notify.sent && data.notify.error) {
+        setNotifyWarning(`Eliminado en Buffalo, pero no se pudo notificar al cliente: ${data.notify.error}`)
+        setTimeout(() => router.push('/tickets'), 1500)
+        return
+      }
+
+      router.push('/tickets')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al eliminar')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <Layout>
       <div className="space-y-5 max-w-3xl mx-auto">
@@ -187,6 +215,19 @@ export default function TicketDetailPage() {
               </div>
             )}
           </div>
+          {ticket && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={deleting || sending}
+              onClick={deleteTicket}
+              className="shrink-0 border-red-200 text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              Eliminar
+            </Button>
+          )}
         </div>
 
         {loading && <div className="py-12 text-center text-sm text-gray-400">Cargando…</div>}

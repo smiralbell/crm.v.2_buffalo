@@ -1,13 +1,26 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { TICKETS_WEBHOOK_TOKEN } from '@/lib/tickets/config'
 import { ingestTicketPayload } from '@/lib/tickets/ingest'
-import { insertTicket, resolveProjectFromPayload } from '@/lib/tickets/store'
+import {
+  deleteTicketById,
+  findTicketForDelete,
+  insertTicket,
+  resolveProjectFromPayload,
+} from '@/lib/tickets/store'
+
+function parseAction(body: Record<string, unknown>): 'create' | 'delete' {
+  const raw = typeof body.action === 'string' ? body.action.toLowerCase().trim() : ''
+  if (raw === 'delete' || raw === 'eliminar' || raw === 'remove') return 'delete'
+  return 'create'
+}
 
 /**
  * POST /api/webhooks/tickets
  * Webhook único para todos los proyectos.
  * Auth: Authorization: Bearer <TICKETS_WEBHOOK_TOKEN>
- * Proyecto: project_id o project_ref en el body JSON
+ *
+ * action: omitido o "create" → crear incidencia
+ * action: "delete" → eliminar incidencia (ticket_id o external_id + project_ref)
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -29,7 +42,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Body JSON requerido' })
     }
 
-    const project = await resolveProjectFromPayload(body as Record<string, unknown>)
+    const payload = body as Record<string, unknown>
+    const action = parseAction(payload)
+
+    if (action === 'delete') {
+      const project = await resolveProjectFromPayload(payload)
+      const ticket = await findTicketForDelete(payload, project?.id)
+
+      if (!ticket) {
+        return res.status(404).json({
+          error: 'Ticket no encontrado. Incluye ticket_id o external_id + project_ref.',
+        })
+      }
+
+      if (project && ticket.project_id !== project.id) {
+        return res.status(400).json({ error: 'El ticket no pertenece a ese proyecto' })
+      }
+
+      const deleted = await deleteTicketById(ticket.id)
+      if (!deleted) {
+        return res.status(404).json({ error: 'Ticket no encontrado' })
+      }
+
+      return res.status(200).json({
+        ok: true,
+        action: 'delete',
+        ticket_id: ticket.id,
+        external_id: ticket.external_id,
+        project_id: ticket.project_id,
+        message: 'Incidencia eliminada en Buffalo',
+      })
+    }
+
+    const project = await resolveProjectFromPayload(payload)
     if (!project) {
       return res.status(400).json({
         error: 'Proyecto no encontrado. Incluye project_id o project_ref en el body.',
@@ -46,6 +91,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(result.duplicate ? 200 : 201).json({
       ok: true,
+      action: 'create',
       ticket_id: result.id,
       project_id: project.id,
       project_name: project.name,

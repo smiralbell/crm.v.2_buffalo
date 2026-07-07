@@ -114,3 +114,62 @@ export async function resolveProjectFromPayload(body: Record<string, unknown>): 
 
   return null
 }
+
+export interface TicketDeleteTarget {
+  id: string
+  external_id: string | null
+  project_id: string
+  project_name: string
+  config_ref: string | null
+  ticket_callback_url: string | null
+  ticket_callback_token: string | null
+}
+
+/** Localiza un ticket para borrar por ticket_id o external_id + proyecto. */
+export async function findTicketForDelete(
+  body: Record<string, unknown>,
+  projectId?: string
+): Promise<TicketDeleteTarget | null> {
+  const ticketId = firstString(body.ticket_id, body.ticketId)
+
+  if (ticketId) {
+    const rows = await prisma.$queryRaw<TicketDeleteTarget[]>`
+      SELECT
+        t.id, t.external_id, t.project_id,
+        p.name AS project_name, p.config_ref,
+        p.ticket_callback_url, p.ticket_callback_token
+      FROM tickets t
+      JOIN proyectos p ON p.id = t.project_id
+      WHERE t.id = ${ticketId}::uuid
+      LIMIT 1
+    `
+    return rows[0] ?? null
+  }
+
+  const externalId = firstString(body.external_id, body.externalId, body.id)
+  if (!externalId) return null
+
+  if (projectId) {
+    const rows = await prisma.$queryRaw<TicketDeleteTarget[]>`
+      SELECT
+        t.id, t.external_id, t.project_id,
+        p.name AS project_name, p.config_ref,
+        p.ticket_callback_url, p.ticket_callback_token
+      FROM tickets t
+      JOIN proyectos p ON p.id = t.project_id
+      WHERE t.project_id = ${projectId}::uuid
+        AND t.external_id = ${externalId}
+      LIMIT 1
+    `
+    return rows[0] ?? null
+  }
+
+  return null
+}
+
+export async function deleteTicketById(ticketId: string): Promise<boolean> {
+  const count = await prisma.$executeRaw`
+    DELETE FROM tickets WHERE id = ${ticketId}::uuid
+  `
+  return Number(count) > 0
+}

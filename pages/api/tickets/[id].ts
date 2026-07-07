@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { notifyClientTicketUpdate } from '@/lib/tickets/notify'
+import { deleteTicketById } from '@/lib/tickets/store'
 import {
   getTicketWithProject,
   insertTicketUpdate,
@@ -148,6 +149,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           is_from_client: u.is_from_client,
           created_at: u.created_at.toISOString(),
         })),
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error interno'
+      return res.status(500).json({ error: msg })
+    }
+  }
+
+  if (req.method === 'DELETE') {
+    try {
+      const row = await getTicketWithProject(id)
+      if (!row) return res.status(404).json({ error: 'Ticket no encontrado' })
+
+      const deleted = await deleteTicketById(id)
+      if (!deleted) return res.status(404).json({ error: 'Ticket no encontrado' })
+
+      const notifyResult = await notifyClientTicketUpdate({
+        callbackUrl: row.ticket_callback_url,
+        callbackToken: row.ticket_callback_token,
+        payload: {
+          event: 'ticket.deleted',
+          ticket_id: row.id,
+          external_id: row.external_id,
+          project_ref: row.config_ref,
+          deleted_by: userEmail,
+          deleted_at: new Date().toISOString(),
+        },
+      })
+
+      return res.status(200).json({
+        ok: true,
+        deleted: true,
+        notify: notifyResult,
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error interno'

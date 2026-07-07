@@ -1,140 +1,129 @@
-# Integración de incidencias (Tickets) — Guía para desarrolladores
+# Tickets — Guía de integración para developers
 
-Esta guía explica cómo enviar incidencias desde el **dashboard de un cliente** al CRM Buffalo.
+Documento para el **developer del dashboard del cliente**. Explica qué implementar para sincronizar incidencias con el CRM Buffalo de forma **bidireccional**.
 
-**Hay un único webhook para todos los proyectos.** Todos los dashboards envían al mismo endpoint. Lo que identifica a qué cliente/proyecto pertenece la incidencia es el campo `project_ref` (o `project_id`) en el body JSON.
+Buffalo os proporcionará:
 
----
-
-## 1. Resumen del flujo
-
-```
-Dashboard del cliente  →  POST webhook único  →  CRM Buffalo  →  Vista Tickets
-```
-
-1. El usuario reporta una incidencia en el dashboard.
-2. Vuestro backend hace `POST` al webhook de Buffalo (misma URL para todos).
-3. En el JSON incluís `project_ref` para que Buffalo sepa de qué proyecto es.
-4. El CRM guarda el ticket y muestra los campos dinámicos en la interfaz.
+| Dato | Descripción |
+|------|-------------|
+| **URL webhook** | Endpoint único para crear y eliminar tickets en Buffalo |
+| **Token** | `Authorization: Bearer <token>` (mismo para todos los proyectos) |
+| **`project_ref`** | Código de vuestro proyecto (ej. `BUF-2026-acme`) |
 
 ---
 
-## 2. URL del webhook (única)
+## 1. Modelo de sincronización
+
+```
+┌─────────────────────┐                      ┌─────────────────────┐
+│  Dashboard cliente  │  POST webhook        │   CRM Buffalo       │
+│                     │ ──────────────────►  │                     │
+│  - crear ticket     │  action: create      │  - lista Tickets    │
+│  - borrar ticket    │  action: delete      │  - responder        │
+│                     │                      │  - borrar           │
+│                     │  POST callback       │                     │
+│                     │ ◄──────────────────  │                     │
+│  - recibir update   │  ticket.updated      │                     │
+│  - recibir delete   │  ticket.deleted      │                     │
+└─────────────────────┘                      └─────────────────────┘
+```
+
+### Reglas importantes
+
+1. **Siempre desde backend** — nunca expongáis el token en el frontend.
+2. **Guardad dos IDs** al crear un ticket:
+   - `external_id` — vuestro ID interno (obligatorio para sincronizar bien).
+   - `ticket_id` — UUID que devuelve Buffalo (útil para operaciones directas).
+3. **Eliminar en un lado → eliminar en el otro** (ver secciones 4 y 5).
+4. **No re-notifiquéis** a Buffalo cuando recibáis un `ticket.deleted` por callback (evitáis bucles).
+
+---
+
+## 2. Credenciales y URLs
+
+### Webhook Buffalo (vosotros → Buffalo)
 
 ```
 POST https://n8n-crmv2-buffalo.zedf6b.easypanel.host/api/webhooks/tickets
 ```
 
-- **Producción:** `https://n8n-crmv2-buffalo.zedf6b.easypanel.host/api/webhooks/tickets`
-- **Local (desarrollo):** `http://localhost:3000/api/webhooks/tickets`
-
-**Esta URL es la misma para todos los proyectos.** No hay un webhook distinto por cliente.
-
-Buffalo os proporcionará:
-- La **URL** del webhook (siempre la misma).
-- El **token de autorización** global (`TICKETS_WEBHOOK_TOKEN`).
-- Vuestro **`project_ref`** (código único de vuestro proyecto en el CRM).
-
----
-
-## 3. Autenticación
-
-Enviar el token global en la cabecera `Authorization`:
+Local: `http://localhost:3000/api/webhooks/tickets`
 
 ```http
 Authorization: Bearer <TICKETS_WEBHOOK_TOKEN>
 Content-Type: application/json
 ```
 
-El token es **el mismo para todos los proyectos**. Sin él válido, el CRM responde `401 Unauthorized`.
+### Callback vuestro (Buffalo → vosotros)
 
-> **Importante:** el token es confidencial. No lo expongáis en el frontend público.  
-> Llamad al webhook desde **vuestro backend** o desde una API route/serverless vuestra.
+Debéis exponer un endpoint POST en **vuestro backend**, por ejemplo:
 
----
+```
+POST https://dashboard.cliente.com/api/webhooks/buffalo-tickets
+```
 
-## 4. Identificar el proyecto
-
-En cada request debéis indicar a qué proyecto pertenece la incidencia. Usad **una** de estas opciones:
-
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `project_ref` | string | **Recomendado.** Código que Buffalo os asigna (campo `config_ref` en el CRM). |
-| `project_id` | string (UUID) | ID interno del proyecto en el CRM (alternativa a `project_ref`). |
-
-Si falta o no coincide con ningún proyecto, el CRM responde `400` con el mensaje `Proyecto no encontrado`.
+Buffalo lo configura en su CRM (Tickets → Configuración). Validad el Bearer token que os indiquen.
 
 ---
 
-## 5. Cuerpo del request (JSON)
+## 3. Crear una incidencia
 
-### Campos del contrato
+### Request
 
-| Campo | Tipo | Obligatorio | Descripción |
-|-------|------|-------------|-------------|
-| `project_ref` | string | Sí* | Código de vuestro proyecto en Buffalo |
-| `project_id` | string | Sí* | UUID del proyecto (alternativa a `project_ref`) |
-| `title` | string | Sí** | Título corto de la incidencia |
-| `description` | string | Sí** | Descripción detallada |
-| `priority` | string | No | `low`, `medium`, `high`, `critical` (también acepta `alta`, `baja`, `urgente`…) |
-| `status` | string | No | Por defecto `open`. Valores: `open`, `in_progress`, `resolved`, `closed` |
-| `external_id` | string | Muy recomendado | ID de la incidencia en vuestro sistema (evita duplicados si reintentáis) |
-| `reporter` | object | No | `{ "name": "...", "email": "..." }` |
-| `fields` | object | No | **Campos libres** específicos de vuestro dashboard |
-
-\* Obligatorio `project_ref` **o** `project_id`.  
-\** Al menos uno de `title` o `description` debe tener contenido.
-
-### El objeto `fields` (campos dinámicos)
-
-Todo lo que sea **específico de vuestro dashboard** va aquí. El CRM lo mostrará automáticamente aunque otros proyectos usen claves distintas.
+`action` puede omitirse (por defecto es crear).
 
 ```json
 {
-  "modulo": "informes",
-  "url_pantalla": "/dashboard/informes/exportar",
-  "version_app": "2.4.1",
-  "navegador": "Chrome 124"
+  "project_ref": "BUF-2026-acme",
+  "title": "Error al exportar informe PDF",
+  "description": "La pantalla se queda en blanco al pulsar Exportar.",
+  "priority": "high",
+  "external_id": "inc-2026-0042",
+  "reporter": {
+    "name": "María García",
+    "email": "maria@cliente.com"
+  },
+  "fields": {
+    "modulo": "informes",
+    "url_pantalla": "/dashboard/informes",
+    "version_app": "2.4.1"
+  }
 }
 ```
 
-**No hay schema fijo** para `fields`. Mandad lo que necesitéis para diagnosticar.
+### Campos
 
----
+| Campo | Obligatorio | Descripción |
+|-------|-------------|-------------|
+| `project_ref` o `project_id` | Sí | Identifica vuestro proyecto en Buffalo |
+| `title` o `description` | Sí* | Al menos uno con contenido |
+| `external_id` | Muy recomendado | Vuestro ID — necesario para delete y callback |
+| `priority` | No | `low`, `medium`, `high`, `critical` |
+| `status` | No | Por defecto `open` |
+| `reporter` | No | `{ "name", "email" }` |
+| `fields` | No | Datos libres de contexto (módulo, URL, versión…) |
 
-## 6. Ejemplo completo
+### Respuesta éxito (`201` nuevo / `200` duplicado)
 
-### cURL
-
-```bash
-curl -X POST "https://n8n-crmv2-buffalo.zedf6b.easypanel.host/api/webhooks/tickets" \
-  -H "Authorization: Bearer TU_TICKETS_WEBHOOK_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "project_ref": "cliente-ejemplo-2026",
-    "title": "Error al exportar informe PDF",
-    "description": "Al pulsar Exportar la pantalla se queda en blanco durante 10 segundos y no descarga nada.",
-    "priority": "high",
-    "external_id": "inc-2026-0042",
-    "reporter": {
-      "name": "María García",
-      "email": "maria@cliente.com"
-    },
-    "fields": {
-      "modulo": "informes",
-      "url_pantalla": "/dashboard/informes",
-      "version_app": "2.4.1",
-      "navegador": "Chrome 124",
-      "user_role": "admin"
-    }
-  }'
+```json
+{
+  "ok": true,
+  "action": "create",
+  "ticket_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "project_id": "...",
+  "project_name": "Nombre del proyecto",
+  "duplicate": false,
+  "message": "Incidencia recibida correctamente"
+}
 ```
 
-### JavaScript (Node / backend)
+**Guardad `ticket_id` y `external_id` en vuestra base de datos.**
+
+### Ejemplo Node.js
 
 ```javascript
-async function reportarIncidencia(incidencia) {
-  const res = await fetch('https://n8n-crmv2-buffalo.zedf6b.easypanel.host/api/webhooks/tickets', {
+async function crearTicket(incidencia) {
+  const res = await fetch(process.env.BUFFALO_TICKETS_WEBHOOK_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -150,159 +139,265 @@ async function reportarIncidencia(incidencia) {
         name: incidencia.usuario.nombre,
         email: incidencia.usuario.email,
       },
-      fields: {
-        modulo: incidencia.modulo,
-        url_pantalla: incidencia.url,
-        version_app: process.env.APP_VERSION,
-      },
+      fields: incidencia.contexto,
     }),
   });
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Error al enviar incidencia');
+  if (!res.ok) throw new Error(data.error || 'Error al crear ticket');
+
+  await db.tickets.update(incidencia.id, {
+    buffalo_ticket_id: data.ticket_id,
+  });
+
   return data;
 }
 ```
 
-### Python
-
-```python
-import os
-import requests
-
-def reportar_incidencia(payload: dict) -> dict:
-    url = "https://n8n-crmv2-buffalo.zedf6b.easypanel.host/api/webhooks/tickets"
-    headers = {
-        "Authorization": f"Bearer {os.environ['BUFFALO_TICKETS_WEBHOOK_TOKEN']}",
-        "Content-Type": "application/json",
-    }
-    body = {
-        "project_ref": os.environ["BUFFALO_PROJECT_REF"],
-        **payload,
-    }
-    r = requests.post(url, json=body, headers=headers, timeout=30)
-    r.raise_for_status()
-    return r.json()
-```
-
 ---
 
-## 7. Respuestas del webhook
+## 4. Eliminar una incidencia (desde vuestro dashboard)
 
-### Éxito — ticket nuevo (`201`)
+Cuando el usuario borra un ticket en **vuestro panel**, debéis notificar a Buffalo para que también se elimine en el CRM.
+
+### Request
 
 ```json
 {
-  "ok": true,
-  "ticket_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "project_id": "...",
-  "project_name": "Nombre del proyecto",
-  "duplicate": false,
-  "message": "Incidencia recibida correctamente"
+  "action": "delete",
+  "project_ref": "BUF-2026-acme",
+  "external_id": "inc-2026-0042"
 }
 ```
 
-### Éxito — duplicado (`200`)
+Alternativa con el UUID de Buffalo:
 
-Si reenviáis el mismo `external_id` para el mismo proyecto:
+```json
+{
+  "action": "delete",
+  "ticket_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+| Campo | Obligatorio | Descripción |
+|-------|-------------|-------------|
+| `action` | Sí | `"delete"` |
+| `ticket_id` | Sí* | UUID devuelto por Buffalo al crear |
+| `external_id` + `project_ref` | Sí* | Vuestro ID + proyecto |
+
+\* Una de las dos opciones de identificación.
+
+### Respuesta éxito (`200`)
 
 ```json
 {
   "ok": true,
+  "action": "delete",
   "ticket_id": "a1b2c3d4-...",
-  "duplicate": true,
-  "message": "Ticket ya existía (mismo external_id)"
+  "external_id": "inc-2026-0042",
+  "project_id": "...",
+  "message": "Incidencia eliminada en Buffalo"
 }
 ```
 
-### Errores habituales
+### Ejemplo Node.js
 
-| HTTP | Causa |
-|------|--------|
-| `401` | Token de autorización incorrecto o ausente |
-| `400` | Body inválido, sin título/descripción, o `project_ref`/`project_id` no encontrado |
-| `500` | Error interno del CRM (reintentar con backoff) |
+```javascript
+async function eliminarTicket(incidencia) {
+  const res = await fetch(process.env.BUFFALO_TICKETS_WEBHOOK_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.BUFFALO_TICKETS_WEBHOOK_TOKEN}`,
+    },
+    body: JSON.stringify({
+      action: 'delete',
+      project_ref: process.env.BUFFALO_PROJECT_REF,
+      external_id: incidencia.id,
+    }),
+  });
 
-El cuerpo de error incluye `{ "error": "mensaje claro" }`.
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error al eliminar en Buffalo');
 
----
+  await db.tickets.delete(incidencia.id);
+  return data;
+}
+```
 
-## 8. Buenas prácticas
-
-### Haced
-
-- Incluir siempre **`project_ref`** en cada request.
-- Usar **`external_id`** estable (vuestro ID de incidencia) para idempotencia.
-- Enviar desde **backend**, no desde el navegador del usuario final.
-- Incluir en `fields` contexto útil: módulo, URL, versión, IDs de negocio, capturas (URL), etc.
-- Usar `reporter` con nombre y email para que Buffalo pueda contactar.
-- Reintentar con backoff exponencial si recibís `5xx`.
-
-### Evitad
-
-- Hardcodear el token en código fuente commiteado (usar variables de entorno).
-- Enviar datos personales innecesarios (PII) en `fields`.
-- Payloads mayores de **1 MB** (límite del webhook).
+> Buffalo **no** os reenvía callback al borrar desde vuestro lado — la eliminación la iniciáis vosotros.
 
 ---
 
-## 9. Prioridades y estados
+## 5. Callback que debéis implementar (Buffalo → vosotros)
 
-### Prioridad (`priority`)
+Buffalo llama a **vuestra URL** cuando:
 
-| Valor enviado | Normalizado en CRM |
-|---------------|-------------------|
+- Responde o cambia el estado de un ticket → `ticket.updated`
+- Elimina un ticket desde el CRM → `ticket.deleted`
+
+### Autenticación
+
+Validad la cabecera que Buffalo os configure:
+
+```http
+Authorization: Bearer <vuestro_token_callback>
+Content-Type: application/json
+```
+
+### Evento `ticket.updated`
+
+```json
+{
+  "event": "ticket.updated",
+  "ticket_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "external_id": "inc-2026-0042",
+  "project_ref": "BUF-2026-acme",
+  "status": "in_progress",
+  "message": "Estamos revisando el error de exportación.",
+  "updated_by": "soporte@agenciabuffalo.es",
+  "updated_at": "2026-06-25T14:30:00.000Z"
+}
+```
+
+**Qué hacer:** localizar el ticket por `external_id` (o `ticket_id`), guardar el mensaje y actualizar el estado en vuestra UI.
+
+### Evento `ticket.deleted`
+
+```json
+{
+  "event": "ticket.deleted",
+  "ticket_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "external_id": "inc-2026-0042",
+  "project_ref": "BUF-2026-acme",
+  "deleted_by": "soporte@agenciabuffalo.es",
+  "deleted_at": "2026-06-25T15:00:00.000Z"
+}
+```
+
+**Qué hacer:** eliminar el ticket de vuestra base de datos y de la UI. **No** llaméis al webhook de Buffalo de nuevo (evitáis bucle).
+
+### Ejemplo handler (Express / Next.js API route)
+
+```javascript
+export async function POST(req) {
+  const auth = req.headers.get('authorization') || '';
+  const token = auth.replace(/^Bearer\s+/i, '').trim();
+  if (token !== process.env.BUFFALO_CALLBACK_TOKEN) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const body = await req.json();
+
+  if (body.event === 'ticket.updated') {
+    await db.tickets.upsertFromBuffalo({
+      externalId: body.external_id,
+      buffaloId: body.ticket_id,
+      status: body.status,
+      lastMessage: body.message,
+      updatedAt: body.updated_at,
+    });
+    return Response.json({ ok: true });
+  }
+
+  if (body.event === 'ticket.deleted') {
+    await db.tickets.deleteByExternalId(body.external_id);
+  // o por buffalo_ticket_id: body.ticket_id
+    return Response.json({ ok: true });
+  }
+
+  return Response.json({ error: 'Evento no soportado' }, { status: 400 });
+}
+```
+
+Responded `200` con `{ "ok": true }` si procesáis correctamente.
+
+---
+
+## 6. Funciones que debe tener vuestro módulo de tickets
+
+| Función | Cuándo | Acción |
+|---------|--------|--------|
+| **Crear incidencia** | Usuario abre ticket en dashboard | `POST` webhook sin `action` → guardar `ticket_id` |
+| **Listar incidencias** | Vista del panel | Leer de vuestra BD (sincronizada) |
+| **Ver detalle / mensajes** | Usuario abre un ticket | Mostrar hilo local + mensajes de callbacks |
+| **Eliminar incidencia** | Usuario borra en dashboard | `POST` webhook `action: delete` → borrar en BD local |
+| **Recibir actualización** | Callback `ticket.updated` | Actualizar estado y mensaje en BD |
+| **Recibir eliminación** | Callback `ticket.deleted` | Borrar de BD sin llamar a Buffalo |
+
+---
+
+## 7. Prioridades y estados
+
+### Prioridad
+
+| Enviáis | En Buffalo |
+|---------|------------|
 | `low`, `baja` | Baja |
 | `medium`, `media`, `normal` | Media |
 | `high`, `alta`, `urgente` | Alta |
 | `critical`, `critica` | Crítica |
 
-### Estado (`status`)
+### Estado
 
-Por defecto el ticket llega como **Abierto** (`open`). Buffalo actualiza el estado desde el CRM.
+| Valor | Significado |
+|-------|-------------|
+| `open` | Abierto |
+| `in_progress` | En progreso |
+| `resolved` | Resuelto |
+| `closed` | Cerrado |
+
+Buffalo puede cambiar el estado y os lo notifica por callback.
 
 ---
 
-## 10. Alternativas de estructura (compatibles)
+## 8. Alias de campos aceptados
 
-| En lugar de… | También válido |
-|--------------|----------------|
+| Estándar | También válido |
+|----------|----------------|
 | `project_ref` | `config_ref`, `projectRef`, `configRef` |
 | `project_id` | `projectId` |
+| `external_id` | `externalId` |
+| `ticket_id` | `ticketId` |
 | `fields` | `custom_fields`, `metadata`, `extra` |
 | `title` | `subject`, `titulo` |
 | `description` | `descripcion`, `message`, `body` |
-| `reporter.name` | `reporter_name`, `fields.usuario` |
-| `reporter.email` | `reporter_email`, `fields.email` |
-| `external_id` | `externalId`, `id` (si es vuestro ID de incidencia) |
+| `action: "delete"` | `eliminar`, `remove` |
 
 ---
 
-## 11. Cómo probar la integración
+## 9. Errores del webhook
 
-1. Pedid a Buffalo el **`project_ref`** de vuestro proyecto y el **token** del webhook.
-2. Enviad un POST de prueba con cURL (sección 6).
-3. Entrad en el CRM → **Tickets** y comprobad que aparece la incidencia.
-4. Verificad que los campos de `fields` se muestran en **Campos del cliente**.
+| HTTP | Causa |
+|------|--------|
+| `401` | Token incorrecto o ausente |
+| `400` | Body inválido, proyecto no encontrado, ticket no pertenece al proyecto |
+| `404` | Ticket no encontrado (delete) |
+| `500` | Error interno — reintentar con backoff |
 
----
-
-## 12. Checklist de entrega
-
-- [ ] Variable `BUFFALO_TICKETS_WEBHOOK_TOKEN` configurada en vuestro entorno.
-- [ ] Variable `BUFFALO_PROJECT_REF` configurada con vuestro código de proyecto.
-- [ ] Llamada al webhook desde backend (no desde el cliente).
-- [ ] Cada request incluye `project_ref` + `title`/`description` + `reporter`.
-- [ ] `external_id` generado y persistido en vuestra BD.
-- [ ] `fields` con el contexto que Buffalo necesita para diagnosticar.
-- [ ] Prueba en staging con un ticket real antes de producción.
+Cuerpo: `{ "error": "mensaje" }`
 
 ---
 
-## 13. Contacto
+## 10. Checklist de implementación
 
-Para obtener vuestro **`project_ref`** y el **token del webhook**, contactad con el equipo Buffalo. El `project_ref` también aparece en la ficha del proyecto en Retención dentro del CRM.
+- [ ] Variables de entorno: `BUFFALO_TICKETS_WEBHOOK_URL`, `BUFFALO_TICKETS_WEBHOOK_TOKEN`, `BUFFALO_PROJECT_REF`
+- [ ] Crear ticket → webhook → persistir `ticket_id` + `external_id`
+- [ ] Eliminar ticket en dashboard → webhook `action: delete`
+- [ ] Endpoint callback POST con validación Bearer
+- [ ] Handler `ticket.updated` — actualizar estado y mensajes
+- [ ] Handler `ticket.deleted` — borrar local sin re-llamar a Buffalo
+- [ ] Token nunca en frontend
+- [ ] Prueba completa: crear → ver en Buffalo → responder desde Buffalo → recibir callback
+- [ ] Prueba delete: borrar en dashboard → desaparece en Buffalo
+- [ ] Prueba delete inversa: borrar en Buffalo → recibir `ticket.deleted` → desaparece en dashboard
 
 ---
 
-*Documento generado para el CRM Buffalo — módulo Tickets.*
+## 11. Contacto
+
+Para obtener `project_ref`, token del webhook y configurar el callback en Buffalo, contactad con el equipo Buffalo.
+
+---
+
+*CRM Buffalo — módulo Tickets.*

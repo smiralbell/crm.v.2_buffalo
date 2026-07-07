@@ -3,7 +3,7 @@ import { useRouter } from 'next/router'
 import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, TrendingUp, FileText, LogOut, Workflow,
-  DollarSign, MessageSquare, Megaphone,
+  DollarSign, Megaphone,
   ChevronDown, ChevronRight, PackageCheck, HeartHandshake, Ticket, Bot,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -30,7 +30,6 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: '/dashboard',   label: 'Dashboard',  icon: LayoutDashboard },
   { href: '/leads',       label: 'Leads',      icon: TrendingUp },
-  { href: '/agent-chats', label: 'Chats IA',   icon: MessageSquare },
   { href: '/invoices',    label: 'Facturas',   icon: FileText },
   { href: '/pipelines',   label: 'Pipelines',  icon: Workflow },
   {
@@ -40,6 +39,7 @@ const NAV: NavItem[] = [
     icon: Megaphone,
     children: [
       { href: '/marketing', label: 'Métricas globales', tab: 'global' },
+      { href: '/marketing', label: 'Web',               tab: 'web' },
       { href: '/marketing', label: 'Email Outreach',    tab: 'email' },
       { href: '/marketing', label: 'Cold Calling',      tab: 'coldcalling' },
       { href: '/marketing', label: 'Meta Ads',          tab: 'meta' },

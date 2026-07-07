@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import ColdCallingTab from '@/components/ColdCallingTab'
 import EmailOutreachTab from '@/components/EmailOutreachTab'
+import WebMarketingTab from '@/components/WebMarketingTab'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -176,6 +177,7 @@ function ComingSoon({ name }: { name: string }) {
 
 const TABS = [
   { id: 'global',      label: 'Métricas Globales' },
+  { id: 'web',         label: 'Web' },
   { id: 'email',       label: 'Email Outreach' },
   { id: 'coldcalling', label: 'Cold Calling' },
   { id: 'meta',        label: 'Meta Ads' },
@@ -184,12 +186,20 @@ const TABS = [
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-const VALID_TABS = ['global', 'email', 'coldcalling', 'meta', 'google'] as const
+const VALID_TABS = ['global', 'web', 'email', 'coldcalling', 'meta', 'google'] as const
 type TabId = typeof VALID_TABS[number]
+
+function resolveTab(queryTab: string | string[] | undefined): TabId {
+  const t = Array.isArray(queryTab) ? queryTab[0] : queryTab
+  if (t === 'chat') return 'web'
+  return VALID_TABS.includes(t as TabId) ? (t as TabId) : 'global'
+}
 
 export default function MarketingPage() {
   const router = useRouter()
-  const tabFromUrl = VALID_TABS.includes(router.query.tab as TabId) ? router.query.tab as TabId : 'global'
+  const tabFromUrl = resolveTab(router.query.tab)
+  const chatSectionOpen =
+    router.query.section === 'chat' || router.query.tab === 'chat'
   const [tab, setTab] = useState<TabId>(tabFromUrl)
   const [data, setData] = useState<MarketingData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -221,6 +231,10 @@ export default function MarketingPage() {
     setPeriod(p)
     load(p)
   }
+
+  const effectivePeriod =
+    period ||
+    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
 
   const emailMetric = data?.metrics.find(m => m.channel === 'email_outreach')
 
@@ -274,8 +288,8 @@ export default function MarketingPage() {
           </div>
         </div>
 
-        {/* Loading skeleton */}
-        {loading && (
+        {/* Loading skeleton — solo pestañas que usan métricas globales */}
+        {loading && (tab === 'global' || tab === 'email') && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-pulse">
             {[...Array(8)].map((_, i) => (
               <div key={i} className="h-28 bg-gray-100 rounded-xl" />
@@ -289,6 +303,11 @@ export default function MarketingPage() {
             <p className="text-gray-400 text-sm">No hay datos de marketing todavía.</p>
             <p className="text-gray-400 text-xs mt-1">Conecta Instantly para que los datos empiecen a llegar automáticamente.</p>
           </div>
+        )}
+
+        {/* ── WEB TAB ──────────────────────────────────────────────────────── */}
+        {tab === 'web' && (
+          <WebMarketingTab period={effectivePeriod} initialChatOpen={chatSectionOpen} />
         )}
 
         {/* ── GLOBAL TAB ───────────────────────────────────────────────────── */}
