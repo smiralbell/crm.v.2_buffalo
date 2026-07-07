@@ -31,6 +31,15 @@ function classifySyncError(msg: string): { status: number; error: string; hint?:
     }
   }
 
+  if (lower.includes('23502') || lower.includes('not-null constraint')) {
+    return {
+      status: 503,
+      error: 'Faltan valores obligatorios al crear el proyecto (columnas NOT NULL sin default).',
+      hint: 'Ejecuta prisma/ALTER_PROYECTOS_SYNC_COLUMNS.sql y redeploy del CRM.',
+      detail: msg,
+    }
+  }
+
   if (lower.includes('proyectos') && lower.includes('does not exist')) {
     return {
       status: 503,

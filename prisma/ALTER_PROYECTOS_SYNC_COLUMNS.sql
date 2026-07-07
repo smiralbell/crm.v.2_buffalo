@@ -26,3 +26,10 @@ ALTER TABLE proyectos ADD COLUMN IF NOT EXISTS ticket_callback_token TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_proyectos_lead_id ON proyectos(lead_id) WHERE lead_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_proyectos_lead_id    ON proyectos(lead_id);
 CREATE INDEX IF NOT EXISTS idx_proyectos_contact_id ON proyectos(contact_id);
+
+-- Defaults que el INSERT del autoguardado necesita (evita error 23502 NOT NULL)
+ALTER TABLE proyectos ALTER COLUMN webhook_secret SET DEFAULT gen_random_uuid()::TEXT;
+ALTER TABLE proyectos ALTER COLUMN created_at SET DEFAULT NOW();
+ALTER TABLE proyectos ALTER COLUMN updated_at SET DEFAULT NOW();
+UPDATE proyectos SET updated_at = COALESCE(updated_at, created_at, NOW()) WHERE updated_at IS NULL;
+UPDATE proyectos SET webhook_secret = gen_random_uuid()::TEXT WHERE webhook_secret IS NULL OR webhook_secret = '';
