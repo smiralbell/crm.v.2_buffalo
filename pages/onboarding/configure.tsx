@@ -328,7 +328,8 @@ export default function ConfigurePage() {
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
-      throw new Error(err.error || `Error sincronizando proyecto (${res.status})`)
+      const hint = err.hint ? ` — ${err.hint}` : ''
+      throw new Error(`${err.error || `Error sincronizando proyecto (${res.status})`}${hint}`)
     }
   }
 

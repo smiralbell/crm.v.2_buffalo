@@ -10,6 +10,24 @@ export interface SyncProyectoInput {
   leadEstado?: string | null
 }
 
+export interface SyncedProyecto {
+  id: string
+  name: string
+  service_type: string
+  status: string
+  setup_fee_eur: number | null
+  monthly_fee_eur: number | null
+  config_ref: string | null
+}
+
+function numOrNull(v: number | null | undefined): number | null {
+  return v != null && Number.isFinite(v) ? v : null
+}
+
+/**
+ * Sincroniza configurador → proyectos con SQL directo.
+ * Evita fallos de Prisma cuando faltan columnas nuevas en producción.
+ */
 export async function syncProyectoFromLead(input: SyncProyectoInput) {
   const lead = await prisma.lead.findUnique({
     where: { id: input.leadId },
@@ -34,56 +52,108 @@ export async function syncProyectoFromLead(input: SyncProyectoInput) {
     fallbackName: lead.contact?.empresa || lead.contact?.nombre || undefined,
   })
 
-  const existing = await prisma.proyecto.findUnique({
-    where: { lead_id: lead.id },
-  })
+  const existing = await prisma.$queryRaw<{ id: string; client_id: string }[]>`
+    SELECT id, client_id FROM proyectos WHERE lead_id = ${lead.id} LIMIT 1
+  `
 
-  let clientId = existing?.client_id
+  let clientId = existing[0]?.client_id
 
   if (!clientId) {
     const sibling = lead.contact_id
-      ? await prisma.proyecto.findFirst({
-          where: { contact_id: lead.contact_id },
-          select: { client_id: true },
-        })
-      : null
-    clientId = sibling?.client_id ?? randomUUID()
+      ? await prisma.$queryRaw<{ client_id: string }[]>`
+          SELECT client_id FROM proyectos
+          WHERE contact_id = ${lead.contact_id}
+          LIMIT 1
+        `
+      : []
+    clientId = sibling[0]?.client_id ?? randomUUID()
   }
 
-  const data = {
-    client_id: clientId,
-    lead_id: lead.id,
-    contact_id: lead.contact_id,
-    config_ref: payload.config_ref,
-    name: payload.name,
-    service_type: payload.service_type,
-    status: payload.status,
-    addon_outbound: payload.addon_outbound,
-    addon_crm_integration: payload.addon_crm_integration,
-    addon_human_transfer: payload.addon_human_transfer,
-    addon_email_summary: payload.addon_email_summary,
-    addon_transcription: payload.addon_transcription,
-    addon_cloned_voice: payload.addon_cloned_voice,
-    addon_whatsapp: payload.addon_whatsapp,
-    addon_web_widget: payload.addon_web_widget,
-    addon_form_trigger: payload.addon_form_trigger,
-    addon_multimodal: payload.addon_multimodal,
-    addon_voice_in_chat: payload.addon_voice_in_chat,
-    dashboard_tier: payload.dashboard_tier,
-    languages_count: payload.languages_count,
-    setup_fee_eur: payload.setup_fee_eur,
-    monthly_fee_eur: payload.monthly_fee_eur,
-    has_mensualidad: payload.has_mensualidad,
-    maint_plan: payload.maint_plan,
-    has_voz: payload.has_voz,
-    has_chat: payload.has_chat,
-    has_dash: payload.has_dash,
-    has_pack: payload.has_pack,
+  const setupFee = numOrNull(payload.setup_fee_eur)
+  const monthlyFee = numOrNull(payload.monthly_fee_eur)
+
+  if (existing[0]) {
+    const rows = await prisma.$queryRaw<SyncedProyecto[]>`
+      UPDATE proyectos SET
+        client_id = ${clientId}::uuid,
+        contact_id = ${lead.contact_id},
+        config_ref = ${payload.config_ref},
+        name = ${payload.name},
+        service_type = ${payload.service_type},
+        status = ${payload.status},
+        addon_outbound = ${payload.addon_outbound},
+        addon_crm_integration = ${payload.addon_crm_integration},
+        addon_human_transfer = ${payload.addon_human_transfer},
+        addon_email_summary = ${payload.addon_email_summary},
+        addon_transcription = ${payload.addon_transcription},
+        addon_cloned_voice = ${payload.addon_cloned_voice},
+        addon_whatsapp = ${payload.addon_whatsapp},
+        addon_web_widget = ${payload.addon_web_widget},
+        addon_form_trigger = ${payload.addon_form_trigger},
+        addon_multimodal = ${payload.addon_multimodal},
+        addon_voice_in_chat = ${payload.addon_voice_in_chat},
+        dashboard_tier = ${payload.dashboard_tier},
+        languages_count = ${payload.languages_count},
+        setup_fee_eur = ${setupFee},
+        monthly_fee_eur = ${monthlyFee},
+        has_mensualidad = ${payload.has_mensualidad},
+        maint_plan = ${payload.maint_plan},
+        has_voz = ${payload.has_voz},
+        has_chat = ${payload.has_chat},
+        has_dash = ${payload.has_dash},
+        has_pack = ${payload.has_pack},
+        updated_at = NOW()
+      WHERE id = ${existing[0].id}::uuid
+      RETURNING id, name, service_type, status, setup_fee_eur, monthly_fee_eur, config_ref
+    `
+    const proyecto = rows[0]
+    if (!proyecto) throw new Error('No se pudo actualizar el proyecto')
+    return { skipped: false as const, proyecto }
   }
 
-  const proyecto = existing
-    ? await prisma.proyecto.update({ where: { id: existing.id }, data })
-    : await prisma.proyecto.create({ data })
+  const rows = await prisma.$queryRaw<SyncedProyecto[]>`
+    INSERT INTO proyectos (
+      client_id, lead_id, contact_id, config_ref, name, service_type, status,
+      addon_outbound, addon_crm_integration, addon_human_transfer, addon_email_summary,
+      addon_transcription, addon_cloned_voice, addon_whatsapp, addon_web_widget,
+      addon_form_trigger, addon_multimodal, addon_voice_in_chat,
+      dashboard_tier, languages_count, setup_fee_eur, monthly_fee_eur,
+      has_mensualidad, maint_plan, has_voz, has_chat, has_dash, has_pack
+    ) VALUES (
+      ${clientId}::uuid,
+      ${lead.id},
+      ${lead.contact_id},
+      ${payload.config_ref},
+      ${payload.name},
+      ${payload.service_type},
+      ${payload.status},
+      ${payload.addon_outbound},
+      ${payload.addon_crm_integration},
+      ${payload.addon_human_transfer},
+      ${payload.addon_email_summary},
+      ${payload.addon_transcription},
+      ${payload.addon_cloned_voice},
+      ${payload.addon_whatsapp},
+      ${payload.addon_web_widget},
+      ${payload.addon_form_trigger},
+      ${payload.addon_multimodal},
+      ${payload.addon_voice_in_chat},
+      ${payload.dashboard_tier},
+      ${payload.languages_count},
+      ${setupFee},
+      ${monthlyFee},
+      ${payload.has_mensualidad},
+      ${payload.maint_plan},
+      ${payload.has_voz},
+      ${payload.has_chat},
+      ${payload.has_dash},
+      ${payload.has_pack}
+    )
+    RETURNING id, name, service_type, status, setup_fee_eur, monthly_fee_eur, config_ref
+  `
+
+  const proyecto = rows[0]
+  if (!proyecto) throw new Error('No se pudo crear el proyecto')
 
   return { skipped: false as const, proyecto }
 }
