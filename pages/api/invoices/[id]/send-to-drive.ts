@@ -38,13 +38,15 @@ export default async function handler(
       return res.status(404).json({ error: 'Factura no encontrada' })
     }
 
+    const usePlaceholderPdf =
+      req.body != null && typeof req.body === 'object' && 'no_invoice_note' in req.body
     const noInvoiceNote =
       typeof req.body?.no_invoice_note === 'string' ? req.body.no_invoice_note.trim() : ''
 
     let pdfBuffer: Buffer
     let pdfFileName: string
 
-    if (noInvoiceNote) {
+    if (usePlaceholderPdf) {
       pdfBuffer = createPlaceholderNotePdfBuffer(noInvoiceNote)
       pdfFileName = `sin_factura_${invoice.invoice_number}.pdf`
     } else {
@@ -124,9 +126,9 @@ export default async function handler(
     formData.append('services', JSON.stringify(invoice.services || []))
     formData.append('created_at', invoice.created_at.toISOString())
     formData.append('updated_at', invoice.updated_at.toISOString())
-    if (noInvoiceNote) {
+    if (usePlaceholderPdf) {
       formData.append('no_invoice', 'true')
-      formData.append('note', noInvoiceNote)
+      if (noInvoiceNote) formData.append('note', noInvoiceNote)
     }
 
     // Enviar al webhook en modo POST con FormData (incluye el PDF)
@@ -142,7 +144,7 @@ export default async function handler(
       // Añadir el nombre del archivo, año-mes, tipo y otros datos como parámetros en la URL
       const webhookUrlWithParams =
         `${WEBHOOK_URL}?pdf_filename=${encodeURIComponent(pdfFileName)}&invoice_id=${invoice.id}&invoice_number=${encodeURIComponent(invoice.invoice_number)}&year_month=${yearMonth}&type=emitida` +
-        (noInvoiceNote ? `&no_invoice=true&note=${encodeURIComponent(noInvoiceNote)}` : '')
+        (usePlaceholderPdf ? `&no_invoice=true${noInvoiceNote ? `&note=${encodeURIComponent(noInvoiceNote)}` : ''}` : '')
 
       const webhookResponse = await fetch(webhookUrlWithParams, {
         method: 'POST',

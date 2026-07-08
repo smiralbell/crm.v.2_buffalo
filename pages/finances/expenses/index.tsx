@@ -465,12 +465,6 @@ export default function ExpensesPage({
       return
     }
 
-    if (!uploadHasInvoice && !uploadNoInvoiceNote.trim()) {
-      setUploadError('Escribe una nota explicando por qué no tienes factura.')
-      setUploadLoading(false)
-      return
-    }
-
     const rawAmount = parseFloat(uploadTotalAmount) || 0
     const ivaPercent = parseFloat(uploadIvaPercent) || 0
     const irpfAmount = parseFloat(uploadIrpfAmount) || 0
@@ -1056,7 +1050,7 @@ export default function ExpensesPage({
                 ) : (
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700" htmlFor="upload_no_invoice_note">
-                      Nota (aparecerá tras «Porque:» en el PDF)
+                      Nota (opcional, aparece debajo del título en el PDF)
                     </label>
                     <Textarea
                       id="upload_no_invoice_note"
@@ -1064,10 +1058,9 @@ export default function ExpensesPage({
                       onChange={(e) => setUploadNoInvoiceNote(e.target.value)}
                       placeholder="Ej: Ticket perdido, pago en efectivo sin factura, abono bancario..."
                       rows={4}
-                      required
                     />
                     <p className="text-xs text-gray-500">
-                      Se generará un PDF con el título «No hay factura», «Porque:» y tu nota en rojo.
+                      Se generará un PDF con «No hay factura» centrado y tu nota debajo, si la escribes.
                     </p>
                   </div>
                 )}

@@ -143,7 +143,6 @@ export default function IncomeLinkInvoiceDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedId) return
-    if (!hasInvoicePdf && !noInvoiceNote.trim()) return
     await onSubmit(selectedId, hasInvoicePdf ? undefined : { noInvoiceNote: noInvoiceNote.trim() })
   }
 
@@ -255,7 +254,7 @@ export default function IncomeLinkInvoiceDialog({
             {!hasInvoicePdf && (
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700" htmlFor="no_invoice_note">
-                  Nota (aparecerá tras «Porque:» en el PDF)
+                  Nota (opcional, aparece debajo del título en el PDF)
                 </label>
                 <Textarea
                   id="no_invoice_note"
@@ -263,7 +262,6 @@ export default function IncomeLinkInvoiceDialog({
                   onChange={(e) => setNoInvoiceNote(e.target.value)}
                   placeholder="Ej: Cobro sin factura emitida aún, transferencia interna..."
                   rows={3}
-                  required
                 />
               </div>
             )}
@@ -275,7 +273,7 @@ export default function IncomeLinkInvoiceDialog({
             </Button>
             <Button
               type="submit"
-              disabled={loading || !selectedId || (!hasInvoicePdf && !noInvoiceNote.trim())}
+              disabled={loading || !selectedId}
             >
               {loading ? 'Guardando...' : hasInvoicePdf ? 'Vincular factura' : 'Vincular y enviar nota'}
             </Button>

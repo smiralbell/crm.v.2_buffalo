@@ -486,11 +486,11 @@ export default function IncomesPage({
         return
       }
 
-      if (options?.noInvoiceNote) {
+      if (options) {
         const driveRes = await fetch(`/api/invoices/${invoiceId}/send-to-drive`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ no_invoice_note: options.noInvoiceNote }),
+          body: JSON.stringify({ no_invoice_note: options.noInvoiceNote ?? '' }),
         })
         if (!driveRes.ok) {
           const driveData = await driveRes.json().catch(() => ({}))
