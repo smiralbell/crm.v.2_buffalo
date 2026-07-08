@@ -4,6 +4,17 @@ import { query } from '@/lib/db'
 
 export type DriveInvoiceKind = 'gastos' | 'emitidas'
 
+const DRIVE_FOLDERS_TABLE_HINT =
+  'Ejecuta en PostgreSQL: prisma/CREATE_DRIVE_CARPETAS_FACTURAS.sql (y prisma/ALTER_EXPENSES_DRIVE_COLUMNS.sql para gastos).'
+
+function rethrowDriveDbError(error: unknown): never {
+  const msg = error instanceof Error ? error.message : String(error)
+  if (msg.includes('drive_carpetas_facturas') && msg.includes('does not exist')) {
+    throw new Error(`La tabla drive_carpetas_facturas no existe. ${DRIVE_FOLDERS_TABLE_HINT}`)
+  }
+  throw error instanceof Error ? error : new Error(msg)
+}
+
 type DriveFileResult = {
   id: string
   url: string | null
@@ -71,13 +82,17 @@ async function createMonthFolder(kind: DriveInvoiceKind, yearMonth: string): Pro
     throw new Error(`No se pudo crear la carpeta mensual ${yearMonth} en Google Drive`)
   }
 
-  await query(
-    `INSERT INTO drive_carpetas_facturas (tipo, nombre, ruta_id, created_at)
-     VALUES ($1, $2, $3, NOW())
-     ON CONFLICT (tipo, nombre)
-     DO UPDATE SET ruta_id = EXCLUDED.ruta_id`,
-    [kind, yearMonth, folderId]
-  )
+  try {
+    await query(
+      `INSERT INTO drive_carpetas_facturas (tipo, nombre, ruta_id, created_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (tipo, nombre)
+       DO UPDATE SET ruta_id = EXCLUDED.ruta_id`,
+      [kind, yearMonth, folderId]
+    )
+  } catch (error) {
+    rethrowDriveDbError(error)
+  }
 
   return folderId
 }
@@ -86,13 +101,18 @@ export async function ensureInvoiceMonthFolder(
   kind: DriveInvoiceKind,
   yearMonth: string
 ): Promise<string> {
-  const existing = await query<{ ruta_id: string }>(
-    `SELECT ruta_id
-       FROM drive_carpetas_facturas
-      WHERE tipo = $1 AND nombre = $2
-      LIMIT 1`,
-    [kind, yearMonth]
-  )
+  let existing: { rows: { ruta_id: string }[] }
+  try {
+    existing = await query<{ ruta_id: string }>(
+      `SELECT ruta_id
+         FROM drive_carpetas_facturas
+        WHERE tipo = $1 AND nombre = $2
+        LIMIT 1`,
+      [kind, yearMonth]
+    )
+  } catch (error) {
+    rethrowDriveDbError(error)
+  }
 
   const cachedFolderId = existing.rows[0]?.ruta_id
   if (cachedFolderId) {
