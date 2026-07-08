@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
+import { removeInvoicePdfFromDrive, syncInvoicePdfToDrive } from '@/lib/drive/invoice-storage'
 import { z } from 'zod'
 
 const invoiceUpdateSchema = z.object({
@@ -89,16 +90,35 @@ export default async function handler(
       if (data.status !== undefined) updateData.status = data.status
 
       if (data.bank_transaction_id !== undefined) {
-        if (data.bank_transaction_id) {
+        const previousBankTransactionId = invoice.bank_transaction_id
+        try {
+          if (data.bank_transaction_id) {
+            await query(
+              `UPDATE invoices SET bank_transaction_id = NULL WHERE bank_transaction_id = $1 AND id != $2`,
+              [data.bank_transaction_id, id]
+            )
+          }
           await query(
-            `UPDATE invoices SET bank_transaction_id = NULL WHERE bank_transaction_id = $1 AND id != $2`,
+            `UPDATE invoices SET bank_transaction_id = $1, updated_at = NOW() WHERE id = $2`,
             [data.bank_transaction_id, id]
           )
+
+          if (data.bank_transaction_id) {
+            await syncInvoicePdfToDrive(id)
+          } else {
+            await removeInvoicePdfFromDrive(id)
+          }
+        } catch (driveError) {
+          await query(
+            `UPDATE invoices SET bank_transaction_id = $1, updated_at = NOW() WHERE id = $2`,
+            [previousBankTransactionId, id]
+          )
+          throw new Error(
+            driveError instanceof Error
+              ? `No se pudo sincronizar la factura con Google Drive: ${driveError.message}`
+              : 'No se pudo sincronizar la factura con Google Drive'
+          )
         }
-        await query(
-          `UPDATE invoices SET bank_transaction_id = $1, updated_at = NOW() WHERE id = $2`,
-          [data.bank_transaction_id, id]
-        )
       }
 
       const updated = Object.keys(updateData).length > 0
@@ -135,6 +155,8 @@ export default async function handler(
       if (!invoice) {
         return res.status(404).json({ error: 'Factura no encontrada' })
       }
+
+      await removeInvoicePdfFromDrive(id)
 
       // Soft delete
       await prisma.invoice.update({

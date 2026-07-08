@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { removeExpensePdfFromDrive } from '@/lib/drive/invoice-storage'
 import { z } from 'zod'
 
 const updateExpenseSchema = z.object({
@@ -99,6 +100,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'DELETE') {
     try {
+      await removeExpensePdfFromDrive(id)
+
       await prisma.expense.update({
         where: { id },
         data: { deleted_at: new Date() },
