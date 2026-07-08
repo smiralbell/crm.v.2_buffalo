@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Search, Sparkles } from 'lucide-react'
 import {
   rankInvoiceLinkSuggestions,
@@ -32,7 +33,7 @@ interface IncomeLinkInvoiceDialogProps {
   income: { id: string; amount: number; description: string; date: string } | null
   invoices: InvoiceForLink[]
   formatCurrency: (n: number) => string
-  onSubmit: (invoiceId: number) => Promise<void>
+  onSubmit: (invoiceId: number, options?: { noInvoiceNote?: string }) => Promise<void>
   loading: boolean
   error: string | null
 }
@@ -109,11 +110,15 @@ export default function IncomeLinkInvoiceDialog({
 }: IncomeLinkInvoiceDialogProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [search, setSearch] = useState('')
+  const [hasInvoicePdf, setHasInvoicePdf] = useState(true)
+  const [noInvoiceNote, setNoInvoiceNote] = useState('')
 
   useEffect(() => {
     if (open) {
       setSelectedId(null)
       setSearch('')
+      setHasInvoicePdf(true)
+      setNoInvoiceNote('')
     }
   }, [open, income?.id])
 
@@ -138,7 +143,8 @@ export default function IncomeLinkInvoiceDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedId) return
-    await onSubmit(selectedId)
+    if (!hasInvoicePdf && !noInvoiceNote.trim()) return
+    await onSubmit(selectedId, hasInvoicePdf ? undefined : { noInvoiceNote: noInvoiceNote.trim() })
   }
 
   return (
@@ -218,12 +224,60 @@ export default function IncomeLinkInvoiceDialog({
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
+          <div className="space-y-3 border-t border-slate-100 pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Documento en Drive
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={`flex-1 text-xs px-3 py-2 rounded-lg border transition-colors ${
+                  hasInvoicePdf
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+                onClick={() => setHasInvoicePdf(true)}
+              >
+                Tengo factura PDF
+              </button>
+              <button
+                type="button"
+                className={`flex-1 text-xs px-3 py-2 rounded-lg border transition-colors ${
+                  !hasInvoicePdf
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+                onClick={() => setHasInvoicePdf(false)}
+              >
+                No tengo factura
+              </button>
+            </div>
+            {!hasInvoicePdf && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700" htmlFor="no_invoice_note">
+                  Nota (aparecerá tras «Porque:» en el PDF)
+                </label>
+                <Textarea
+                  id="no_invoice_note"
+                  value={noInvoiceNote}
+                  onChange={(e) => setNoInvoiceNote(e.target.value)}
+                  placeholder="Ej: Cobro sin factura emitida aún, transferencia interna..."
+                  rows={3}
+                  required
+                />
+              </div>
+            )}
+          </div>
+
           <DialogFooter className="mt-auto">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading || !selectedId}>
-              {loading ? 'Guardando...' : 'Vincular factura'}
+            <Button
+              type="submit"
+              disabled={loading || !selectedId || (!hasInvoicePdf && !noInvoiceNote.trim())}
+            >
+              {loading ? 'Guardando...' : hasInvoicePdf ? 'Vincular factura' : 'Vincular y enviar nota'}
             </Button>
           </DialogFooter>
         </form>

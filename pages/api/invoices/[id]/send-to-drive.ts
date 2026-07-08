@@ -8,6 +8,7 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 import FormData from 'form-data'
 import fetch from 'node-fetch'
+import { createPlaceholderNotePdfBuffer } from '@/lib/pdf/placeholder-note-pdf'
 
 const WEBHOOK_URL = 'https://n8n.agenciabuffalo.es/webhook/0a19bd04-25b5-4f9a-b4f9-9037a7e02996'
 
@@ -37,7 +38,16 @@ export default async function handler(
       return res.status(404).json({ error: 'Factura no encontrada' })
     }
 
-    // Preparar servicios para el PDF
+    const noInvoiceNote =
+      typeof req.body?.no_invoice_note === 'string' ? req.body.no_invoice_note.trim() : ''
+
+    let pdfBuffer: Buffer
+    let pdfFileName: string
+
+    if (noInvoiceNote) {
+      pdfBuffer = createPlaceholderNotePdfBuffer(noInvoiceNote)
+      pdfFileName = `sin_factura_${invoice.invoice_number}.pdf`
+    } else {
     const services = Array.isArray(invoice.services) ? invoice.services : []
     const servicesWithTotals = services.map((service: any) => ({
       description: service.description || '',
@@ -82,8 +92,9 @@ export default async function handler(
 
     // Generar el buffer del PDF
     const pdfBlob = await pdf(pdfDoc as any).toBlob()
-    const pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer())
-    const pdfFileName = `factura_${invoice.invoice_number}.pdf`
+    pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer())
+    pdfFileName = `factura_${invoice.invoice_number}.pdf`
+    }
 
     // Preparar FormData para enviar el PDF y los datos
     const formData = new FormData()
@@ -113,6 +124,10 @@ export default async function handler(
     formData.append('services', JSON.stringify(invoice.services || []))
     formData.append('created_at', invoice.created_at.toISOString())
     formData.append('updated_at', invoice.updated_at.toISOString())
+    if (noInvoiceNote) {
+      formData.append('no_invoice', 'true')
+      formData.append('note', noInvoiceNote)
+    }
 
     // Enviar al webhook en modo POST con FormData (incluye el PDF)
     try {
@@ -125,7 +140,9 @@ export default async function handler(
       const yearMonth = invoice.issue_date.toISOString().substring(0, 7) // YYYY-MM
 
       // Añadir el nombre del archivo, año-mes, tipo y otros datos como parámetros en la URL
-      const webhookUrlWithParams = `${WEBHOOK_URL}?pdf_filename=${encodeURIComponent(pdfFileName)}&invoice_id=${invoice.id}&invoice_number=${encodeURIComponent(invoice.invoice_number)}&year_month=${yearMonth}&type=emitida`
+      const webhookUrlWithParams =
+        `${WEBHOOK_URL}?pdf_filename=${encodeURIComponent(pdfFileName)}&invoice_id=${invoice.id}&invoice_number=${encodeURIComponent(invoice.invoice_number)}&year_month=${yearMonth}&type=emitida` +
+        (noInvoiceNote ? `&no_invoice=true&note=${encodeURIComponent(noInvoiceNote)}` : '')
 
       const webhookResponse = await fetch(webhookUrlWithParams, {
         method: 'POST',

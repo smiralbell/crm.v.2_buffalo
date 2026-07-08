@@ -21,7 +21,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
+import { Textarea } from '@/components/ui/textarea'
 import { buildExpenseAnalytics, type ExpenseAnalytics } from '@/lib/finance/expense-analytics'
+import { createPlaceholderNotePdfBlob } from '@/lib/pdf/placeholder-note-pdf'
 
 const ExpenseVendorBarChart = dynamic(() => import('@/components/finances/ExpenseVendorBarChart'), {
   ssr: false,
@@ -389,6 +391,8 @@ export default function ExpensesPage({
   const [uploadIrpfAmount, setUploadIrpfAmount] = useState('0')
   const [amountIncludesVat, setAmountIncludesVat] = useState(true)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadHasInvoice, setUploadHasInvoice] = useState(true)
+  const [uploadNoInvoiceNote, setUploadNoInvoiceNote] = useState('')
 
   useEffect(() => {
     setDisplayExpenses(expenses)
@@ -444,6 +448,8 @@ export default function ExpensesPage({
     setUploadIrpfAmount('0')
     setAmountIncludesVat(true)
     setUploadFile(null)
+    setUploadHasInvoice(true)
+    setUploadNoInvoiceNote('')
     setUploadError(null)
     setUploadOpen(true)
   }
@@ -453,8 +459,14 @@ export default function ExpensesPage({
     setUploadError(null)
     setUploadLoading(true)
 
-    if (!uploadFile) {
+    if (uploadHasInvoice && !uploadFile) {
       setUploadError('Debes adjuntar la factura del gasto (archivo).')
+      setUploadLoading(false)
+      return
+    }
+
+    if (!uploadHasInvoice && !uploadNoInvoiceNote.trim()) {
+      setUploadError('Escribe una nota explicando por qué no tienes factura.')
       setUploadLoading(false)
       return
     }
@@ -510,17 +522,30 @@ export default function ExpensesPage({
 
       const expenseId = data.expense?.id ?? data.id
 
-      // 2) Enviar la factura al webhook externo con la misma estructura de query params que facturas
+      // 2) Enviar la factura (o PDF en blanco con nota) al webhook de n8n
       const uploadData = new FormData()
-      uploadData.append('pdf', uploadFile)
+      const note = uploadNoInvoiceNote.trim()
+      const pdfFile = uploadHasInvoice
+        ? uploadFile!
+        : new File(
+            [createPlaceholderNotePdfBlob(note)],
+            `sin_factura_${uploadConcept || `GASTO-${expenseId}`}.pdf`,
+            { type: 'application/pdf' }
+          )
+
+      uploadData.append('pdf', pdfFile)
       uploadData.append('concept', uploadConcept)
       uploadData.append('date', uploadDate)
       uploadData.append('base_amount', String(baseAmount))
       uploadData.append('iva_amount', String(ivaAmount))
       uploadData.append('total_amount', String(totalAmount))
+      if (!uploadHasInvoice) {
+        uploadData.append('no_invoice', 'true')
+        uploadData.append('note', note)
+      }
 
       const filename =
-        uploadFile.name || `gasto_${uploadConcept || 'sin_concepto'}_${uploadDate || ''}.pdf`
+        pdfFile.name || `gasto_${uploadConcept || 'sin_concepto'}_${uploadDate || ''}.pdf`
       const yearMonth = uploadDate ? uploadDate.substring(0, 7) : new Date().toISOString().substring(0, 7)
 
       const webhookUrlWithParams =
@@ -529,7 +554,8 @@ export default function ExpensesPage({
         `&invoice_id=${encodeURIComponent(String(expenseId))}` +
         `&invoice_number=${encodeURIComponent(uploadConcept || `GASTO-${expenseId}`)}` +
         `&year_month=${encodeURIComponent(yearMonth)}` +
-        `&type=gasto`
+        `&type=gasto` +
+        (uploadHasInvoice ? '' : `&no_invoice=true&note=${encodeURIComponent(note)}`)
 
       try {
         const uploadRes = await fetch(webhookUrlWithParams, {
@@ -981,24 +1007,70 @@ export default function ExpensesPage({
                 </button>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700" htmlFor="upload_file">
-                  Factura adjunta (archivo)
-                </label>
-                <input
-                  id="upload_file"
-                  type="file"
-                  accept="application/pdf,image/*"
-                  className="w-full text-sm"
-                  onChange={(e) => {
-                    const selected = e.target.files?.[0] || null
-                    setUploadFile(selected)
-                  }}
-                />
-                <p className="text-xs text-gray-500">
-                  Sube el PDF o imagen de la factura de este gasto. Se enviará automáticamente al
-                  sistema externo.
-                </p>
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-gray-700">Documento de factura</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className={`flex-1 text-xs sm:text-sm px-3 py-2 rounded-full border transition-colors ${
+                      uploadHasInvoice
+                        ? 'bg-gray-900 text-white border-gray-900'
+                        : 'border-gray-300 text-gray-700 bg-white'
+                    }`}
+                    onClick={() => setUploadHasInvoice(true)}
+                  >
+                    Tengo factura
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 text-xs sm:text-sm px-3 py-2 rounded-full border transition-colors ${
+                      !uploadHasInvoice
+                        ? 'bg-gray-900 text-white border-gray-900'
+                        : 'border-gray-300 text-gray-700 bg-white'
+                    }`}
+                    onClick={() => setUploadHasInvoice(false)}
+                  >
+                    No tengo factura
+                  </button>
+                </div>
+
+                {uploadHasInvoice ? (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700" htmlFor="upload_file">
+                      Factura adjunta (archivo)
+                    </label>
+                    <input
+                      id="upload_file"
+                      type="file"
+                      accept="application/pdf,image/*"
+                      className="w-full text-sm"
+                      onChange={(e) => {
+                        const selected = e.target.files?.[0] || null
+                        setUploadFile(selected)
+                      }}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Sube el PDF o imagen de la factura. Se enviará automáticamente a Drive vía n8n.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700" htmlFor="upload_no_invoice_note">
+                      Nota (aparecerá tras «Porque:» en el PDF)
+                    </label>
+                    <Textarea
+                      id="upload_no_invoice_note"
+                      value={uploadNoInvoiceNote}
+                      onChange={(e) => setUploadNoInvoiceNote(e.target.value)}
+                      placeholder="Ej: Ticket perdido, pago en efectivo sin factura, abono bancario..."
+                      rows={4}
+                      required
+                    />
+                    <p className="text-xs text-gray-500">
+                      Se generará un PDF con el título «No hay factura», «Porque:» y tu nota en rojo.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {uploadError && (

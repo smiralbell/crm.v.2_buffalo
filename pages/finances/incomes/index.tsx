@@ -469,7 +469,7 @@ export default function IncomesPage({
     setLinkModalOpen(true)
   }
 
-  const handleSubmitLink = async (invoiceId: number) => {
+  const handleSubmitLink = async (invoiceId: number, options?: { noInvoiceNote?: string }) => {
     if (!selectedIncomeId) return
     setLinkError(null)
     setLinkLoading(true)
@@ -484,6 +484,24 @@ export default function IncomesPage({
         setLinkError(data.error || 'Error al vincular factura')
         setLinkLoading(false)
         return
+      }
+
+      if (options?.noInvoiceNote) {
+        const driveRes = await fetch(`/api/invoices/${invoiceId}/send-to-drive`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ no_invoice_note: options.noInvoiceNote }),
+        })
+        if (!driveRes.ok) {
+          const driveData = await driveRes.json().catch(() => ({}))
+          setLinkError(
+            driveData.error ||
+              driveData.details ||
+              'Factura vinculada, pero no se pudo enviar el PDF con la nota a Drive'
+          )
+          setLinkLoading(false)
+          return
+        }
       }
       const income = incomes.find((i) => i.id === selectedIncomeId)
       const inv = invoicesForLinkLocal.find((f) => f.id === invoiceId)
