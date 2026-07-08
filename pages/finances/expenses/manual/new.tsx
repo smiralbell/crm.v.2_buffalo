@@ -94,7 +94,31 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
     const totalAmount = baseAmount + ivaAmount - irpfAmount
 
     try {
-      // 1) Registrar el gasto manual en nuestra BD
+      // 1) Enviar la factura al webhook externo
+      const uploadData = new FormData()
+      uploadData.append('file', file)
+      uploadData.append('concept', formData.name)
+      uploadData.append('date', formData.date)
+      uploadData.append('base_amount', String(baseAmount))
+      uploadData.append('iva_amount', String(ivaAmount))
+      uploadData.append('irpf_amount', String(irpfAmount))
+      uploadData.append('total_amount', String(totalAmount))
+
+      const uploadRes = await fetch(
+        'https://n8n.agenciabuffalo.es/webhook/c102607d-57a2-43fe-a8c1-55f2e24fc5c0',
+        {
+          method: 'POST',
+          body: uploadData,
+        }
+      )
+
+      if (!uploadRes.ok) {
+        setError('No se ha podido enviar la factura al sistema externo.')
+        setLoading(false)
+        return
+      }
+
+      // 2) Registrar el gasto manual en nuestra BD
       const res = await fetch('/api/finances/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -118,25 +142,6 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
 
       if (!res.ok) {
         setError(data.error || 'Error al crear gasto')
-        setLoading(false)
-        return
-      }
-
-      const expenseId = data.expense?.id ?? data.id
-
-      const uploadData = new FormData()
-      uploadData.append('file', file)
-      uploadData.append('file_name', file.name || `gasto_${expenseId}.pdf`)
-
-      const uploadRes = await fetch(`/api/finances/expenses/${expenseId}/send-to-drive`, {
-        method: 'POST',
-        body: uploadData,
-      })
-
-      if (!uploadRes.ok) {
-        const uploadError = await uploadRes.json().catch(() => ({}))
-        await fetch(`/api/finances/expenses/${expenseId}`, { method: 'DELETE' }).catch(() => null)
-        setError(uploadError.error || 'No se pudo subir la factura del gasto a Google Drive.')
         setLoading(false)
         return
       }

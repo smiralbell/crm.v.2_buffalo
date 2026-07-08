@@ -248,9 +248,6 @@ model Expense {
   project     String?  // Proyecto asociado (opcional)
   client_name String?  // Cliente asociado (opcional)
   notes       String?  @db.Text
-  pdf_drive_file_id String?
-  pdf_drive_url     String?  @db.Text
-  sent_to_drive     Boolean  @default(false)
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
   deleted_at  DateTime?
@@ -258,7 +255,6 @@ model Expense {
   @@index([date_start])
   @@index([date_end])
   @@index([deleted_at])
-  @@index([sent_to_drive])
   @@map("expenses")
 }
 
