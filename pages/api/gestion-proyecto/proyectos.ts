@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getAccessibleProjectIds, getDevelopersByProjectIds } from '@/lib/project-access'
+import { listAssignmentsForUser } from '@/lib/developer/assignments'
 
 type ProyectoRow = {
   id: string
@@ -32,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ORDER BY updated_at DESC
       `
     } else if (accessibleIds.length === 0) {
-      return res.status(200).json({ proyectos: [], total: 0 })
+      proyectos = []
     } else {
       proyectos = await prisma.$queryRaw<ProyectoRow[]>`
         SELECT id, name, status, service_type, config_ref, lead_id, contact_id, updated_at
@@ -99,12 +100,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    const rows = proyectos.map((p) => {
+    const projectRows = proyectos.map((p) => {
       const lead = p.lead_id ? leadMap.get(p.lead_id) : null
       const contact =
         lead?.contact ?? (p.contact_id ? contactMap.get(p.contact_id) ?? null : null)
 
       return {
+        kind: 'project' as const,
         id: p.id,
         name: p.name,
         status: p.status,
@@ -119,7 +121,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     })
 
-    return res.status(200).json({ proyectos: rows, total: rows.length })
+    const assignmentRows =
+      user.role === 'developer'
+        ? (await listAssignmentsForUser(user.id)).map((a) => ({
+            kind: 'assignment' as const,
+            id: a.id,
+            name: a.title,
+            status: a.status,
+            service_type: 'assignment',
+            config_ref: null as string | null,
+            lead_id: null as number | null,
+            updated_at: a.updated_at,
+            contact: null,
+            task_counts: {
+              pending: a.status === 'pending' ? 1 : 0,
+              in_progress: a.status === 'in_progress' ? 1 : 0,
+              done: a.status === 'done' ? 1 : 0,
+            },
+            developers: [] as { id: number; name: string; email: string }[],
+            assignment_summary: a.summary,
+            due_date: a.due_date,
+          }))
+        : []
+
+    const merged = [...assignmentRows, ...projectRows].sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    )
+
+    return res.status(200).json({ proyectos: merged, total: merged.length })
   } catch (error) {
     if (error instanceof Error && ['No session', 'Invalid session'].includes(error.message)) {
       return

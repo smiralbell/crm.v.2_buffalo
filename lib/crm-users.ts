@@ -83,17 +83,74 @@ export async function createCrmUser(input: {
   role?: CrmRole
 }): Promise<CrmUserPublic> {
   const hash = await bcrypt.hash(input.password, 12)
-  const rows = await prisma.$queryRaw<CrmUserRow[]>`
-    INSERT INTO crm_users (name, email, password_hash, role)
-    VALUES (
-      ${input.name.trim()},
-      ${input.email.trim().toLowerCase()},
-      ${hash},
-      ${input.role || 'developer'}
-    )
-    RETURNING id, name, email, role, active, created_at, updated_at
-  `
-  return toPublic(rows[0])
+  const plainPassword = input.password
+  try {
+    const rows = await prisma.$queryRaw<CrmUserRow[]>`
+      INSERT INTO crm_users (name, email, password_hash, role, admin_password)
+      VALUES (
+        ${input.name.trim()},
+        ${input.email.trim().toLowerCase()},
+        ${hash},
+        ${input.role || 'developer'},
+        ${plainPassword}
+      )
+      RETURNING id, name, email, role, active, created_at, updated_at
+    `
+    return toPublic(rows[0])
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (!msg.includes('admin_password')) throw err
+    const rows = await prisma.$queryRaw<CrmUserRow[]>`
+      INSERT INTO crm_users (name, email, password_hash, role)
+      VALUES (
+        ${input.name.trim()},
+        ${input.email.trim().toLowerCase()},
+        ${hash},
+        ${input.role || 'developer'}
+      )
+      RETURNING id, name, email, role, active, created_at, updated_at
+    `
+    return toPublic(rows[0])
+  }
+}
+
+export async function updateCrmUserPassword(
+  id: number,
+  password: string
+): Promise<CrmUserPublic | null> {
+  const hash = await bcrypt.hash(password, 12)
+  try {
+    const rows = await prisma.$queryRaw<CrmUserRow[]>`
+      UPDATE crm_users
+      SET password_hash = ${hash},
+          admin_password = ${password},
+          updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING id, name, email, role, active, created_at, updated_at
+    `
+    return rows[0] ? toPublic(rows[0]) : null
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (!msg.includes('admin_password')) throw err
+    const rows = await prisma.$queryRaw<CrmUserRow[]>`
+      UPDATE crm_users
+      SET password_hash = ${hash}, updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING id, name, email, role, active, created_at, updated_at
+    `
+    return rows[0] ? toPublic(rows[0]) : null
+  }
+}
+
+export async function getCrmUserAdminPassword(id: number): Promise<string | null> {
+  try {
+    const rows = await prisma.$queryRaw<{ admin_password: string | null }[]>`
+      SELECT admin_password FROM crm_users WHERE id = ${id} LIMIT 1
+    `
+    return rows[0]?.admin_password ?? null
+  } catch {
+    return null
+  }
 }
 
 export async function setCrmUserActive(id: number, active: boolean): Promise<CrmUserPublic | null> {

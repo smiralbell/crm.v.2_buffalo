@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireAdminAPI } from '@/lib/auth'
 import { createCrmUser, listCrmUsers, setCrmUserActive } from '@/lib/crm-users'
+import { getUserWorkStats } from '@/lib/developer/assignments'
 
 const createSchema = z.object({
   name: z.string().min(1, 'El nombre es obligatorio'),
@@ -16,7 +17,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'GET') {
       const users = await listCrmUsers()
-      return res.status(200).json({ users })
+      const withStats = await Promise.all(
+        users.map(async (u) => ({
+          ...u,
+          stats: u.role === 'developer' ? await getUserWorkStats(u.id) : null,
+        }))
+      )
+      return res.status(200).json({ users: withStats })
     }
 
     if (req.method === 'POST') {

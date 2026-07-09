@@ -82,38 +82,75 @@ export default function GestionProyectoPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {rows.map((row) => {
-              const clientName = row.contact?.empresa || row.contact?.nombre || row.contact?.email || 'Sin cliente'
+              const isAssignment = row.kind === 'assignment'
+              const href = isAssignment
+                ? `/gestion-proyecto/asignaciones/${row.id}`
+                : `/gestion-proyecto/proyectos/${row.id}`
+              const clientName = isAssignment
+                ? 'Asignación interna'
+                : row.contact?.empresa || row.contact?.nombre || row.contact?.email || 'Sin cliente'
               const openTasks = row.task_counts.pending + row.task_counts.in_progress
+              const assignmentStatusLabel: Record<string, string> = {
+                pending: 'Pendiente',
+                in_progress: 'En curso',
+                done: 'Hecha',
+                cancelled: 'Cancelada',
+              }
               return (
                 <Link
                   key={row.id}
-                  href={`/gestion-proyecto/proyectos/${row.id}`}
+                  href={href}
                   className="rounded-2xl border border-gray-200 bg-white p-5 hover:border-gray-300 hover:shadow-sm transition-all"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-xs text-gray-400 uppercase tracking-wide">Proyecto</p>
+                      <p className="text-xs text-gray-400 uppercase tracking-wide">
+                        {isAssignment ? 'Tarea puntual' : 'Proyecto'}
+                      </p>
                       <h2 className="text-lg font-semibold text-gray-900 truncate">{row.name}</h2>
                       <p className="text-sm text-gray-600 mt-1 truncate">{clientName}</p>
                     </div>
                     <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600">
-                      {statusLabel[row.status] || row.status}
+                      {isAssignment
+                        ? assignmentStatusLabel[row.status] || row.status
+                        : statusLabel[row.status] || row.status}
                     </span>
                   </div>
 
                   <div className="mt-4 space-y-2 text-sm text-gray-500">
-                    <p>{serviceLabel[row.service_type] || row.service_type}</p>
-                    {row.config_ref && <p className="font-mono text-[11px] text-gray-400">{row.config_ref}</p>}
-                    {row.developers?.length > 0 && (
-                      <DeveloperTags developers={row.developers} className="pt-1" />
+                    {isAssignment ? (
+                      <>
+                        {row.assignment_summary && (
+                          <p className="line-clamp-2">{row.assignment_summary}</p>
+                        )}
+                        {row.due_date && (
+                          <p className="text-xs text-gray-400">
+                            Entrega: {new Date(row.due_date).toLocaleDateString('es-ES')}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <p>{serviceLabel[row.service_type] || row.service_type}</p>
+                        {row.config_ref && (
+                          <p className="font-mono text-[11px] text-gray-400">{row.config_ref}</p>
+                        )}
+                        {row.developers?.length > 0 && (
+                          <DeveloperTags developers={row.developers} className="pt-1" />
+                        )}
+                      </>
                     )}
                   </div>
 
                   <div className="mt-5 flex items-center justify-between text-xs">
                     <span className="text-gray-500">
-                      {openTasks} tareas abiertas · {row.task_counts.done} hechas
+                      {isAssignment
+                        ? row.status === 'done'
+                          ? 'Completada'
+                          : 'Asignación activa'
+                        : `${openTasks} tareas abiertas · ${row.task_counts.done} hechas`}
                     </span>
-                    <span className="font-medium text-indigo-600">Abrir →</span>
+                    <span className="font-medium text-gray-700">Abrir →</span>
                   </div>
                 </Link>
               )

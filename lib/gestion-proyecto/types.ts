@@ -3,6 +3,7 @@ export type TaskPriority = 'low' | 'medium' | 'high'
 export type DocType = 'link' | 'file'
 
 export interface ProjectListRow {
+  kind?: 'project' | 'assignment'
   id: string
   name: string
   status: string
@@ -22,6 +23,8 @@ export interface ProjectListRow {
     done: number
   }
   developers: { id: number; name: string; email: string }[]
+  assignment_summary?: string | null
+  due_date?: string | null
 }
 
 export interface ProjectOnboarding {

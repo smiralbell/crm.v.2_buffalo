@@ -1,10 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireAdminAPI } from '@/lib/auth'
-import { setCrmUserActive } from '@/lib/crm-users'
+import { findCrmUserById, setCrmUserActive, updateCrmUserPassword } from '@/lib/crm-users'
 
 const patchSchema = z.object({
-  active: z.boolean(),
+  active: z.boolean().optional(),
+  password: z.string().min(8, 'Mínimo 8 caracteres').optional(),
+}).refine((d) => d.active !== undefined || d.password !== undefined, {
+  message: 'Indica active o password',
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -15,9 +18,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'PATCH') {
       const data = patchSchema.parse(req.body)
-      const user = await setCrmUserActive(id, data.active)
-      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
-      return res.status(200).json({ user })
+      const existing = await findCrmUserById(id)
+      if (!existing) return res.status(404).json({ error: 'Usuario no encontrado' })
+
+      if (data.password) {
+        const user = await updateCrmUserPassword(id, data.password)
+        if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
+        return res.status(200).json({ user, password: data.password })
+      }
+
+      if (data.active !== undefined) {
+        const user = await setCrmUserActive(id, data.active)
+        if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
+        return res.status(200).json({ user })
+      }
+
+      return res.status(400).json({ error: 'Sin cambios' })
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

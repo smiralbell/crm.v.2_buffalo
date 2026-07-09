@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { getAccessibleProjectIds } from '@/lib/project-access'
 import type { AuthUser } from '@/lib/auth'
 import { taskEstimatedHours } from '@/lib/developer/task-hours'
+import { countOpenAssignmentsForUser } from '@/lib/developer/assignments'
 
 export interface DeveloperDashboardStats {
   projects_count: number
@@ -40,14 +41,21 @@ function taskHours(priority: string, estimated: number | null): number {
 
 export async function getDeveloperDashboardStats(user: AuthUser): Promise<DeveloperDashboardStats> {
   const projectIds = await getAccessibleProjectIds(user)
-  if (projectIds !== null && projectIds.length === 0) return EMPTY
+  const openAssignments =
+    user.role === 'developer' ? await countOpenAssignmentsForUser(user.id) : 0
+
+  if (projectIds !== null && projectIds.length === 0 && openAssignments === 0) return EMPTY
 
   const stats = { ...EMPTY }
 
   try {
-    if (projectIds && projectIds.length > 0) {
+    if (user.role === 'developer') {
+      stats.projects_count = (projectIds?.length ?? 0) + openAssignments
+    } else if (projectIds && projectIds.length > 0) {
       stats.projects_count = projectIds.length
+    }
 
+    if (projectIds && projectIds.length > 0) {
       const taskRows = await prisma.$queryRaw<
         { status: string; priority: string; estimated_hours: number | null; count: string }[]
       >`
@@ -86,6 +94,17 @@ export async function getDeveloperDashboardStats(user: AuthUser): Promise<Develo
         FROM tickets
         WHERE assignee_user_id = ${user.id}
           AND project_id = ANY(${projectIds}::uuid[])
+        GROUP BY status
+      `
+      for (const row of ticketCounts) {
+        if (row.status === 'open') stats.tickets_open = Number(row.count)
+        if (row.status === 'in_progress') stats.tickets_in_progress = Number(row.count)
+      }
+    } else if (user.role === 'developer') {
+      const ticketCounts = await prisma.$queryRaw<{ status: string; count: string }[]>`
+        SELECT status, COUNT(*)::int AS count
+        FROM tickets
+        WHERE assignee_user_id = ${user.id}
         GROUP BY status
       `
       for (const row of ticketCounts) {
