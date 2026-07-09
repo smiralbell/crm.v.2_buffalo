@@ -148,12 +148,13 @@ export default function IncomeLinkInvoiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 px-6 pt-6 pb-3">
           <DialogTitle>Relacionar ingreso con factura</DialogTitle>
         </DialogHeader>
+
         {income && (
-          <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-sm">
+          <div className="shrink-0 mx-6 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-sm">
             <p className="font-medium text-slate-900 truncate">{income.description || 'Sin concepto'}</p>
             <p className="text-xs text-slate-500 mt-0.5">
               {formatDate(income.date)} ·{' '}
@@ -161,120 +162,120 @@ export default function IncomeLinkInvoiceDialog({
             </p>
           </div>
         )}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 min-h-0 flex-1">
-          {suggestions.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700/90">
-                Sugerencias automáticas
-              </p>
-              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                {suggestions.map((inv) => (
-                  <InvoiceOption
-                    key={inv.id}
-                    inv={inv}
-                    selected={selectedId === inv.id}
-                    onSelect={() => setSelectedId(inv.id)}
-                    formatCurrency={formatCurrency}
-                    suggested
-                  />
-                ))}
-              </div>
-            </div>
-          )}
 
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Buscar otra factura
-            </p>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Nº factura, cliente o importe..."
-                className="pl-9"
-              />
-            </div>
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-              {filtered.length === 0 ? (
-                <p className="text-sm text-slate-500 py-2">
-                  {invoices.length === 0
-                    ? 'No hay facturas enviadas disponibles.'
-                    : 'Sin resultados — prueba otro término.'}
-                </p>
-              ) : (
-                filtered.slice(0, 20).map((inv) => (
-                  <InvoiceOption
-                    key={inv.id}
-                    inv={inv}
-                    selected={selectedId === inv.id}
-                    onSelect={() => setSelectedId(inv.id)}
-                    formatCurrency={formatCurrency}
-                  />
-                ))
-              )}
-              {filtered.length > 20 && (
-                <p className="text-xs text-slate-400 text-center">
-                  +{filtered.length - 20} más — afina la búsqueda
-                </p>
-              )}
-            </div>
-          </div>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
-          <div className="space-y-3 border-t border-slate-100 pt-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Documento en Drive
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className={`flex-1 text-xs px-3 py-2 rounded-lg border transition-colors ${
-                  hasInvoicePdf
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-                onClick={() => setHasInvoicePdf(true)}
-              >
-                Tengo factura PDF
-              </button>
-              <button
-                type="button"
-                className={`flex-1 text-xs px-3 py-2 rounded-lg border transition-colors ${
-                  !hasInvoicePdf
-                    ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-                onClick={() => setHasInvoicePdf(false)}
-              >
-                No tengo factura
-              </button>
-            </div>
-            {!hasInvoicePdf && (
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-h-0">
+            {suggestions.length > 0 && (
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700" htmlFor="no_invoice_note">
-                  Nota (opcional, aparece debajo del título en el PDF)
-                </label>
-                <Textarea
-                  id="no_invoice_note"
-                  value={noInvoiceNote}
-                  onChange={(e) => setNoInvoiceNote(e.target.value)}
-                  placeholder="Ej: Cobro sin factura emitida aún, transferencia interna..."
-                  rows={3}
-                />
+                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700/90">
+                  Sugerencias automáticas
+                </p>
+                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                  {suggestions.map((inv) => (
+                    <InvoiceOption
+                      key={inv.id}
+                      inv={inv}
+                      selected={selectedId === inv.id}
+                      onSelect={() => setSelectedId(inv.id)}
+                      formatCurrency={formatCurrency}
+                      suggested
+                    />
+                  ))}
+                </div>
               </div>
             )}
+
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Buscar otra factura
+              </p>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Nº factura, cliente o importe..."
+                  className="pl-9"
+                />
+              </div>
+              <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                {filtered.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-2">
+                    {invoices.length === 0
+                      ? 'No hay facturas enviadas disponibles.'
+                      : 'Sin resultados — prueba otro término.'}
+                  </p>
+                ) : (
+                  filtered.slice(0, 20).map((inv) => (
+                    <InvoiceOption
+                      key={inv.id}
+                      inv={inv}
+                      selected={selectedId === inv.id}
+                      onSelect={() => setSelectedId(inv.id)}
+                      formatCurrency={formatCurrency}
+                    />
+                  ))
+                )}
+                {filtered.length > 20 && (
+                  <p className="text-xs text-slate-400 text-center">
+                    +{filtered.length - 20} más — afina la búsqueda
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t border-slate-100 pt-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Documento en Drive
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={`flex-1 text-xs px-3 py-2 rounded-lg border transition-colors ${
+                    hasInvoicePdf
+                      ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                  onClick={() => setHasInvoicePdf(true)}
+                >
+                  Tengo factura PDF
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 text-xs px-3 py-2 rounded-lg border transition-colors ${
+                    !hasInvoicePdf
+                      ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                  onClick={() => setHasInvoicePdf(false)}
+                >
+                  No tengo factura
+                </button>
+              </div>
+              {!hasInvoicePdf && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700" htmlFor="no_invoice_note">
+                    Nota (opcional, aparece debajo del título en el PDF)
+                  </label>
+                  <Textarea
+                    id="no_invoice_note"
+                    value={noInvoiceNote}
+                    onChange={(e) => setNoInvoiceNote(e.target.value)}
+                    placeholder="Ej: Cobro sin factura emitida aún, transferencia interna..."
+                    rows={3}
+                  />
+                </div>
+              )}
+            </div>
+
+            {error && <p className="text-sm text-red-600">{error}</p>}
           </div>
 
-          <DialogFooter className="mt-auto">
+          <DialogFooter className="shrink-0 border-t bg-background px-6 py-4 mt-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar
             </Button>
-            <Button
-              type="submit"
-              disabled={loading || !selectedId}
-            >
+            <Button type="submit" disabled={loading || !selectedId}>
               {loading ? 'Guardando...' : hasInvoicePdf ? 'Vincular factura' : 'Vincular y enviar nota'}
             </Button>
           </DialogFooter>
