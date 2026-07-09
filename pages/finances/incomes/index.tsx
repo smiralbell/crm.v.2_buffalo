@@ -78,6 +78,7 @@ interface IncomeRow {
   account_name: string
   matched: boolean
   is_recurring_income: boolean
+  is_reconciled: boolean
   linkedInvoice: LinkedInvoice | null
 }
 
@@ -144,6 +145,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       description: string
       account_name: string | null
       is_recurring_income: boolean
+      is_reconciled: boolean
     }>(
       `SELECT 
         bt.id,
@@ -151,13 +153,34 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         bt.amount,
         bt.description,
         ba.name as account_name,
-        COALESCE(bt.is_recurring_income, false) AS is_recurring_income
+        COALESCE(bt.is_recurring_income, false) AS is_recurring_income,
+        COALESCE(bt.is_reconciled, false) AS is_reconciled
        FROM bank_transactions bt
        LEFT JOIN bank_accounts ba ON bt.account_id = ba.id
        WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount > 0
        ORDER BY bt.date DESC`,
       [startStr, endStr]
     ).catch(async () => {
+      const fallback = await query<{
+        id: string
+        date: string | Date
+        amount: number
+        description: string
+        account_name: string | null
+        is_recurring_income: boolean
+      }>(
+        `SELECT bt.id, bt.date, bt.amount, bt.description, ba.name as account_name,
+                COALESCE(bt.is_recurring_income, false) AS is_recurring_income
+         FROM bank_transactions bt
+         LEFT JOIN bank_accounts ba ON bt.account_id = ba.id
+         WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount > 0
+         ORDER BY bt.date DESC`,
+        [startStr, endStr]
+      )
+      return {
+        rows: fallback.rows.map((r) => ({ ...r, is_reconciled: false })),
+      }
+    }).catch(async () => {
       const fallback = await query<{
         id: string
         date: string | Date
@@ -173,7 +196,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         [startStr, endStr]
       )
       return {
-        rows: fallback.rows.map((r) => ({ ...r, is_recurring_income: false })),
+        rows: fallback.rows.map((r) => ({ ...r, is_recurring_income: false, is_reconciled: false })),
       }
     })
 
@@ -184,6 +207,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       description: i.description ?? '',
       account_name: i.account_name ?? '',
       is_recurring_income: Boolean(i.is_recurring_income),
+      is_reconciled: Boolean(i.is_reconciled),
     }))
 
     let linkedByBtId = new Map<string | null, LinkedInvoice>()
@@ -266,7 +290,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       const linked = linkedByBtId.get(i.id)
       return {
         ...i,
-        matched: !!linked,
+        matched: !!linked || i.is_reconciled,
         linkedInvoice: linked ?? null,
       }
     })
@@ -279,14 +303,33 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       amount: number
       description: string
       is_recurring_income: boolean
+      is_reconciled: boolean
     }>(
       `SELECT bt.id, bt.date, bt.amount, bt.description,
-              COALESCE(bt.is_recurring_income, false) AS is_recurring_income
+              COALESCE(bt.is_recurring_income, false) AS is_recurring_income,
+              COALESCE(bt.is_reconciled, false) AS is_reconciled
        FROM bank_transactions bt
        WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount > 0
        ORDER BY bt.date`,
       [analyticsStartStr, endStr]
     ).catch(async () => {
+      const fallback = await query<{
+        id: string
+        date: string | Date
+        amount: number
+        description: string
+        is_recurring_income: boolean
+      }>(
+        `SELECT bt.id, bt.date, bt.amount, bt.description,
+                COALESCE(bt.is_recurring_income, false) AS is_recurring_income
+         FROM bank_transactions bt
+         WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount > 0`,
+        [analyticsStartStr, endStr]
+      )
+      return {
+        rows: fallback.rows.map((r) => ({ ...r, is_reconciled: false })),
+      }
+    }).catch(async () => {
       const fallback = await query<{
         id: string
         date: string | Date
@@ -299,7 +342,11 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         [analyticsStartStr, endStr]
       )
       return {
-        rows: fallback.rows.map((r) => ({ ...r, is_recurring_income: false })),
+        rows: fallback.rows.map((r) => ({
+          ...r,
+          is_recurring_income: false,
+          is_reconciled: false,
+        })),
       }
     })
 
@@ -309,6 +356,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       amount: number
       description: string
       is_recurring_income: boolean
+      is_reconciled: boolean
     }) => {
       const dateStr =
         row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date).slice(0, 10)
@@ -318,7 +366,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         amount: Number(row.amount),
         date: dateStr,
         is_recurring_income: Boolean(row.is_recurring_income),
-        linked_client_name: linked?.client_name,
+        linked_client_name:
+          linked?.client_name ?? (row.is_reconciled ? '(Conciliado)' : undefined),
       }
     }
 
@@ -327,7 +376,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       amount: i.amount,
       date: i.date.slice(0, 10),
       is_recurring_income: i.is_recurring_income,
-      linked_client_name: i.linkedInvoice?.client_name ?? undefined,
+      linked_client_name:
+        i.linkedInvoice?.client_name ?? (i.is_reconciled ? '(Conciliado)' : undefined),
       linked_invoice_subtotal: i.linkedInvoice?.subtotal,
       linked_invoice_iva: i.linkedInvoice?.iva,
     }))
@@ -953,6 +1003,8 @@ export default function IncomesPage({
                                   <Unlink className="h-3.5 w-3.5 text-slate-500" />
                                 </Button>
                               </>
+                            ) : income.is_reconciled ? (
+                              <span className="text-xs font-medium text-emerald-700">Conciliado</span>
                             ) : (
                               <Button
                                 variant="ghost"
