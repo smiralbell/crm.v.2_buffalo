@@ -5,7 +5,7 @@ import Layout from '@/components/Layout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, FileUp, Loader2, Plus, Trash2 } from 'lucide-react'
 
 interface ServiceLine {
   description: string
@@ -20,6 +20,7 @@ export default function NuevaFacturaDeveloperPage() {
   const [lines, setLines] = useState<ServiceLine[]>([
     { description: 'Desarrollo y mantenimiento', quantity: 1, price: 0, tax: 21 },
   ])
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -42,7 +43,23 @@ export default function NuevaFacturaDeveloperPage() {
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)))
   }
 
+  const uploadPdf = async (invoiceId: number) => {
+    if (!pdfFile) return true
+    const formData = new FormData()
+    formData.append('pdf', pdfFile)
+    const res = await fetch(`/api/developer/invoices/${invoiceId}/pdf`, {
+      method: 'POST',
+      body: formData,
+    })
+    return res.ok
+  }
+
   const submit = async (status: 'draft' | 'sent') => {
+    if (status === 'sent' && !pdfFile) {
+      setError('Debes adjuntar el PDF de tu factura para emitirla')
+      return
+    }
+
     setSaving(true)
     setError('')
     try {
@@ -66,6 +83,15 @@ export default function NuevaFacturaDeveloperPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.hint || data.error || 'Error al guardar')
+
+      if (pdfFile) {
+        const pdfOk = await uploadPdf(data.id)
+        if (!pdfOk) {
+          await fetch(`/api/developer/invoices/${data.id}`, { method: 'DELETE' })
+          throw new Error('No se pudo subir el PDF. Vuelve a intentarlo.')
+        }
+      }
+
       router.push(`/developer/facturas/${data.id}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al guardar')
@@ -178,6 +204,25 @@ export default function NuevaFacturaDeveloperPage() {
           </div>
         </div>
 
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 space-y-3">
+          <Label className="text-sm font-medium text-gray-900 flex items-center gap-2">
+            <FileUp className="h-4 w-4" />
+            PDF de tu factura
+          </Label>
+          <p className="text-xs text-gray-500">
+            Adjunta el PDF real de tu factura. Es obligatorio para emitirla y para que contabilidad
+            pueda procesarla.
+          </p>
+          <Input
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+          />
+          {pdfFile && (
+            <p className="text-xs text-green-700">Archivo seleccionado: {pdfFile.name}</p>
+          )}
+        </div>
+
         {error && (
           <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
             {error}
@@ -195,7 +240,7 @@ export default function NuevaFacturaDeveloperPage() {
           </Button>
           <Button
             className="rounded-xl"
-            disabled={saving || total <= 0}
+            disabled={saving || total <= 0 || !pdfFile}
             onClick={() => submit('sent')}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Emitir factura'}

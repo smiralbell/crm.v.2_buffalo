@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
 import { useAuth } from '@/components/AuthContext'
+import type { DeveloperDailyHoursPoint, DeveloperProjectHoursRow } from '@/lib/developer/work-charts'
 import {
   FolderKanban,
   ListTodo,
@@ -12,6 +14,15 @@ import {
   Loader2,
   ArrowRight,
 } from 'lucide-react'
+
+const DeveloperWorkTimelineChart = dynamic(
+  () => import('@/components/developer/DeveloperWorkTimelineChart'),
+  { ssr: false, loading: () => <div className="h-56 bg-gray-50 rounded-xl animate-pulse" /> }
+)
+const DeveloperHoursByProjectChart = dynamic(
+  () => import('@/components/developer/DeveloperHoursByProjectChart'),
+  { ssr: false, loading: () => <div className="h-56 bg-gray-50 rounded-xl animate-pulse" /> }
+)
 
 interface Stats {
   projects_count: number
@@ -31,20 +42,49 @@ interface Stats {
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
 
+function developerFirstName(name: string | undefined, email: string | undefined): string {
+  const trimmed = name?.trim()
+  if (trimmed && trimmed.toLowerCase() !== 'developer') {
+    return trimmed.split(/\s+/)[0]
+  }
+  const local = email?.split('@')[0]?.trim()
+  return local || ''
+}
+
+interface Charts {
+  daily_hours: DeveloperDailyHoursPoint[]
+  hours_by_project: DeveloperProjectHoursRow[]
+}
+
 export default function DeveloperDashboardPage() {
   const { user } = useAuth()
   const [stats, setStats] = useState<Stats | null>(null)
+  const [charts, setCharts] = useState<Charts | null>(null)
+  const [displayName, setDisplayName] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     fetch('/api/developer/dashboard')
       .then((r) => r.json())
-      .then((d) => setStats(d.stats || null))
-      .catch(() => setStats(null))
+      .then((d) => {
+        setStats(d.stats || null)
+        setCharts(d.charts || null)
+        const name = d.user?.name || user?.name || user?.email?.split('@')[0] || ''
+        setDisplayName(developerFirstName(name, d.user?.email || user?.email))
+      })
+      .catch(() => {
+        setStats(null)
+        setCharts(null)
+      })
       .finally(() => setLoading(false))
-  }, [])
+  }, [user?.name, user?.email])
 
   const ticketsPending = (stats?.tickets_open ?? 0) + (stats?.tickets_in_progress ?? 0)
+  const greetingName =
+    displayName ||
+    developerFirstName(user?.name, user?.email) ||
+    user?.email?.split('@')[0] ||
+    ''
 
   return (
     <Layout>
@@ -52,7 +92,7 @@ export default function DeveloperDashboardPage() {
         <div className="rounded-2xl bg-gray-900 text-white px-6 py-8">
           <p className="text-xs font-medium uppercase tracking-wider text-white/60">Tu panel</p>
           <h1 className="text-2xl font-bold mt-1">
-            Hola, {user?.name?.split(' ')[0] || 'Developer'}
+            Hola{greetingName ? `, ${greetingName}` : ''}
           </h1>
           <p className="text-sm text-white/70 mt-2 max-w-xl">
             Resumen de proyectos, tareas, tickets, retención y facturación.
@@ -147,6 +187,37 @@ export default function DeveloperDashboardPage() {
                   {stats.invoices_count} facturas · {stats.invoices_pending_draft} borradores
                 </p>
               </Link>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="rounded-2xl border border-gray-200 bg-white p-6">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="text-sm font-semibold text-gray-900">Actividad diaria</h2>
+                  <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                    Últimos 30 días
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 mb-4">
+                  Horas estimadas de tareas completadas cada día
+                </p>
+                <DeveloperWorkTimelineChart data={charts?.daily_hours ?? []} />
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-white p-6">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="text-sm font-semibold text-gray-900">Horas por proyecto</h2>
+                  <Link
+                    href="/gestion-proyecto"
+                    className="text-[11px] font-medium text-gray-500 hover:text-gray-900"
+                  >
+                    Ver proyectos
+                  </Link>
+                </div>
+                <p className="text-xs text-gray-400 mb-4">
+                  Total de horas en tareas hechas por proyecto asignado
+                </p>
+                <DeveloperHoursByProjectChart data={charts?.hours_by_project ?? []} />
+              </div>
             </div>
           </>
         ) : (

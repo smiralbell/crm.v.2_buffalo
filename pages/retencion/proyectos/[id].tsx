@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
+import { useAuth } from '@/components/AuthContext'
 import DeveloperDataGuide from '@/components/engranaje5/DeveloperDataGuide'
 import KpiDashboard, { type KpiPeriod } from '@/components/engranaje5/KpiDashboard'
 import ProyectoContractSummary from '@/components/engranaje5/ProyectoContractSummary'
@@ -25,9 +26,16 @@ function isValidTab(v: unknown): v is Tab {
 
 export default function RetencionProyectoDetailPage() {
   const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
+  const isAdmin = !authLoading && user?.role === 'admin'
   const { id, tab: urlTab } = router.query
 
-  const [activeTab, setActiveTab] = useState<Tab>('proyecto')
+  const visibleTabs = useMemo(
+    () => (isAdmin ? TABS : TABS.filter((t) => t.id !== 'proyecto')),
+    [isAdmin]
+  )
+
+  const [activeTab, setActiveTab] = useState<Tab>('guia')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [proyecto, setProyecto] = useState<ProyectoRow | null>(null)
@@ -46,10 +54,15 @@ export default function RetencionProyectoDetailPage() {
   const [hasData, setHasData] = useState(false)
 
   useEffect(() => {
-    if (!router.isReady) return
-    if (isValidTab(urlTab)) setActiveTab(urlTab)
-    else setActiveTab('proyecto')
-  }, [router.isReady, urlTab])
+    if (!router.isReady || authLoading) return
+    if (isAdmin) {
+      if (isValidTab(urlTab)) setActiveTab(urlTab)
+      else setActiveTab('proyecto')
+      return
+    }
+    if (isValidTab(urlTab) && urlTab !== 'proyecto') setActiveTab(urlTab)
+    else setActiveTab('guia')
+  }, [router.isReady, urlTab, isAdmin, authLoading])
 
   const load = useCallback(async (year?: number, month?: number) => {
     if (!id || typeof id !== 'string') return
@@ -105,14 +118,16 @@ export default function RetencionProyectoDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Retención · Engranaje 3</p>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+              Retención{isAdmin ? ' · Engranaje 3' : ''}
+            </p>
             <h1 className="text-xl font-semibold text-gray-900">{proyecto?.name || 'Proyecto'}</h1>
           </div>
         </div>
 
         {proyecto && services && (
           <div className="flex items-center justify-center gap-1 border-b border-gray-200">
-            {TABS.map((tab) => {
+            {visibleTabs.map((tab) => {
               const isActive = activeTab === tab.id
               return (
                 <button
@@ -154,7 +169,7 @@ export default function RetencionProyectoDetailPage() {
           </div>
         )}
 
-        {proyecto && services && contract && activeTab === 'proyecto' && (
+        {isAdmin && proyecto && services && contract && activeTab === 'proyecto' && (
           <ProyectoContractSummary
             proyecto={proyecto}
             contact={contact}

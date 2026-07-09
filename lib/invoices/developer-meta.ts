@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 export type InvoiceDeveloperMeta = {
   invoice_source: string
   developer_name: string | null
+  has_pdf: boolean
 }
 
 export async function getInvoiceDeveloperMetaMap(
@@ -13,11 +14,12 @@ export async function getInvoiceDeveloperMetaMap(
 
   try {
     const rows = await prisma.$queryRaw<
-      { id: number; invoice_source: string; developer_name: string | null }[]
+      { id: number; invoice_source: string; developer_name: string | null; developer_pdf_path: string | null }[]
     >`
       SELECT i.id,
              COALESCE(i.invoice_source, 'client') AS invoice_source,
-             u.name AS developer_name
+             u.name AS developer_name,
+             i.developer_pdf_path
       FROM invoices i
       LEFT JOIN crm_users u ON u.id = i.crm_user_id
       WHERE i.id = ANY(${invoiceIds}::int[])
@@ -26,11 +28,12 @@ export async function getInvoiceDeveloperMetaMap(
       map.set(row.id, {
         invoice_source: row.invoice_source,
         developer_name: row.developer_name,
+        has_pdf: Boolean(row.developer_pdf_path),
       })
     }
   } catch {
     for (const id of invoiceIds) {
-      map.set(id, { invoice_source: 'client', developer_name: null })
+      map.set(id, { invoice_source: 'client', developer_name: null, has_pdf: false })
     }
   }
   return map

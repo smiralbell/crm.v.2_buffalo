@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import {
   createDeveloperInvoice,
+  DeveloperInvoicesConfigError,
   listDeveloperInvoices,
   nextDeveloperInvoiceNumber,
 } from '@/lib/developer/invoices'
@@ -45,10 +46,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ...inv,
           issue_date: inv.issue_date.toISOString(),
           created_at: inv.created_at.toISOString(),
+          has_pdf: inv.has_pdf,
         })),
         next_invoice_number: nextNumber,
       })
     } catch (error) {
+      if (error instanceof DeveloperInvoicesConfigError) {
+        return res.status(503).json({ error: error.message, hint: error.message })
+      }
       console.error('[developer/invoices GET]', error)
       return res.status(500).json({ error: 'Error al cargar facturas' })
     }
@@ -75,6 +80,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       return res.status(201).json({ id, invoice_number: invoiceNumber })
     } catch (error) {
+      if (error instanceof DeveloperInvoicesConfigError) {
+        return res.status(503).json({ error: 'Migración pendiente', hint: error.message })
+      }
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors[0]?.message || 'Datos inválidos' })
       }

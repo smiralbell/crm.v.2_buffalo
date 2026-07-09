@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ArrowLeft, FileText, Loader2, Trash2, Upload } from 'lucide-react'
 
 export default function DeveloperFacturaDetailPage() {
   const router = useRouter()
   const { id } = router.query
+  const fileRef = useRef<HTMLInputElement>(null)
   const [invoice, setInvoice] = useState<{
     id: number
     invoice_number: string
@@ -16,21 +19,74 @@ export default function DeveloperFacturaDetailPage() {
     iva: number
     total: number
     issue_date: string
+    has_pdf: boolean
     services: { description: string; quantity: number; price: number; tax: number; total: number }[]
   } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const load = useCallback(() => {
+    if (!router.isReady || !id || typeof id !== 'string') return
+    setLoading(true)
+    setLoadError('')
+    fetch(`/api/developer/invoices/${id}`)
+      .then(async (r) => {
+        const d = await r.json()
+        if (!r.ok) throw new Error(d.hint || d.error || 'Error al cargar')
+        setInvoice(d.invoice || null)
+      })
+      .catch((e: Error) => {
+        setInvoice(null)
+        setLoadError(e.message)
+      })
+      .finally(() => setLoading(false))
+  }, [router.isReady, id])
 
   useEffect(() => {
-    if (!id || typeof id !== 'string') return
-    fetch(`/api/developer/invoices/${id}`)
-      .then((r) => r.json())
-      .then((d) => setInvoice(d.invoice || null))
-      .catch(() => setInvoice(null))
-      .finally(() => setLoading(false))
-  }, [id])
+    load()
+  }, [load])
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
+
+  const uploadPdf = async (file: File) => {
+    if (!invoice) return
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('pdf', file)
+      const res = await fetch(`/api/developer/invoices/${invoice.id}/pdf`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.hint || data.error || 'Error al subir')
+      load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al subir PDF')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!invoice) return
+    if (!confirm(`¿Eliminar la factura ${invoice.invoice_number}?`)) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/developer/invoices/${invoice.id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(data.hint || data.error || 'No se pudo eliminar')
+        return
+      }
+      router.push('/developer/facturas')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   return (
     <Layout>
@@ -47,6 +103,10 @@ export default function DeveloperFacturaDetailPage() {
           <div className="py-16 flex justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
           </div>
+        ) : loadError ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {loadError}
+          </div>
         ) : !invoice ? (
           <p className="text-sm text-gray-400 text-center py-12">Factura no encontrada.</p>
         ) : (
@@ -60,6 +120,55 @@ export default function DeveloperFacturaDetailPage() {
                 </p>
               </div>
               <Badge variant="secondary">{invoice.status}</Badge>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-gray-500">Documento PDF</p>
+                  {invoice.has_pdf ? (
+                    <a
+                      href={`/api/developer/invoices/${invoice.id}/pdf`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-900 hover:underline mt-1"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Ver / descargar PDF
+                    </a>
+                  ) : (
+                    <p className="text-sm text-amber-700 mt-1 font-medium">Falta adjuntar el PDF</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    ref={fileRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0]
+                      if (f) uploadPdf(f)
+                      e.target.value = ''
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 rounded-xl"
+                    disabled={uploading}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    {invoice.has_pdf ? 'Reemplazar PDF' : 'Subir PDF'}
+                  </Button>
+                </div>
+              </div>
             </div>
 
             <table className="w-full text-sm">
@@ -99,9 +208,18 @@ export default function DeveloperFacturaDetailPage() {
               </div>
             </div>
 
-            <p className="text-xs text-gray-400 border-t pt-4">
-              Esta factura aparece en el panel admin de Facturas con la etiqueta Developer.
-            </p>
+            <div className="border-t pt-4 flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 rounded-xl text-red-600 border-red-200 hover:bg-red-50"
+                disabled={deleting}
+                onClick={handleDelete}
+              >
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Eliminar factura
+              </Button>
+            </div>
           </div>
         )}
       </div>

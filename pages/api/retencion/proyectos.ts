@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { getAccessibleProjectIds } from '@/lib/project-access'
+import { stripRetencionListRowForDeveloper } from '@/lib/retencion/developer-view'
 import { prisma } from '@/lib/prisma'
 
 type ProyectoRow = {
@@ -25,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const user = await requireAuthAPI(req, res)
     const accessibleIds = await getAccessibleProjectIds(user)
+    const isDeveloper = user.role === 'developer'
 
     let proyectos: ProyectoRow[]
     if (accessibleIds === null) {
@@ -74,22 +76,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const rows = proyectos.map((p) => {
       const lead = p.lead_id ? leadMap.get(p.lead_id) : null
-      return {
-        id: p.id,
-        lead_id: p.lead_id,
-        name: p.name,
-        config_ref: p.config_ref,
-        status: p.status,
-        service_type: p.service_type,
-        setup_fee_eur: p.setup_fee_eur != null ? Number(p.setup_fee_eur) : null,
-        monthly_fee_eur: p.monthly_fee_eur != null ? Number(p.monthly_fee_eur) : null,
-        maint_plan: p.maint_plan,
-        has_mensualidad: p.has_mensualidad,
-        updated_at:
-          p.updated_at instanceof Date ? p.updated_at.toISOString() : String(p.updated_at),
-        contact: lead?.contact ?? null,
-        lead_estado: lead?.estado ?? null,
-      }
+      return stripRetencionListRowForDeveloper(
+        {
+          id: p.id,
+          lead_id: p.lead_id,
+          name: p.name,
+          config_ref: p.config_ref,
+          status: p.status,
+          service_type: p.service_type,
+          setup_fee_eur: isDeveloper ? null : p.setup_fee_eur != null ? Number(p.setup_fee_eur) : null,
+          monthly_fee_eur: isDeveloper ? null : p.monthly_fee_eur != null ? Number(p.monthly_fee_eur) : null,
+          maint_plan: isDeveloper ? null : p.maint_plan,
+          has_mensualidad: isDeveloper ? undefined : p.has_mensualidad,
+          updated_at:
+            p.updated_at instanceof Date ? p.updated_at.toISOString() : String(p.updated_at),
+          contact: lead?.contact ?? null,
+          lead_estado: lead?.estado ?? null,
+        },
+        user
+      )
     })
 
     return res.status(200).json({ proyectos: rows, total: rows.length })

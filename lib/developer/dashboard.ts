@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { getAccessibleProjectIds } from '@/lib/project-access'
 import type { AuthUser } from '@/lib/auth'
+import { taskEstimatedHours } from '@/lib/developer/task-hours'
 
 export interface DeveloperDashboardStats {
   projects_count: number
@@ -32,11 +33,9 @@ const EMPTY: DeveloperDashboardStats = {
   invoices_pending_draft: 0,
 }
 
-const DEFAULT_HOURS: Record<string, number> = { low: 2, medium: 4, high: 8 }
 
 function taskHours(priority: string, estimated: number | null): number {
-  if (estimated != null && estimated > 0) return Number(estimated)
-  return DEFAULT_HOURS[priority] ?? 4
+  return taskEstimatedHours(priority, estimated)
 }
 
 export async function getDeveloperDashboardStats(user: AuthUser): Promise<DeveloperDashboardStats> {

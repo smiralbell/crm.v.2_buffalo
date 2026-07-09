@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { assertProjectAccess } from '@/lib/project-access'
+import { stripProyectoFeesForDeveloper, isDeveloperViewer } from '@/lib/retencion/developer-view'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectServices, type ProyectoRow } from '@/lib/engranaje5/project-services'
 import { buildDefaultKpiLayout, type KpiItem } from '@/lib/engranaje5/kpi-layout'
@@ -134,6 +135,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     await assertProjectAccess(user, id, res)
 
+    const isDeveloper = isDeveloperViewer(user)
+
     const row = await fetchProyectoById(id)
     if (!row) return res.status(404).json({ error: 'Proyecto no encontrado' })
 
@@ -161,8 +164,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
       })
       configuracion = lead?.configuracion ?? null
-      leadValor = lead?.valor != null ? Number(lead.valor) : null
-      leadNotas = lead?.notas ?? null
+      if (!isDeveloper) {
+        leadValor = lead?.valor != null ? Number(lead.valor) : null
+        leadNotas = lead?.notas ?? null
+      }
       contact = lead?.contact ?? null
     } else if (row.contact_id) {
       contact = await prisma.contact.findUnique({
@@ -171,16 +176,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    const proyecto: ProyectoRow = {
+    const proyectoRaw: ProyectoRow = {
       id: row.id,
       name: row.name,
       service_type: row.service_type,
       status: row.status,
       config_ref: row.config_ref,
-      setup_fee_eur: num(row.setup_fee_eur),
-      monthly_fee_eur: num(row.monthly_fee_eur),
-      maint_plan: row.maint_plan,
-      has_mensualidad: row.has_mensualidad,
+      setup_fee_eur: isDeveloper ? null : num(row.setup_fee_eur),
+      monthly_fee_eur: isDeveloper ? null : num(row.monthly_fee_eur),
+      maint_plan: isDeveloper ? null : row.maint_plan,
+      has_mensualidad: isDeveloper ? false : row.has_mensualidad,
       has_voz: row.has_voz,
       has_chat: row.has_chat,
       has_dash: row.has_dash,
@@ -207,12 +212,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       languages_count: row.languages_count ?? null,
     }
 
+    const proyecto = stripProyectoFeesForDeveloper(proyectoRaw, user)
+
     const services = resolveProjectServices(proyecto, configuracion)
-    const contract = buildContractSummary(proyecto, configuracion, {
-      valor: leadValor,
-      notas: leadNotas,
-      languagesCount: row.languages_count ?? null,
-    })
+    const contract = isDeveloper
+      ? null
+      : buildContractSummary(proyecto, configuracion, {
+          valor: leadValor,
+          notas: leadNotas,
+          languagesCount: row.languages_count ?? null,
+        })
 
     const periodRows = await prisma.$queryRaw<PeriodRow[]>`
       SELECT DISTINCT year, month
@@ -264,7 +273,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       contact,
       services,
       contract,
-      configuracion,
+      configuracion: isDeveloper ? null : configuracion,
       kpis,
       periods,
       selectedPeriod:
@@ -272,6 +281,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ? { year: targetYear, month: targetMonth, label: `${MONTHS[targetMonth - 1]} ${targetYear}` }
           : null,
       hasData,
+      viewerRole: user.role,
     })
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Error interno'

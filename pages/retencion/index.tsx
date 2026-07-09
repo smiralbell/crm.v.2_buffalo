@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
+import { useAuth } from '@/components/AuthContext'
 import { Eye, RefreshCw, AlertCircle } from 'lucide-react'
 
 interface RetencionRow {
@@ -47,6 +48,8 @@ const serviceLabel: Record<string, string> = {
 }
 
 export default function RetencionPage() {
+  const { user, loading: authLoading } = useAuth()
+  const isAdmin = !authLoading && user?.role === 'admin'
   const [rows, setRows] = useState<RetencionRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -68,6 +71,8 @@ export default function RetencionPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  const pageTitle = isAdmin ? 'Clientes con mensualidad' : 'Proyectos'
 
   return (
     <Layout>
@@ -94,7 +99,7 @@ export default function RetencionPage() {
 
         <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">Clientes con mensualidad</h2>
+            <h2 className="text-sm font-semibold text-gray-900">{pageTitle}</h2>
             {!loading && (
               <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2.5 py-0.5 rounded-full">
                 {rows.length}
@@ -106,10 +111,16 @@ export default function RetencionPage() {
             <div className="py-16 text-center text-sm text-gray-400">Cargando...</div>
           ) : rows.length === 0 && !error ? (
             <div className="py-16 text-center">
-              <p className="text-sm text-gray-400">No hay proyectos con mantenimiento mensual.</p>
-              <p className="text-xs text-gray-300 mt-1">
-                Solo aparecen leads que hayan seleccionado Connect o Cloud al configurar el proyecto.
+              <p className="text-sm text-gray-400">
+                {isAdmin
+                  ? 'No hay proyectos con mantenimiento mensual.'
+                  : 'No tienes proyectos asignados en retención.'}
               </p>
+              {isAdmin && (
+                <p className="text-xs text-gray-300 mt-1">
+                  Solo aparecen leads que hayan seleccionado Connect o Cloud al configurar el proyecto.
+                </p>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -118,9 +129,13 @@ export default function RetencionPage() {
                   <tr className="border-b border-gray-100 bg-gray-50/80">
                     <th className="text-left font-medium text-gray-500 px-5 py-3">Cliente</th>
                     <th className="text-left font-medium text-gray-500 px-5 py-3">Proyecto</th>
-                    <th className="text-left font-medium text-gray-500 px-5 py-3">Plan</th>
-                    <th className="text-right font-medium text-gray-500 px-5 py-3">Setup</th>
-                    <th className="text-right font-medium text-gray-500 px-5 py-3">Mensualidad</th>
+                    {isAdmin && (
+                      <>
+                        <th className="text-left font-medium text-gray-500 px-5 py-3">Plan</th>
+                        <th className="text-right font-medium text-gray-500 px-5 py-3">Setup</th>
+                        <th className="text-right font-medium text-gray-500 px-5 py-3">Mensualidad</th>
+                      </>
+                    )}
                     <th className="text-left font-medium text-gray-500 px-5 py-3">Estado</th>
                     <th className="text-right font-medium text-gray-500 px-5 py-3"></th>
                   </tr>
@@ -148,19 +163,23 @@ export default function RetencionPage() {
                             {serviceLabel[row.service_type] || row.service_type}
                           </div>
                         </td>
-                        <td className="px-5 py-4">
-                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-700">
-                            {maintLabel(row.maint_plan)}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-right font-medium text-gray-700 tabular-nums">
-                          {row.setup_fee_eur != null ? fmt(row.setup_fee_eur) : '—'}
-                        </td>
-                        <td className="px-5 py-4 text-right font-semibold text-gray-900 tabular-nums">
-                          {row.monthly_fee_eur != null ? (
-                            <>{fmt(row.monthly_fee_eur)}<span className="text-xs font-normal text-gray-400">/mes</span></>
-                          ) : '—'}
-                        </td>
+                        {isAdmin && (
+                          <>
+                            <td className="px-5 py-4">
+                              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-700">
+                                {maintLabel(row.maint_plan)}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 text-right font-medium text-gray-700 tabular-nums">
+                              {row.setup_fee_eur != null ? fmt(row.setup_fee_eur) : '—'}
+                            </td>
+                            <td className="px-5 py-4 text-right font-semibold text-gray-900 tabular-nums">
+                              {row.monthly_fee_eur != null ? (
+                                <>{fmt(row.monthly_fee_eur)}<span className="text-xs font-normal text-gray-400">/mes</span></>
+                              ) : '—'}
+                            </td>
+                          </>
+                        )}
                         <td className="px-5 py-4">
                           <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wide bg-gray-100 text-gray-700">
                             {statusLabel[row.status] || row.status}

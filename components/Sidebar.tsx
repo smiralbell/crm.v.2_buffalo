@@ -15,6 +15,7 @@ import type { CrmRole } from '@/lib/auth'
 interface SubItem {
   href: string
   label: string
+  developerLabel?: string
   tab?: string
 }
 
@@ -81,7 +82,7 @@ const NAV: NavItem[] = [
     badge: 'ENG 4',
     icon: HeartHandshake,
     roles: ['admin', 'developer'],
-    children: [{ href: '/retencion', label: 'Clientes con mensualidad' }],
+    children: [{ href: '/retencion', label: 'Clientes con mensualidad', developerLabel: 'Proyectos' }],
   },
   { href: '/finances', label: 'Finanzas', icon: DollarSign, roles: ['admin'] },
   { href: '/tickets', label: 'Tickets', icon: Ticket, roles: ['admin', 'developer'] },
@@ -102,10 +103,12 @@ const NAV: NavItem[] = [
 
 export default function Sidebar() {
   const router = useRouter()
-  const { user } = useAuth()
-  const role = user?.role ?? 'admin'
+  const { user, loading } = useAuth()
+  const role = user?.role
+  const isAdmin = role === 'admin'
 
   const navItems = useMemo(() => {
+    if (!role) return []
     const items = NAV.filter((item) => !item.roles || item.roles.includes(role))
     if (role === 'developer') {
       const order = [
@@ -155,6 +158,9 @@ export default function Sidebar() {
 
   const homeHref = role === 'developer' ? '/developer' : '/dashboard'
 
+  const childLabel = (child: SubItem) =>
+    role === 'developer' && child.developerLabel ? child.developerLabel : child.label
+
   return (
     <div className="flex h-screen w-60 shrink-0 flex-col border-r border-gray-100 bg-white">
       <div className="border-b border-gray-100 px-5 py-6 shrink-0">
@@ -174,7 +180,14 @@ export default function Sidebar() {
 
       <div className="sidebar-nav-fade flex-1 min-h-0 relative">
         <nav className="sidebar-nav-scroll h-full py-4 px-3 space-y-0.5">
-          {navItems.map((item) => {
+          {loading ? (
+            <div className="px-1 py-2 space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-9 rounded-xl bg-gray-100 animate-pulse" />
+              ))}
+            </div>
+          ) : (
+          navItems.map((item) => {
             const Icon = item.icon
             const active = isParentActive(item)
             const isOpen = open[item.href] ?? false
@@ -211,7 +224,7 @@ export default function Sidebar() {
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   <span className="flex-1 text-left">{item.label}</span>
-                  {item.badge && role === 'admin' && (
+                  {item.badge && isAdmin && (
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-gray-900 text-white tracking-wide shrink-0">
                       {item.badge}
                     </span>
@@ -244,7 +257,7 @@ export default function Sidebar() {
                               : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
                           )}
                         >
-                          {child.label}
+                          {childLabel(child)}
                         </Link>
                       )
                     })}
@@ -252,7 +265,8 @@ export default function Sidebar() {
                 )}
               </div>
             )
-          })}
+          })
+          )}
         </nav>
       </div>
 

@@ -48,6 +48,7 @@ interface Invoice {
   sent_to_drive: boolean
   invoice_source?: string
   developer_name?: string | null
+  developer_has_pdf?: boolean
 }
 
 interface InvoicesPageProps {
@@ -217,6 +218,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
             created_at: inv.created_at.toISOString(),
             invoice_source: meta?.invoice_source ?? 'client',
             developer_name: meta?.developer_name ?? null,
+            developer_has_pdf: meta?.has_pdf ?? false,
           }
         }),
           page,
@@ -968,6 +970,17 @@ export default function InvoicesPage({
                               <Badge className="bg-indigo-50 text-indigo-800 border-indigo-100 text-[10px] font-medium">
                                 Developer{invoice.developer_name ? ` · ${invoice.developer_name}` : ''}
                               </Badge>
+                            )}
+                            {invoice.invoice_source === 'developer' && invoice.developer_has_pdf && (
+                              <a
+                                href={`/api/developer/invoices/${invoice.id}/pdf`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[10px] font-medium text-indigo-600 hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                PDF
+                              </a>
                             )}
                           </div>
                         </td>

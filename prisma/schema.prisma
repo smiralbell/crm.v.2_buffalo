@@ -148,6 +148,7 @@ model Invoice {
   bank_transaction_id String?  @db.Uuid // Movimiento bancario (cobro) vinculado a esta factura
   crm_user_id       Int?
   invoice_source    String    @default("client") // client | developer
+  developer_pdf_path String?  @db.Text
   deleted_at        DateTime?
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
