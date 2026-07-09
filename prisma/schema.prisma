@@ -146,6 +146,8 @@ model Invoice {
   pdf_drive_url     String?   @db.Text
   sent_to_drive     Boolean?  @default(false)
   bank_transaction_id String?  @db.Uuid // Movimiento bancario (cobro) vinculado a esta factura
+  crm_user_id       Int?
+  invoice_source    String    @default("client") // client | developer
   deleted_at        DateTime?
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt

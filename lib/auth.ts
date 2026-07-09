@@ -1,223 +1,181 @@
 import { GetServerSidePropsContext, NextApiRequest, NextApiResponse } from 'next'
 import { randomBytes, createHmac, timingSafeEqual } from 'crypto'
+import { verifyCrmUserPassword } from '@/lib/crm-users'
 
-/**
- * Obtiene las credenciales del admin desde variables de entorno
- */
-function getAdminCredentials(): { email: string; password: string } {
+export type CrmRole = 'admin' | 'developer'
+
+export interface AuthUser {
+  id: number
+  email: string
+  name: string
+  role: CrmRole
+}
+
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+
+function getAdminCredentials(): { email: string; password: string; name: string } {
   const email = process.env.CRM_ADMIN_EMAIL
   const password = process.env.CRM_ADMIN_PASSWORD
-
   if (!email || !password) {
     throw new Error('CRM_ADMIN_EMAIL y CRM_ADMIN_PASSWORD deben estar configurados en .env')
   }
-
-  return { email, password }
+  return { email, password, name: 'Administrador' }
 }
 
-/**
- * Crea un token de sesión firmado
- */
-function createSignedSessionToken(): string {
-  const token = randomBytes(32).toString('hex')
-  return signToken(token)
-}
-
-/**
- * Firma un token con el SESSION_SECRET
- */
 function signToken(token: string): string {
   const secret = process.env.SESSION_SECRET || 'default-secret-change-in-production'
   const hmac = createHmac('sha256', secret)
   hmac.update(token)
-  const signature = hmac.digest('hex')
-  return `${token}.${signature}`
+  return `${token}.${hmac.digest('hex')}`
 }
 
-/**
- * Verifica y extrae el token de una cookie firmada
- */
-function verifyToken(signedToken: string): { valid: boolean; token?: string } {
+export function verifyToken(signedToken: string): { valid: boolean; token?: string } {
   try {
     const parts = signedToken.split('.')
     if (parts.length !== 2) return { valid: false }
-
     const [token, signature] = parts
     if (!token || !signature) return { valid: false }
 
     const secret = process.env.SESSION_SECRET || 'default-secret-change-in-production'
     const hmac = createHmac('sha256', secret)
     hmac.update(token)
-    const expectedSignature = hmac.digest('hex')
-
-    // Usar timingSafeEqual para prevenir timing attacks
-    const expectedBuffer = Buffer.from(expectedSignature, 'hex')
+    const expectedBuffer = Buffer.from(hmac.digest('hex'), 'hex')
     const receivedBuffer = Buffer.from(signature, 'hex')
-
-    if (expectedBuffer.length !== receivedBuffer.length) {
-      return { valid: false }
-    }
-
-    const isValid = timingSafeEqual(expectedBuffer, receivedBuffer)
-    
-    if (!isValid) return { valid: false }
-    
+    if (expectedBuffer.length !== receivedBuffer.length) return { valid: false }
+    if (!timingSafeEqual(expectedBuffer, receivedBuffer)) return { valid: false }
     return { valid: true, token }
   } catch {
     return { valid: false }
   }
 }
 
-/**
- * Extrae información de la sesión del token (email y expiración)
- * El token contiene: base64(email.expiresAt.timestamp)
- */
-function decodeSessionToken(token: string): { email: string; expiresAt: Date } | null {
+function encodeSessionPayload(user: AuthUser): string {
+  const payload = {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    exp: Date.now() + SESSION_MAX_AGE_MS,
+    n: randomBytes(8).toString('hex'),
+  }
+  return Buffer.from(JSON.stringify(payload)).toString('base64url')
+}
+
+function decodeSessionPayload(token: string): AuthUser | null {
   try {
-    // El token firmado contiene el email y timestamp de expiración
-    // Formato: email|timestamp (en base64 dentro del token)
-    // Por simplicidad, validamos solo la firma y usamos el email de las env vars
-    const { email } = getAdminCredentials()
-    const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 7) // 7 días
-    
-    return { email, expiresAt }
+    const raw = Buffer.from(token, 'base64url').toString('utf8')
+    const data = JSON.parse(raw) as {
+      id: number
+      email: string
+      name: string
+      role: CrmRole
+      exp: number
+    }
+    if (!data.email || !data.role || typeof data.exp !== 'number') return null
+    if (Date.now() > data.exp) return null
+    return {
+      id: data.id ?? 0,
+      email: data.email,
+      name: data.name || data.email,
+      role: data.role,
+    }
   } catch {
     return null
   }
 }
 
-/**
- * Requiere autenticación en páginas (getServerSideProps)
- * Si no hay sesión válida, redirige a /login
- */
+function getUserFromSignedToken(signedToken: string): AuthUser | null {
+  const verification = verifyToken(signedToken)
+  if (!verification.valid || !verification.token) return null
+  return decodeSessionPayload(verification.token)
+}
+
+export async function authenticateCredentials(
+  email: string,
+  password: string
+): Promise<AuthUser | null> {
+  const admin = getAdminCredentials()
+  if (email === admin.email && password === admin.password) {
+    return { id: 0, email: admin.email, name: admin.name, role: 'admin' }
+  }
+  const dev = await verifyCrmUserPassword(email, password)
+  if (!dev) return null
+  return {
+    id: dev.id,
+    email: dev.email,
+    name: dev.name,
+    role: dev.role as CrmRole,
+  }
+}
+
 export async function requireAuth(
   context: GetServerSidePropsContext
-): Promise<{ id: number; email: string }> {
+): Promise<AuthUser> {
   const signedToken = context.req.cookies.session_id
-
   if (!signedToken) {
     context.res.writeHead(302, { Location: '/login' })
     context.res.end()
     throw new Error('No session')
   }
-
-  const verification = verifyToken(signedToken)
-  
-  if (!verification.valid || !verification.token) {
+  const user = getUserFromSignedToken(signedToken)
+  if (!user) {
     context.res.writeHead(302, { Location: '/login' })
     context.res.end()
-    throw new Error('Invalid token')
+    throw new Error('Invalid session')
   }
-
-  const sessionData = decodeSessionToken(verification.token)
-  
-  if (!sessionData) {
-    context.res.writeHead(302, { Location: '/login' })
-    context.res.end()
-    throw new Error('Invalid session data')
-  }
-
-  // Verificar expiración (7 días desde creación)
-  // Como no almacenamos timestamp, asumimos que si el token es válido, la sesión es válida
-  // En producción podrías agregar un timestamp en el token
-
-  const { email } = getAdminCredentials()
-
-  return {
-    id: 1, // Solo hay un usuario
-    email,
-  }
+  return user
 }
 
-/**
- * Requiere autenticación en API routes
- * Si no hay sesión válida, retorna 401
- */
 export async function requireAuthAPI(
   req: NextApiRequest,
   res: NextApiResponse
-): Promise<{ id: number; email: string }> {
+): Promise<AuthUser> {
   const signedToken = req.cookies.session_id
-
   if (!signedToken) {
     res.status(401).json({ error: 'No session' })
     throw new Error('No session')
   }
-
-  const verification = verifyToken(signedToken)
-  
-  if (!verification.valid || !verification.token) {
-    res.status(401).json({ error: 'Invalid token' })
-    throw new Error('Invalid token')
+  const user = getUserFromSignedToken(signedToken)
+  if (!user) {
+    res.status(401).json({ error: 'Invalid session' })
+    throw new Error('Invalid session')
   }
-
-  const sessionData = decodeSessionToken(verification.token)
-  
-  if (!sessionData) {
-    res.status(401).json({ error: 'Invalid session data' })
-    throw new Error('Invalid session data')
-  }
-
-  const { email } = getAdminCredentials()
-
-  return {
-    id: 1, // Solo hay un usuario
-    email,
-  }
+  return user
 }
 
-/**
- * Crea una nueva sesión
- */
-export async function createSession(
-  email: string,
-  res?: NextApiResponse
-): Promise<string> {
-  const token = randomBytes(32).toString('hex')
-  const signedToken = signToken(token)
+export async function requireAdminAPI(
+  req: NextApiRequest,
+  res: NextApiResponse
+): Promise<AuthUser> {
+  const user = await requireAuthAPI(req, res)
+  if (user.role !== 'admin') {
+    res.status(403).json({ error: 'Acceso denegado' })
+    throw new Error('Forbidden')
+  }
+  return user
+}
 
-  // Setear cookie si hay response object
+export async function createSession(user: AuthUser, res?: NextApiResponse): Promise<string> {
+  const payload = encodeSessionPayload(user)
+  const signedToken = signToken(payload)
   if (res) {
-    const maxAge = 7 * 24 * 60 * 60 // 7 días en segundos
+    const maxAge = Math.floor(SESSION_MAX_AGE_MS / 1000)
     const isProduction = process.env.NODE_ENV === 'production'
-    
     res.setHeader(
       'Set-Cookie',
       `session_id=${signedToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${isProduction ? '; Secure' : ''}`
     )
   }
-
   return signedToken
 }
 
-/**
- * Obtiene la sesión actual sin validar (para uso interno)
- */
-export async function getSession(signedToken: string) {
+export function getSessionUser(signedToken: string | undefined): AuthUser | null {
   if (!signedToken) return null
-
-  const verification = verifyToken(signedToken)
-  if (!verification.valid || !verification.token) return null
-
-  const sessionData = decodeSessionToken(verification.token)
-  if (!sessionData) return null
-
-  return sessionData
+  return getUserFromSignedToken(signedToken)
 }
 
-/**
- * Elimina una sesión
- */
-export async function deleteSession(
-  signedToken: string,
-  res?: NextApiResponse
-): Promise<void> {
-  // Limpiar cookie si hay response object
+export async function deleteSession(_signedToken: string, res?: NextApiResponse): Promise<void> {
   if (res) {
-    res.setHeader(
-      'Set-Cookie',
-      'session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'
-    )
+    res.setHeader('Set-Cookie', 'session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0')
   }
 }

@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
+import { assertProjectAccess } from '@/lib/project-access'
 import { prisma } from '@/lib/prisma'
 import { resolveProjectServices, type ProyectoRow } from '@/lib/engranaje5/project-services'
 import { buildDefaultKpiLayout, type KpiItem } from '@/lib/engranaje5/kpi-layout'
@@ -127,9 +128,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'ID requerido' })
+
+    await assertProjectAccess(user, id, res)
 
     const row = await fetchProyectoById(id)
     if (!row) return res.status(404).json({ error: 'Proyecto no encontrado' })
@@ -272,6 +275,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Error interno'
+    if (msg === 'Forbidden' || msg === 'No session' || msg === 'Invalid session') return
     console.error('[retencion/proyectos/[id]]', error)
     return res.status(500).json({ error: msg })
   }

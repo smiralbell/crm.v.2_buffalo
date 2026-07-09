@@ -32,8 +32,7 @@ export default function Login() {
         return
       }
 
-      // Redirigir a dashboard
-      router.push('/dashboard')
+      router.push(data.redirect || '/dashboard')
     } catch (err) {
       setError('Error de conexión')
       setLoading(false)

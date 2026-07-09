@@ -33,6 +33,7 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { format } from 'date-fns'
 import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
+import { getDeveloperInvoiceIds, getInvoiceDeveloperMetaMap } from '@/lib/invoices/developer-meta'
 
 interface Invoice {
   id: number
@@ -45,6 +46,8 @@ interface Invoice {
   issue_date: string
   created_at: string
   sent_to_drive: boolean
+  invoice_source?: string
+  developer_name?: string | null
 }
 
 interface InvoicesPageProps {
@@ -53,6 +56,7 @@ interface InvoicesPageProps {
   totalPages: number
   search: string
   status: string
+  source?: string
   dateFrom?: string
   dateTo?: string
   stats: {
@@ -94,6 +98,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     const page = parseInt(context.query.page as string) || 1
     const search = (context.query.search as string) || ''
     const status = (context.query.status as string) || ''
+    const source = (context.query.source as string) || 'all'
     const dateFrom = context.query.dateFrom as string | undefined
     const dateTo = context.query.dateTo as string | undefined
     const pageSize = 10
@@ -113,6 +118,16 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         { client_name: { contains: search, mode: 'insensitive' } },
         { client_email: { contains: search, mode: 'insensitive' } },
       ]
+    }
+
+    if (source === 'developer') {
+      const devIds = await getDeveloperInvoiceIds()
+      where.id = { in: devIds.length ? devIds : [-1] }
+    } else if (source === 'client') {
+      const devIds = await getDeveloperInvoiceIds()
+      if (devIds.length > 0) {
+        where.id = { notIn: devIds }
+      }
     }
 
     // Filtro por fechas
@@ -163,6 +178,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
       const totalPages = Math.ceil(total / pageSize)
 
+      const metaMap = await getInvoiceDeveloperMetaMap(invoices.map((i) => i.id))
+
       // Calcular estadísticas
       const totalSinIva = allInvoices.reduce((sum, inv) => {
         const subtotal = inv.subtotal ? Number(inv.subtotal) : 0
@@ -189,18 +206,24 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
       return {
         props: {
-        invoices: invoices.map((inv) => ({
-          ...inv,
-          subtotal: Number(inv.subtotal),
-          iva: Number(inv.iva),
-          total: Number(inv.total),
-          issue_date: inv.issue_date.toISOString(),
-          created_at: inv.created_at.toISOString(),
-        })),
+        invoices: invoices.map((inv) => {
+          const meta = metaMap.get(inv.id)
+          return {
+            ...inv,
+            subtotal: Number(inv.subtotal),
+            iva: Number(inv.iva),
+            total: Number(inv.total),
+            issue_date: inv.issue_date.toISOString(),
+            created_at: inv.created_at.toISOString(),
+            invoice_source: meta?.invoice_source ?? 'client',
+            developer_name: meta?.developer_name ?? null,
+          }
+        }),
           page,
           totalPages,
           search,
           status: status || 'all',
+          source: source || 'all',
           ...(dateFrom && { dateFrom }),
           ...(dateTo && { dateTo }),
           stats,
@@ -286,6 +309,7 @@ export default function InvoicesPage({
   totalPages,
   search: initialSearch,
   status: initialStatus,
+  source: initialSource = 'all',
   dateFrom: initialDateFrom,
   dateTo: initialDateTo,
   stats,
@@ -295,6 +319,7 @@ export default function InvoicesPage({
   const router = useRouter()
   const [search, setSearch] = useState(initialSearch)
   const [status, setStatus] = useState(initialStatus)
+  const [source, setSource] = useState(initialSource)
   const [dateRange, setDateRange] = useState<DateRangePickerResult>({
     start: initialDateFrom ? new Date(initialDateFrom) : null,
     end: initialDateTo ? new Date(initialDateTo) : null,
@@ -316,7 +341,7 @@ export default function InvoicesPage({
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    const query: any = { search, status, page: 1 }
+    const query: any = { search, status, source, page: 1 }
     if (dateRange.start) {
       query.dateFrom = dateRange.start.toISOString().split('T')[0]
     }
@@ -332,7 +357,7 @@ export default function InvoicesPage({
   const handleDateRangeChange = (range: DateRangePickerResult) => {
     setDateRange(range)
     // Aplicar filtro automáticamente cuando cambia el rango
-    const query: any = { search, status, page: 1 }
+    const query: any = { search, status, source, page: 1 }
     if (range.start) {
       query.dateFrom = range.start.toISOString().split('T')[0]
     }
@@ -348,7 +373,7 @@ export default function InvoicesPage({
   const handleStatusChange = (value: string) => {
     const statusValue = value === 'all' ? '' : value
     setStatus(value)
-    const query: any = { search, status: statusValue, page: 1 }
+    const query: any = { search, status: statusValue, source, page: 1 }
     if (dateRange.start) {
       query.dateFrom = dateRange.start.toISOString().split('T')[0]
     }
@@ -359,6 +384,18 @@ export default function InvoicesPage({
       pathname: '/invoices',
       query,
     })
+  }
+
+  const handleSourceChange = (value: string) => {
+    setSource(value)
+    const query: any = { search, status, source: value, page: 1 }
+    if (dateRange.start) {
+      query.dateFrom = dateRange.start.toISOString().split('T')[0]
+    }
+    if (dateRange.end) {
+      query.dateTo = dateRange.end.toISOString().split('T')[0]
+    }
+    router.push({ pathname: '/invoices', query })
   }
 
   const handleDeleteClick = (invoice: Invoice) => {
@@ -740,6 +777,16 @@ export default function InvoicesPage({
                   <SelectItem value="cancelled">Cancelada</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={source || 'all'} onValueChange={handleSourceChange}>
+                <SelectTrigger className="w-[180px] shrink-0">
+                  <SelectValue placeholder="Origen" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las facturas</SelectItem>
+                  <SelectItem value="client">Facturas cliente</SelectItem>
+                  <SelectItem value="developer">Facturas developers</SelectItem>
+                </SelectContent>
+              </Select>
               <DateRangePicker
                 onRangeChange={handleDateRangeChange}
                 defaultRange={dateRange}
@@ -754,6 +801,12 @@ export default function InvoicesPage({
                   <Button type="button">
                     <Plus className="mr-2 h-4 w-4" />
                     Nueva Factura
+                  </Button>
+                </Link>
+                <Link href="/invoices/recurring">
+                  <Button type="button" variant="outline">
+                    <FileText className="mr-2 h-4 w-4" />
+                    Recurrentes
                   </Button>
                 </Link>
                 <DropdownMenu>
@@ -908,7 +961,16 @@ export default function InvoicesPage({
                             />
                           </td>
                         )}
-                        <td className="p-3 text-sm font-medium text-gray-900">{invoice.invoice_number}</td>
+                        <td className="p-3 text-sm font-medium text-gray-900">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {invoice.invoice_number}
+                            {invoice.invoice_source === 'developer' && (
+                              <Badge className="bg-indigo-50 text-indigo-800 border-indigo-100 text-[10px] font-medium">
+                                Developer{invoice.developer_name ? ` · ${invoice.developer_name}` : ''}
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-3 text-sm text-gray-900">{invoice.client_name}</td>
                         <td className="p-3 text-sm text-gray-600">
                           {format(new Date(invoice.issue_date), 'dd MMM yyyy')}

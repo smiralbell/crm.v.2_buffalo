@@ -9,6 +9,8 @@ export type TicketListRow = {
   priority: string
   status: string
   last_client_message: string | null
+  assignee_user_id: number | null
+  assignee_name: string | null
   created_at: Date
 }
 
@@ -16,9 +18,11 @@ const LIST_SELECT = `
   SELECT
     t.id, t.project_id, p.name AS project_name, p.config_ref,
     t.title, t.priority, t.status, t.created_at,
+    t.assignee_user_id, u.name AS assignee_name,
     COALESCE(lcu.message, t.description) AS last_client_message
   FROM tickets t
   JOIN proyectos p ON p.id = t.project_id
+  LEFT JOIN crm_users u ON u.id = t.assignee_user_id
   LEFT JOIN LATERAL (
     SELECT tu.message
     FROM ticket_updates tu
@@ -32,9 +36,11 @@ const LIST_SELECT_FALLBACK = `
   SELECT
     t.id, t.project_id, p.name AS project_name, p.config_ref,
     t.title, t.priority, t.status, t.created_at,
+    t.assignee_user_id, u.name AS assignee_name,
     t.description AS last_client_message
   FROM tickets t
   JOIN proyectos p ON p.id = t.project_id
+  LEFT JOIN crm_users u ON u.id = t.assignee_user_id
 `
 
 export function truncateClientSummary(text: string | null, max = 90): string {
@@ -46,41 +52,42 @@ export function truncateClientSummary(text: string | null, max = 90): string {
 export async function listTickets(params: {
   status?: string | null
   projectId?: string | null
+  projectIds?: string[] | null
+  assigneeUserId?: number | null
   limit: number
   offset: number
 }): Promise<TicketListRow[]> {
-  const { status, projectId, limit, offset } = params
+  const { status, projectId, projectIds, assigneeUserId, limit, offset } = params
 
   const run = async (select: string) => {
-    if (status && projectId) {
-      return prisma.$queryRawUnsafe<TicketListRow[]>(
-        `${select} WHERE t.status = $1 AND t.project_id = $2::uuid ORDER BY t.created_at DESC LIMIT $3 OFFSET $4`,
-        status,
-        projectId,
-        limit,
-        offset
-      )
-    }
+    const conditions: string[] = []
+    const values: unknown[] = []
+    let idx = 1
+
     if (status) {
-      return prisma.$queryRawUnsafe<TicketListRow[]>(
-        `${select} WHERE t.status = $1 ORDER BY t.created_at DESC LIMIT $2 OFFSET $3`,
-        status,
-        limit,
-        offset
-      )
+      conditions.push(`t.status = $${idx++}`)
+      values.push(status)
     }
     if (projectId) {
-      return prisma.$queryRawUnsafe<TicketListRow[]>(
-        `${select} WHERE t.project_id = $1::uuid ORDER BY t.created_at DESC LIMIT $2 OFFSET $3`,
-        projectId,
-        limit,
-        offset
-      )
+      conditions.push(`t.project_id = $${idx++}::uuid`)
+      values.push(projectId)
+    } else if (projectIds && projectIds.length > 0) {
+      conditions.push(`t.project_id = ANY($${idx++}::uuid[])`)
+      values.push(projectIds)
     }
+    if (assigneeUserId != null) {
+      conditions.push(`t.assignee_user_id = $${idx++}`)
+      values.push(assigneeUserId)
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+    values.push(limit, offset)
+    const limitIdx = idx++
+    const offsetIdx = idx
+
     return prisma.$queryRawUnsafe<TicketListRow[]>(
-      `${select} ORDER BY t.created_at DESC LIMIT $1 OFFSET $2`,
-      limit,
-      offset
+      `${select} ${where} ORDER BY t.created_at DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      ...values
     )
   }
 
@@ -98,27 +105,36 @@ export async function listTickets(params: {
 export async function countTickets(params: {
   status?: string | null
   projectId?: string | null
+  projectIds?: string[] | null
+  assigneeUserId?: number | null
 }): Promise<number> {
-  const { status, projectId } = params
+  const { status, projectId, projectIds, assigneeUserId } = params
 
-  if (status && projectId) {
-    const c = await prisma.$queryRaw<{ count: bigint }[]>`
-      SELECT COUNT(*)::bigint AS count FROM tickets
-      WHERE status = ${status} AND project_id = ${projectId}::uuid`
-    return Number(c[0]?.count ?? 0)
-  }
+  const conditions: string[] = []
+  const values: unknown[] = []
+  let idx = 1
+
   if (status) {
-    const c = await prisma.$queryRaw<{ count: bigint }[]>`
-      SELECT COUNT(*)::bigint AS count FROM tickets WHERE status = ${status}`
-    return Number(c[0]?.count ?? 0)
+    conditions.push(`status = $${idx++}`)
+    values.push(status)
   }
   if (projectId) {
-    const c = await prisma.$queryRaw<{ count: bigint }[]>`
-      SELECT COUNT(*)::bigint AS count FROM tickets WHERE project_id = ${projectId}::uuid`
-    return Number(c[0]?.count ?? 0)
+    conditions.push(`project_id = $${idx++}::uuid`)
+    values.push(projectId)
+  } else if (projectIds && projectIds.length > 0) {
+    conditions.push(`project_id = ANY($${idx++}::uuid[])`)
+    values.push(projectIds)
   }
-  const c = await prisma.$queryRaw<{ count: bigint }[]>`
-    SELECT COUNT(*)::bigint AS count FROM tickets`
+  if (assigneeUserId != null) {
+    conditions.push(`assignee_user_id = $${idx++}`)
+    values.push(assigneeUserId)
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+  const c = await prisma.$queryRawUnsafe<{ count: bigint }[]>(
+    `SELECT COUNT(*)::bigint AS count FROM tickets ${where}`,
+    ...values
+  )
   return Number(c[0]?.count ?? 0)
 }
 

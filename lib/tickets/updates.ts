@@ -43,38 +43,87 @@ export async function insertTicketUpdate(params: {
 }
 
 export async function getTicketWithProject(ticketId: string) {
-  const rows = await prisma.$queryRaw<
-    {
-      id: string
-      project_id: string
-      project_name: string
-      config_ref: string | null
-      ticket_callback_url: string | null
-      ticket_callback_token: string | null
-      title: string
-      description: string | null
-      priority: string
-      status: string
-      reporter_name: string | null
-      reporter_email: string | null
-      external_id: string | null
-      custom_fields: unknown
-      created_at: Date
-      updated_at: Date
-    }[]
-  >`
-    SELECT
-      t.id, t.project_id, p.name AS project_name, p.config_ref,
-      p.ticket_callback_url, p.ticket_callback_token,
-      t.title, t.description, t.priority, t.status,
-      t.reporter_name, t.reporter_email, t.external_id,
-      t.custom_fields, t.created_at, t.updated_at
-    FROM tickets t
-    JOIN proyectos p ON p.id = t.project_id
-    WHERE t.id = ${ticketId}::uuid
-    LIMIT 1
+  try {
+    const rows = await prisma.$queryRaw<
+      {
+        id: string
+        project_id: string
+        project_name: string
+        config_ref: string | null
+        ticket_callback_url: string | null
+        ticket_callback_token: string | null
+        title: string
+        description: string | null
+        priority: string
+        status: string
+        reporter_name: string | null
+        reporter_email: string | null
+        external_id: string | null
+        custom_fields: unknown
+        assignee_user_id: number | null
+        created_at: Date
+        updated_at: Date
+      }[]
+    >`
+      SELECT
+        t.id, t.project_id, p.name AS project_name, p.config_ref,
+        p.ticket_callback_url, p.ticket_callback_token,
+        t.title, t.description, t.priority, t.status,
+        t.reporter_name, t.reporter_email, t.external_id,
+        t.custom_fields, t.assignee_user_id, t.created_at, t.updated_at
+      FROM tickets t
+      JOIN proyectos p ON p.id = t.project_id
+      WHERE t.id = ${ticketId}::uuid
+      LIMIT 1
+    `
+    return rows[0] ?? null
+  } catch {
+    const rows = await prisma.$queryRaw<
+      {
+        id: string
+        project_id: string
+        project_name: string
+        config_ref: string | null
+        ticket_callback_url: string | null
+        ticket_callback_token: string | null
+        title: string
+        description: string | null
+        priority: string
+        status: string
+        reporter_name: string | null
+        reporter_email: string | null
+        external_id: string | null
+        custom_fields: unknown
+        created_at: Date
+        updated_at: Date
+      }[]
+    >`
+      SELECT
+        t.id, t.project_id, p.name AS project_name, p.config_ref,
+        p.ticket_callback_url, p.ticket_callback_token,
+        t.title, t.description, t.priority, t.status,
+        t.reporter_name, t.reporter_email, t.external_id,
+        t.custom_fields, t.created_at, t.updated_at
+      FROM tickets t
+      JOIN proyectos p ON p.id = t.project_id
+      WHERE t.id = ${ticketId}::uuid
+      LIMIT 1
+    `
+    const row = rows[0]
+    if (!row) return null
+    return { ...row, assignee_user_id: null }
+  }
+}
+
+export async function updateTicketAssignee(
+  ticketId: string,
+  assigneeUserId: number | null
+): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE tickets
+    SET assignee_user_id = ${assigneeUserId}, updated_at = NOW()
+    WHERE id = ${ticketId}::uuid
   `
-  return rows[0] ?? null
 }
 
 export async function updateTicketStatus(ticketId: string, status: string): Promise<void> {

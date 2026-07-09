@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { BUFFALO_STAGE_COLORS } from '@/components/PipelineCardDrawer'
 import Link from 'next/link'
+import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
 
 // ── Types ──────────────────────────────────────────────────────────────
 interface Contact {
@@ -575,6 +576,9 @@ export default function OnboardingPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 pr-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        {lead.configuracion && (
+                          <AssignDevelopersButton leadId={lead.id} variant="icon" />
+                        )}
                         <button
                           onClick={async () => { const r = await fetch(`/api/contacts/${lead.contact.id}`); if (r.ok) void handleConfigure(await r.json(), undefined, undefined, lead.id) }}
                           className="flex items-center gap-1.5 px-3 h-9 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-700 transition-colors"
@@ -634,6 +638,9 @@ export default function OnboardingPage() {
                         <div className="text-[11px] text-gray-400">{dateStr}</div>
 
                         <div className="flex items-center gap-1.5 pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+                          {lead.configuracion && (
+                            <AssignDevelopersButton leadId={lead.id} variant="icon" />
+                          )}
                           <button
                             onClick={async () => { const r = await fetch(`/api/contacts/${lead.contact.id}`); if (r.ok) void handleConfigure(await r.json(), undefined, undefined, lead.id) }}
                             className="flex-1 flex items-center justify-center h-9 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-700 transition-colors"

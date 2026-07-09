@@ -4,6 +4,7 @@ import { useRouter } from 'next/router'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
+import { useAuth } from '@/components/AuthContext'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, AlertCircle, Send, Trash2 } from 'lucide-react'
@@ -24,6 +25,7 @@ interface TicketDetail {
   status: string
   reporter_name: string | null
   reporter_email: string | null
+  assignee_user_id: number | null
   custom_fields: Record<string, unknown>
   created_at: string
 }
@@ -63,6 +65,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 export default function TicketDetailPage() {
   const router = useRouter()
   const { id } = router.query
+  const { user } = useAuth()
+  const [developers, setDevelopers] = useState<{ id: number; name: string; email: string }[]>([])
 
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
   const [updates, setUpdates] = useState<TicketUpdate[]>([])
@@ -91,6 +95,30 @@ export default function TicketDetailPage() {
       setLoading(false)
     }
   }, [id])
+
+  useEffect(() => {
+    if (user?.role !== 'admin') return
+    fetch('/api/users/developers')
+      .then((r) => r.json())
+      .then((d) => setDevelopers(d.users || []))
+      .catch(() => setDevelopers([]))
+  }, [user?.role])
+
+  const assignDeveloper = async (assigneeUserId: string) => {
+    if (!ticket) return
+    const val = assigneeUserId === '' ? null : parseInt(assigneeUserId, 10)
+    const res = await fetch(`/api/tickets/${ticket.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignee_user_id: val }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setError(data.error || 'No se pudo asignar')
+      return
+    }
+    setTicket((t) => (t ? { ...t, assignee_user_id: val } : t))
+  }
 
   useEffect(() => {
     if (router.isReady) load()
@@ -212,10 +240,24 @@ export default function TicketDetailPage() {
                 <Badge className={statusClass[ticket.status] || statusClass.open}>
                   {STATUS_LABELS[ticket.status as TicketStatus] || ticket.status}
                 </Badge>
+                {user?.role === 'admin' && (
+                  <select
+                    value={ticket.assignee_user_id ?? ''}
+                    onChange={(e) => assignDeveloper(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700"
+                  >
+                    <option value="">Sin asignar</option>
+                    {developers.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             )}
           </div>
-          {ticket && (
+          {ticket && user?.role === 'admin' && (
             <Button
               type="button"
               variant="outline"

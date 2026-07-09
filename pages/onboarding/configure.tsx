@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
+import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
 import { ChevronLeft, CheckCircle, Settings, Save, Loader2 } from 'lucide-react'
 import { BUFFALO_STAGE_COLORS } from '@/components/PipelineCardDrawer'
 
@@ -411,6 +412,9 @@ export default function ConfigurePage() {
               <Save className="h-3.5 w-3.5" />
               Guardado
             </div>
+          )}
+          {activeLeadId && (
+            <AssignDevelopersButton leadId={activeLeadId} />
           )}
           {activeLeadId && (
             <button

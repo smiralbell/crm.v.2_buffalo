@@ -25,6 +25,8 @@ interface TicketRow {
   priority: string
   status: string
   last_client_summary: string
+  assignee_user_id: number | null
+  assignee_name: string | null
   created_at: string
 }
 
@@ -233,11 +235,12 @@ export default function TicketsPage() {
                 No hay incidencias todavía.
               </div>
             ) : (
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[800px] text-left text-sm">
                 <thead>
                   <tr className="border-b bg-gray-50 text-gray-600">
                     <th className="px-4 py-3 font-medium">Incidencia</th>
                     <th className="px-4 py-3 font-medium">Proyecto</th>
+                    <th className="px-4 py-3 font-medium">Developer</th>
                     <th className="px-4 py-3 font-medium">Prioridad</th>
                     <th className="px-4 py-3 font-medium">Estado</th>
                     <th className="px-4 py-3 font-medium">Último mensaje</th>
@@ -257,6 +260,15 @@ export default function TicketsPage() {
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-gray-700">{t.project_name}</td>
+                      <td className="px-4 py-3">
+                        {t.assignee_name ? (
+                          <span className="inline-flex items-center rounded-full bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 text-[11px] font-medium text-indigo-800">
+                            {t.assignee_name}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">Sin asignar</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <Badge className={priorityClass[t.priority] || priorityClass.medium}>
                           {PRIORITY_LABELS[t.priority as TicketPriority] || t.priority}

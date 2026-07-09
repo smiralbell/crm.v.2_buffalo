@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
+import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
+import { DeveloperTags } from '@/components/gestion-proyecto/ProjectDevelopersPanel'
 import {
   ArrowLeft, Edit, FileText, Settings, User, Building2,
   Mail, Phone, MapPin, Receipt, Calendar,
@@ -76,6 +78,18 @@ const estadoLabel: Record<string, string> = {
 export default function ProyectoDetailPage({ lead }: Props) {
   const [iframeHeight, setIframeHeight] = useState(820)
   const [iframeUrl, setIframeUrl] = useState('')
+  const [developers, setDevelopers] = useState<{ id: number; name: string }[]>([])
+
+  const loadDevelopers = () => {
+    fetch(`/api/gestion-proyecto/proyectos/by-lead/${lead.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setDevelopers(d?.developers || []))
+      .catch(() => setDevelopers([]))
+  }
+
+  useEffect(() => {
+    loadDevelopers()
+  }, [lead.id])
 
   const displayName = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
   const project = useMemo(
@@ -143,6 +157,7 @@ export default function ProyectoDetailPage({ lead }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <AssignDevelopersButton leadId={lead.id} onAssigned={loadDevelopers} />
             <Link
               href={configureUrl}
               className="inline-flex items-center gap-2 px-4 h-10 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition-colors"
@@ -263,6 +278,16 @@ export default function ProyectoDetailPage({ lead }: Props) {
                 <dt className="text-gray-400 flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Actualizado</dt>
                 <dd className="text-gray-900 text-right">
                   {new Date(lead.updated_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 text-sm items-start">
+                <dt className="text-gray-400 pt-0.5">Developers</dt>
+                <dd className="text-right">
+                  {developers.length > 0 ? (
+                    <DeveloperTags developers={developers} className="justify-end" />
+                  ) : (
+                    <span className="text-xs text-gray-400">Sin asignar</span>
+                  )}
                 </dd>
               </div>
             </dl>

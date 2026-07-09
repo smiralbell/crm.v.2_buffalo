@@ -2,20 +2,23 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { notifyClientTicketUpdate } from '@/lib/tickets/notify'
 import { deleteTicketById } from '@/lib/tickets/store'
+import { assertTicketAccess } from '@/lib/tickets/access'
 import {
   getTicketWithProject,
   insertTicketUpdate,
   listTicketUpdates,
   updateTicketStatus,
+  updateTicketAssignee,
   type TicketUpdateRow,
 } from '@/lib/tickets/updates'
 
 const VALID_STATUS = new Set(['open', 'in_progress', 'resolved', 'closed'])
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  let user
   let userEmail = 'Buffalo'
   try {
-    const user = await requireAuthAPI(req, res)
+    user = await requireAuthAPI(req, res)
     userEmail = user.email
   } catch {
     return
@@ -28,6 +31,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const row = await getTicketWithProject(id)
       if (!row) return res.status(404).json({ error: 'Ticket no encontrado' })
+      if (!(await assertTicketAccess(user, row))) {
+        return res.status(403).json({ error: 'Acceso denegado' })
+      }
 
       let updates: TicketUpdateRow[] = []
       try {
@@ -50,6 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           reporter_email: row.reporter_email,
           external_id: row.external_id,
           custom_fields: row.custom_fields,
+          assignee_user_id: row.assignee_user_id ?? null,
           created_at: row.created_at.toISOString(),
           updated_at: row.updated_at.toISOString(),
         },
@@ -70,7 +77,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'PATCH') {
-    const { status, message } = req.body || {}
+    const { status, message, assignee_user_id } = req.body || {}
+
+    if (assignee_user_id !== undefined && user.role !== 'admin') {
+      return res.status(403).json({ error: 'Solo admin puede asignar tickets' })
+    }
 
     if (status && !VALID_STATUS.has(status)) {
       return res.status(400).json({
@@ -80,13 +91,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const replyMessage = typeof message === 'string' ? message.trim() : ''
-    if (!status && !replyMessage) {
-      return res.status(400).json({ error: 'Indica status y/o message' })
+    if (!status && !replyMessage && assignee_user_id === undefined) {
+      return res.status(400).json({ error: 'Indica status, message y/o assignee_user_id' })
     }
 
     try {
       const row = await getTicketWithProject(id)
       if (!row) return res.status(404).json({ error: 'Ticket no encontrado' })
+      if (!(await assertTicketAccess(user, row))) {
+        return res.status(403).json({ error: 'Acceso denegado' })
+      }
+
+      if (assignee_user_id !== undefined) {
+        const aid =
+          assignee_user_id === null || assignee_user_id === ''
+            ? null
+            : parseInt(String(assignee_user_id), 10)
+        if (aid !== null && Number.isNaN(aid)) {
+          return res.status(400).json({ error: 'assignee_user_id inválido' })
+        }
+        await updateTicketAssignee(id, aid)
+      }
 
       const nextStatus = status || row.status
 
@@ -157,6 +182,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'DELETE') {
+    if (user.role !== 'admin') {
+      return res.status(403).json({ error: 'Acceso denegado' })
+    }
     try {
       const row = await getTicketWithProject(id)
       if (!row) return res.status(404).json({ error: 'Ticket no encontrado' })

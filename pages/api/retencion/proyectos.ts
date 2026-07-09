@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
+import { getAccessibleProjectIds } from '@/lib/project-access'
 import { prisma } from '@/lib/prisma'
 
 type ProyectoRow = {
@@ -22,22 +23,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
+    const accessibleIds = await getAccessibleProjectIds(user)
 
-    // Query directa: funciona aunque el cliente Prisma no esté regenerado
-    const proyectos = await prisma.$queryRaw<ProyectoRow[]>`
-      SELECT
-        id, lead_id, name, config_ref, status, service_type,
-        setup_fee_eur, monthly_fee_eur, maint_plan, has_mensualidad, updated_at
-      FROM proyectos
-      WHERE has_mensualidad = true
-        AND lead_id IS NOT NULL
-      ORDER BY updated_at DESC
-    `
+    let proyectos: ProyectoRow[]
+    if (accessibleIds === null) {
+      proyectos = await prisma.$queryRaw<ProyectoRow[]>`
+        SELECT
+          id, lead_id, name, config_ref, status, service_type,
+          setup_fee_eur, monthly_fee_eur, maint_plan, has_mensualidad, updated_at
+        FROM proyectos
+        WHERE has_mensualidad = true AND lead_id IS NOT NULL
+        ORDER BY updated_at DESC
+      `
+    } else if (accessibleIds.length === 0) {
+      return res.status(200).json({ proyectos: [], total: 0 })
+    } else {
+      proyectos = await prisma.$queryRaw<ProyectoRow[]>`
+        SELECT
+          id, lead_id, name, config_ref, status, service_type,
+          setup_fee_eur, monthly_fee_eur, maint_plan, has_mensualidad, updated_at
+        FROM proyectos
+        WHERE has_mensualidad = true
+          AND lead_id IS NOT NULL
+          AND id = ANY(${accessibleIds}::uuid[])
+        ORDER BY updated_at DESC
+      `
+    }
 
-    const leadIds = proyectos
-      .map((p) => p.lead_id)
-      .filter((id): id is number => id != null)
+    const leadIds = proyectos.map((p) => p.lead_id).filter((id): id is number => id != null)
 
     const leads = leadIds.length
       ? await prisma.lead.findMany({
@@ -71,9 +85,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         monthly_fee_eur: p.monthly_fee_eur != null ? Number(p.monthly_fee_eur) : null,
         maint_plan: p.maint_plan,
         has_mensualidad: p.has_mensualidad,
-        updated_at: p.updated_at instanceof Date
-          ? p.updated_at.toISOString()
-          : String(p.updated_at),
+        updated_at:
+          p.updated_at instanceof Date ? p.updated_at.toISOString() : String(p.updated_at),
         contact: lead?.contact ?? null,
         lead_estado: lead?.estado ?? null,
       }
