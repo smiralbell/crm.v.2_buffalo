@@ -8,7 +8,7 @@ import { query } from '@/lib/db'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Link2, Repeat, Unlink } from 'lucide-react'
+import { ArrowLeft, Repeat, Unlink, Upload } from 'lucide-react'
 import Link from 'next/link'
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear } from 'date-fns'
 import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
@@ -779,7 +779,7 @@ export default function IncomesPage({
                       <th className="text-left p-3 font-medium text-sm text-slate-700">Fecha</th>
                       <th className="text-left p-3 font-medium text-sm text-slate-700">Concepto</th>
                       <th className="text-right p-3 font-medium text-sm text-slate-700">Importe</th>
-                      <th className="text-right p-3 font-medium text-sm text-slate-700">Acción</th>
+                      <th className="text-center p-3 font-medium text-sm text-slate-700">Factura</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -792,15 +792,14 @@ export default function IncomesPage({
                         <td className="p-3 text-right text-sm font-medium text-emerald-700">
                           {formatCurrency(income.amount)}
                         </td>
-                        <td className="p-3 text-right">
+                        <td className="p-3 text-center">
                           <Button
                             variant="ghost"
-                            size="sm"
-                            className="text-indigo-600 hover:text-indigo-800"
+                            size="icon"
+                            title="Vincular factura emitida"
                             onClick={() => handleOpenLinkModal(income.id)}
                           >
-                            <Link2 className="h-4 w-4 mr-1" />
-                            Vincular
+                            <Upload className="h-4 w-4 text-gray-600" />
                           </Button>
                         </td>
                       </tr>
@@ -842,8 +841,7 @@ export default function IncomesPage({
                       <th className="text-left p-3 font-medium text-sm text-slate-700">Cuenta</th>
                       <th className="text-right p-3 font-medium text-sm text-slate-700">Importe</th>
                       <th className="text-left p-3 font-medium text-sm text-slate-700">MRR</th>
-                      <th className="text-left p-3 font-medium text-sm text-slate-700">Factura</th>
-                      <th className="text-right p-3 font-medium text-sm text-slate-700">Acciones</th>
+                      <th className="text-center p-3 font-medium text-sm text-slate-700">Factura</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -881,43 +879,37 @@ export default function IncomesPage({
                             {income.is_recurring_income ? 'MRR' : 'Marcar MRR'}
                           </Button>
                         </td>
-                        <td className="p-3 text-sm text-slate-600">
+                        <td className="p-3 text-center">
                           {income.linkedInvoice ? (
-                            <Link
-                              href={`/invoices/${income.linkedInvoice.id}`}
-                              className="text-emerald-700 hover:underline font-medium"
-                            >
-                              {income.linkedInvoice.invoice_number} – {income.linkedInvoice.client_name}
-                            </Link>
-                          ) : (
-                            '—'
-                          )}
-                        </td>
-                        <td className="p-3">
-                          <div className="flex justify-end gap-1">
-                            {income.matched && income.linkedInvoice ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <Link
+                                href={`/invoices/${income.linkedInvoice.id}`}
+                                className="text-sm text-emerald-700 hover:underline font-medium truncate max-w-[140px]"
+                                title={`${income.linkedInvoice.invoice_number} – ${income.linkedInvoice.client_name}`}
+                              >
+                                {income.linkedInvoice.invoice_number}
+                              </Link>
                               <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 border-slate-200 text-slate-600"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
+                                title="Desvincular factura"
                                 disabled={unlinkLoadingId === income.id}
                                 onClick={() => handleUnlink(income.id, income.linkedInvoice!.id)}
                               >
-                                <Unlink className="h-3.5 w-3.5 mr-1" />
-                                Desvincular
+                                <Unlink className="h-3.5 w-3.5 text-slate-500" />
                               </Button>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-indigo-600 hover:text-indigo-800"
-                                onClick={() => handleOpenLinkModal(income.id)}
-                              >
-                                <Link2 className="h-3.5 w-3.5 mr-1" />
-                                Vincular
-                              </Button>
-                            )}
-                          </div>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Vincular factura emitida"
+                              onClick={() => handleOpenLinkModal(income.id)}
+                            >
+                              <Upload className="h-4 w-4 text-gray-600" />
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}

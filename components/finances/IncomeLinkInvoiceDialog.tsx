@@ -63,36 +63,26 @@ function InvoiceOption({
   formatCurrency: (n: number) => string
   suggested?: boolean
 }) {
-  const reasons = 'match_reasons' in inv ? inv.match_reasons : []
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
+      className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${
         selected
           ? 'border-indigo-500 bg-indigo-50/80 ring-1 ring-indigo-500/30'
           : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-900 truncate">
+          <p className="text-sm font-medium text-slate-900 truncate flex items-center gap-1.5">
+            {suggested && <Sparkles className="h-3.5 w-3.5 text-indigo-500 shrink-0" />}
             {inv.invoice_number} · {inv.client_name}
           </p>
           <p className="text-xs text-slate-500 mt-0.5">
-            {formatDate(inv.issue_date)} · Base {formatCurrency(inv.subtotal)} + IVA{' '}
-            {formatCurrency(inv.iva)}
+            {formatDate(inv.issue_date)} · {formatCurrency(inv.total)}
           </p>
-          {suggested && reasons.length > 0 && (
-            <p className="text-[11px] text-indigo-600 mt-1 flex items-center gap-1">
-              <Sparkles className="h-3 w-3 shrink-0" />
-              {reasons.join(' · ')}
-            </p>
-          )}
         </div>
-        <span className="text-sm font-semibold tabular-nums text-emerald-700 shrink-0">
-          {formatCurrency(inv.total)}
-        </span>
       </div>
     </button>
   )
@@ -127,18 +117,19 @@ export default function IncomeLinkInvoiceDialog({
     return rankInvoiceLinkSuggestions(income, invoices).slice(0, 5)
   }, [income, invoices])
 
+  const displayList = useMemo(() => {
+    if (search.trim()) {
+      return filterInvoicesForSearch(invoices, search).slice(0, 12)
+    }
+    return suggestions
+  }, [search, invoices, suggestions])
+
   useEffect(() => {
     if (!open || !income || selectedId != null) return
-    if (suggestions.length > 0) {
-      setSelectedId(suggestions[0].id)
+    if (displayList.length > 0) {
+      setSelectedId(displayList[0].id)
     }
-  }, [open, income, suggestions, selectedId])
-
-  const filtered = useMemo(() => {
-    const list = filterInvoicesForSearch(invoices, search)
-    const suggestedIds = new Set(suggestions.map((s) => s.id))
-    return list.filter((inv) => !suggestedIds.has(inv.id))
-  }, [invoices, search, suggestions])
+  }, [open, income, displayList, selectedId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -146,11 +137,13 @@ export default function IncomeLinkInvoiceDialog({
     await onSubmit(selectedId, hasInvoicePdf ? undefined : { noInvoiceNote: noInvoiceNote.trim() })
   }
 
+  const suggestedIds = new Set(suggestions.map((s) => s.id))
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="shrink-0 px-6 pt-6 pb-3">
-          <DialogTitle>Relacionar ingreso con factura</DialogTitle>
+          <DialogTitle>Vincular factura emitida</DialogTitle>
         </DialogHeader>
 
         {income && (
@@ -165,69 +158,42 @@ export default function IncomeLinkInvoiceDialog({
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-h-0">
-            {suggestions.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700/90">
-                  Sugerencias automáticas
-                </p>
-                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                  {suggestions.map((inv) => (
-                    <InvoiceOption
-                      key={inv.id}
-                      inv={inv}
-                      selected={selectedId === inv.id}
-                      onSelect={() => setSelectedId(inv.id)}
-                      formatCurrency={formatCurrency}
-                      suggested
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Buscar otra factura
-              </p>
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Nº factura, cliente o importe..."
+                  placeholder="Buscar factura..."
                   className="pl-9"
                 />
               </div>
-              <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
-                {filtered.length === 0 ? (
-                  <p className="text-sm text-slate-500 py-2">
+              {!search.trim() && suggestions.length > 0 && (
+                <p className="text-xs text-indigo-600">Sugerencias según importe y fecha</p>
+              )}
+              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                {displayList.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-3 text-center">
                     {invoices.length === 0
-                      ? 'No hay facturas enviadas disponibles.'
-                      : 'Sin resultados — prueba otro término.'}
+                      ? 'No hay facturas disponibles.'
+                      : 'Sin resultados.'}
                   </p>
                 ) : (
-                  filtered.slice(0, 20).map((inv) => (
+                  displayList.map((inv) => (
                     <InvoiceOption
                       key={inv.id}
                       inv={inv}
                       selected={selectedId === inv.id}
                       onSelect={() => setSelectedId(inv.id)}
                       formatCurrency={formatCurrency}
+                      suggested={!search.trim() && suggestedIds.has(inv.id)}
                     />
                   ))
-                )}
-                {filtered.length > 20 && (
-                  <p className="text-xs text-slate-400 text-center">
-                    +{filtered.length - 20} más — afina la búsqueda
-                  </p>
                 )}
               </div>
             </div>
 
-            <div className="space-y-3 border-t border-slate-100 pt-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Documento en Drive
-              </p>
+            <div className="space-y-2 pt-1 border-t border-slate-100">
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -238,7 +204,7 @@ export default function IncomeLinkInvoiceDialog({
                   }`}
                   onClick={() => setHasInvoicePdf(true)}
                 >
-                  Tengo factura PDF
+                  Tengo factura
                 </button>
                 <button
                   type="button"
@@ -253,18 +219,13 @@ export default function IncomeLinkInvoiceDialog({
                 </button>
               </div>
               {!hasInvoicePdf && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700" htmlFor="no_invoice_note">
-                    Nota (opcional, aparece debajo del título en el PDF)
-                  </label>
-                  <Textarea
-                    id="no_invoice_note"
-                    value={noInvoiceNote}
-                    onChange={(e) => setNoInvoiceNote(e.target.value)}
-                    placeholder="Ej: Cobro sin factura emitida aún, transferencia interna..."
-                    rows={3}
-                  />
-                </div>
+                <Textarea
+                  id="no_invoice_note"
+                  value={noInvoiceNote}
+                  onChange={(e) => setNoInvoiceNote(e.target.value)}
+                  placeholder="Nota opcional para el PDF..."
+                  rows={2}
+                />
               )}
             </div>
 
@@ -276,7 +237,7 @@ export default function IncomeLinkInvoiceDialog({
               Cancelar
             </Button>
             <Button type="submit" disabled={loading || !selectedId}>
-              {loading ? 'Guardando...' : hasInvoicePdf ? 'Vincular factura' : 'Vincular y enviar nota'}
+              {loading ? 'Guardando...' : 'Confirmar'}
             </Button>
           </DialogFooter>
         </form>
