@@ -27,13 +27,17 @@ export interface InvoiceForLink {
   bank_transaction_id?: string | null
 }
 
+export type IncomeLinkPayload =
+  | { kind: 'crm'; invoiceId: number }
+  | { kind: 'external'; file: File | null; note: string }
+
 interface IncomeLinkInvoiceDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   income: { id: string; amount: number; description: string; date: string } | null
   invoices: InvoiceForLink[]
   formatCurrency: (n: number) => string
-  onSubmit: (invoiceId: number, options?: { noInvoiceNote?: string }) => Promise<void>
+  onSubmit: (payload: IncomeLinkPayload) => Promise<void>
   loading: boolean
   error: string | null
 }
@@ -100,15 +104,17 @@ export default function IncomeLinkInvoiceDialog({
 }: IncomeLinkInvoiceDialogProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [search, setSearch] = useState('')
-  const [hasInvoicePdf, setHasInvoicePdf] = useState(true)
+  const [hasCrmInvoice, setHasCrmInvoice] = useState(true)
   const [noInvoiceNote, setNoInvoiceNote] = useState('')
+  const [externalFile, setExternalFile] = useState<File | null>(null)
 
   useEffect(() => {
     if (open) {
       setSelectedId(null)
       setSearch('')
-      setHasInvoicePdf(true)
+      setHasCrmInvoice(true)
       setNoInvoiceNote('')
+      setExternalFile(null)
     }
   }, [open, income?.id])
 
@@ -125,19 +131,28 @@ export default function IncomeLinkInvoiceDialog({
   }, [search, invoices, suggestions])
 
   useEffect(() => {
-    if (!open || !income || selectedId != null) return
+    if (!open || !income || !hasCrmInvoice || selectedId != null) return
     if (displayList.length > 0) {
       setSelectedId(displayList[0].id)
     }
-  }, [open, income, displayList, selectedId])
+  }, [open, income, displayList, selectedId, hasCrmInvoice])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedId) return
-    await onSubmit(selectedId, hasInvoicePdf ? undefined : { noInvoiceNote: noInvoiceNote.trim() })
+    if (hasCrmInvoice) {
+      if (!selectedId) return
+      await onSubmit({ kind: 'crm', invoiceId: selectedId })
+      return
+    }
+    await onSubmit({
+      kind: 'external',
+      file: externalFile,
+      note: noInvoiceNote.trim(),
+    })
   }
 
   const suggestedIds = new Set(suggestions.map((s) => s.id))
+  const incomeDate = income?.date ? income.date.slice(0, 10) : ''
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -159,75 +174,110 @@ export default function IncomeLinkInvoiceDialog({
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-h-0">
             <div className="space-y-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar factura..."
-                  className="pl-9"
-                />
-              </div>
-              {!search.trim() && suggestions.length > 0 && (
-                <p className="text-xs text-indigo-600">Sugerencias según importe y fecha</p>
-              )}
-              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                {displayList.length === 0 ? (
-                  <p className="text-sm text-slate-500 py-3 text-center">
-                    {invoices.length === 0
-                      ? 'No hay facturas disponibles.'
-                      : 'Sin resultados.'}
-                  </p>
-                ) : (
-                  displayList.map((inv) => (
-                    <InvoiceOption
-                      key={inv.id}
-                      inv={inv}
-                      selected={selectedId === inv.id}
-                      onSelect={() => setSelectedId(inv.id)}
-                      formatCurrency={formatCurrency}
-                      suggested={!search.trim() && suggestedIds.has(inv.id)}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2 pt-1 border-t border-slate-100">
               <div className="flex gap-2">
                 <button
                   type="button"
                   className={`flex-1 text-xs px-3 py-2 rounded-lg border transition-colors ${
-                    hasInvoicePdf
+                    hasCrmInvoice
                       ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
                       : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                   }`}
-                  onClick={() => setHasInvoicePdf(true)}
+                  onClick={() => setHasCrmInvoice(true)}
                 >
-                  Tengo factura
+                  Factura en el CRM
                 </button>
                 <button
                   type="button"
                   className={`flex-1 text-xs px-3 py-2 rounded-lg border transition-colors ${
-                    !hasInvoicePdf
+                    !hasCrmInvoice
                       ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
                       : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                   }`}
-                  onClick={() => setHasInvoicePdf(false)}
+                  onClick={() => {
+                    setHasCrmInvoice(false)
+                    setSelectedId(null)
+                  }}
                 >
-                  No tengo factura
+                  Sin factura en CRM
                 </button>
               </div>
-              {!hasInvoicePdf && (
+            </div>
+
+            {hasCrmInvoice ? (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Buscar factura..."
+                    className="pl-9"
+                  />
+                </div>
+                {!search.trim() && suggestions.length > 0 && (
+                  <p className="text-xs text-indigo-600">Sugerencias según importe y fecha</p>
+                )}
+                <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                  {displayList.length === 0 ? (
+                    <p className="text-sm text-slate-500 py-3 text-center">
+                      {invoices.length === 0
+                        ? 'No hay facturas disponibles.'
+                        : 'Sin resultados.'}
+                    </p>
+                  ) : (
+                    displayList.map((inv) => (
+                      <InvoiceOption
+                        key={inv.id}
+                        inv={inv}
+                        selected={selectedId === inv.id}
+                        onSelect={() => setSelectedId(inv.id)}
+                        formatCurrency={formatCurrency}
+                        suggested={!search.trim() && suggestedIds.has(inv.id)}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 rounded-lg border border-amber-100 bg-amber-50/50 p-3">
+                <p className="text-xs text-amber-900">
+                  No se vinculará ninguna factura del CRM. El cobro quedará conciliado solo con el
+                  documento que subas (o una nota). No afectará a IVA ni fiscalidad del CRM.
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-xs text-slate-500">Fecha cobro</p>
+                    <p className="font-medium">{incomeDate || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Importe</p>
+                    <p className="font-medium">{income ? formatCurrency(income.amount) : '—'}</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700" htmlFor="external_invoice_file">
+                    Documento (PDF o imagen)
+                  </label>
+                  <input
+                    id="external_invoice_file"
+                    type="file"
+                    accept="application/pdf,image/*"
+                    className="w-full text-sm"
+                    onChange={(e) => setExternalFile(e.target.files?.[0] || null)}
+                  />
+                  <p className="text-xs text-slate-500">
+                    Si no subes archivo, se generará un PDF con tu nota para Drive vía n8n.
+                  </p>
+                </div>
                 <Textarea
                   id="no_invoice_note"
                   value={noInvoiceNote}
                   onChange={(e) => setNoInvoiceNote(e.target.value)}
-                  placeholder="Nota opcional para el PDF..."
+                  placeholder="Nota opcional (ej: factura externa, sin registro en CRM)..."
                   rows={2}
                 />
-              )}
-            </div>
+              </div>
+            )}
 
             {error && <p className="text-sm text-red-600">{error}</p>}
           </div>
@@ -236,8 +286,11 @@ export default function IncomeLinkInvoiceDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading || !selectedId}>
-              {loading ? 'Guardando...' : 'Confirmar'}
+            <Button
+              type="submit"
+              disabled={loading || (hasCrmInvoice && !selectedId)}
+            >
+              {loading ? 'Guardando...' : hasCrmInvoice ? 'Vincular factura' : 'Conciliar cobro'}
             </Button>
           </DialogFooter>
         </form>

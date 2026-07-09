@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import IncomeLinkInvoiceDialog, {
   type InvoiceForLink,
+  type IncomeLinkPayload,
 } from '@/components/finances/IncomeLinkInvoiceDialog'
 import { buildIncomeAnalytics, type IncomeAnalytics } from '@/lib/finance/income-analytics'
 
@@ -526,12 +527,45 @@ export default function IncomesPage({
     setLinkModalOpen(true)
   }
 
-  const handleSubmitLink = async (invoiceId: number, options?: { noInvoiceNote?: string }) => {
+  const handleSubmitLink = async (payload: IncomeLinkPayload) => {
     if (!selectedIncomeId) return
     setLinkError(null)
     setLinkLoading(true)
     try {
-      const res = await fetch(`/api/invoices/${invoiceId}`, {
+      if (payload.kind === 'external') {
+        const formData = new FormData()
+        if (payload.file) {
+          formData.append('file', payload.file)
+        }
+        if (payload.note) {
+          formData.append('note', payload.note)
+        }
+
+        const res = await fetch(`/api/finances/incomes/${selectedIncomeId}/send-document`, {
+          method: 'POST',
+          body: formData,
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          setLinkError(data.error || data.details || 'No se pudo conciliar el cobro')
+          setLinkLoading(false)
+          return
+        }
+
+        setIncomes((prev) =>
+          prev.map((i) =>
+            i.id === selectedIncomeId
+              ? { ...i, matched: true, is_reconciled: true, linkedInvoice: null }
+              : i
+          )
+        )
+        setLinkModalOpen(false)
+        setSelectedIncomeId(null)
+        setLinkLoading(false)
+        return
+      }
+
+      const res = await fetch(`/api/invoices/${payload.invoiceId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bank_transaction_id: selectedIncomeId }),
@@ -543,25 +577,8 @@ export default function IncomesPage({
         return
       }
 
-      if (options) {
-        const driveRes = await fetch(`/api/invoices/${invoiceId}/send-to-drive`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ no_invoice_note: options.noInvoiceNote ?? '' }),
-        })
-        if (!driveRes.ok) {
-          const driveData = await driveRes.json().catch(() => ({}))
-          setLinkError(
-            driveData.error ||
-              driveData.details ||
-              'Factura vinculada, pero no se pudo enviar el PDF con la nota a Drive'
-          )
-          setLinkLoading(false)
-          return
-        }
-      }
       const income = incomes.find((i) => i.id === selectedIncomeId)
-      const inv = invoicesForLinkLocal.find((f) => f.id === invoiceId)
+      const inv = invoicesForLinkLocal.find((f) => f.id === payload.invoiceId)
       if (income && inv) {
         setIncomes((prev) =>
           prev.map((i) =>
@@ -569,6 +586,7 @@ export default function IncomesPage({
               ? {
                   ...i,
                   matched: true,
+                  is_reconciled: false,
                   linkedInvoice: {
                     id: inv.id,
                     invoice_number: inv.invoice_number,
