@@ -8,11 +8,17 @@ import { query } from '@/lib/db'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Repeat, Trash2, Unlink, Upload } from 'lucide-react'
+import { ArrowLeft, MoreVertical, Repeat, Trash2, Upload } from 'lucide-react'
 import Link from 'next/link'
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear } from 'date-fns'
 import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
 import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import IncomeLinkInvoiceDialog, {
   type InvoiceForLink,
 } from '@/components/finances/IncomeLinkInvoiceDialog'
@@ -590,27 +596,47 @@ export default function IncomesPage({
     setLinkLoading(false)
   }
 
-  const handleUnlink = async (incomeId: string, invoiceId: number) => {
-    if (!confirm('¿Desvincular esta factura del cobro del banco?')) return
-    setUnlinkLoadingId(incomeId)
+  const handleUnlinkIncome = async (income: IncomeRow) => {
+    if (!confirm('¿Desvincular este cobro? Volverá a aparecer como pendiente.')) return
+    setUnlinkLoadingId(income.id)
     try {
-      const res = await fetch(`/api/invoices/${invoiceId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bank_transaction_id: null }),
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        alert(data.error || 'Error al desvincular factura')
+      if (income.linkedInvoice) {
+        const res = await fetch(`/api/invoices/${income.linkedInvoice.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bank_transaction_id: null }),
+        })
+        if (!res.ok) {
+          const data = await res.json()
+          alert(data.error || 'Error al desvincular factura')
+          return
+        }
+        setInvoicesForLinkLocal((prev) =>
+          prev.map((f) =>
+            f.id === income.linkedInvoice!.id ? { ...f, bank_transaction_id: null } : f
+          )
+        )
+      } else if (income.is_reconciled) {
+        const res = await fetch(`/api/finance/bank-transactions/${income.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_reconciled: false }),
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          alert(data.error || 'Error al desvincular cobro')
+          return
+        }
+      } else {
         return
       }
+
       setIncomes((prev) =>
         prev.map((i) =>
-          i.id === incomeId ? { ...i, matched: false, linkedInvoice: null } : i
+          i.id === income.id
+            ? { ...i, matched: false, linkedInvoice: null, is_reconciled: false }
+            : i
         )
-      )
-      setInvoicesForLinkLocal((prev) =>
-        prev.map((f) => (f.id === invoiceId ? { ...f, bank_transaction_id: null } : f))
       )
     } catch {
       alert('Error de conexión')
@@ -983,28 +1009,36 @@ export default function IncomesPage({
                         </td>
                         <td className="p-3 text-center">
                           <div className="flex items-center justify-center gap-0.5">
-                            {income.linkedInvoice ? (
+                            {income.matched ? (
                               <>
-                                <Link
-                                  href={`/invoices/${income.linkedInvoice.id}`}
-                                  className="text-sm text-emerald-700 hover:underline font-medium truncate max-w-[120px]"
-                                  title={`${income.linkedInvoice.invoice_number} – ${income.linkedInvoice.client_name}`}
-                                >
-                                  {income.linkedInvoice.invoice_number}
-                                </Link>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 shrink-0"
-                                  title="Desvincular factura"
-                                  disabled={unlinkLoadingId === income.id}
-                                  onClick={() => handleUnlink(income.id, income.linkedInvoice!.id)}
-                                >
-                                  <Unlink className="h-3.5 w-3.5 text-slate-500" />
-                                </Button>
+                                {income.linkedInvoice ? (
+                                  <Link
+                                    href={`/invoices/${income.linkedInvoice.id}`}
+                                    className="text-sm text-emerald-700 hover:underline font-medium truncate max-w-[100px]"
+                                    title={`${income.linkedInvoice.invoice_number} – ${income.linkedInvoice.client_name}`}
+                                  >
+                                    {income.linkedInvoice.invoice_number}
+                                  </Link>
+                                ) : null}
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      title="Opciones"
+                                      disabled={unlinkLoadingId === income.id}
+                                    >
+                                      <MoreVertical className="h-4 w-4 text-gray-600" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleUnlinkIncome(income)}>
+                                      Desvincular factura
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </>
-                            ) : income.is_reconciled ? (
-                              <span className="text-xs font-medium text-emerald-700">Conciliado</span>
                             ) : (
                               <Button
                                 variant="ghost"

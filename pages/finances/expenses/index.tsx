@@ -8,7 +8,7 @@ import { query } from '@/lib/db'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Upload } from 'lucide-react'
+import { ArrowLeft, MoreVertical, Upload } from 'lucide-react'
 import Link from 'next/link'
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
 import { Textarea } from '@/components/ui/textarea'
 import { buildExpenseAnalytics, type ExpenseAnalytics } from '@/lib/finance/expense-analytics'
@@ -71,6 +77,7 @@ interface ExpensesPageProps {
     description: string
     account_name: string
     matched: boolean
+    linkedExpenseId: number | null
   }>
   expenseAnalytics: ExpenseAnalytics
   invoices: Array<{
@@ -88,6 +95,7 @@ interface ExpensesPageProps {
     description: string
     account_name: string
     matched: boolean
+    linkedExpenseId: number | null
   }>
   dateRange?: {
     start: string | null
@@ -246,6 +254,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       return {
         ...expense,
         matched: !!match,
+        linkedExpenseId: match?.id ?? null,
       }
     })
 
@@ -393,6 +402,7 @@ export default function ExpensesPage({
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadHasInvoice, setUploadHasInvoice] = useState(true)
   const [uploadNoInvoiceNote, setUploadNoInvoiceNote] = useState('')
+  const [unlinkLoadingId, setUnlinkLoadingId] = useState<string | null>(null)
 
   useEffect(() => {
     setDisplayExpenses(expenses)
@@ -434,6 +444,39 @@ export default function ExpensesPage({
         end: format(range.end, 'yyyy-MM-dd'),
       })
       router.push(`/finances/expenses?${params.toString()}`)
+    }
+  }
+
+  const handleUnlinkExpense = async (bankExpenseId: string, linkedExpenseId: number | null) => {
+    if (!linkedExpenseId) {
+      alert('No se encontró el gasto manual vinculado a este movimiento.')
+      return
+    }
+    if (!confirm('¿Desvincular la factura de gasto de este movimiento?')) return
+
+    setUnlinkLoadingId(bankExpenseId)
+    try {
+      const res = await fetch(`/api/finances/expenses/${linkedExpenseId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'No se pudo desvincular el gasto')
+        return
+      }
+
+      setDisplayExpenses((prev) =>
+        prev.map((e) =>
+          e.id === bankExpenseId ? { ...e, matched: false, linkedExpenseId: null } : e
+        )
+      )
+      setDisplayUnmatched((prev) => {
+        const row = displayExpenses.find((e) => e.id === bankExpenseId)
+        if (!row || prev.some((e) => e.id === bankExpenseId)) return prev
+        return [{ ...row, matched: false, linkedExpenseId: null }, ...prev]
+      })
+    } catch {
+      alert('Error de conexión')
+    } finally {
+      setUnlinkLoadingId(null)
     }
   }
 
@@ -573,6 +616,7 @@ export default function ExpensesPage({
               ? {
                   ...e,
                   matched: true,
+                  linkedExpenseId: expenseId,
                 }
               : e
           )
@@ -853,16 +897,41 @@ export default function ExpensesPage({
                             {formatCurrency(expense.amount)}
                           </td>
                           <td className="p-3 text-center">
-                            {!expense.matched && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                title="Colgar factura de este gasto"
-                                onClick={() => handleOpenUpload(expense.id)}
-                              >
-                                <Upload className="h-4 w-4 text-gray-600" />
-                              </Button>
-                            )}
+                            <div className="flex items-center justify-center gap-0.5">
+                              {!expense.matched ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Colgar factura de este gasto"
+                                  onClick={() => handleOpenUpload(expense.id)}
+                                >
+                                  <Upload className="h-4 w-4 text-gray-600" />
+                                </Button>
+                              ) : (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      title="Opciones"
+                                      disabled={unlinkLoadingId === expense.id}
+                                    >
+                                      <MoreVertical className="h-4 w-4 text-gray-600" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        handleUnlinkExpense(expense.id, expense.linkedExpenseId)
+                                      }
+                                    >
+                                      Desvincular factura
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
