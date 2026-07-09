@@ -8,7 +8,7 @@ import { query } from '@/lib/db'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Repeat, Unlink, Upload } from 'lucide-react'
+import { ArrowLeft, Repeat, Trash2, Unlink, Upload } from 'lucide-react'
 import Link from 'next/link'
 import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear } from 'date-fns'
 import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
@@ -411,6 +411,7 @@ export default function IncomesPage({
   const [unlinkLoadingId, setUnlinkLoadingId] = useState<string | null>(null)
   const [linkError, setLinkError] = useState<string | null>(null)
   const [recurringLoadingId, setRecurringLoadingId] = useState<string | null>(null)
+  const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null)
 
   useEffect(() => {
     setIncomes(initialIncomes)
@@ -565,6 +566,45 @@ export default function IncomesPage({
       alert('Error de conexión')
     } finally {
       setUnlinkLoadingId(null)
+    }
+  }
+
+  const handleDeleteIncome = async (incomeId: string) => {
+    const income = incomes.find((i) => i.id === incomeId)
+    if (!income) return
+
+    const label = income.description || formatCurrency(income.amount)
+    if (
+      !confirm(
+        `¿Eliminar este cobro del listado?\n\n${label}\n\nSi estaba vinculado a una factura, se desvinculará. El movimiento desaparecerá de ingresos (no borra la factura del CRM).`
+      )
+    ) {
+      return
+    }
+
+    setDeleteLoadingId(incomeId)
+    try {
+      const res = await fetch(`/api/finance/bank-transactions/${incomeId}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'No se pudo eliminar el cobro')
+        return
+      }
+
+      setIncomes((prev) => prev.filter((i) => i.id !== incomeId))
+      if (income.linkedInvoice) {
+        setInvoicesForLinkLocal((prev) =>
+          prev.map((f) =>
+            f.id === income.linkedInvoice!.id ? { ...f, bank_transaction_id: null } : f
+          )
+        )
+      }
+    } catch {
+      alert('Error de conexión')
+    } finally {
+      setDeleteLoadingId(null)
     }
   }
 
@@ -793,14 +833,26 @@ export default function IncomesPage({
                           {formatCurrency(income.amount)}
                         </td>
                         <td className="p-3 text-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Vincular factura emitida"
-                            onClick={() => handleOpenLinkModal(income.id)}
-                          >
-                            <Upload className="h-4 w-4 text-gray-600" />
-                          </Button>
+                          <div className="flex items-center justify-center gap-0.5">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Vincular factura emitida"
+                              onClick={() => handleOpenLinkModal(income.id)}
+                            >
+                              <Upload className="h-4 w-4 text-gray-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400 hover:text-red-600"
+                              title="Eliminar cobro duplicado"
+                              disabled={deleteLoadingId === income.id}
+                              onClick={() => handleDeleteIncome(income.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -880,36 +932,48 @@ export default function IncomesPage({
                           </Button>
                         </td>
                         <td className="p-3 text-center">
-                          {income.linkedInvoice ? (
-                            <div className="flex items-center justify-center gap-1">
-                              <Link
-                                href={`/invoices/${income.linkedInvoice.id}`}
-                                className="text-sm text-emerald-700 hover:underline font-medium truncate max-w-[140px]"
-                                title={`${income.linkedInvoice.invoice_number} – ${income.linkedInvoice.client_name}`}
-                              >
-                                {income.linkedInvoice.invoice_number}
-                              </Link>
+                          <div className="flex items-center justify-center gap-0.5">
+                            {income.linkedInvoice ? (
+                              <>
+                                <Link
+                                  href={`/invoices/${income.linkedInvoice.id}`}
+                                  className="text-sm text-emerald-700 hover:underline font-medium truncate max-w-[120px]"
+                                  title={`${income.linkedInvoice.invoice_number} – ${income.linkedInvoice.client_name}`}
+                                >
+                                  {income.linkedInvoice.invoice_number}
+                                </Link>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 shrink-0"
+                                  title="Desvincular factura"
+                                  disabled={unlinkLoadingId === income.id}
+                                  onClick={() => handleUnlink(income.id, income.linkedInvoice!.id)}
+                                >
+                                  <Unlink className="h-3.5 w-3.5 text-slate-500" />
+                                </Button>
+                              </>
+                            ) : (
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 shrink-0"
-                                title="Desvincular factura"
-                                disabled={unlinkLoadingId === income.id}
-                                onClick={() => handleUnlink(income.id, income.linkedInvoice!.id)}
+                                title="Vincular factura emitida"
+                                onClick={() => handleOpenLinkModal(income.id)}
                               >
-                                <Unlink className="h-3.5 w-3.5 text-slate-500" />
+                                <Upload className="h-4 w-4 text-gray-600" />
                               </Button>
-                            </div>
-                          ) : (
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"
-                              title="Vincular factura emitida"
-                              onClick={() => handleOpenLinkModal(income.id)}
+                              className="h-8 w-8 text-slate-400 hover:text-red-600"
+                              title="Eliminar cobro duplicado"
+                              disabled={deleteLoadingId === income.id}
+                              onClick={() => handleDeleteIncome(income.id)}
                             >
-                              <Upload className="h-4 w-4 text-gray-600" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     ))}
