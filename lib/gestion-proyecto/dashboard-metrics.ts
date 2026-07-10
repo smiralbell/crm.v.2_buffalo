@@ -110,10 +110,11 @@ function buildTimeline(
 function buildTaskCounts(tasks: DashboardTaskInput[]): ProjectDashboardTaskCounts {
   const pending = tasks.filter((t) => t.status === 'pending').length
   const in_progress = tasks.filter((t) => t.status === 'in_progress').length
+  const buffalo_validation = tasks.filter((t) => t.status === 'buffalo_validation').length
   const done = tasks.filter((t) => t.status === 'done').length
   const total = tasks.length
   const completion_pct = total > 0 ? Math.round((done / total) * 100) : 0
-  return { total, pending, in_progress, done, completion_pct }
+  return { total, pending, in_progress, buffalo_validation, done, completion_pct }
 }
 
 function buildHours(tasks: DashboardTaskInput[]): ProjectDashboardHours {
@@ -125,7 +126,7 @@ function buildHours(tasks: DashboardTaskInput[]): ProjectDashboardHours {
     const h = estimateTaskHours(t)
     total += h
     if (t.status === 'done') done += h
-    else if (t.status === 'in_progress') in_progress += h
+    else if (t.status === 'in_progress' || t.status === 'buffalo_validation') in_progress += h
     else pending += h
   }
   return {
@@ -145,6 +146,7 @@ function buildAssigneeRows(tasks: DashboardTaskInput[]): ProjectDashboardAssigne
       total: 0,
       pending: 0,
       in_progress: 0,
+      buffalo_validation: 0,
       done: 0,
       hours: 0,
     }
@@ -152,6 +154,7 @@ function buildAssigneeRows(tasks: DashboardTaskInput[]): ProjectDashboardAssigne
     row.hours += estimateTaskHours(t)
     if (t.status === 'pending') row.pending += 1
     else if (t.status === 'in_progress') row.in_progress += 1
+    else if (t.status === 'buffalo_validation') row.buffalo_validation += 1
     else row.done += 1
     map.set(key, row)
   }

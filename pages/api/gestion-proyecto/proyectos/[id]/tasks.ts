@@ -1,12 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireProjectAccessAPI } from '@/lib/gestion-proyecto/require-project-access'
+import { serializeTaskRow } from '@/lib/gestion-proyecto/task-stale'
 import { prisma } from '@/lib/prisma'
 
 const createTaskSchema = z.object({
   title: z.string().min(1, 'El título es obligatorio'),
   description: z.string().optional(),
-  status: z.enum(['pending', 'in_progress', 'done']).optional(),
+  status: z.enum(['pending', 'in_progress', 'buffalo_validation', 'done']).optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
   assignee: z.string().optional(),
   estimated_hours: z.number().positive().optional(),
@@ -20,32 +21,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await requireProjectAccessAPI(req, res, projectId)
 
     if (req.method === 'GET') {
-      const rows = await prisma.$queryRaw<
-        {
-          id: string
-          project_id: string
-          title: string
-          description: string | null
-          status: string
-          priority: string
-          assignee: string | null
-          estimated_hours: number | null
-          position: number
-          created_at: Date
-          updated_at: Date
-        }[]
-      >`
+      const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
         SELECT *
         FROM project_dev_tasks
         WHERE project_id = ${projectId}::uuid
         ORDER BY position ASC, created_at ASC
       `
       return res.status(200).json({
-        tasks: rows.map((t) => ({
-          ...t,
-          created_at: t.created_at.toISOString(),
-          updated_at: t.updated_at.toISOString(),
-        })),
+        tasks: rows.map((t) => {
+          const serialized = serializeTaskRow(t)
+          return {
+            ...serialized,
+            created_at:
+              t.created_at instanceof Date ? t.created_at.toISOString() : String(t.created_at),
+            updated_at:
+              t.updated_at instanceof Date ? t.updated_at.toISOString() : String(t.updated_at),
+          }
+        }),
       })
     }
 
@@ -60,23 +52,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const position = (maxPos[0]?.max_pos ?? -1) + 1
 
       try {
-        const rows = await prisma.$queryRaw<
-          {
-            id: string
-            project_id: string
-            title: string
-            description: string | null
-            status: string
-            priority: string
-            assignee: string | null
-            estimated_hours: number | null
-            position: number
-            created_at: Date
-            updated_at: Date
-          }[]
-        >`
+        const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
           INSERT INTO project_dev_tasks (
-            project_id, title, description, status, priority, assignee, estimated_hours, position
+            project_id, title, description, status, priority, assignee, estimated_hours, position, status_changed_at
           ) VALUES (
             ${projectId}::uuid,
             ${data.title},
@@ -85,33 +63,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             ${data.priority || 'medium'},
             ${data.assignee ?? null},
             ${data.estimated_hours ?? null},
-            ${position}
+            ${position},
+            NOW()
           )
           RETURNING *
         `
         const task = rows[0]
+        const serialized = serializeTaskRow(task)
         return res.status(201).json({
-          ...task,
-          created_at: task.created_at.toISOString(),
-          updated_at: task.updated_at.toISOString(),
+          ...serialized,
+          created_at:
+            task.created_at instanceof Date
+              ? task.created_at.toISOString()
+              : String(task.created_at),
+          updated_at:
+            task.updated_at instanceof Date
+              ? task.updated_at.toISOString()
+              : String(task.updated_at),
         })
       } catch (insertError) {
         const msg = insertError instanceof Error ? insertError.message : ''
-        if (!msg.includes('estimated_hours')) throw insertError
-        const rows = await prisma.$queryRaw<
-          {
-            id: string
-            project_id: string
-            title: string
-            description: string | null
-            status: string
-            priority: string
-            assignee: string | null
-            position: number
-            created_at: Date
-            updated_at: Date
-          }[]
-        >`
+        if (!msg.includes('estimated_hours') && !msg.includes('status_changed_at')) throw insertError
+        const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
           INSERT INTO project_dev_tasks (
             project_id, title, description, status, priority, assignee, position
           ) VALUES (
@@ -126,11 +99,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           RETURNING *
         `
         const task = rows[0]
+        const serialized = serializeTaskRow(task)
         return res.status(201).json({
-          ...task,
-          estimated_hours: null,
-          created_at: task.created_at.toISOString(),
-          updated_at: task.updated_at.toISOString(),
+          ...serialized,
+          estimated_hours: data.estimated_hours ?? null,
+          created_at:
+            task.created_at instanceof Date
+              ? task.created_at.toISOString()
+              : String(task.created_at),
+          updated_at:
+            task.updated_at instanceof Date
+              ? task.updated_at.toISOString()
+              : String(task.updated_at),
         })
       }
     }

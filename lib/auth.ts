@@ -2,7 +2,7 @@ import { GetServerSidePropsContext, NextApiRequest, NextApiResponse } from 'next
 import { randomBytes, createHmac, timingSafeEqual } from 'crypto'
 import { verifyCrmUserPassword } from '@/lib/crm-users'
 
-export type CrmRole = 'admin' | 'developer'
+export type CrmRole = 'admin' | 'developer' | 'comercial'
 
 export interface AuthUser {
   id: number
@@ -149,6 +149,30 @@ export async function requireAdminAPI(
 ): Promise<AuthUser> {
   const user = await requireAuthAPI(req, res)
   if (user.role !== 'admin') {
+    res.status(403).json({ error: 'Acceso denegado' })
+    throw new Error('Forbidden')
+  }
+  return user
+}
+
+export async function requireColdCallAPI(
+  req: NextApiRequest,
+  res: NextApiResponse
+): Promise<AuthUser> {
+  const user = await requireAuthAPI(req, res)
+  if (user.role !== 'admin' && user.role !== 'comercial') {
+    res.status(403).json({ error: 'Acceso denegado' })
+    throw new Error('Forbidden')
+  }
+  return user
+}
+
+export async function requireFreelancerInvoicesAPI(
+  req: NextApiRequest,
+  res: NextApiResponse
+): Promise<AuthUser> {
+  const user = await requireAuthAPI(req, res)
+  if (user.role !== 'developer' && user.role !== 'comercial') {
     res.status(403).json({ error: 'Acceso denegado' })
     throw new Error('Forbidden')
   }

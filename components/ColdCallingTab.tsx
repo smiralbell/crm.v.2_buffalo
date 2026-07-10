@@ -327,7 +327,8 @@ function NewProspectModal({ onClose, onCreated }: { onClose: () => void; onCreat
   )
 }
 
-// ── Google Maps Search ────────────────────────────────────────────────────────
+// ── Google Maps Search (oculto — conservar código para reactivar) ───────────────
+const SHOW_GOOGLE_MAPS = false
 
 interface PlaceResult {
   placeId: string; nombre: string; empresa: string; telefono: string
@@ -489,7 +490,7 @@ function GoogleMapsSearch({ onImported }: { onImported: () => void }) {
 
 // ── Call Panel ────────────────────────────────────────────────────────────────
 
-function CallPanel({ prospect, onClose, onUpdate }: {
+export function CallPanel({ prospect, onClose, onUpdate }: {
   prospect: Prospect; onClose: () => void; onUpdate: (p: Prospect) => void
 }) {
   const [resultado, setResultado] = useState<string | null>(null)
@@ -1006,15 +1007,17 @@ export default function ColdCallingTab() {
         </div>
       )}
 
-      {/* Google Maps Search */}
-      <GoogleMapsSearch onImported={() => loadData(1)} />
+      {/* Google Maps Search — deshabilitado (SHOW_GOOGLE_MAPS) */}
+      {SHOW_GOOGLE_MAPS && <GoogleMapsSearch onImported={() => loadData(1)} />}
 
       {/* Empty state */}
       {prospects.length === 0 && !loading && (
         <div className="border-2 border-dashed border-gray-200 rounded-xl p-12 text-center space-y-3">
           <h3 className="font-medium text-gray-600">Sin prospectos</h3>
           <p className="text-sm text-gray-400 max-w-sm mx-auto">
-            Usa el buscador de Google Maps para importar prospectos, o añade uno manualmente.
+            {SHOW_GOOGLE_MAPS
+              ? 'Usa el buscador de Google Maps para importar prospectos, o añade uno manualmente.'
+              : 'Añade prospectos manualmente o importa un CSV.'}
           </p>
         </div>
       )}

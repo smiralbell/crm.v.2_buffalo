@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { buildDefaultOnboarding } from '@/lib/gestion-proyecto/prefill-onboarding'
 import { requireProjectAccessAPI } from '@/lib/gestion-proyecto/require-project-access'
 import { sanitizeOnboardingForDeveloper } from '@/lib/gestion-proyecto/sanitize-onboarding'
+import { serializeTaskRow } from '@/lib/gestion-proyecto/task-stale'
 
 type DbProyecto = {
   id: string
@@ -167,19 +168,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           WHERE project_id = ${id}::uuid
           ORDER BY position ASC, created_at ASC
         `
-        tasks = taskRows.map((t) => ({
-          ...t,
-          created_at: t.created_at.toISOString(),
-          updated_at: t.updated_at.toISOString(),
-          attachments: [] as {
-            id: string
-            task_id: string
-            file_name: string
-            mime_type: string | null
-            file_size: number | null
-            created_at: string
-          }[],
-        }))
+        tasks = taskRows.map((t) => {
+          const serialized = serializeTaskRow(t as Record<string, unknown>)
+          return {
+            ...serialized,
+            created_at: t.created_at.toISOString(),
+            updated_at: t.updated_at.toISOString(),
+            attachments: [] as {
+              id: string
+              task_id: string
+              file_name: string
+              mime_type: string | null
+              file_size: number | null
+              created_at: string
+            }[],
+          }
+        })
 
         try {
           const attRows = await prisma.$queryRaw<

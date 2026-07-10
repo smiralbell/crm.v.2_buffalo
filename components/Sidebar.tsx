@@ -87,11 +87,13 @@ const NAV: NavItem[] = [
   { href: '/finances', label: 'Finanzas', icon: DollarSign, roles: ['admin'] },
   { href: '/tickets', label: 'Tickets', icon: Ticket, roles: ['admin', 'developer'] },
   { href: '/developer', label: 'Dashboard', icon: LayoutDashboard, roles: ['developer'] },
+  { href: '/comercial', label: 'Dashboard', icon: LayoutDashboard, roles: ['comercial'] },
+  { href: '/comercial/campanas', label: 'Campañas', icon: Megaphone, roles: ['comercial'] },
   {
     href: '/developer/facturas',
     label: 'Facturas',
     icon: FileText,
-    roles: ['developer'],
+    roles: ['developer', 'comercial'],
     children: [
       { href: '/developer/facturas', label: 'Mis facturas' },
       { href: '/developer/facturas/nueva', label: 'Nueva factura' },
@@ -122,6 +124,10 @@ export default function Sidebar() {
         (a, b) => order.indexOf(a.href) - order.indexOf(b.href)
       )
     }
+    if (role === 'comercial') {
+      const order = ['/comercial', '/comercial/campanas', '/developer/facturas']
+      return [...items].sort((a, b) => order.indexOf(a.href) - order.indexOf(b.href))
+    }
     return items
   }, [role])
 
@@ -143,6 +149,8 @@ export default function Sidebar() {
     else if (item.href === '/onboarding') router.push('/onboarding?tab=projects')
     else if (item.href === '/retencion') router.push('/retencion')
     else if (item.href === '/gestion-proyecto') router.push('/gestion-proyecto')
+    else if (item.href === '/comercial') router.push('/comercial')
+    else if (item.href === '/comercial/campanas') router.push('/comercial/campanas')
     else if (item.href === '/developer/facturas') router.push('/developer/facturas')
     else if (item.href === '/developer') router.push('/developer')
     else router.push(item.href)
@@ -156,7 +164,8 @@ export default function Sidebar() {
   const isParentActive = (item: NavItem) =>
     router.pathname === item.href || router.pathname.startsWith(item.href + '/')
 
-  const homeHref = role === 'developer' ? '/developer' : '/dashboard'
+  const homeHref =
+    role === 'developer' ? '/developer' : role === 'comercial' ? '/comercial' : '/dashboard'
 
   const childLabel = (child: SubItem) =>
     role === 'developer' && child.developerLabel ? child.developerLabel : child.label

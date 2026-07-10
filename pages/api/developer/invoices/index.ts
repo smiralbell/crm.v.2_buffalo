@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
-import { requireAuthAPI } from '@/lib/auth'
+import { requireFreelancerInvoicesAPI } from '@/lib/auth'
 import {
   createDeveloperInvoice,
   DeveloperInvoicesConfigError,
@@ -28,13 +28,9 @@ const createSchema = z.object({
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   let user
   try {
-    user = await requireAuthAPI(req, res)
+    user = await requireFreelancerInvoicesAPI(req, res)
   } catch {
     return
-  }
-
-  if (user.role !== 'developer') {
-    return res.status(403).json({ error: 'Solo para developers' })
   }
 
   if (req.method === 'GET') {

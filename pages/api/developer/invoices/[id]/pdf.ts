@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import formidable from 'formidable'
 import { readFile } from 'fs/promises'
 import { requireAuthAPI } from '@/lib/auth'
+import { canUseFreelancerInvoices } from '@/lib/auth-rbac'
 import {
   DeveloperInvoicesConfigError,
   getDeveloperInvoice,
@@ -36,13 +37,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'GET') {
-    if (user.role !== 'developer' && user.role !== 'admin') {
+    if (!canUseFreelancerInvoices(user.role) && user.role !== 'admin') {
       return res.status(403).json({ error: 'Acceso denegado' })
     }
     try {
       const meta = await getDeveloperInvoicePdfPath(id)
       if (!meta) return res.status(404).json({ error: 'PDF no encontrado' })
-      if (user.role === 'developer' && meta.userId !== user.id) {
+      if (canUseFreelancerInvoices(user.role) && meta.userId !== user.id) {
         return res.status(403).json({ error: 'Acceso denegado' })
       }
       const buffer = await readDevInvoicePdf(meta.path)
@@ -58,8 +59,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  if (user.role !== 'developer') {
-    return res.status(403).json({ error: 'Solo para developers' })
+  if (!canUseFreelancerInvoices(user.role)) {
+    return res.status(403).json({ error: 'Acceso denegado' })
   }
 
   if (req.method === 'POST') {

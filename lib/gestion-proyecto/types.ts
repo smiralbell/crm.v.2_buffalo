@@ -1,4 +1,4 @@
-export type TaskStatus = 'pending' | 'in_progress' | 'done'
+export type TaskStatus = 'pending' | 'in_progress' | 'buffalo_validation' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high'
 export type DocType = 'link' | 'file'
 
@@ -20,6 +20,7 @@ export interface ProjectListRow {
   task_counts: {
     pending: number
     in_progress: number
+    buffalo_validation: number
     done: number
   }
   developers: { id: number; name: string; email: string }[]
@@ -70,6 +71,9 @@ export interface ProjectTask {
   assignee: string | null
   estimated_hours: number | null
   position: number
+  status_changed_at: string
+  stale_extension_until: string | null
+  stale_notice_active: boolean
   created_at: string
   updated_at: string
   attachments?: ProjectTaskAttachment[]
@@ -90,6 +94,7 @@ export interface ProjectDashboardTaskCounts {
   total: number
   pending: number
   in_progress: number
+  buffalo_validation: number
   done: number
   completion_pct: number
 }
@@ -106,6 +111,7 @@ export interface ProjectDashboardAssigneeRow {
   total: number
   pending: number
   in_progress: number
+  buffalo_validation: number
   done: number
   hours: number
 }

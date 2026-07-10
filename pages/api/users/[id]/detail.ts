@@ -17,21 +17,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await findCrmUserById(userId)
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
 
-    const stats = await getUserWorkStats(userId)
-    const assignments = await listAllAssignmentsForUser(userId)
     const adminPassword = await getCrmUserAdminPassword(userId)
 
+    const isDeveloper = user.role === 'developer'
+    const stats = isDeveloper ? await getUserWorkStats(userId) : null
+    const assignments = isDeveloper ? await listAllAssignmentsForUser(userId) : []
+
     let projects: { id: string; name: string; status: string; service_type: string }[] = []
-    try {
-      projects = await prisma.$queryRaw`
-        SELECT p.id, p.name, p.status, p.service_type
-        FROM crm_user_projects up
-        INNER JOIN proyectos p ON p.id = up.project_id
-        WHERE up.user_id = ${userId}
-        ORDER BY p.name ASC
-      `
-    } catch {
-      projects = []
+    if (isDeveloper) {
+      try {
+        projects = await prisma.$queryRaw`
+          SELECT p.id, p.name, p.status, p.service_type
+          FROM crm_user_projects up
+          INNER JOIN proyectos p ON p.id = up.project_id
+          WHERE up.user_id = ${userId}
+          ORDER BY p.name ASC
+        `
+      } catch {
+        projects = []
+      }
     }
 
     return res.status(200).json({

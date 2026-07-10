@@ -73,7 +73,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const contactMap = new Map(contacts.map((c) => [c.id, c]))
 
     const projectIds = proyectos.map((p) => p.id)
-    let taskCounts: Record<string, { pending: number; in_progress: number; done: number }> = {}
+    let taskCounts: Record<
+      string,
+      { pending: number; in_progress: number; buffalo_validation: number; done: number }
+    > = {}
     const devMap = await getDevelopersByProjectIds(projectIds)
 
     if (projectIds.length > 0) {
@@ -88,9 +91,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         `
         for (const row of counts) {
           if (!taskCounts[row.project_id]) {
-            taskCounts[row.project_id] = { pending: 0, in_progress: 0, done: 0 }
+            taskCounts[row.project_id] = {
+              pending: 0,
+              in_progress: 0,
+              buffalo_validation: 0,
+              done: 0,
+            }
           }
-          const status = row.status as 'pending' | 'in_progress' | 'done'
+          const status = row.status as
+            | 'pending'
+            | 'in_progress'
+            | 'buffalo_validation'
+            | 'done'
           if (status in taskCounts[row.project_id]) {
             taskCounts[row.project_id][status] = Number(row.count)
           }
@@ -116,7 +128,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         updated_at:
           p.updated_at instanceof Date ? p.updated_at.toISOString() : String(p.updated_at),
         contact,
-        task_counts: taskCounts[p.id] || { pending: 0, in_progress: 0, done: 0 },
+        task_counts: taskCounts[p.id] || {
+          pending: 0,
+          in_progress: 0,
+          buffalo_validation: 0,
+          done: 0,
+        },
         developers: devMap[p.id] || [],
       }
     })
@@ -136,6 +153,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             task_counts: {
               pending: a.status === 'pending' ? 1 : 0,
               in_progress: a.status === 'in_progress' ? 1 : 0,
+              buffalo_validation: 0,
               done: a.status === 'done' ? 1 : 0,
             },
             developers: [] as { id: number; name: string; email: string }[],

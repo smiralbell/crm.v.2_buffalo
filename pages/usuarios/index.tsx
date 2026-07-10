@@ -14,11 +14,25 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Loader2, UserPlus, RefreshCw } from 'lucide-react'
 import type { CrmUserPublic } from '@/lib/crm-users'
+import type { CrmRole } from '@/lib/auth'
 import type { UserWorkStats } from '@/lib/developer/assignments'
 
 type UserRow = CrmUserPublic & { stats: UserWorkStats | null }
+
+const ROLE_LABEL: Record<CrmRole, string> = {
+  admin: 'Admin',
+  developer: 'Developer',
+  comercial: 'Comercial',
+}
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
@@ -42,6 +56,7 @@ export default function UsuariosPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState<'developer' | 'comercial'>('developer')
 
   const load = () => {
     setLoading(true)
@@ -68,13 +83,14 @@ export default function UsuariosPage() {
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role: 'developer' }),
+        body: JSON.stringify({ name, email, password, role }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'No se pudo crear')
       setName('')
       setEmail('')
       setPassword('')
+      setRole('developer')
       setCreateOpen(false)
       load()
     } catch (e) {
@@ -118,11 +134,12 @@ export default function UsuariosPage() {
             <div className="py-16 text-center text-sm text-gray-400">No hay usuarios creados</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[800px]">
+              <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="border-b bg-gray-50 text-gray-600">
                     <th className="px-4 py-3 text-left font-medium">Nombre</th>
                     <th className="px-4 py-3 text-left font-medium">Email</th>
+                    <th className="px-4 py-3 text-left font-medium">Rol</th>
                     <th className="px-4 py-3 text-left font-medium">Estado</th>
                     <th className="px-4 py-3 text-center font-medium">Proyectos</th>
                     <th className="px-4 py-3 text-center font-medium">Asignaciones</th>
@@ -147,6 +164,11 @@ export default function UsuariosPage() {
                     >
                       <td className="px-4 py-3 font-medium text-gray-900">{u.name}</td>
                       <td className="px-4 py-3 text-gray-500">{u.email}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant="outline" className="text-gray-700">
+                          {ROLE_LABEL[u.role] || u.role}
+                        </Badge>
+                      </td>
                       <td className="px-4 py-3">
                         {u.active ? (
                           <Badge variant="secondary" className="bg-gray-100 text-gray-700">
@@ -182,9 +204,29 @@ export default function UsuariosPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Nuevo developer</DialogTitle>
+            <DialogTitle>Nuevo usuario</DialogTitle>
           </DialogHeader>
           <form onSubmit={createUser} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="u_role">Rol</Label>
+              <Select
+                value={role}
+                onValueChange={(v) => setRole(v as 'developer' | 'comercial')}
+              >
+                <SelectTrigger id="u_role" className="rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="developer">Developer</SelectItem>
+                  <SelectItem value="comercial">Comercial</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">
+                {role === 'comercial'
+                  ? 'Acceso a dashboard de campañas, cold calling y facturas propias.'
+                  : 'Acceso al panel de proyectos, tickets y facturas propias.'}
+              </p>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="u_name">Nombre</Label>
               <Input

@@ -210,6 +210,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
   const statusDonut = [
     { name: 'Pendiente', value: data.task_counts.pending },
     { name: 'En curso', value: data.task_counts.in_progress },
+    { name: 'Validación Buffalo', value: data.task_counts.buffalo_validation },
     { name: 'Hecho', value: data.task_counts.done },
   ].filter((d) => d.value > 0)
 
@@ -222,6 +223,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
     fullName: a.assignee,
     hechas: a.done,
     en_curso: a.in_progress,
+    validacion: a.buffalo_validation,
     pendientes: a.pending,
   }))
 
@@ -293,7 +295,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <KpiCard label="Tareas totales" value={data.task_counts.total} />
         <KpiCard
           label="Pendientes"
@@ -305,6 +307,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
           value={data.task_counts.in_progress}
           sub={`${data.hours.in_progress_estimated}h estimadas`}
         />
+        <KpiCard label="Validación Buffalo" value={data.task_counts.buffalo_validation} />
         <KpiCard
           label="Finalizadas"
           value={data.task_counts.done}
@@ -514,6 +517,13 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
                 name="Hechas"
                 stackId="stack"
                 fill={CHART.stackDone}
+                maxBarSize={24}
+              />
+              <Bar
+                dataKey="validacion"
+                name="Validación"
+                stackId="stack"
+                fill="#a78bfa"
                 maxBarSize={24}
               />
               <Bar

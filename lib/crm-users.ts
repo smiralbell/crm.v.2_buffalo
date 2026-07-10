@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 
-export type CrmRole = 'admin' | 'developer'
+export type CrmRole = 'admin' | 'developer' | 'comercial'
 
 export interface CrmUserRow {
   id: number
@@ -65,6 +65,15 @@ export async function findCrmUserById(id: number): Promise<CrmUserRow | null> {
   } catch {
     return null
   }
+}
+
+/** ID válido para FK a crm_users (el admin de .env usa id 0 y no está en la tabla). */
+export async function resolveCrmUserFkId(
+  userId: number | null | undefined
+): Promise<number | null> {
+  if (!userId || userId <= 0) return null
+  const user = await findCrmUserById(userId)
+  return user?.id ?? null
 }
 
 export async function listCrmUsers(): Promise<CrmUserPublic[]> {

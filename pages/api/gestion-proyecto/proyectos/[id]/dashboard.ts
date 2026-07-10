@@ -114,7 +114,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
         taskRows.map((t) => ({
           id: t.id,
-          status: t.status as 'pending' | 'in_progress' | 'done',
+          status: t.status as 'pending' | 'in_progress' | 'buffalo_validation' | 'done',
           priority: t.priority as 'low' | 'medium' | 'high',
           assignee: t.assignee,
           estimated_hours: t.estimated_hours,

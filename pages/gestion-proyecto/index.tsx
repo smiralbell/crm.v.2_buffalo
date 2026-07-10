@@ -89,7 +89,10 @@ export default function GestionProyectoPage() {
               const clientName = isAssignment
                 ? 'Asignación interna'
                 : row.contact?.empresa || row.contact?.nombre || row.contact?.email || 'Sin cliente'
-              const openTasks = row.task_counts.pending + row.task_counts.in_progress
+              const openTasks =
+                row.task_counts.pending +
+                row.task_counts.in_progress +
+                (row.task_counts.buffalo_validation ?? 0)
               const assignmentStatusLabel: Record<string, string> = {
                 pending: 'Pendiente',
                 in_progress: 'En curso',

@@ -11,16 +11,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { AlertTriangle, Grip, Paperclip, Plus, Trash2, User } from 'lucide-react'
+import { AlertTriangle, Clock, Grip, Paperclip, Plus, Trash2, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { estimateTaskHours } from '@/lib/gestion-proyecto/dashboard-metrics'
+import {
+  TASK_COLUMNS,
+  TASK_STATUS_LABELS,
+  STALE_DAYS,
+  buildAssigneeColorMap,
+  daysInCurrentColumn,
+  isStaleTask,
+} from '@/lib/gestion-proyecto/task-stale'
 import type { ProjectTask, TaskPriority, TaskStatus } from '@/lib/gestion-proyecto/types'
-
-const COLUMNS: { id: TaskStatus; label: string }[] = [
-  { id: 'pending', label: 'Pendiente' },
-  { id: 'in_progress', label: 'En curso' },
-  { id: 'done', label: 'Hecho' },
-]
 
 const PRIORITIES: { id: TaskPriority; label: string; className: string }[] = [
   { id: 'low', label: 'Baja', className: 'bg-slate-100 text-slate-700 border-slate-200' },
@@ -56,17 +58,25 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
   const [creating, setCreating] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ProjectTask | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [staleActionId, setStaleActionId] = useState<string | null>(null)
+
+  const assigneeColors = useMemo(
+    () => buildAssigneeColorMap(tasks, teamMembers),
+    [tasks, teamMembers]
+  )
+  const multipleAssignees = assigneeColors.size > 1
 
   const grouped = useMemo(() => {
     const map: Record<TaskStatus, ProjectTask[]> = {
       pending: [],
       in_progress: [],
+      buffalo_validation: [],
       done: [],
     }
     for (const task of tasks) {
       map[task.status].push(task)
     }
-    for (const col of COLUMNS) {
+    for (const col of TASK_COLUMNS) {
       map[col.id].sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at))
     }
     return map
@@ -177,8 +187,17 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
     }
 
     const prev = tasks
+    const now = new Date().toISOString()
     const optimistic = tasks.map((t) =>
-      t.id === draggedTask.id ? { ...t, status: targetStatus } : t
+      t.id === draggedTask.id
+        ? {
+            ...t,
+            status: targetStatus,
+            status_changed_at: now,
+            stale_notice_active: false,
+            stale_extension_until: null,
+          }
+        : t
     )
     onChange(optimistic)
     const moved = draggedTask
@@ -232,12 +251,45 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
     }
   }
 
-  const columnLabel = (status: TaskStatus) =>
-    COLUMNS.find((c) => c.id === status)?.label || status
+  const patchTaskMeta = async (taskId: string, body: Record<string, unknown>) => {
+    setStaleActionId(taskId)
+    try {
+      const res = await fetch(`/api/gestion-proyecto/proyectos/${projectId}/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo actualizar')
+      onChange(tasks.map((t) => (t.id === taskId ? { ...t, ...data, attachments: t.attachments } : t)))
+      if (viewTask?.id === taskId) {
+        setViewTask((v) => (v ? { ...v, ...data, attachments: v.attachments } : v))
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al actualizar')
+    } finally {
+      setStaleActionId(null)
+    }
+  }
+
+  const columnLabel = (status: TaskStatus) => TASK_STATUS_LABELS[status] || status
+
+  const getCardClassName = (task: ProjectTask, stale: boolean) => {
+    if (task.status === 'done') {
+      return 'border-emerald-300 bg-emerald-50/90 hover:border-emerald-400 hover:shadow-md'
+    }
+    if (stale) {
+      return 'border-red-400 bg-red-50/95 hover:border-red-500 ring-1 ring-red-200/80'
+    }
+    if (task.status === 'buffalo_validation') {
+      return 'border-violet-300 bg-violet-50/60 hover:border-violet-400 hover:shadow-md'
+    }
+    return 'border-gray-200 bg-white hover:shadow-md hover:border-gray-300'
+  }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3 min-w-0">
-      {COLUMNS.map((column) => {
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 min-w-0">
+      {TASK_COLUMNS.map((column) => {
         const columnTasks = grouped[column.id]
         const isOver = draggedOver === column.id
 
@@ -282,6 +334,15 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
               )}
               {columnTasks.map((task) => {
                 const isDragging = draggedTask?.id === task.id
+                const stale = isStaleTask(task)
+                const daysInColumn = daysInCurrentColumn(task)
+                const assigneeColor = task.assignee ? assigneeColors.get(task.assignee) : undefined
+                const cardTint =
+                  multipleAssignees && assigneeColor
+                    ? { borderLeftWidth: 4, borderLeftColor: assigneeColor }
+                    : undefined
+                const isActing = staleActionId === task.id
+
                 return (
                   <div
                     key={task.id}
@@ -295,12 +356,32 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
                         setViewTask(task)
                       }
                     }}
+                    style={cardTint}
                     className={cn(
-                      'rounded-xl border border-gray-200 bg-white p-3 shadow-sm h-[148px] flex flex-col overflow-hidden',
-                      'hover:shadow-md hover:border-gray-300 transition-all duration-200 cursor-pointer',
+                      'rounded-xl border p-3 shadow-sm min-h-[148px] flex flex-col overflow-hidden transition-all duration-200 cursor-pointer',
+                      getCardClassName(task, stale),
                       isDragging && 'opacity-40 scale-[0.98]'
                     )}
                   >
+                    {task.stale_notice_active && (
+                      <div
+                        className="mb-2 -mx-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <p className="text-[10px] leading-tight text-amber-900 font-medium">
+                          Aviso: extensión solicitada. Confirma que sigues en desarrollo.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={isActing}
+                          onClick={() => patchTaskMeta(task.id, { acknowledge_stale: true })}
+                          className="mt-1 text-[10px] font-semibold text-amber-800 underline hover:text-amber-950 disabled:opacity-50"
+                        >
+                          Sigo en desarrollo
+                        </button>
+                      </div>
+                    )}
+
                     <div className="flex items-start gap-2 min-h-0 flex-1 overflow-hidden">
                       <div
                         draggable
@@ -318,7 +399,12 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
                       </div>
                       <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
                         <div className="flex items-start justify-between gap-2 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 leading-snug line-clamp-2 break-all min-w-0">
+                          <p
+                            className={cn(
+                              'text-sm font-medium leading-snug line-clamp-2 break-all min-w-0',
+                              task.status === 'done' ? 'text-emerald-900' : 'text-gray-900'
+                            )}
+                          >
                             {task.title}
                           </p>
                           <button
@@ -343,7 +429,14 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
                             {PRIORITIES.find((p) => p.id === task.priority)?.label}
                           </Badge>
                           {task.assignee && (
-                            <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-200 max-w-full truncate">
+                            <span
+                              className="inline-flex items-center gap-1 text-xs text-gray-600 px-2 py-0.5 rounded-full border border-gray-200 max-w-full truncate"
+                              style={
+                                multipleAssignees && assigneeColor
+                                  ? { backgroundColor: `${assigneeColor}18`, borderColor: `${assigneeColor}55` }
+                                  : { backgroundColor: 'rgb(249 250 251)' }
+                              }
+                            >
                               <User className="h-3 w-3 shrink-0" />
                               <span className="truncate">{task.assignee}</span>
                             </span>
@@ -357,6 +450,26 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
                         </div>
                       </div>
                     </div>
+
+                    {stale && task.status !== 'done' && !task.stale_notice_active && (
+                      <div
+                        className="mt-2 pt-2 border-t border-red-200/80 flex items-center justify-between gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-700">
+                          <Clock className="h-3 w-3" />
+                          {daysInColumn}d sin mover ({'>'}={STALE_DAYS}d)
+                        </span>
+                        <button
+                          type="button"
+                          disabled={isActing}
+                          onClick={() => patchTaskMeta(task.id, { extend_stale: true })}
+                          className="text-[10px] font-semibold text-red-800 bg-red-100 hover:bg-red-200 px-2 py-0.5 rounded-md disabled:opacity-50"
+                        >
+                          +10 días
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               })}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
@@ -9,9 +9,11 @@ import { Button } from '@/components/ui/button'
 import {
   RefreshCw, ChevronDown, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react'
-import ColdCallingTab from '@/components/ColdCallingTab'
 import EmailOutreachTab from '@/components/EmailOutreachTab'
 import WebMarketingTab from '@/components/WebMarketingTab'
+import ColdCallingDashboard from '@/components/coldcall/ColdCallingDashboard'
+import ColdCallingCampanasTab from '@/components/ColdCallingCampanasTab'
+import { cn } from '@/lib/utils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -179,15 +181,21 @@ const TABS = [
   { id: 'global',      label: 'Métricas Globales' },
   { id: 'web',         label: 'Web' },
   { id: 'email',       label: 'Email Outreach' },
-  { id: 'coldcalling', label: 'Cold Calling' },
+  { id: 'coldcalling', label: 'Cold Calling', hasSubmenu: true },
   { id: 'meta',        label: 'Meta Ads' },
   { id: 'google',      label: 'Google Ads' },
-]
+] as const
+
+const COLD_CALLING_SECTIONS = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'campanas', label: 'Campañas' },
+] as const
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 const VALID_TABS = ['global', 'web', 'email', 'coldcalling', 'meta', 'google'] as const
 type TabId = typeof VALID_TABS[number]
+type ColdCallingSection = typeof COLD_CALLING_SECTIONS[number]['id']
 
 function resolveTab(queryTab: string | string[] | undefined): TabId {
   const t = Array.isArray(queryTab) ? queryTab[0] : queryTab
@@ -195,20 +203,36 @@ function resolveTab(queryTab: string | string[] | undefined): TabId {
   return VALID_TABS.includes(t as TabId) ? (t as TabId) : 'global'
 }
 
+function resolveColdCallingSection(
+  queryCc: string | string[] | undefined
+): ColdCallingSection {
+  const cc = Array.isArray(queryCc) ? queryCc[0] : queryCc
+  return cc === 'campanas' ? 'campanas' : 'dashboard'
+}
+
 export default function MarketingPage() {
   const router = useRouter()
   const tabFromUrl = resolveTab(router.query.tab)
+  const ccFromUrl = resolveColdCallingSection(router.query.cc)
   const chatSectionOpen =
     router.query.section === 'chat' || router.query.tab === 'chat'
   const [tab, setTab] = useState<TabId>(tabFromUrl)
+  const [ccSection, setCcSection] = useState<ColdCallingSection>(ccFromUrl)
+  const [ccHover, setCcHover] = useState(false)
+  const [ccMenuPos, setCcMenuPos] = useState<{ top: number; left: number } | null>(null)
+  const ccTabRef = useRef<HTMLDivElement>(null)
+  const ccCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [data, setData] = useState<MarketingData | null>(null)
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState('')
 
-  // Sync tab with URL param
   useEffect(() => {
     if (tabFromUrl !== tab) setTab(tabFromUrl)
   }, [tabFromUrl])
+
+  useEffect(() => {
+    if (ccFromUrl !== ccSection) setCcSection(ccFromUrl)
+  }, [ccFromUrl])
 
   const load = useCallback(async (p?: string) => {
     setLoading(true)
@@ -238,23 +262,89 @@ export default function MarketingPage() {
 
   const emailMetric = data?.metrics.find(m => m.channel === 'email_outreach')
 
+  const goToTab = (tabId: TabId, cc?: ColdCallingSection) => {
+    setTab(tabId)
+    if (tabId === 'coldcalling') {
+      const section = cc || ccSection
+      setCcSection(section)
+      const query: Record<string, string> = { tab: tabId }
+      if (section === 'campanas') query.cc = 'campanas'
+      router.push({ pathname: '/marketing', query }, undefined, { shallow: true })
+      return
+    }
+    router.push({ pathname: '/marketing', query: { tab: tabId } }, undefined, { shallow: true })
+  }
+
+  const goToColdCalling = (section: ColdCallingSection) => {
+    if (ccCloseTimer.current) {
+      clearTimeout(ccCloseTimer.current)
+      ccCloseTimer.current = null
+    }
+    setCcHover(false)
+    setCcMenuPos(null)
+    goToTab('coldcalling', section)
+  }
+
+  const openCcMenu = () => {
+    if (ccCloseTimer.current) {
+      clearTimeout(ccCloseTimer.current)
+      ccCloseTimer.current = null
+    }
+    const rect = ccTabRef.current?.getBoundingClientRect()
+    if (rect) {
+      setCcMenuPos({ top: rect.bottom + 2, left: rect.left })
+    }
+    setCcHover(true)
+  }
+
+  const closeCcMenu = () => {
+    ccCloseTimer.current = setTimeout(() => {
+      setCcHover(false)
+      setCcMenuPos(null)
+    }, 150)
+  }
+
   return (
     <Layout>
       <div className="space-y-6 max-w-6xl mx-auto">
 
         {/* Toolbar: tabs centered + period controls */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-1 justify-center overflow-x-auto border-b border-gray-200 lg:border-b-0 lg:pb-0">
-            <div className="flex gap-0">
+          <div className="flex flex-1 justify-center border-b border-gray-200 lg:border-b-0 lg:pb-0">
+            <div className="flex gap-0 flex-wrap justify-center">
               {TABS.map(t => {
                 const isActive = tab === t.id
+
+                if ('hasSubmenu' in t && t.hasSubmenu) {
+                  return (
+                    <div
+                      key={t.id}
+                      ref={ccTabRef}
+                      className="relative"
+                      onMouseEnter={openCcMenu}
+                      onMouseLeave={closeCcMenu}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => goToColdCalling('dashboard')}
+                        className={cn(
+                          'whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg inline-flex items-center gap-1',
+                          isActive
+                            ? 'border-gray-900 text-gray-900'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        )}
+                      >
+                        {t.label}
+                        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                      </button>
+                    </div>
+                  )
+                }
+
                 return (
                   <button
                     key={t.id}
-                    onClick={() => {
-                      setTab(t.id as typeof tab)
-                      router.push({ pathname: '/marketing', query: { tab: t.id } }, undefined, { shallow: true })
-                    }}
+                    onClick={() => goToTab(t.id)}
                     className={`whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg ${
                       isActive
                         ? 'border-gray-900 text-gray-900'
@@ -564,10 +654,10 @@ export default function MarketingPage() {
           </div>
         )}
 
+
         {/* ── COLD CALLING TAB ─────────────────────────────────────────────── */}
-        {tab === 'coldcalling' && (
-          <ColdCallingTab />
-        )}
+        {tab === 'coldcalling' && ccSection === 'dashboard' && <ColdCallingDashboard />}
+        {tab === 'coldcalling' && ccSection === 'campanas' && <ColdCallingCampanasTab />}
 
         {/* ── META ADS TAB ─────────────────────────────────────────────────── */}
         {!loading && data && tab === 'meta' && (
@@ -580,6 +670,39 @@ export default function MarketingPage() {
         )}
 
       </div>
+
+      {ccHover && ccMenuPos && (
+        <div
+          className="fixed z-[200] min-w-[160px] rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl"
+          style={{ top: ccMenuPos.top, left: ccMenuPos.left }}
+          onMouseEnter={openCcMenu}
+          onMouseLeave={closeCcMenu}
+        >
+          {COLD_CALLING_SECTIONS.map((section) => {
+            const sectionActive =
+              tab === 'coldcalling' &&
+              (section.id === 'campanas'
+                ? ccSection === 'campanas'
+                : ccSection === 'dashboard')
+
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => goToColdCalling(section.id)}
+                className={cn(
+                  'block w-full text-left px-4 py-2.5 text-sm font-medium transition-colors',
+                  sectionActive
+                    ? 'bg-gray-100 text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                )}
+              >
+                {section.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </Layout>
   )
 }

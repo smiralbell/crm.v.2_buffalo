@@ -8,7 +8,7 @@ const createSchema = z.object({
   name: z.string().min(1, 'El nombre es obligatorio'),
   email: z.string().email('Email inválido'),
   password: z.string().min(8, 'Mínimo 8 caracteres'),
-  role: z.enum(['admin', 'developer']).optional(),
+  role: z.enum(['admin', 'developer', 'comercial']).optional(),
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

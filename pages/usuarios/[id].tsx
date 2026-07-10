@@ -18,6 +18,13 @@ import {
 } from '@/components/ui/dialog'
 import { ArrowLeft, Loader2, Plus, Trash2, FolderKanban, Copy, KeyRound, Eye, EyeOff } from 'lucide-react'
 import type { DeveloperAssignment } from '@/lib/developer/assignments'
+import type { CrmRole } from '@/lib/auth'
+
+const ROLE_LABEL: Record<CrmRole, string> = {
+  admin: 'Admin',
+  developer: 'Developer',
+  comercial: 'Comercial',
+}
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
@@ -47,6 +54,7 @@ export default function UsuarioDetailPage() {
     id: number
     name: string
     email: string
+    role: CrmRole
     active: boolean
   } | null>(null)
   const [stats, setStats] = useState<{
@@ -201,11 +209,16 @@ export default function UsuarioDetailPage() {
           </div>
         ) : user ? (
           <>
+            {(() => {
+              const isDeveloperUser = user.role === 'developer'
+              return (
+                <>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">{user.name}</h1>
                 <p className="text-sm text-gray-500 mt-0.5">{user.email}</p>
-                <div className="mt-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{ROLE_LABEL[user.role] || user.role}</Badge>
                   <Badge variant="secondary" className={user.active ? '' : 'opacity-60'}>
                     {user.active ? 'Activo' : 'Inactivo'}
                   </Badge>
@@ -215,10 +228,12 @@ export default function UsuarioDetailPage() {
                 <Button variant="outline" className="rounded-xl" onClick={toggleActive}>
                   {user.active ? 'Desactivar' : 'Activar'}
                 </Button>
-                <Button className="gap-2 rounded-xl" onClick={() => setAssignOpen(true)}>
-                  <Plus className="h-4 w-4" />
-                  Nueva asignación
-                </Button>
+                {isDeveloperUser && (
+                  <Button className="gap-2 rounded-xl" onClick={() => setAssignOpen(true)}>
+                    <Plus className="h-4 w-4" />
+                    Nueva asignación
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -298,7 +313,7 @@ export default function UsuarioDetailPage() {
               </div>
             )}
 
-            {stats && (
+            {stats && isDeveloperUser && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
                   { label: 'Proyectos', value: stats.projects_count },
@@ -317,6 +332,7 @@ export default function UsuarioDetailPage() {
               </div>
             )}
 
+            {isDeveloperUser && (
             <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100">
                 <h2 className="text-sm font-semibold text-gray-900">Asignaciones puntuales</h2>
@@ -359,7 +375,9 @@ export default function UsuarioDetailPage() {
                 </ul>
               )}
             </div>
+            )}
 
+            {isDeveloperUser && (
             <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100">
                 <h2 className="text-sm font-semibold text-gray-900">Proyectos asignados</h2>
@@ -387,6 +405,16 @@ export default function UsuarioDetailPage() {
                 </ul>
               )}
             </div>
+            )}
+
+            {!isDeveloperUser && user.role === 'comercial' && (
+              <div className="rounded-2xl border border-gray-200 bg-white px-5 py-4 text-sm text-gray-600">
+                Los comerciales acceden al dashboard de cold calling, campañas y facturas propias desde su panel lateral.
+              </div>
+            )}
+                </>
+              )
+            })()}
           </>
         ) : null}
       </div>

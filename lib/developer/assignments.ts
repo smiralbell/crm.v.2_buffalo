@@ -270,7 +270,7 @@ export async function getUserWorkStats(userId: number): Promise<UserWorkStats> {
       FROM project_dev_tasks t
       INNER JOIN crm_user_projects up ON up.project_id = t.project_id
       WHERE up.user_id = ${userId}
-        AND t.status IN ('pending', 'in_progress')
+        AND t.status IN ('pending', 'in_progress', 'buffalo_validation')
     `
     stats.open_tasks_count = Number(taskRows[0]?.count ?? 0)
   } catch {
