@@ -3,18 +3,18 @@ import { buildDedupeKey } from './apollo-csv'
 /** Variables del sistema que el usuario relaciona con columnas del CSV */
 export const INTERNAL_FIELDS = [
   { key: 'nombre', label: 'Nombre', required: true },
-  { key: 'apellidos', label: 'Apellidos' },
-  { key: 'denominacion_social', label: 'Denominación social' },
+  { key: 'apellidos', label: 'Apellidos', required: false },
+  { key: 'denominacion_social', label: 'Denominación social', required: false },
   { key: 'telefono', label: 'Teléfono', required: true },
-  { key: 'cif', label: 'CIF' },
-  { key: 'correo', label: 'Correo' },
-  { key: 'direccion', label: 'Dirección' },
-  { key: 'web', label: 'Web' },
-  { key: 'posicion', label: 'Posición / Cargo' },
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'ciudad', label: 'Ciudad' },
-  { key: 'sector', label: 'Sector' },
-  { key: 'do_not_call', label: 'No llamar' },
+  { key: 'cif', label: 'CIF', required: false },
+  { key: 'correo', label: 'Correo', required: false },
+  { key: 'direccion', label: 'Dirección', required: false },
+  { key: 'web', label: 'Web', required: false },
+  { key: 'posicion', label: 'Posición / Cargo', required: false },
+  { key: 'linkedin', label: 'LinkedIn', required: false },
+  { key: 'ciudad', label: 'Ciudad', required: false },
+  { key: 'sector', label: 'Sector', required: false },
+  { key: 'do_not_call', label: 'No llamar', required: false },
 ] as const
 
 export type InternalFieldKey = (typeof INTERNAL_FIELDS)[number]['key']
