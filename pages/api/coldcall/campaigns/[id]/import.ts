@@ -8,13 +8,15 @@ import {
   validateMapping,
 } from '@/lib/coldcall/field-mapping'
 import { getCampaignById, importLeadsToCampaign } from '@/lib/coldcall/campaigns'
+import { parseCampaignId, requireCampaignAccess } from '@/lib/coldcall/api-access'
 import type { CsvLeadInput } from '@/lib/coldcall/types'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const user = await requireColdCallAPI(req, res)
-    const id = parseInt(String(req.query.id), 10)
-    if (Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido' })
+    const id = parseCampaignId(req)
+    if (id == null) return res.status(400).json({ error: 'ID inválido' })
+    if (!(await requireCampaignAccess(req, res, user, id))) return
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 

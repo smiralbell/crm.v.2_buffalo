@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireColdCallAPI } from '@/lib/auth'
 import { resolveCrmUserFkId } from '@/lib/crm-users'
 import { createCampaign, listCampaigns } from '@/lib/coldcall/campaigns'
+import { getColdCallScope } from '@/lib/coldcall/scope'
 
 const createSchema = z.object({
   name: z.string().min(1, 'Nombre obligatorio'),
@@ -13,16 +14,20 @@ const createSchema = z.object({
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const user = await requireColdCallAPI(req, res)
+    const scope = getColdCallScope(user)
 
     if (req.method === 'GET') {
-      const campaigns = await listCampaigns()
+      const campaigns = await listCampaigns(scope)
       return res.status(200).json({ campaigns })
     }
 
     if (req.method === 'POST') {
       const data = createSchema.parse(req.body)
       const createdById = await resolveCrmUserFkId(user.id)
-      const assignedId = await resolveCrmUserFkId(data.assigned_to_user_id)
+      const assignedId =
+        user.role === 'comercial'
+          ? createdById
+          : await resolveCrmUserFkId(data.assigned_to_user_id)
       const campaign = await createCampaign({
         name: data.name,
         description: data.description,

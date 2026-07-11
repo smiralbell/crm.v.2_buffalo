@@ -1,10 +1,13 @@
 import { prisma } from '@/lib/prisma'
 import type { ColumnMapping } from './field-mapping'
 import { applyColumnMapping, normalizeStoredMapping } from './field-mapping'
+import type { ColdCallScope } from './scope'
+import { scopeOwnerUserId } from './scope'
 import type { ColdCallCampaign, CsvLeadInput, ImportBatchResult } from './types'
 import { LEAD_STAGES } from './types'
 
-export async function listCampaigns(): Promise<ColdCallCampaign[]> {
+export async function listCampaigns(scope: ColdCallScope = { mode: 'all' }): Promise<ColdCallCampaign[]> {
+  const ownerUserId = scopeOwnerUserId(scope)
   const rows = await prisma.$queryRaw<
     {
       id: number
@@ -47,6 +50,7 @@ export async function listCampaigns(): Promise<ColdCallCampaign[]> {
     FROM coldcall_campaigns c
     LEFT JOIN crm_users u ON u.id = c.assigned_to_user_id
     LEFT JOIN coldcall_prospects p ON p.campaign_id = c.id
+    WHERE (${ownerUserId}::int IS NULL OR c.assigned_to_user_id = ${ownerUserId} OR c.created_by_user_id = ${ownerUserId})
     GROUP BY c.id, u.name
     ORDER BY c.created_at DESC
   `

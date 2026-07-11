@@ -46,7 +46,10 @@ export async function applyCallOutcome(input: {
 
   if (input.outcome === 'sin_respuesta' || input.outcome === 'buzon_voz') {
     callAttempts += 1
-    if (callAttempts < 3) {
+    if (input.retryAt) {
+      nextRetryAt = input.retryAt
+      stage = 'en_cola'
+    } else if (callAttempts < 3) {
       const later = new Date()
       later.setHours(later.getHours() + 4)
       nextRetryAt = later

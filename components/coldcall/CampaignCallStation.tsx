@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -7,6 +8,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { stageLabel, outcomeLabel } from '@/lib/coldcall/lead-table'
 import type { ScriptBox } from '@/lib/coldcall/script-parser'
 import {
+  defaultWhatsAppTemplate,
+  openWhatsApp,
+} from '@/lib/coldcall/whatsapp'
+import {
   ChevronLeft,
   ChevronRight,
   Home,
@@ -14,14 +19,26 @@ import {
   Phone,
   ThumbsUp,
   ThumbsDown,
-  CalendarPlus,
   Clock,
   PhoneMissed,
-  Voicemail,
   Ban,
   Check,
   History,
+  CalendarPlus,
+  CalendarClock,
+  MessageCircle,
+  XCircle,
+  type LucideIcon,
 } from 'lucide-react'
+import { toDatetimeLocalValue } from '@/lib/coldcall/cal-embed'
+import type { CalBookingPayload } from '@/components/coldcall/CalComMeetingEmbed'
+
+const CalComMeetingEmbed = dynamic(() => import('@/components/coldcall/CalComMeetingEmbed'), {
+  ssr: false,
+  loading: () => (
+    <div className="py-8 text-center text-sm text-gray-400">Cargando calendario...</div>
+  ),
+})
 
 interface CallLead {
   id: number
@@ -66,14 +83,20 @@ function formatCallDate(iso: string): string {
   }
 }
 
-const RESULTADOS = [
-  { id: 'interesado', label: 'Interesado', icon: ThumbsUp },
-  { id: 'reunion_agendada', label: 'Reunión', icon: CalendarPlus },
-  { id: 'llamar_tarde', label: 'Llamar más tarde', icon: Clock },
-  { id: 'sin_respuesta', label: 'Sin respuesta', icon: PhoneMissed },
-  { id: 'buzon_voz', label: 'Buzón', icon: Voicemail },
-  { id: 'no_interesado', label: 'No interesado', icon: ThumbsDown },
-  { id: 'no_contactar', label: 'No contactar', icon: Ban },
+type BaseOutcome = 'interesado' | 'llamar_tarde' | 'sin_respuesta' | 'no_interesado' | 'no_contactar'
+type InteresadoFollowUp = 'reunion' | 'sin_reunion'
+
+const RESULTADOS: {
+  id: BaseOutcome
+  label: string
+  icon: LucideIcon
+  hint: string
+}[] = [
+  { id: 'interesado', label: 'Interesado', icon: ThumbsUp, hint: 'Seguimiento y posible reunión' },
+  { id: 'llamar_tarde', label: 'Llamar más tarde', icon: Clock, hint: 'Programar callback' },
+  { id: 'sin_respuesta', label: 'Sin respuesta', icon: PhoneMissed, hint: 'Apuntar próximo intento' },
+  { id: 'no_interesado', label: 'No interesado', icon: ThumbsDown, hint: 'Mensaje de cierre opcional' },
+  { id: 'no_contactar', label: 'No contactar', icon: Ban, hint: 'Solo nota interna' },
 ]
 
 function leadFieldCards(lead: CallLead): { label: string; value: string }[] {
@@ -107,6 +130,54 @@ function leadFieldCards(lead: CallLead): { label: string; value: string }[] {
   return cards
 }
 
+interface WhatsAppPanelProps {
+  lead: CallLead
+  message: string
+  onChange: (value: string) => void
+  onSend: () => void
+  sent: boolean
+}
+
+function WhatsAppPanel({ lead, message, onChange, onSend, sent }: WhatsAppPanelProps) {
+  const hasPhone = Boolean(lead.telefono?.trim())
+
+  return (
+    <div className="rounded-xl border border-green-100 bg-green-50/50 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-green-900 flex items-center gap-1.5">
+          <MessageCircle className="h-3.5 w-3.5" />
+          Mensaje por WhatsApp
+        </p>
+        {sent && (
+          <Badge variant="secondary" className="text-[10px] bg-green-100 text-green-800">
+            Abierto
+          </Badge>
+        )}
+      </div>
+      <Textarea
+        rows={5}
+        value={message}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-lg resize-none text-sm bg-white border-green-100"
+        placeholder="Escribe o edita la plantilla..."
+      />
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full rounded-lg border-green-200 text-green-900 hover:bg-green-100"
+        disabled={!hasPhone || !message.trim()}
+        onClick={onSend}
+      >
+        <MessageCircle className="h-4 w-4 mr-2" />
+        Enviar por WhatsApp
+      </Button>
+      {!hasPhone && (
+        <p className="text-[11px] text-amber-700">Este lead no tiene teléfono para WhatsApp.</p>
+      )}
+    </div>
+  )
+}
+
 interface CampaignCallStationProps {
   campaignId: string
 }
@@ -126,10 +197,16 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
   const [scriptCa, setScriptCa] = useState<ScriptBox[]>([])
   const [scriptLang, setScriptLang] = useState<'es' | 'ca'>('es')
 
-  const [resultado, setResultado] = useState<string | null>(null)
+  const [resultado, setResultado] = useState<BaseOutcome | null>(null)
+  const [interesadoFollowUp, setInteresadoFollowUp] = useState<InteresadoFollowUp | null>(null)
   const [notas, setNotas] = useState('')
   const [duracion, setDuracion] = useState('')
-  const [reunionFecha, setReunionFecha] = useState('')
+  const [callbackAt, setCallbackAt] = useState('')
+  const [whatsAppMessage, setWhatsAppMessage] = useState('')
+  const [whatsappSent, setWhatsappSent] = useState(false)
+  const [calBooked, setCalBooked] = useState(false)
+  const [calBookingSummary, setCalBookingSummary] = useState('')
+  const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -137,10 +214,16 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
     if (!campaignId) return
     setLoading(true)
     setSaved(false)
+    setSaveError('')
     setResultado(null)
+    setInteresadoFollowUp(null)
     setNotas('')
     setDuracion('')
-    setReunionFecha('')
+    setCallbackAt('')
+    setWhatsAppMessage('')
+    setWhatsappSent(false)
+    setCalBooked(false)
+    setCalBookingSummary('')
 
     const params = leadIdParam ? `?leadId=${leadIdParam}` : ''
     fetch(`/api/coldcall/campaigns/${campaignId}/call-session${params}`)
@@ -171,21 +254,126 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
     })
   }
 
+  const selectResultado = (id: BaseOutcome) => {
+    if (resultado === id) {
+      setResultado(null)
+      setInteresadoFollowUp(null)
+      setWhatsAppMessage('')
+      setWhatsappSent(false)
+      setCallbackAt('')
+      return
+    }
+    setResultado(id)
+    setInteresadoFollowUp(null)
+    setWhatsappSent(false)
+    setCallbackAt('')
+    setCalBooked(false)
+    setCalBookingSummary('')
+    setSaveError('')
+    if (id === 'interesado' && lead) {
+      setWhatsAppMessage(defaultWhatsAppTemplate('interesado', lead))
+    } else if (id === 'no_interesado' && lead) {
+      setWhatsAppMessage(defaultWhatsAppTemplate('no_interesado', lead))
+    } else {
+      setWhatsAppMessage('')
+    }
+  }
+
+  const resolvedResultado = (): string | null => {
+    if (!resultado) return null
+    if (resultado === 'interesado' && interesadoFollowUp === 'reunion') return 'reunion_agendada'
+    return resultado
+  }
+
+  const handleCalBooked = (booking: CalBookingPayload) => {
+    setCallbackAt(toDatetimeLocalValue(booking.startTime))
+    setCalBooked(true)
+    const when = new Date(booking.startTime).toLocaleString('es-ES', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    })
+    const summary = booking.title ? `${booking.title} · ${when}` : when
+    setCalBookingSummary(summary)
+    const lines = [
+      `Reunión agendada en Cal.com: ${when}`,
+      booking.title ? `Evento: ${booking.title}` : null,
+      booking.uid ? `Reserva: ${booking.uid}` : null,
+      booking.videoCallUrl ? `Enlace: ${booking.videoCallUrl}` : null,
+    ].filter(Boolean) as string[]
+    setNotas((prev) => {
+      const block = lines.join('\n')
+      return prev.trim() ? `${prev.trim()}\n\n${block}` : block
+    })
+    setSaveError('')
+  }
+
+  const canSave = (): boolean => {
+    if (!resultado) return false
+    if (resultado === 'interesado' && !interesadoFollowUp) return false
+    if (resultado === 'interesado' && interesadoFollowUp === 'reunion' && !calBooked) {
+      return false
+    }
+    if (
+      (resultado === 'llamar_tarde' || resultado === 'sin_respuesta') &&
+      !callbackAt
+    ) {
+      return false
+    }
+    return true
+  }
+
+  const handleWhatsApp = () => {
+    if (!lead) return
+    const ok = openWhatsApp(lead.telefono, whatsAppMessage)
+    if (!ok) {
+      setSaveError('No hay un teléfono válido para abrir WhatsApp.')
+      return
+    }
+    setWhatsappSent(true)
+    setSaveError('')
+  }
+
   const registrar = async () => {
     if (!lead || !resultado) return
+    const finalResultado = resolvedResultado()
+    if (!finalResultado) return
+
+    if (resultado === 'interesado' && !interesadoFollowUp) {
+      setSaveError('Indica si quiere reunión o no.')
+      return
+    }
+    if (resultado === 'interesado' && interesadoFollowUp === 'reunion' && !calBooked) {
+      setSaveError('Agenda la reunión en el calendario de Cal.com antes de guardar.')
+      return
+    }
+    if (
+      (resultado === 'llamar_tarde' || resultado === 'sin_respuesta') &&
+      !callbackAt
+    ) {
+      setSaveError('Indica la fecha y hora del callback.')
+      return
+    }
+
     setSaving(true)
-    await fetch('/api/coldcall/calls', {
+    setSaveError('')
+    const res = await fetch('/api/coldcall/calls', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prospect_id: lead.id,
-        resultado,
+        resultado: finalResultado,
         notas,
         duracion: duracion ? parseInt(duracion, 10) * 60 : null,
-        reunion_fecha: reunionFecha || null,
+        reunion_fecha: callbackAt || null,
+        whatsapp_enviado: whatsappSent,
       }),
     })
     setSaving(false)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setSaveError(data.error || 'No se pudo guardar la llamada.')
+      return
+    }
     setSaved(true)
     if (nextId) {
       setTimeout(() => goLead(nextId), 800)
@@ -281,7 +469,12 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
           {/* Acciones + Guión */}
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
-              <h2 className="text-sm font-semibold text-gray-900">Acciones de llamada</h2>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Resultado de la llamada</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Elige un estado y completa las acciones debajo.
+                </p>
+              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 {RESULTADOS.map((r) => {
@@ -291,8 +484,8 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
                     <button
                       key={r.id}
                       type="button"
-                      onClick={() => setResultado(r.id === resultado ? null : r.id)}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
+                      onClick={() => selectResultado(r.id)}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all text-left ${
                         active
                           ? 'bg-gray-900 text-white border-gray-900'
                           : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
@@ -305,6 +498,131 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
                 })}
               </div>
 
+              {resultado && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Acciones
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {RESULTADOS.find((r) => r.id === resultado)?.hint}
+                    </p>
+                  </div>
+
+                  {resultado === 'interesado' && (
+                    <div className="space-y-3">
+                      <p className="text-sm text-gray-700">¿Quiere reunión?</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInteresadoFollowUp('reunion')
+                            setCallbackAt('')
+                            setCalBooked(false)
+                            setCalBookingSummary('')
+                          }}
+                          className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
+                            interesadoFollowUp === 'reunion'
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                          }`}
+                        >
+                          <CalendarPlus className="h-4 w-4" />
+                          Quiere reunión
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInteresadoFollowUp('sin_reunion')
+                            setCallbackAt('')
+                            setCalBooked(false)
+                            setCalBookingSummary('')
+                          }}
+                          className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
+                            interesadoFollowUp === 'sin_reunion'
+                              ? 'bg-gray-800 text-white border-gray-800'
+                              : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                          }`}
+                        >
+                          <XCircle className="h-4 w-4" />
+                          No quiere reunión
+                        </button>
+                      </div>
+                      {interesadoFollowUp === 'reunion' && (
+                        <div className="space-y-2">
+                          <CalComMeetingEmbed
+                            key={`cal-${lead.id}`}
+                            leadName={lead.nombre}
+                            leadEmail={lead.email}
+                            onBooked={handleCalBooked}
+                          />
+                          {calBooked && (
+                            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 flex items-center gap-2">
+                              <Check className="h-3.5 w-3.5 shrink-0" />
+                              Reunión confirmada: {calBookingSummary}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <WhatsAppPanel
+                        lead={lead}
+                        message={whatsAppMessage}
+                        onChange={setWhatsAppMessage}
+                        onSend={handleWhatsApp}
+                        sent={whatsappSent}
+                      />
+                    </div>
+                  )}
+
+                  {resultado === 'no_interesado' && (
+                    <WhatsAppPanel
+                      lead={lead}
+                      message={whatsAppMessage}
+                      onChange={setWhatsAppMessage}
+                      onSend={handleWhatsApp}
+                      sent={whatsappSent}
+                    />
+                  )}
+
+                  {(resultado === 'llamar_tarde' || resultado === 'sin_respuesta') && (
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 flex items-center gap-1.5">
+                        <CalendarClock className="h-3.5 w-3.5" />
+                        {resultado === 'llamar_tarde'
+                          ? 'Cuándo volver a llamar *'
+                          : 'Próximo intento de llamada *'}
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={callbackAt}
+                        onChange={(e) => setCallbackAt(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
+                      />
+                    </div>
+                  )}
+
+                  {resultado === 'no_contactar' && (
+                    <p className="text-sm text-gray-600">
+                      El lead quedará marcado como no contactar. Añade una nota abajo si hace falta
+                      contexto.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {resultado && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Nota de la llamada</label>
+                  <Textarea
+                    rows={3}
+                    value={notas}
+                    onChange={(e) => setNotas(e.target.value)}
+                    placeholder="Objeciones, contexto, acuerdos..."
+                    className="rounded-xl resize-none bg-white"
+                  />
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">Duración (min)</label>
@@ -316,33 +634,17 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
                   />
                 </div>
-                {(resultado === 'reunion_agendada' || resultado === 'llamar_tarde') && (
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1 block">Fecha / hora</label>
-                    <input
-                      type="datetime-local"
-                      value={reunionFecha}
-                      onChange={(e) => setReunionFecha(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
-                )}
               </div>
 
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Notas</label>
-                <Textarea
-                  rows={3}
-                  value={notas}
-                  onChange={(e) => setNotas(e.target.value)}
-                  placeholder="Objeciones, próximos pasos..."
-                  className="rounded-xl resize-none"
-                />
-              </div>
+              {saveError && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  {saveError}
+                </div>
+              )}
 
               <Button
                 className="w-full rounded-xl"
-                disabled={!resultado || saving || saved}
+                disabled={!canSave() || saving || saved}
                 onClick={registrar}
               >
                 {saved ? (

@@ -3,13 +3,14 @@ import { requireColdCallAPI } from '@/lib/auth'
 import { parseCsvText } from '@/lib/coldcall/apollo-csv'
 import { guessColumnMapping } from '@/lib/coldcall/field-mapping'
 import { getCampaignById } from '@/lib/coldcall/campaigns'
+import { parseCampaignId, requireCampaignAccess } from '@/lib/coldcall/api-access'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    if (!requireColdCallAPI(req, res)) return
-
-    const id = parseInt(String(req.query.id), 10)
-    if (Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido' })
+    const user = await requireColdCallAPI(req, res)
+    const id = parseCampaignId(req)
+    if (id == null) return res.status(400).json({ error: 'ID inválido' })
+    if (!(await requireCampaignAccess(req, res, user, id))) return
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 

@@ -7,13 +7,14 @@ import {
   getCampaignById,
   saveCampaignMapping,
 } from '@/lib/coldcall/campaigns'
+import { parseCampaignId, requireCampaignAccess } from '@/lib/coldcall/api-access'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    if (!requireColdCallAPI(req, res)) return
-
-    const id = parseInt(String(req.query.id), 10)
-    if (Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido' })
+    const user = await requireColdCallAPI(req, res)
+    const id = parseCampaignId(req)
+    if (id == null) return res.status(400).json({ error: 'ID inválido' })
+    if (!(await requireCampaignAccess(req, res, user, id))) return
 
     const campaign = await getCampaignById(id)
     if (!campaign) return res.status(404).json({ error: 'Campaña no encontrada' })

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireColdCallAPI } from '@/lib/auth'
 import { getCampaignById, saveCampaignScript } from '@/lib/coldcall/campaigns'
+import { parseCampaignId, requireCampaignAccess } from '@/lib/coldcall/api-access'
 import {
   DEFAULT_SCRIPT_MARKDOWN_CA,
   DEFAULT_SCRIPT_MARKDOWN_ES,
@@ -8,10 +9,10 @@ import {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    if (!requireColdCallAPI(req, res)) return
-
-    const id = parseInt(String(req.query.id), 10)
-    if (Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido' })
+    const user = await requireColdCallAPI(req, res)
+    const id = parseCampaignId(req)
+    if (id == null) return res.status(400).json({ error: 'ID inválido' })
+    if (!(await requireCampaignAccess(req, res, user, id))) return
 
     const campaign = await getCampaignById(id)
     if (!campaign) return res.status(404).json({ error: 'Campaña no encontrada' })
@@ -36,6 +37,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(405).json({ error: 'Method not allowed' })
   } catch (error) {
+    if (error instanceof Error && ['Forbidden', 'No session', 'Invalid session'].includes(error.message)) {
+      return
+    }
     console.error('[coldcall/campaigns/[id]/script]', error)
     return res.status(500).json({ error: 'Error al guardar guión' })
   }
