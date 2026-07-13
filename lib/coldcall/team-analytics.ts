@@ -146,9 +146,14 @@ export async function getColdCallTeamDashboard(): Promise<ColdCallTeamDashboardD
     statsMap.set(asNumber(row.user_id), row)
   }
 
-  const allUserIds = new Set<number>([...statsMap.keys(), ...campaignMap.keys(), LEGACY_ADMIN_ID, ...memberDirectory.keys()])
+  const allUserIds = new Set<number>([
+    ...Array.from(statsMap.keys()),
+    ...Array.from(campaignMap.keys()),
+    LEGACY_ADMIN_ID,
+    ...Array.from(memberDirectory.keys()),
+  ])
 
-  const members: TeamMemberStats[] = [...allUserIds]
+  const members: TeamMemberStats[] = Array.from(allUserIds)
     .filter((id) => memberDirectory.has(id) || statsMap.has(id) || campaignMap.has(id))
     .map((userId) => {
       const meta = memberDirectory.get(userId) || { name: `Usuario #${userId}`, role: 'comercial' }
@@ -235,7 +240,7 @@ export async function getColdCallTeamDashboard(): Promise<ColdCallTeamDashboardD
 
   return {
     members,
-    calls_by_day: [...dayMap.values()],
+    calls_by_day: Array.from(dayMap.values()),
     series,
     totals: {
       calls_week: members.reduce((s, m) => s + m.calls_week, 0),
