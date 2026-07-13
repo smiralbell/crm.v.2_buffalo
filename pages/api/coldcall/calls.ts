@@ -3,11 +3,12 @@ import { requireColdCallAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { applyCallOutcome } from '@/lib/coldcall/call-outcomes'
 import { assertProspectAccess, getColdCallScope } from '@/lib/coldcall/scope'
+import { resolveCrmUserFkId } from '@/lib/crm-users'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const user = await requireColdCallAPI(req, res)
-    const scope = getColdCallScope(user)
+    const scope = await getColdCallScope(user)
 
     if (req.method === 'POST') {
       const { prospect_id, duracion, resultado, notas, whatsapp_enviado, email_enviado, reunion_fecha } =
@@ -34,17 +35,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ? new Date(reunion_fecha)
           : null
 
-      const call = await prisma.coldCallCall.create({
-        data: {
-          prospect_id: prospectId,
-          duracion: duracion ? parseInt(duracion, 10) : null,
-          resultado,
-          notas,
-          whatsapp_enviado: !!whatsapp_enviado,
-          email_enviado: !!email_enviado,
-          reunion_fecha: retryAt,
-        },
-      })
+      const createdById = await resolveCrmUserFkId(user.id)
+
+      let callId: number
+      try {
+        const rows = await prisma.$queryRaw<{ id: number }[]>`
+          INSERT INTO coldcall_calls (
+            prospect_id, duracion, resultado, notas, whatsapp_enviado, email_enviado, reunion_fecha, created_by_user_id
+          )
+          VALUES (
+            ${prospectId},
+            ${duracion ? parseInt(duracion, 10) : null},
+            ${resultado},
+            ${notas ?? null},
+            ${!!whatsapp_enviado},
+            ${!!email_enviado},
+            ${retryAt},
+            ${createdById}
+          )
+          RETURNING id
+        `
+        callId = rows[0].id
+      } catch {
+        const call = await prisma.coldCallCall.create({
+          data: {
+            prospect_id: prospectId,
+            duracion: duracion ? parseInt(duracion, 10) : null,
+            resultado,
+            notas,
+            whatsapp_enviado: !!whatsapp_enviado,
+            email_enviado: !!email_enviado,
+            reunion_fecha: retryAt,
+          },
+        })
+        callId = call.id
+      }
+
+      const call = { id: callId }
 
       await applyCallOutcome({
         prospectId,

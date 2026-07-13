@@ -12,7 +12,12 @@ import {
 import EmailOutreachTab from '@/components/EmailOutreachTab'
 import WebMarketingTab from '@/components/WebMarketingTab'
 import ColdCallingDashboard from '@/components/coldcall/ColdCallingDashboard'
+import ColdCallTeamDashboard from '@/components/coldcall/ColdCallTeamDashboard'
 import ColdCallingCampanasTab from '@/components/ColdCallingCampanasTab'
+import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
+import { parseColdCallFilterParam } from '@/lib/coldcall/api-query'
+import type { ColdCallFilter } from '@/lib/coldcall/scope'
+import { useAuth } from '@/components/AuthContext'
 import { cn } from '@/lib/utils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -188,6 +193,7 @@ const TABS = [
 
 const COLD_CALLING_SECTIONS = [
   { id: 'dashboard', label: 'Dashboard' },
+  { id: 'equipo', label: 'Equipo' },
   { id: 'campanas', label: 'Campañas' },
 ] as const
 
@@ -203,17 +209,28 @@ function resolveTab(queryTab: string | string[] | undefined): TabId {
   return VALID_TABS.includes(t as TabId) ? (t as TabId) : 'global'
 }
 
+function resolveColdCallingFilter(
+  queryCcUser: string | string[] | undefined,
+  defaultUserId: number
+): ColdCallFilter {
+  return parseColdCallFilterParam(queryCcUser, defaultUserId)
+}
+
 function resolveColdCallingSection(
   queryCc: string | string[] | undefined
 ): ColdCallingSection {
   const cc = Array.isArray(queryCc) ? queryCc[0] : queryCc
-  return cc === 'campanas' ? 'campanas' : 'dashboard'
+  if (cc === 'campanas') return 'campanas'
+  if (cc === 'equipo') return 'equipo'
+  return 'dashboard'
 }
 
 export default function MarketingPage() {
   const router = useRouter()
+  const { user } = useAuth()
   const tabFromUrl = resolveTab(router.query.tab)
   const ccFromUrl = resolveColdCallingSection(router.query.cc)
+  const ccFilterFromUrl = resolveColdCallingFilter(router.query.ccUser, user?.id ?? 0)
   const chatSectionOpen =
     router.query.section === 'chat' || router.query.tab === 'chat'
   const [tab, setTab] = useState<TabId>(tabFromUrl)
@@ -224,6 +241,9 @@ export default function MarketingPage() {
   const ccCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [data, setData] = useState<MarketingData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [coldCallLoading, setColdCallLoading] = useState(false)
+  const [coldCallReload, setColdCallReload] = useState(0)
+  const [ccFilter, setCcFilter] = useState<ColdCallFilter>(ccFilterFromUrl)
   const [period, setPeriod] = useState('')
 
   useEffect(() => {
@@ -233,6 +253,10 @@ export default function MarketingPage() {
   useEffect(() => {
     if (ccFromUrl !== ccSection) setCcSection(ccFromUrl)
   }, [ccFromUrl])
+
+  useEffect(() => {
+    setCcFilter(ccFilterFromUrl)
+  }, [ccFilterFromUrl])
 
   const load = useCallback(async (p?: string) => {
     setLoading(true)
@@ -269,10 +293,23 @@ export default function MarketingPage() {
       setCcSection(section)
       const query: Record<string, string> = { tab: tabId }
       if (section === 'campanas') query.cc = 'campanas'
+      else if (section === 'equipo') query.cc = 'equipo'
+      else query.cc = 'dashboard'
+      if (ccFilter !== 'team' && ccFilter) query.ccUser = String(ccFilter)
+      if (ccFilter === 'team') query.ccUser = 'team'
       router.push({ pathname: '/marketing', query }, undefined, { shallow: true })
       return
     }
     router.push({ pathname: '/marketing', query: { tab: tabId } }, undefined, { shallow: true })
+  }
+
+  const setColdCallFilter = (filter: ColdCallFilter) => {
+    setCcFilter(filter)
+    const query: Record<string, string> = { tab: 'coldcalling' }
+    if (ccSection === 'campanas') query.cc = 'campanas'
+    else if (ccSection === 'equipo') query.cc = 'equipo'
+    query.ccUser = filter === 'team' ? 'team' : String(filter)
+    router.push({ pathname: '/marketing', query }, undefined, { shallow: true })
   }
 
   const goToColdCalling = (section: ColdCallingSection) => {
@@ -358,23 +395,52 @@ export default function MarketingPage() {
             </div>
           </div>
           <div className="flex items-center justify-center gap-2 shrink-0">
-            {data && data.periods.length > 0 && (
-              <div className="relative">
-                <select
-                  value={period}
-                  onChange={e => handlePeriod(e.target.value)}
-                  className="appearance-none border border-gray-200 rounded-xl px-3 py-2 pr-8 text-sm font-medium bg-white text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-200"
+            {tab === 'coldcalling' ? (
+              ccSection === 'equipo' ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => {
+                    setColdCallLoading(true)
+                    setColdCallReload((n) => n + 1)
+                  }}
+                  disabled={coldCallLoading}
                 >
-                  {data.periods.map(p => (
-                    <option key={p} value={p}>{periodLabel(p)}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
-              </div>
+                  <RefreshCw className={`h-4 w-4 ${coldCallLoading ? 'animate-spin' : ''}`} />
+                </Button>
+              ) : (
+                <ColdCallScopeToolbar
+                  filter={ccFilter}
+                  onFilterChange={setColdCallFilter}
+                  onRefresh={() => {
+                    setColdCallLoading(true)
+                    setColdCallReload((n) => n + 1)
+                  }}
+                  loading={coldCallLoading}
+                />
+              )
+            ) : (
+              <>
+                {data && data.periods.length > 0 && (
+                  <div className="relative">
+                    <select
+                      value={period}
+                      onChange={e => handlePeriod(e.target.value)}
+                      className="appearance-none border border-gray-200 rounded-xl px-3 py-2 pr-8 text-sm font-medium bg-white text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-200"
+                    >
+                      {data.periods.map(p => (
+                        <option key={p} value={p}>{periodLabel(p)}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
+                  </div>
+                )}
+                <Button variant="outline" size="sm" className="rounded-xl" onClick={() => load(period)} disabled={loading}>
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </Button>
+              </>
             )}
-            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => load(period)} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
           </div>
         </div>
 
@@ -656,8 +722,30 @@ export default function MarketingPage() {
 
 
         {/* ── COLD CALLING TAB ─────────────────────────────────────────────── */}
-        {tab === 'coldcalling' && ccSection === 'dashboard' && <ColdCallingDashboard />}
-        {tab === 'coldcalling' && ccSection === 'campanas' && <ColdCallingCampanasTab />}
+        {tab === 'coldcalling' && ccSection === 'equipo' && (
+          <ColdCallTeamDashboard
+            reloadToken={coldCallReload}
+            onLoadingChange={setColdCallLoading}
+          />
+        )}
+        {tab === 'coldcalling' && ccSection === 'dashboard' && (
+          <ColdCallingDashboard
+            filter={ccFilter}
+            onFilterChange={setColdCallFilter}
+            reloadToken={coldCallReload}
+            hideToolbar
+            onLoadingChange={setColdCallLoading}
+          />
+        )}
+        {tab === 'coldcalling' && ccSection === 'campanas' && (
+          <ColdCallingCampanasTab
+            filter={ccFilter}
+            onFilterChange={setColdCallFilter}
+            reloadToken={coldCallReload}
+            hideToolbar
+            onLoadingChange={setColdCallLoading}
+          />
+        )}
 
         {/* ── META ADS TAB ─────────────────────────────────────────────────── */}
         {!loading && data && tab === 'meta' && (
@@ -679,11 +767,7 @@ export default function MarketingPage() {
           onMouseLeave={closeCcMenu}
         >
           {COLD_CALLING_SECTIONS.map((section) => {
-            const sectionActive =
-              tab === 'coldcalling' &&
-              (section.id === 'campanas'
-                ? ccSection === 'campanas'
-                : ccSection === 'dashboard')
+            const sectionActive = tab === 'coldcalling' && ccSection === section.id
 
             return (
               <button

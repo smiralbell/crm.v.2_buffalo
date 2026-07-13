@@ -9,6 +9,10 @@ import { Button } from '@/components/ui/button'
 import { outcomeLabel } from '@/lib/coldcall/lead-table'
 import type { ColdCallDashboardData } from '@/lib/coldcall/dashboard-analytics'
 import ColdCallAlertsPanel from '@/components/coldcall/dashboard/ColdCallAlertsPanel'
+import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
+import { coldCallScopeQuery } from '@/lib/coldcall/api-query'
+import type { ColdCallFilter } from '@/lib/coldcall/scope'
+import { useAuth } from '@/components/AuthContext'
 import {
   ArrowRight,
   Bell,
@@ -87,24 +91,50 @@ function fmtDuration(sec: number | null): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-export default function ColdCallingDashboard() {
+export default function ColdCallingDashboard({
+  filter: filterProp,
+  onFilterChange,
+  reloadToken = 0,
+  hideToolbar = false,
+  onLoadingChange,
+}: {
+  filter?: ColdCallFilter
+  onFilterChange?: (filter: ColdCallFilter) => void
+  reloadToken?: number
+  hideToolbar?: boolean
+  onLoadingChange?: (loading: boolean) => void
+}) {
+  const { user } = useAuth()
+  const defaultFilter: ColdCallFilter = user?.id ?? 'team'
   const [data, setData] = useState<ColdCallDashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [localFilter, setLocalFilter] = useState<ColdCallFilter>(filterProp ?? defaultFilter)
+
+  const effectiveFilter = onFilterChange ? (filterProp ?? defaultFilter) : localFilter
+  const setFilter = onFilterChange ?? setLocalFilter
+
+  useEffect(() => {
+    if (filterProp !== undefined) setLocalFilter(filterProp)
+  }, [filterProp])
 
   const load = useCallback(() => {
     setLoading(true)
-    fetch('/api/coldcall/dashboard')
+    onLoadingChange?.(true)
+    fetch(`/api/coldcall/dashboard${coldCallScopeQuery(effectiveFilter, user?.id)}`)
       .then((r) => r.json())
       .then((d) => {
         if (!d.error) setData(d)
       })
       .catch(() => setData(null))
-      .finally(() => setLoading(false))
-  }, [])
+      .finally(() => {
+        setLoading(false)
+        onLoadingChange?.(false)
+      })
+  }, [effectiveFilter, onLoadingChange, user?.id])
 
   useEffect(() => {
     load()
-  }, [load])
+  }, [load, reloadToken])
 
   if (loading && !data) {
     return (
@@ -131,6 +161,14 @@ export default function ColdCallingDashboard() {
 
   return (
     <div className="space-y-6">
+      {!hideToolbar && (
+        <ColdCallScopeToolbar
+          filter={effectiveFilter}
+          onFilterChange={setFilter}
+          onRefresh={load}
+          loading={loading}
+        />
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard
           label="Interesados"

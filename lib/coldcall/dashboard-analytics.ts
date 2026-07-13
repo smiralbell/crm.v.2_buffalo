@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { outcomeLabel, stageLabel } from './lead-table'
 import type { ColdCallScope } from './scope'
-import { scopeOwnerUserId } from './scope'
+import { getScopeFilterParams } from './scope'
 
 export interface ColdCallDashboardData {
   kpis: {
@@ -354,10 +354,8 @@ function buildAlerts(
     .slice(0, 15)
 }
 
-export async function getColdCallDashboard(
-  scope: ColdCallScope = { mode: 'all' }
-): Promise<ColdCallDashboardData> {
-  const ownerUserId = scopeOwnerUserId(scope)
+export async function getColdCallDashboard(scope: ColdCallScope): Promise<ColdCallDashboardData> {
+  const { userId: scopeUserId, teamIds: scopeTeamIds, legacyAdmin } = getScopeFilterParams(scope)
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const weekStart = new Date(todayStart)
@@ -387,7 +385,15 @@ export async function getColdCallDashboard(
     prisma.$queryRaw<{ total: number; active: number }[]>`
       SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status = 'active')::int AS active
       FROM coldcall_campaigns c
-      WHERE (${ownerUserId}::int IS NULL OR c.assigned_to_user_id = ${ownerUserId} OR c.created_by_user_id = ${ownerUserId})
+      WHERE (
+        (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+        OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+        OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+          c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+          OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+          OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+        ))
+      )
     `,
     prisma.$queryRaw<
       {
@@ -425,10 +431,18 @@ export async function getColdCallDashboard(
           WHERE deleted_at IS NULL AND (stage = 'volver_a_llamar' OR estado = 'llamar_tarde')
         )::int AS callback_leads
       FROM coldcall_prospects p
-      WHERE (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-        SELECT id FROM coldcall_campaigns
-        WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-      ))
+      WHERE p.campaign_id IN (
+        SELECT id FROM coldcall_campaigns c
+        WHERE (
+          (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+          OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+          OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+            c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+            OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+            OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+          ))
+        )
+      )
     `,
     prisma.$queryRaw<
       {
@@ -455,29 +469,53 @@ export async function getColdCallDashboard(
         COUNT(*) FILTER (WHERE resultado IN ('interesado', 'reunion_agendada'))::int AS positive_total
       FROM coldcall_calls c
       INNER JOIN coldcall_prospects p ON p.id = c.prospect_id AND p.deleted_at IS NULL
-      WHERE (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-        SELECT id FROM coldcall_campaigns
-        WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-      ))
+      WHERE p.campaign_id IN (
+        SELECT id FROM coldcall_campaigns c
+        WHERE (
+          (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+          OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+          OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+            c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+            OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+            OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+          ))
+        )
+      )
     `,
     prisma.$queryRaw<{ avg_sec: number | null }[]>`
       SELECT AVG(c.duracion)::float AS avg_sec FROM coldcall_calls c
       INNER JOIN coldcall_prospects p ON p.id = c.prospect_id AND p.deleted_at IS NULL
       WHERE c.duracion IS NOT NULL AND c.duracion > 0
-        AND (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-          SELECT id FROM coldcall_campaigns
-          WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-        ))
+        AND p.campaign_id IN (
+          SELECT id FROM coldcall_campaigns c
+          WHERE (
+            (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+              c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+              OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+              OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            ))
+          )
+        )
     `,
     prisma.$queryRaw<{ avg_sec: number | null }[]>`
       SELECT AVG(c.duracion)::float AS avg_sec FROM coldcall_calls c
       INNER JOIN coldcall_prospects p ON p.id = c.prospect_id AND p.deleted_at IS NULL
       WHERE c.duracion IS NOT NULL AND c.duracion > 0
         AND c.resultado IN ('interesado', 'reunion_agendada')
-        AND (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-          SELECT id FROM coldcall_campaigns
-          WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-        ))
+        AND p.campaign_id IN (
+          SELECT id FROM coldcall_campaigns c
+          WHERE (
+            (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+              c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+              OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+              OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            ))
+          )
+        )
     `,
     prisma.$queryRaw<{ day: Date; calls: number; interested: number; meetings: number }[]>`
       SELECT DATE(c.fecha) AS day, COUNT(*)::int AS calls,
@@ -486,10 +524,18 @@ export async function getColdCallDashboard(
       FROM coldcall_calls c
       INNER JOIN coldcall_prospects p ON p.id = c.prospect_id AND p.deleted_at IS NULL
       WHERE c.fecha >= ${thirtyDaysAgo}
-        AND (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-          SELECT id FROM coldcall_campaigns
-          WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-        ))
+        AND p.campaign_id IN (
+          SELECT id FROM coldcall_campaigns c
+          WHERE (
+            (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+              c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+              OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+              OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            ))
+          )
+        )
       GROUP BY DATE(c.fecha) ORDER BY day ASC
     `,
     prisma.$queryRaw<
@@ -504,10 +550,18 @@ export async function getColdCallDashboard(
       FROM coldcall_calls c
       INNER JOIN coldcall_prospects p ON p.id = c.prospect_id AND p.deleted_at IS NULL
       WHERE c.fecha >= ${twelveMonthsAgo}
-        AND (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-          SELECT id FROM coldcall_campaigns
-          WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-        ))
+        AND p.campaign_id IN (
+          SELECT id FROM coldcall_campaigns c
+          WHERE (
+            (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+              c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+              OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+              OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            ))
+          )
+        )
       GROUP BY DATE_TRUNC('month', c.fecha)
       ORDER BY month ASC
     `,
@@ -519,10 +573,18 @@ export async function getColdCallDashboard(
       FROM coldcall_calls c
       INNER JOIN coldcall_prospects p ON p.id = c.prospect_id AND p.deleted_at IS NULL
       WHERE c.fecha >= ${thirtyDaysAgo}
-        AND (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-          SELECT id FROM coldcall_campaigns
-          WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-        ))
+        AND p.campaign_id IN (
+          SELECT id FROM coldcall_campaigns c
+          WHERE (
+            (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+              c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+              OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+              OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            ))
+          )
+        )
       GROUP BY EXTRACT(HOUR FROM c.fecha) ORDER BY hour ASC
     `,
     prisma.$queryRaw<{ dow: number; calls: number; positive: number }[]>`
@@ -533,19 +595,35 @@ export async function getColdCallDashboard(
       FROM coldcall_calls c
       INNER JOIN coldcall_prospects p ON p.id = c.prospect_id AND p.deleted_at IS NULL
       WHERE c.fecha >= ${thirtyDaysAgo}
-        AND (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-          SELECT id FROM coldcall_campaigns
-          WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-        ))
+        AND p.campaign_id IN (
+          SELECT id FROM coldcall_campaigns c
+          WHERE (
+            (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+              c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+              OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+              OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            ))
+          )
+        )
       GROUP BY EXTRACT(DOW FROM c.fecha) ORDER BY dow ASC
     `,
     prisma.$queryRaw<{ resultado: string; count: number }[]>`
       SELECT c.resultado, COUNT(*)::int AS count FROM coldcall_calls c
       INNER JOIN coldcall_prospects p ON p.id = c.prospect_id AND p.deleted_at IS NULL
-      WHERE (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-        SELECT id FROM coldcall_campaigns
-        WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-      ))
+      WHERE p.campaign_id IN (
+        SELECT id FROM coldcall_campaigns c
+        WHERE (
+          (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+          OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+          OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+            c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+            OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+            OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+          ))
+        )
+      )
       GROUP BY c.resultado ORDER BY count DESC
     `,
     prisma.$queryRaw<{ stage: string; count: number }[]>`
@@ -558,10 +636,18 @@ export async function getColdCallDashboard(
         COUNT(*)::int AS count
       FROM coldcall_prospects p
       WHERE p.deleted_at IS NULL
-        AND (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-          SELECT id FROM coldcall_campaigns
-          WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-        ))
+        AND p.campaign_id IN (
+          SELECT id FROM coldcall_campaigns c
+          WHERE (
+            (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+              c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+              OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+              OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            ))
+          )
+        )
       GROUP BY 1 ORDER BY count DESC
     `,
     prisma.$queryRaw<
@@ -595,7 +681,15 @@ export async function getColdCallDashboard(
         INNER JOIN coldcall_prospects pp ON pp.id = cc.prospect_id
         WHERE pp.campaign_id = c.id AND pp.deleted_at IS NULL
       ) call_stats ON TRUE
-      WHERE (${ownerUserId}::int IS NULL OR c.assigned_to_user_id = ${ownerUserId} OR c.created_by_user_id = ${ownerUserId})
+      WHERE (
+        (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+        OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+        OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+          c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+          OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+          OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+        ))
+      )
       GROUP BY c.id, c.name, c.status, call_stats.calls, call_stats.interested, call_stats.meetings, call_stats.last_call_at
       ORDER BY meetings DESC, interested DESC, calls DESC, c.name ASC
     `,
@@ -630,10 +724,18 @@ export async function getColdCallDashboard(
       ) lc ON TRUE
       WHERE p.deleted_at IS NULL
         AND p.do_not_call = FALSE
-        AND (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-          SELECT id FROM coldcall_campaigns
-          WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-        ))
+        AND p.campaign_id IN (
+          SELECT id FROM coldcall_campaigns c
+          WHERE (
+            (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+              c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+              OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+              OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            ))
+          )
+        )
         AND (
           p.stage IN ('reunion_agendada', 'volver_a_llamar', 'interesado_info_enviada')
           OR p.estado IN ('reunion_agendada', 'llamar_tarde', 'interesado')
@@ -661,10 +763,18 @@ export async function getColdCallDashboard(
       INNER JOIN coldcall_prospects p ON p.id = c.prospect_id AND p.deleted_at IS NULL
       LEFT JOIN coldcall_campaigns camp ON camp.id = p.campaign_id
       WHERE c.resultado IN ('interesado', 'reunion_agendada', 'llamar_tarde')
-        AND (${ownerUserId}::int IS NULL OR p.campaign_id IN (
-          SELECT id FROM coldcall_campaigns
-          WHERE assigned_to_user_id = ${ownerUserId} OR created_by_user_id = ${ownerUserId}
-        ))
+        AND p.campaign_id IN (
+          SELECT id FROM coldcall_campaigns c
+          WHERE (
+            (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+            OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+              c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+              OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+              OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+            ))
+          )
+        )
       ORDER BY c.fecha DESC
       LIMIT 2
     `,

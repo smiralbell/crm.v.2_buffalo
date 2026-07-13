@@ -2,12 +2,12 @@ import { prisma } from '@/lib/prisma'
 import type { ColumnMapping } from './field-mapping'
 import { applyColumnMapping, normalizeStoredMapping } from './field-mapping'
 import type { ColdCallScope } from './scope'
-import { scopeOwnerUserId } from './scope'
+import { getScopeFilterParams } from './scope'
 import type { ColdCallCampaign, CsvLeadInput, ImportBatchResult } from './types'
 import { LEAD_STAGES } from './types'
 
-export async function listCampaigns(scope: ColdCallScope = { mode: 'all' }): Promise<ColdCallCampaign[]> {
-  const ownerUserId = scopeOwnerUserId(scope)
+export async function listCampaigns(scope: ColdCallScope): Promise<ColdCallCampaign[]> {
+  const { userId: scopeUserId, teamIds: scopeTeamIds, legacyAdmin } = getScopeFilterParams(scope)
   const rows = await prisma.$queryRaw<
     {
       id: number
@@ -50,7 +50,15 @@ export async function listCampaigns(scope: ColdCallScope = { mode: 'all' }): Pro
     FROM coldcall_campaigns c
     LEFT JOIN crm_users u ON u.id = c.assigned_to_user_id
     LEFT JOIN coldcall_prospects p ON p.campaign_id = c.id
-    WHERE (${ownerUserId}::int IS NULL OR c.assigned_to_user_id = ${ownerUserId} OR c.created_by_user_id = ${ownerUserId})
+    WHERE (
+      (${legacyAdmin} IS TRUE AND c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+      OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NOT NULL AND (c.assigned_to_user_id = ${scopeUserId} OR c.created_by_user_id = ${scopeUserId}))
+      OR (${legacyAdmin} IS NOT TRUE AND ${scopeUserId}::int IS NULL AND (
+        c.assigned_to_user_id = ANY(${scopeTeamIds}::int[])
+        OR c.created_by_user_id = ANY(${scopeTeamIds}::int[])
+        OR (c.assigned_to_user_id IS NULL AND c.created_by_user_id IS NULL)
+      ))
+    )
     GROUP BY c.id, u.name
     ORDER BY c.created_at DESC
   `

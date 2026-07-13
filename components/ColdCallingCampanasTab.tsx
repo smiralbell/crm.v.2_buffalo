@@ -25,11 +25,37 @@ import {
 } from 'lucide-react'
 import type { ColdCallCampaign, ImportBatchResult } from '@/lib/coldcall/types'
 import CsvImportMappingDialog from '@/components/coldcall/CsvImportMappingDialog'
+import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
+import { coldCallScopeQuery } from '@/lib/coldcall/api-query'
+import type { ColdCallFilter } from '@/lib/coldcall/scope'
+import { useAuth } from '@/components/AuthContext'
 
-export default function ColdCallingCampanasTab() {
+export default function ColdCallingCampanasTab({
+  filter: filterProp,
+  onFilterChange,
+  reloadToken = 0,
+  hideToolbar = false,
+  onLoadingChange,
+}: {
+  filter?: ColdCallFilter
+  onFilterChange?: (filter: ColdCallFilter) => void
+  reloadToken?: number
+  hideToolbar?: boolean
+  onLoadingChange?: (loading: boolean) => void
+}) {
   const router = useRouter()
+  const { user } = useAuth()
+  const defaultFilter: ColdCallFilter = user?.id ?? 'team'
   const [campaigns, setCampaigns] = useState<ColdCallCampaign[]>([])
   const [loading, setLoading] = useState(true)
+  const [localFilter, setLocalFilter] = useState<ColdCallFilter>(filterProp ?? defaultFilter)
+
+  const effectiveFilter = onFilterChange ? (filterProp ?? defaultFilter) : localFilter
+  const setFilter = onFilterChange ?? setLocalFilter
+
+  useEffect(() => {
+    if (filterProp !== undefined) setLocalFilter(filterProp)
+  }, [filterProp])
   const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -74,16 +100,20 @@ export default function ColdCallingCampanasTab() {
 
   const load = () => {
     setLoading(true)
-    fetch('/api/coldcall/campaigns')
+    onLoadingChange?.(true)
+    fetch(`/api/coldcall/campaigns${coldCallScopeQuery(effectiveFilter, user?.id)}`)
       .then((r) => r.json())
       .then((d) => setCampaigns(d.campaigns || []))
       .catch(() => setCampaigns([]))
-      .finally(() => setLoading(false))
+      .finally(() => {
+        setLoading(false)
+        onLoadingChange?.(false)
+      })
   }
 
   useEffect(() => {
     load()
-  }, [])
+  }, [effectiveFilter, reloadToken])
 
   const createCampaign = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -121,8 +151,24 @@ export default function ColdCallingCampanasTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <Button className="gap-2 rounded-xl" onClick={() => setCreateOpen(true)}>
+      <div
+        className={`flex flex-col gap-3 sm:flex-row sm:items-center ${
+          hideToolbar ? 'sm:justify-end' : 'sm:justify-between'
+        }`}
+      >
+        {!hideToolbar && (
+          <ColdCallScopeToolbar
+            filter={effectiveFilter}
+            onFilterChange={setFilter}
+            onRefresh={load}
+            loading={loading}
+            className="sm:order-2"
+          />
+        )}
+        <Button
+          className={`gap-2 rounded-xl ${hideToolbar ? '' : 'sm:order-1'}`}
+          onClick={() => setCreateOpen(true)}
+        >
           <Plus className="h-4 w-4" />
           Nueva campaña
         </Button>

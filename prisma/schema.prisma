@@ -401,6 +401,7 @@ model ColdCallCall {
   whatsapp_enviado Boolean   @default(false)
   email_enviado    Boolean   @default(false)
   reunion_fecha    DateTime?
+  created_by_user_id Int?
   created_at       DateTime  @default(now())
 
   prospect         ColdCallProspect @relation(fields: [prospect_id], references: [id], onDelete: Cascade)

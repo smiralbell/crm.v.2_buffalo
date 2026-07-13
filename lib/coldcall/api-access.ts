@@ -13,7 +13,7 @@ export async function requireCampaignAccess(
   user: AuthUser,
   campaignId: number
 ): Promise<ColdCallScope | null> {
-  const scope = getColdCallScope(user)
+  const scope = await getColdCallScope(user)
   try {
     await assertCampaignAccess(scope, campaignId)
     return scope

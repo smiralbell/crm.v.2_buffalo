@@ -17,6 +17,8 @@ interface SubItem {
   label: string
   developerLabel?: string
   tab?: string
+  cc?: string
+  roles?: CrmRole[]
 }
 
 interface NavItem {
@@ -247,12 +249,25 @@ export default function Sidebar() {
 
                 {isOpen && (
                   <div className="ml-3 mt-0.5 mb-1 border-l border-gray-100 pl-3 space-y-0.5">
-                    {item.children.map((child) => {
-                      const childHref = child.tab ? `${child.href}?tab=${child.tab}` : child.href
+                    {item.children
+                      .filter((child) => !child.roles || (role && child.roles.includes(role)))
+                      .map((child) => {
+                      const query = new URLSearchParams()
+                      if (child.tab) query.set('tab', child.tab)
+                      if (child.cc) query.set('cc', child.cc)
+                      const childHref = child.tab
+                        ? `${child.href}?${query.toString()}`
+                        : child.href
                       const tabParam = router.query.tab as string | undefined
+                      const ccParam = router.query.cc as string | undefined
                       const childActive = child.tab
                         ? router.pathname === child.href &&
-                          (tabParam === child.tab || (!tabParam && child.tab === 'global'))
+                          tabParam === child.tab &&
+                          (child.cc
+                            ? child.cc === 'dashboard'
+                              ? !ccParam || ccParam === 'dashboard'
+                              : ccParam === child.cc
+                            : true)
                         : router.pathname === child.href || router.pathname.startsWith(child.href + '/')
 
                       return (
