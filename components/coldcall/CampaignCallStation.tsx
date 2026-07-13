@@ -5,11 +5,14 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
-import { stageLabel, outcomeLabel } from '@/lib/coldcall/lead-table'
+import { outcomeLabel } from '@/lib/coldcall/lead-table'
 import type { ScriptBox } from '@/lib/coldcall/script-parser'
 import {
   defaultWhatsAppTemplate,
+  formatPhoneForDisplay,
+  normalizeWhatsAppPhone,
   openWhatsApp,
+  resolveLeadPhone,
 } from '@/lib/coldcall/whatsapp'
 import {
   ChevronLeft,
@@ -31,6 +34,9 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { toDatetimeLocalValue } from '@/lib/coldcall/cal-embed'
+import type { ColumnMapping } from '@/lib/coldcall/field-mapping'
+import { splitLeadDisplayFields } from '@/lib/coldcall/lead-display'
+import { LeadFieldCards } from '@/components/coldcall/LeadFieldCards'
 import type { CalBookingPayload } from '@/components/coldcall/CalComMeetingEmbed'
 
 const CalComMeetingEmbed = dynamic(() => import('@/components/coldcall/CalComMeetingEmbed'), {
@@ -94,52 +100,22 @@ const RESULTADOS: {
 }[] = [
   { id: 'interesado', label: 'Interesado', icon: ThumbsUp, hint: 'Seguimiento y posible reunión' },
   { id: 'llamar_tarde', label: 'Llamar más tarde', icon: Clock, hint: 'Programar callback' },
-  { id: 'sin_respuesta', label: 'Sin respuesta', icon: PhoneMissed, hint: 'Apuntar próximo intento' },
+  { id: 'sin_respuesta', label: 'Sin respuesta', icon: PhoneMissed, hint: 'Registrar intento y pasar al siguiente' },
   { id: 'no_interesado', label: 'No interesado', icon: ThumbsDown, hint: 'Mensaje de cierre opcional' },
   { id: 'no_contactar', label: 'No contactar', icon: Ban, hint: 'Solo nota interna' },
 ]
 
-function leadFieldCards(lead: CallLead): { label: string; value: string }[] {
-  const cards: { label: string; value: string }[] = []
-  const add = (label: string, v: string | null | undefined) => {
-    if (v?.trim()) cards.push({ label, value: v.trim() })
-  }
-
-  add('Nombre', lead.nombre)
-  add('Teléfono', lead.telefono)
-  add('Correo', lead.email)
-  add('Empresa', lead.empresa)
-  add('Cargo', lead.cargo)
-  add('Sector', lead.sector)
-  add('Ciudad', lead.zona)
-  add('CIF', lead.cif)
-  add('Dirección', lead.direccion)
-  add('LinkedIn', lead.linkedin)
-  add('Web', lead.web)
-  add('Estado', stageLabel(lead.stage))
-  add('Llamadas', String(lead.calls?.length ?? 0))
-  add('Intentos sin respuesta', String(lead.call_attempts))
-
-  const used = new Set(cards.map((c) => c.value))
-  for (const [k, v] of Object.entries(lead.raw_data || {})) {
-    if (v?.trim() && !used.has(v.trim())) {
-      cards.push({ label: k, value: v.trim() })
-    }
-  }
-
-  return cards
-}
-
 interface WhatsAppPanelProps {
-  lead: CallLead
+  phone: string | null
+  phoneDisplay: string | null
   message: string
   onChange: (value: string) => void
   onSend: () => void
   sent: boolean
 }
 
-function WhatsAppPanel({ lead, message, onChange, onSend, sent }: WhatsAppPanelProps) {
-  const hasPhone = Boolean(lead.telefono?.trim())
+function WhatsAppPanel({ phone, phoneDisplay, message, onChange, onSend, sent }: WhatsAppPanelProps) {
+  const hasPhone = Boolean(phone && normalizeWhatsAppPhone(phone))
 
   return (
     <div className="rounded-xl border border-green-100 bg-green-50/50 p-3 space-y-2">
@@ -154,6 +130,12 @@ function WhatsAppPanel({ lead, message, onChange, onSend, sent }: WhatsAppPanelP
           </Badge>
         )}
       </div>
+      {hasPhone && phoneDisplay && (
+        <p className="text-[11px] text-green-800">
+          Se abrirá WhatsApp Web con{' '}
+          <span className="font-medium tabular-nums">{phoneDisplay}</span>
+        </p>
+      )}
       <Textarea
         rows={5}
         value={message}
@@ -188,6 +170,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
 
   const [loading, setLoading] = useState(true)
   const [campaignName, setCampaignName] = useState('')
+  const [columnMapping, setColumnMapping] = useState<ColumnMapping>({})
   const [lead, setLead] = useState<CallLead | null>(null)
   const [index, setIndex] = useState(0)
   const [total, setTotal] = useState(0)
@@ -231,6 +214,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
       .then((d) => {
         if (d.error) throw new Error(d.error)
         setCampaignName(d.campaign?.name || '')
+        setColumnMapping(d.campaign?.column_mapping || {})
         setLead(d.lead)
         setIndex(d.index ?? 0)
         setTotal(d.total ?? 0)
@@ -313,10 +297,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
     if (resultado === 'interesado' && interesadoFollowUp === 'reunion' && !calBooked) {
       return false
     }
-    if (
-      (resultado === 'llamar_tarde' || resultado === 'sin_respuesta') &&
-      !callbackAt
-    ) {
+    if (resultado === 'llamar_tarde' && !callbackAt) {
       return false
     }
     return true
@@ -324,7 +305,8 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
 
   const handleWhatsApp = () => {
     if (!lead) return
-    const ok = openWhatsApp(lead.telefono, whatsAppMessage)
+    const phone = resolveLeadPhone(lead, columnMapping)
+    const ok = openWhatsApp(phone, whatsAppMessage)
     if (!ok) {
       setSaveError('No hay un teléfono válido para abrir WhatsApp.')
       return
@@ -346,11 +328,8 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
       setSaveError('Agenda la reunión en el calendario de Cal.com antes de guardar.')
       return
     }
-    if (
-      (resultado === 'llamar_tarde' || resultado === 'sin_respuesta') &&
-      !callbackAt
-    ) {
-      setSaveError('Indica la fecha y hora del callback.')
+    if (resultado === 'llamar_tarde' && !callbackAt) {
+      setSaveError('Indica cuándo volver a llamar.')
       return
     }
 
@@ -364,7 +343,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
         resultado: finalResultado,
         notas,
         duracion: duracion ? parseInt(duracion, 10) * 60 : null,
-        reunion_fecha: callbackAt || null,
+        reunion_fecha: resultado === 'llamar_tarde' ? callbackAt || null : null,
         whatsapp_enviado: whatsappSent,
       }),
     })
@@ -383,7 +362,17 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
   }
 
   const script = scriptLang === 'es' ? scriptEs : scriptCa
-  const cards = lead ? leadFieldCards(lead) : []
+  const leadDisplay = lead
+    ? splitLeadDisplayFields(
+        {
+          ...lead,
+          callsCount: lead.calls?.length ?? 0,
+        },
+        columnMapping
+      )
+    : { primary: [], extra: [] }
+  const leadPhone = lead ? resolveLeadPhone(lead, columnMapping) : null
+  const leadPhoneDisplay = leadPhone ? formatPhoneForDisplay(leadPhone) : null
   const callHistory = lead?.calls ?? []
 
   return (
@@ -407,63 +396,57 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
       ) : (
         <>
           {/* Navegación + datos del lead */}
-          <div className="flex items-stretch gap-3">
-            <Button
-              variant="outline"
-              size="icon"
-              className="shrink-0 h-auto rounded-xl"
-              title="Volver a leads"
-              asChild
-            >
-              <Link href={`/coldcalling/campanas/${campaignId}`}>
-                <Home className="h-5 w-5" />
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="shrink-0 h-auto rounded-xl"
-              disabled={!prevId}
-              title="Lead anterior"
-              onClick={() => goLead(prevId)}
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-
-            <div className="flex-1 min-w-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-3">
-              <div className="text-center">
-                <p className="text-xs text-gray-500 uppercase tracking-wide">Lead</p>
-                <p className="text-lg font-bold text-gray-900">
-                  {index + 1} <span className="text-gray-400 font-normal">de</span> {total}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {cards.map((c) => (
-                  <div
-                    key={`${c.label}-${c.value}`}
-                    className="rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-1.5 min-w-[100px] max-w-[160px]"
-                  >
-                    <p className="text-[10px] text-gray-400 uppercase tracking-wide truncate">
-                      {c.label}
-                    </p>
-                    <p className="text-xs font-medium text-gray-900 truncate" title={c.value}>
-                      {c.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center shrink-0 rounded-xl border border-gray-200 bg-white shadow-sm divide-x divide-gray-200">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-none rounded-l-xl hover:bg-gray-50"
+                title="Volver a leads"
+                asChild
+              >
+                <Link href={`/coldcalling/campanas/${campaignId}`}>
+                  <Home className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-8 rounded-none hover:bg-gray-50"
+                disabled={!prevId}
+                title="Lead anterior"
+                onClick={() => goLead(prevId)}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span
+                className="px-2.5 text-[11px] text-gray-500 tabular-nums whitespace-nowrap select-none"
+                title={`Lead ${index + 1} de ${total}`}
+              >
+                <span className="font-semibold text-gray-900">{index + 1}</span>
+                <span className="mx-1 text-gray-300">/</span>
+                <span>{total}</span>
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-8 rounded-none rounded-r-xl hover:bg-gray-50"
+                disabled={!nextId}
+                title="Lead siguiente"
+                onClick={() => goLead(nextId)}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
 
-            <Button
-              variant="outline"
-              size="icon"
-              className="shrink-0 h-auto rounded-xl"
-              disabled={!nextId}
-              title="Lead siguiente"
-              onClick={() => goLead(nextId)}
-            >
-              <ChevronRight className="h-5 w-5" />
-            </Button>
+            <div className="flex-1 min-w-0 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+              <LeadFieldCards
+                leadName={lead.nombre}
+                primary={leadDisplay.primary}
+                extra={leadDisplay.extra}
+                compact
+              />
+            </div>
           </div>
 
           {/* Acciones + Guión */}
@@ -565,7 +548,8 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
                         </div>
                       )}
                       <WhatsAppPanel
-                        lead={lead}
+                        phone={leadPhone}
+                        phoneDisplay={leadPhoneDisplay}
                         message={whatsAppMessage}
                         onChange={setWhatsAppMessage}
                         onSend={handleWhatsApp}
@@ -576,7 +560,8 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
 
                   {resultado === 'no_interesado' && (
                     <WhatsAppPanel
-                      lead={lead}
+                      phone={leadPhone}
+                      phoneDisplay={leadPhoneDisplay}
                       message={whatsAppMessage}
                       onChange={setWhatsAppMessage}
                       onSend={handleWhatsApp}
@@ -584,13 +569,11 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
                     />
                   )}
 
-                  {(resultado === 'llamar_tarde' || resultado === 'sin_respuesta') && (
+                  {resultado === 'llamar_tarde' && (
                     <div>
                       <label className="text-xs text-gray-500 mb-1 flex items-center gap-1.5">
                         <CalendarClock className="h-3.5 w-3.5" />
-                        {resultado === 'llamar_tarde'
-                          ? 'Cuándo volver a llamar *'
-                          : 'Próximo intento de llamada *'}
+                        Cuándo volver a llamar *
                       </label>
                       <input
                         type="datetime-local"
@@ -599,6 +582,13 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
                       />
                     </div>
+                  )}
+
+                  {resultado === 'sin_respuesta' && (
+                    <p className="text-sm text-gray-600">
+                      Se registrará el intento sin respuesta. El lead volverá a la cola para
+                      reintentarlo más adelante.
+                    </p>
                   )}
 
                   {resultado === 'no_contactar' && (

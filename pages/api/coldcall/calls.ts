@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const retryAt =
         reunion_fecha &&
-        ['reunion_agendada', 'llamar_tarde', 'sin_respuesta'].includes(resultado)
+        ['reunion_agendada', 'llamar_tarde'].includes(resultado)
           ? new Date(reunion_fecha)
           : null
 

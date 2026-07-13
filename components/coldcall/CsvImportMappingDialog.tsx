@@ -226,15 +226,17 @@ export default function CsvImportMappingDialog({
 
     <Dialog open={open} onOpenChange={onOpenChange}>
 
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
 
-        <DialogHeader>
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-gray-100 shrink-0">
 
           <DialogTitle>Relacionar variables con el CSV</DialogTitle>
 
         </DialogHeader>
 
 
+
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
 
         {loading ? (
 
@@ -272,9 +274,9 @@ export default function CsvImportMappingDialog({
 
                 </p>
 
-                <div className="overflow-x-auto rounded-xl border border-gray-200">
+                <div className="overflow-auto max-h-36 rounded-xl border border-gray-200">
 
-                  <table className="w-full text-xs text-left">
+                  <table className="w-full text-xs text-left min-w-max">
 
                     <thead>
 
@@ -340,9 +342,11 @@ export default function CsvImportMappingDialog({
 
         )}
 
+        </div>
 
 
-        <DialogFooter>
+
+        <DialogFooter className="px-6 py-4 border-t border-gray-100 shrink-0 bg-white">
 
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
 

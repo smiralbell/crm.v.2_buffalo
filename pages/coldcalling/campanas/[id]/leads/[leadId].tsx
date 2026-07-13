@@ -3,12 +3,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
-import { useAuth } from '@/components/AuthContext'
-import { campanasListHref } from '@/lib/coldcall/routes'
 import { getColdCallPageProps } from '@/lib/coldcall/page-auth'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { displayValue, stageLabel } from '@/lib/coldcall/lead-table'
+import { displayValue, outcomeLabel, stageLabel } from '@/lib/coldcall/lead-table'
+import { splitLeadDisplayFields } from '@/lib/coldcall/lead-display'
+import { LeadFieldCards } from '@/components/coldcall/LeadFieldCards'
 import type { ColdCallCampaign } from '@/lib/coldcall/types'
 import { ArrowLeft, Loader2, Phone } from 'lucide-react'
 
@@ -36,17 +35,6 @@ interface LeadDetail {
 
 export const getServerSideProps: GetServerSideProps = getColdCallPageProps
 
-const EXTRA_DB_FIELDS: { key: keyof LeadDetail; label: string }[] = [
-  { key: 'empresa', label: 'Denominación social' },
-  { key: 'cargo', label: 'Posición' },
-  { key: 'cif', label: 'CIF' },
-  { key: 'direccion', label: 'Dirección' },
-  { key: 'zona', label: 'Ciudad' },
-  { key: 'sector', label: 'Sector' },
-  { key: 'linkedin', label: 'LinkedIn' },
-  { key: 'web', label: 'Web' },
-]
-
 export default function LeadDetailPage() {
   const router = useRouter()
   const campaignId = router.query.id as string | undefined
@@ -54,7 +42,6 @@ export default function LeadDetailPage() {
 
   const [campaign, setCampaign] = useState<ColdCallCampaign | null>(null)
   const [lead, setLead] = useState<LeadDetail | null>(null)
-  const [importColumns, setImportColumns] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -66,7 +53,6 @@ export default function LeadDetailPage() {
         if (d.error) throw new Error(d.error)
         setCampaign(d.campaign)
         setLead(d.lead)
-        setImportColumns(d.import_columns || [])
       })
       .catch(() => {
         setCampaign(null)
@@ -96,22 +82,10 @@ export default function LeadDetailPage() {
     )
   }
 
-  const shownRawKeys = new Set<string>()
-  const extraFromRaw: { label: string; value: string }[] = []
-  for (const col of importColumns) {
-    const v = lead.raw_data?.[col]
-    if (v?.trim()) {
-      shownRawKeys.add(col)
-      if (!['nombre', 'telefono', 'correo', 'email'].includes(col.toLowerCase())) {
-        extraFromRaw.push({ label: col, value: v.trim() })
-      }
-    }
-  }
-  for (const [k, v] of Object.entries(lead.raw_data || {})) {
-    if (!shownRawKeys.has(k) && v?.trim()) {
-      extraFromRaw.push({ label: k, value: v.trim() })
-    }
-  }
+  const leadDisplay = splitLeadDisplayFields(
+    { ...lead, callsCount: lead.calls.length },
+    campaign.column_mapping
+  )
 
   return (
     <Layout>
@@ -127,22 +101,11 @@ export default function LeadDetailPage() {
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-5">
           <div className="space-y-3">
             <h1 className="text-xl font-semibold text-gray-900">{displayValue(lead.nombre)}</h1>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-gray-50 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-wide text-gray-500">Teléfono</p>
-                <p className="text-sm font-medium text-gray-900 mt-0.5">{displayValue(lead.telefono)}</p>
-              </div>
-              <div className="rounded-xl bg-gray-50 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-wide text-gray-500">Correo</p>
-                <p className="text-sm font-medium text-gray-900 mt-0.5 truncate">{displayValue(lead.email)}</p>
-              </div>
-              <div className="rounded-xl bg-gray-50 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-wide text-gray-500">Estado</p>
-                <Badge variant="outline" className="mt-1 font-normal">
-                  {stageLabel(lead.stage)}
-                </Badge>
-              </div>
-            </div>
+            <LeadFieldCards
+              leadName={lead.nombre}
+              primary={leadDisplay.primary}
+              extra={leadDisplay.extra}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -161,48 +124,31 @@ export default function LeadDetailPage() {
           </div>
 
           <Button size="sm" className="rounded-xl gap-1.5" asChild>
-            <Link href={`/coldcalling/campanas/${campaignId}/llamadas`}>
+            <Link href={`/coldcalling/campanas/${campaignId}/llamadas?leadId=${lead.id}`}>
               <Phone className="h-3.5 w-3.5" />
               Ir a llamar
             </Link>
           </Button>
         </div>
 
-        {(extraFromRaw.length > 0 ||
-          EXTRA_DB_FIELDS.some((f) => lead[f.key] && String(lead[f.key]).trim())) && (
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-4">
-            <h2 className="text-sm font-semibold text-gray-900">Datos del lead</h2>
-            <dl className="grid gap-3 sm:grid-cols-2">
-              {EXTRA_DB_FIELDS.map(({ key, label }) => {
-                const v = lead[key]
-                if (!v || !String(v).trim()) return null
-                return (
-                  <div key={key} className="rounded-lg bg-gray-50 px-3 py-2">
-                    <dt className="text-xs text-gray-500">{label}</dt>
-                    <dd className="text-sm text-gray-900 mt-0.5 break-words">{String(v)}</dd>
-                  </div>
-                )
-              })}
-              {extraFromRaw.map(({ label, value }) => (
-                <div key={label} className="rounded-lg bg-gray-50 px-3 py-2">
-                  <dt className="text-xs text-gray-500">{label}</dt>
-                  <dd className="text-sm text-gray-900 mt-0.5 break-words">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        )}
-
         {lead.calls.length > 0 && (
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-3">
             <h2 className="text-sm font-semibold text-gray-900">Historial de llamadas</h2>
             <div className="space-y-2">
               {lead.calls.map((c) => (
-                <div key={c.id} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2 text-sm">
-                  <span className="text-gray-800 capitalize">{c.resultado.replace(/_/g, ' ')}</span>
-                  <span className="text-xs text-gray-400">
-                    {new Date(c.fecha).toLocaleString('es-ES')}
-                  </span>
+                <div
+                  key={c.id}
+                  className="rounded-lg border border-gray-100 px-3 py-2 text-sm space-y-1"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-800">{outcomeLabel(c.resultado)}</span>
+                    <span className="text-xs text-gray-400 shrink-0">
+                      {new Date(c.fecha).toLocaleString('es-ES')}
+                    </span>
+                  </div>
+                  {c.notas?.trim() && (
+                    <p className="text-xs text-gray-600 whitespace-pre-line">{c.notas}</p>
+                  )}
                 </div>
               ))}
             </div>
