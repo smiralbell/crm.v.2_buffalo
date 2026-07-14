@@ -119,6 +119,7 @@ export function demoRowToListItem(row: PublicFormDemoRow): DemoListItem {
     retell_kb_id: null,
     voz_id: null,
     direccion: row.direccion as DemoListItem['direccion'],
+    es_principal: false,
     created_at: new Date().toISOString(),
     numeros: row.numeros,
     numeros_count: row.numeros.length,

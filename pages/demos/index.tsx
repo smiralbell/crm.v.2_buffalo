@@ -337,12 +337,19 @@ export default function DemosPage() {
                           </Link>
                         </td>
                         <td className="p-4">
-                          <Badge
-                            variant="outline"
-                            className={tipoClass[demo.tipo] || 'bg-gray-100 text-gray-700'}
-                          >
-                            {demo.tipo === 'voz' ? 'Voz' : 'WhatsApp'}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge
+                              variant="outline"
+                              className={tipoClass[demo.tipo] || 'bg-gray-100 text-gray-700'}
+                            >
+                              {demo.tipo === 'voz' ? 'Voz' : 'WhatsApp'}
+                            </Badge>
+                            {demo.es_principal && (
+                              <Badge className="bg-blue-50 text-blue-800 border border-blue-200">
+                                Principal Buffalo
+                              </Badge>
+                            )}
+                          </div>
                         </td>
                         <td className="p-4">
                           <Badge className={estadoClass[demo.estado] || 'bg-gray-100 text-gray-700'}>
@@ -414,6 +421,7 @@ export default function DemosPage() {
           if (!open) setEditing(null)
         }}
         demo={editing}
+        allDemos={demos}
         onSubmit={editing ? handleUpdate : handleCreate}
         saving={saving}
       />

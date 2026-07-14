@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { getColdCallScope } from '@/lib/coldcall/scope'
+import { getColdCallPipelineCards, isColdCallPipeline } from '@/lib/pipelines/cold-calling'
 
 const createCardSchema = z.object({
   entity_id: z.union([z.string(), z.number()]).transform((val) => String(val)), // Acepta string o number, convierte a string
@@ -40,7 +42,7 @@ export default async function handler(
   res: NextApiResponse
 ) {
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
 
     const pipelineId = req.query.id as string
 
@@ -67,17 +69,33 @@ export default async function handler(
     }
 
     if (req.method === 'GET') {
-      // Listar todas las tarjetas del pipeline (no eliminadas)
-      const cards = await prisma.pipelineCard.findMany({
-        where: {
-          pipeline_id: pipelineId,
-          deleted_at: null,
-        },
-        orderBy: [
-          { stage: 'asc' },
-          { position: 'asc' },
-        ],
-      })
+      const coldCall = await isColdCallPipeline(pipelineId)
+
+      if (coldCall && user.role !== 'admin' && user.role !== 'comercial') {
+        return res.status(403).json({ error: 'Acceso denegado' })
+      }
+
+      let cards
+      if (coldCall) {
+        const scope = await getColdCallScope(user)
+        const rows = await getColdCallPipelineCards(scope, pipelineId)
+        cards = rows.map((card) => ({
+          ...card,
+          amount: card.amount != null ? Number(card.amount) : null,
+        }))
+      } else {
+        const rows = await prisma.pipelineCard.findMany({
+          where: {
+            pipeline_id: pipelineId,
+            deleted_at: null,
+          },
+          orderBy: [{ stage: 'asc' }, { position: 'asc' }],
+        })
+        cards = rows.map((card) => ({
+          ...card,
+          amount: card.amount != null ? Number(card.amount) : null,
+        }))
+      }
 
       // Agrupar por stage para facilitar el frontend
       const cardsByStage: Record<string, typeof cards> = {}

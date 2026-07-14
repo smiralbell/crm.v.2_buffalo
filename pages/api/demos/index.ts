@@ -17,6 +17,7 @@ const createSchema = z.object({
   tipo: z.enum(['whatsapp', 'voz']).default('whatsapp'),
   voz_id: z.string().optional(),
   direccion: z.enum(['inbound', 'outbound', 'ambos']).optional(),
+  es_principal: z.boolean().optional(),
 })
 
 function retellErrorMessage(err: unknown): string {
@@ -58,6 +59,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!parsed.direccion) {
           return res.status(400).json({ error: 'La dirección es obligatoria para demos de voz' })
         }
+        if (parsed.es_principal && parsed.direccion === 'outbound') {
+          return res.status(400).json({
+            error: 'La demo principal de voz debe ser inbound o ambos para recibir llamadas del widget',
+          })
+        }
 
         const demo = await createVoiceDemo(
           {
@@ -70,6 +76,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             tipo: 'voz',
             voz_id: parsed.voz_id.trim(),
             direccion: parsed.direccion,
+            es_principal: parsed.es_principal === true,
           },
           { mover_numeros: parsed.mover_numeros }
         )
@@ -81,9 +88,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           nombre_cliente: parsed.nombre_cliente.trim(),
           prompt: parsed.prompt.trim(),
           base_conocimiento: parsed.base_conocimiento.trim(),
+          frase_inicial: parsed.frase_inicial?.trim() ?? '',
           estado: parsed.estado,
           numeros,
           tipo: 'whatsapp',
+          es_principal: parsed.es_principal === true,
         },
         { mover_numeros: parsed.mover_numeros }
       )

@@ -21,6 +21,7 @@ export interface DemoRow {
   retell_kb_id: string | null
   voz_id: string | null
   direccion: DemoDireccion | null
+  es_principal: boolean
   created_at: string
 }
 
@@ -39,6 +40,7 @@ export interface DemoInput {
   tipo?: DemoTipo
   voz_id?: string
   direccion?: DemoDireccion
+  es_principal?: boolean
 }
 
 export interface PhoneConflict {

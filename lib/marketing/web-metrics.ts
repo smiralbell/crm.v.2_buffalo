@@ -1,6 +1,16 @@
 import { prisma } from '@/lib/prisma'
 import { queryChat } from '@/lib/db-chat'
 import { AGENT_CHAT_HISTORY_TABLE } from '@/lib/agent-chat-history'
+import {
+  countPendingWebFormSubmissions,
+  countWebFormSubmissions,
+  isWebFormSubmissionsTableAvailable,
+} from '@/lib/marketing/web-form-submissions'
+import {
+  countCalBookings,
+  countUpcomingCalBookings,
+  isCalBookingsReady,
+} from '@/lib/marketing/cal-bookings'
 
 export const WEB_LEAD_ORIGINS = [
   'web',
@@ -20,29 +30,8 @@ export const WEB_FORM_ORIGINS = [
   'formulario',
 ] as const
 
-export interface WebLeadRow {
-  id: number
-  estado: string | null
-  origen_principal: string | null
-  created_at: string
-  contact: {
-    nombre: string | null
-    email: string | null
-    empresa: string | null
-  } | null
-}
-
-export interface WebMarketingMetrics {
-  period: string
-  web_leads: number
-  form_submissions: number
-  chat_sessions: number
-  chat_replied: number
-  conversion_form_pct: number | null
-  conversion_chat_pct: number | null
-  recent_web_leads: WebLeadRow[]
-  chat_available: boolean
-}
+export type { WebLeadRow, WebMarketingMetrics } from '@/lib/marketing/web-metrics.types'
+import type { WebMarketingMetrics } from '@/lib/marketing/web-metrics.types'
 
 function periodBounds(period: string): { start: Date; end: Date } {
   const [y, m] = period.split('-').map(Number)
@@ -113,23 +102,33 @@ export async function getWebMarketingMetrics(period: string): Promise<WebMarketi
   const { start, end } = periodBounds(period)
   const dateFilter = { created_at: { gte: start, lte: end } }
 
-  const [web_leads, form_submissions, recentRaw, chat] = await Promise.all([
-    prisma.lead.count({
-      where: { ...dateFilter, ...webLeadWhere() },
-    }),
-    prisma.lead.count({
-      where: { ...dateFilter, ...formLeadWhere() },
-    }),
-    prisma.lead.findMany({
-      where: { ...dateFilter, ...webLeadWhere() },
-      include: {
-        contact: { select: { nombre: true, email: true, empresa: true } },
-      },
-      orderBy: { created_at: 'desc' },
-      take: 12,
-    }),
-    fetchChatMetrics(),
-  ])
+  const calReady = await isCalBookingsReady()
+
+  const [web_leads, formFromTable, formFromLeads, recentRaw, chat, formsTableOk, cal_bookings, cal_upcoming] =
+    await Promise.all([
+      prisma.lead.count({
+        where: { ...dateFilter, ...webLeadWhere() },
+      }),
+      countWebFormSubmissions(period),
+      prisma.lead.count({
+        where: { ...dateFilter, ...formLeadWhere() },
+      }),
+      prisma.lead.findMany({
+        where: { ...dateFilter, ...webLeadWhere() },
+        include: {
+          contact: { select: { nombre: true, email: true, empresa: true } },
+        },
+        orderBy: { created_at: 'desc' },
+        take: 12,
+      }),
+      fetchChatMetrics(),
+      isWebFormSubmissionsTableAvailable(),
+      calReady ? countCalBookings(period) : Promise.resolve(0),
+      calReady ? countUpcomingCalBookings() : Promise.resolve(0),
+    ])
+
+  const form_submissions = formsTableOk ? formFromTable : formFromLeads
+  const form_submissions_pending = formsTableOk ? await countPendingWebFormSubmissions(period) : 0
 
   const conversion_form_pct =
     web_leads > 0 ? Math.round((form_submissions / web_leads) * 1000) / 10 : null
@@ -154,5 +153,10 @@ export async function getWebMarketingMetrics(period: string): Promise<WebMarketi
       contact: l.contact,
     })),
     chat_available: chat.available,
+    form_submissions_available: formsTableOk,
+    form_submissions_pending,
+    cal_bookings,
+    cal_upcoming,
+    cal_available: calReady,
   }
 }

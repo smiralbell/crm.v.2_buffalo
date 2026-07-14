@@ -27,6 +27,7 @@ function mapDemoRow(row: {
   retell_kb_id?: string | null
   voz_id?: string | null
   direccion?: string | null
+  es_principal?: boolean | null
   created_at: Date | string
 }): DemoRow {
   return {
@@ -42,6 +43,7 @@ function mapDemoRow(row: {
     retell_kb_id: row.retell_kb_id ?? null,
     voz_id: row.voz_id ?? null,
     direccion: (row.direccion as DemoDireccion | null) ?? null,
+    es_principal: row.es_principal === true,
     created_at:
       row.created_at instanceof Date
         ? row.created_at.toISOString()
@@ -50,7 +52,18 @@ function mapDemoRow(row: {
 }
 
 const DEMO_SELECT = `id, nombre_cliente, prompt, base_conocimiento, frase_inicial, estado,
-  tipo, retell_agent_id, retell_llm_id, retell_kb_id, voz_id, direccion, created_at`
+  tipo, retell_agent_id, retell_llm_id, retell_kb_id, voz_id, direccion,
+  COALESCE(es_principal, false) AS es_principal, created_at`
+
+async function clearPrincipalFlag(tipo: DemoTipo, exceptDemoId?: number): Promise<void> {
+  await query(
+    `UPDATE demos SET es_principal = FALSE
+     WHERE COALESCE(es_principal, false) = TRUE
+       AND COALESCE(tipo, 'whatsapp') = $1
+       AND ($2::int IS NULL OR id <> $2)`,
+    [tipo, exceptDemoId ?? null]
+  )
+}
 
 export async function listDemos(): Promise<DemoListItem[]> {
   const demos = await query<{
@@ -232,19 +245,24 @@ export async function createDemo(
   options?: DemoSaveOptions
 ): Promise<DemoListItem> {
   const tipo: DemoTipo = input.tipo === 'voz' ? 'voz' : 'whatsapp'
+  const esPrincipal = input.es_principal === true
 
   const preConflicts = await findPhoneConflicts(input.numeros, undefined, tipo)
   if (preConflicts.length > 0 && !options?.mover_numeros) {
     throw new PhoneNumberConflictError(preConflicts)
   }
 
+  if (esPrincipal) {
+    await clearPrincipalFlag(tipo)
+  }
+
   const result = await query<{ id: number; created_at: Date }>(
     `INSERT INTO demos (
        nombre_cliente, prompt, base_conocimiento, frase_inicial, estado,
-       tipo, voz_id, direccion,
+       tipo, voz_id, direccion, es_principal,
        retell_agent_id, retell_llm_id, retell_kb_id
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING id, created_at`,
     [
       input.nombre_cliente,
@@ -255,6 +273,7 @@ export async function createDemo(
       tipo,
       tipo === 'voz' ? input.voz_id?.trim() || null : null,
       tipo === 'voz' ? input.direccion || 'inbound' : null,
+      esPrincipal,
       null,
       null,
       null,
@@ -292,13 +311,19 @@ export async function updateDemo(
   const vozId = input.voz_id !== undefined ? input.voz_id.trim() || null : existing.voz_id
   const direccion =
     input.direccion !== undefined ? input.direccion : existing.direccion
+  const esPrincipal =
+    input.es_principal !== undefined ? input.es_principal === true : existing.es_principal
+
+  if (esPrincipal) {
+    await clearPrincipalFlag(existing.tipo, id)
+  }
 
   await query(
     `UPDATE demos
      SET nombre_cliente = $1, prompt = $2, base_conocimiento = $3, frase_inicial = $4, estado = $5,
-         voz_id = $6, direccion = $7
-     WHERE id = $8`,
-    [nombre, prompt, base, fraseInicial, estado, vozId, direccion, id]
+         voz_id = $6, direccion = $7, es_principal = $8
+     WHERE id = $9`,
+    [nombre, prompt, base, fraseInicial, estado, vozId, direccion, esPrincipal, id]
   )
 
   if (input.numeros) {
@@ -384,6 +409,51 @@ export async function findActiveVoiceDemoByPhone(
        AND d.retell_agent_id IS NOT NULL
      LIMIT 1`,
     [phone]
+  )
+  const row = result.rows[0]
+  if (!row) return null
+  return {
+    demo_id: row.demo_id,
+    nombre_cliente: row.nombre_cliente,
+    retell_agent_id: row.retell_agent_id,
+    direccion: row.direccion as DemoDireccion,
+  }
+}
+
+/** Demo principal Buffalo (WhatsApp): captura números no asociados a ninguna demo de cliente */
+export async function findPrincipalActiveDemo(): Promise<ActiveDemoMatch | null> {
+  const result = await query<{
+    demo_id: number
+    nombre_cliente: string
+    prompt: string
+    base_conocimiento: string
+  }>(
+    `SELECT d.id AS demo_id, d.nombre_cliente, d.prompt, d.base_conocimiento
+     FROM demos d
+     WHERE d.estado = 'activa'
+       AND COALESCE(d.es_principal, false) = TRUE
+       AND (d.tipo = 'whatsapp' OR d.tipo IS NULL)
+     LIMIT 1`
+  )
+  return result.rows[0] ?? null
+}
+
+/** Demo principal Buffalo (voz inbound): captura llamadas de números no autorizados */
+export async function findPrincipalActiveVoiceDemo(): Promise<VoiceDemoMatch | null> {
+  const result = await query<{
+    demo_id: number
+    nombre_cliente: string
+    retell_agent_id: string
+    direccion: string
+  }>(
+    `SELECT d.id AS demo_id, d.nombre_cliente, d.retell_agent_id, d.direccion
+     FROM demos d
+     WHERE d.estado = 'activa'
+       AND COALESCE(d.es_principal, false) = TRUE
+       AND d.tipo = 'voz'
+       AND d.direccion IN ('inbound', 'ambos')
+       AND d.retell_agent_id IS NOT NULL
+     LIMIT 1`
   )
   const row = result.rows[0]
   if (!row) return null

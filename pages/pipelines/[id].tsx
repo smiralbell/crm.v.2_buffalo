@@ -6,6 +6,13 @@ import PipelineLayout from '@/components/PipelineLayout'
 import KanbanBoard from '@/components/KanbanBoard'
 import PipelineCardDrawer from '@/components/PipelineCardDrawer'
 import { getPipelineStages, type PipelineStageRow } from '@/lib/pipelines/stages'
+import { getColdCallScope } from '@/lib/coldcall/scope'
+import {
+  getColdCallPipelineCards,
+  getColdCallProspectDisplayMap,
+  isColdCallPipeline,
+  syncColdCallPipelineForScope,
+} from '@/lib/pipelines/cold-calling'
 
 interface PipelineCard {
   id: string
@@ -34,11 +41,14 @@ interface PipelineDetailProps {
   initialCards: PipelineCard[]
   initialStages: PipelineStageRow[]
   availableEntities: Array<{ id: string; name: string }>
+  isColdCallPipeline: boolean
+  initialProspectDisplay: Record<string, { nombre: string; email: string | null; telefono: string | null }>
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
+  let user
   try {
-    await requireAuth(context)
+    user = await requireAuth(context)
   } catch {
     return { redirect: { destination: '/login', permanent: false } }
   }
@@ -52,17 +62,55 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     })
     if (!pipeline) return { notFound: true }
 
-    const [cards, stages, contacts] = await Promise.all([
-      prisma.pipelineCard.findMany({
+    const coldCall = await isColdCallPipeline(pipelineId)
+    if (coldCall && user.role !== 'admin' && user.role !== 'comercial') {
+      return { notFound: true }
+    }
+    if (!coldCall && user.role !== 'admin') {
+      return { notFound: true }
+    }
+
+    const scope = await getColdCallScope(user)
+
+    let cardsRaw
+    if (coldCall) {
+      await syncColdCallPipelineForScope(scope)
+      cardsRaw = await getColdCallPipelineCards(scope, pipelineId)
+    } else {
+      cardsRaw = await prisma.pipelineCard.findMany({
         where: { pipeline_id: pipelineId, deleted_at: null },
         orderBy: [{ stage: 'asc' }, { position: 'asc' }],
-      }),
+      })
+    }
+
+    const [stages, contacts] = await Promise.all([
       getPipelineStages(pipelineId),
-      prisma.contact.findMany({
-        take: 100,
-        orderBy: { created_at: 'desc' },
-      }),
+      coldCall
+        ? Promise.resolve([])
+        : prisma.contact.findMany({
+            take: 100,
+            orderBy: { created_at: 'desc' },
+          }),
     ])
+
+    const initialCards = cardsRaw.map((card) => ({
+      id: card.id,
+      entity_id: card.entity_id,
+      entity_type: card.entity_type as 'client' | 'contact',
+      stage: card.stage,
+      stage_color: card.stage_color || '#FFFFFF',
+      position: card.position,
+      tags: card.tags,
+      capture_date: card.capture_date?.toISOString?.() || (card.capture_date ? String(card.capture_date) : null),
+      amount: card.amount ? Number(card.amount) : null,
+      notes: card.notes || null,
+      created_at: card.created_at.toISOString(),
+      updated_at: card.updated_at.toISOString(),
+    }))
+
+    const initialProspectDisplay = coldCall
+      ? await getColdCallProspectDisplayMap(initialCards.map((c) => c.entity_id))
+      : {}
 
     return {
       props: {
@@ -73,24 +121,18 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           created_at: pipeline.created_at.toISOString(),
         },
         initialStages: stages,
-        initialCards: cards.map((card) => ({
-          id: card.id,
-          entity_id: card.entity_id,
-          entity_type: card.entity_type as 'client' | 'contact',
-          stage: card.stage,
-          stage_color: card.stage_color || '#FFFFFF',
-          position: card.position,
-          tags: card.tags,
-          capture_date: card.capture_date?.toISOString() || null,
-          amount: card.amount ? Number(card.amount) : null,
-          notes: card.notes || null,
-          created_at: card.created_at.toISOString(),
-          updated_at: card.updated_at.toISOString(),
-        })),
-        availableEntities: contacts.map((c) => ({
-          id: String(c.id),
-          name: c.nombre || c.email || 'Sin nombre',
-        })),
+        initialCards,
+        isColdCallPipeline: coldCall,
+        initialProspectDisplay,
+        availableEntities: coldCall
+          ? initialCards.map((c) => ({
+              id: c.entity_id,
+              name: initialProspectDisplay[c.entity_id]?.nombre || `Lead #${c.entity_id}`,
+            }))
+          : contacts.map((c) => ({
+              id: String(c.id),
+              name: c.nombre || c.email || 'Sin nombre',
+            })),
       },
     }
   } catch (error) {
@@ -104,6 +146,8 @@ export default function PipelineDetail({
   initialCards,
   initialStages,
   availableEntities,
+  isColdCallPipeline: isColdCall,
+  initialProspectDisplay,
 }: PipelineDetailProps) {
   const [cards, setCards] = useState<PipelineCard[]>(initialCards)
   const [stages, setStages] = useState<PipelineStageRow[]>(initialStages)
@@ -223,6 +267,21 @@ export default function PipelineDetail({
   }
 
   const getEntityName = async (entityId: string): Promise<string> => {
+    if (isColdCall) {
+      const cached = initialProspectDisplay[entityId]
+      if (cached?.nombre) return cached.nombre
+      try {
+        const res = await fetch(`/api/coldcall/prospects/lookup?ids=${encodeURIComponent(entityId)}`)
+        if (res.ok) {
+          const data = await res.json()
+          return data[entityId]?.nombre || 'Sin nombre'
+        }
+      } catch (error) {
+        console.error('Error fetching prospect name:', error)
+      }
+      return 'Sin nombre'
+    }
+
     try {
       const entityIdNum = parseInt(entityId, 10)
       if (isNaN(entityIdNum)) return 'Sin nombre'
@@ -238,6 +297,27 @@ export default function PipelineDetail({
   }
 
   const getEntityDetails = async (entityId: string): Promise<{ email?: string; telefono?: string }> => {
+    if (isColdCall) {
+      const cached = initialProspectDisplay[entityId]
+      if (cached) {
+        return {
+          email: cached.email || undefined,
+          telefono: cached.telefono || undefined,
+        }
+      }
+      try {
+        const res = await fetch(`/api/coldcall/prospects/lookup?ids=${encodeURIComponent(entityId)}`)
+        if (res.ok) {
+          const data = await res.json()
+          const row = data[entityId]
+          return { email: row?.email, telefono: row?.telefono }
+        }
+      } catch (error) {
+        console.error('Error fetching prospect details:', error)
+      }
+      return {}
+    }
+
     try {
       const entityIdNum = parseInt(entityId, 10)
       if (isNaN(entityIdNum)) return {}

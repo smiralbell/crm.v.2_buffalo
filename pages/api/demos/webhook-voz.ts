@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { findActiveVoiceDemoByPhone } from '@/lib/demos/store'
+import { findActiveVoiceDemoByPhone, findPrincipalActiveVoiceDemo } from '@/lib/demos/store'
 import { normalizePhoneNumber } from '@/lib/demos/phone'
 
 function extractFromNumber(body: unknown): string | null {
@@ -47,6 +47,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (digits.length === 9 && /^[67]/.test(digits)) {
         demo = await findActiveVoiceDemoByPhone(`+34${digits}`)
       }
+    }
+
+    if (!demo) {
+      demo = await findPrincipalActiveVoiceDemo()
     }
 
     if (!demo) {

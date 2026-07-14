@@ -10,6 +10,7 @@ import type { ColdCallScope } from './scope'
 import { getScopeFilterParams } from './scope'
 import type { ColdCallCampaign, CsvLeadInput, ImportBatchResult } from './types'
 import { LEAD_STAGES } from './types'
+import { syncProspectPipelineCard } from '@/lib/pipelines/cold-calling'
 
 export async function listCampaigns(scope: ColdCallScope): Promise<ColdCallCampaign[]> {
   const { userId: scopeUserId, teamIds: scopeTeamIds, legacyAdmin } = getScopeFilterParams(scope)
@@ -374,6 +375,7 @@ export async function importLeadsToCampaign(input: {
           TRUE
         )
       `
+      await syncProspectPipelineCard(inserted[0].id)
     }
 
     rowsImported++

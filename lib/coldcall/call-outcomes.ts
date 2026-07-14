@@ -1,5 +1,9 @@
 import { prisma } from '@/lib/prisma'
 import type { CallOutcome } from './types'
+import {
+  deleteProspectPipelineCard,
+  syncProspectPipelineCard,
+} from '@/lib/pipelines/cold-calling'
 
 const OUTCOME_TO_STAGE: Record<string, string> = {
   interesado: 'interesado_info_enviada',
@@ -55,14 +59,13 @@ export async function applyCallOutcome(input: {
       nextRetryAt = later
       stage = 'en_cola'
     } else {
-      const in30 = new Date()
-      in30.setDate(in30.getDate() + 30)
-      nextRetryAt = in30
-      stage = 'en_cola'
+      stage = 'no_interesado'
+      nextRetryAt = null
     }
   }
 
   if (input.outcome === 'numero_erroneo') {
+    await deleteProspectPipelineCard(input.prospectId)
     await prisma.$executeRaw`
       DELETE FROM coldcall_prospects WHERE id = ${input.prospectId}
     `
@@ -90,6 +93,11 @@ export async function applyCallOutcome(input: {
       ${input.userId ?? null}
     )
   `
+
+  await syncProspectPipelineCard(input.prospectId, {
+    outcome: input.outcome,
+    callAttempts,
+  })
 
   return { deleted: false, stage, callAttempts, nextRetryAt }
 }

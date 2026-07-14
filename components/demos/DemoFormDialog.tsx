@@ -46,12 +46,14 @@ export interface DemoFormValues {
   tipo: DemoTipo
   voz_id: string
   direccion: DemoDireccion
+  es_principal: boolean
 }
 
 interface DemoFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   demo?: DemoListItem | null
+  allDemos?: DemoListItem[]
   onSubmit: (values: DemoFormValues) => Promise<void>
   saving?: boolean
 }
@@ -66,6 +68,7 @@ const emptyForm: DemoFormValues = {
   tipo: 'whatsapp',
   voz_id: '',
   direccion: 'inbound',
+  es_principal: false,
 }
 
 const direccionLabel: Record<DemoDireccion, string> = {
@@ -85,6 +88,7 @@ export default function DemoFormDialog({
   open,
   onOpenChange,
   demo,
+  allDemos = [],
   onSubmit,
   saving = false,
 }: DemoFormDialogProps) {
@@ -103,6 +107,9 @@ export default function DemoFormDialog({
   const exceptDemoId = demo?.id
   const isEdit = Boolean(demo)
   const isVoz = form.tipo === 'voz'
+  const otherPrincipal = allDemos.find(
+    (d) => d.es_principal && d.tipo === form.tipo && d.id !== exceptDemoId
+  )
 
   useEffect(() => {
     if (!open) return
@@ -119,6 +126,7 @@ export default function DemoFormDialog({
         tipo: demo.tipo,
         voz_id: demo.voz_id || '',
         direccion: demo.direccion || 'inbound',
+        es_principal: demo.es_principal ?? false,
       })
     } else {
       setForm(emptyForm)
@@ -244,6 +252,11 @@ export default function DemoFormDialog({
     }
     if (isVoz && !form.voz_id.trim()) {
       setError('Selecciona una voz de Retell')
+      return
+    }
+
+    if (isVoz && form.es_principal && form.direccion === 'outbound') {
+      setError('La demo principal de voz debe ser inbound o ambos')
       return
     }
 
@@ -432,6 +445,51 @@ export default function DemoFormDialog({
             )}
           </div>
 
+          <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-4 space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.es_principal}
+                onChange={(e) => {
+                  const checked = e.target.checked
+                  setForm((p) => ({
+                    ...p,
+                    es_principal: checked,
+                    ...(checked && p.tipo === 'voz' && p.direccion === 'outbound'
+                      ? { direccion: 'inbound' as DemoDireccion }
+                      : {}),
+                  }))
+                }}
+                className="mt-1 h-4 w-4 rounded border-gray-300"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900">
+                  Agente principal Buffalo
+                </span>
+                <span className="block text-xs text-gray-600 mt-1">
+                  {isVoz
+                    ? 'Si alguien llama desde el widget web con un número que no está en ninguna demo de cliente, se enruta a este agente de voz.'
+                    : 'Si alguien escribe por WhatsApp desde el widget web con un número que no está en ninguna demo de cliente, responde este agente de Buffalo (no la demo de un cliente).'}
+                </span>
+              </span>
+            </label>
+            {form.es_principal && (
+              <p className="text-xs text-blue-800">
+                Solo puede haber <strong>una</strong> demo principal de{' '}
+                {isVoz ? 'voz' : 'WhatsApp'} en todo el sistema. Los números autorizados son
+                opcionales: sin ellos, actúa como captura global de desconocidos.
+                {otherPrincipal && (
+                  <>
+                    {' '}
+                    Al guardar, se sustituirá la principal actual:{' '}
+                    <strong>{otherPrincipal.nombre_cliente}</strong>.
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+
+          {!form.es_principal && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>{numerosLabel(form.tipo, form.direccion)}</Label>
@@ -484,6 +542,44 @@ export default function DemoFormDialog({
             </div>
             <p className="text-xs text-gray-500">Formato internacional, ej. +34612345678</p>
           </div>
+          )}
+
+          {form.es_principal && (
+            <div className="space-y-2">
+              <Label>Números de prueba (opcional)</Label>
+              <p className="text-xs text-gray-500">
+                Puedes añadir números concretos para pruebas internas. Los desconocidos del widget
+                también llegarán aquí.
+              </p>
+              <div className="space-y-2">
+                {form.numeros.map((num, i) => (
+                  <div key={i} className="flex gap-2">
+                    <Input
+                      value={num}
+                      onChange={(e) => updateNumero(i, e.target.value)}
+                      placeholder="+34612345678"
+                      className="rounded-xl border-gray-200 font-mono text-sm"
+                    />
+                    {form.numeros.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeNumero(i)}
+                        className="shrink-0 text-gray-400 hover:text-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={addNumero} className="rounded-lg">
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Añadir número de prueba
+              </Button>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Estado</Label>

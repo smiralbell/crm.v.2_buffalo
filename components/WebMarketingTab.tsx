@@ -4,10 +4,12 @@ import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Globe, FileText, MessageCircle, Info, ChevronDown } from 'lucide-react'
+import { FileText, MessageCircle, CalendarDays, Info, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import AgentChatsPanel from '@/components/AgentChatsPanel'
-import type { WebMarketingMetrics } from '@/lib/marketing/web-metrics'
+import WebFormSubmissionsPanel from '@/components/WebFormSubmissionsPanel'
+import WebCalBookingsPanel from '@/components/WebCalBookingsPanel'
+import type { WebMarketingMetrics } from '@/lib/marketing/web-metrics.types'
 
 function fmt(n: number) {
   return n.toLocaleString('es-ES')
@@ -27,6 +29,7 @@ function Kpi({
   label,
   value,
   sub,
+  hint,
   icon: Icon,
   active,
   onClick,
@@ -34,6 +37,7 @@ function Kpi({
   label: string
   value: string
   sub?: string
+  hint?: string
   icon: React.ElementType
   active?: boolean
   onClick?: () => void
@@ -45,9 +49,9 @@ function Kpi({
           <p className="text-xs text-gray-500 font-medium">{label}</p>
           <p className="text-2xl font-semibold text-gray-900 leading-tight">{value}</p>
           {sub && <p className="text-xs text-gray-400">{sub}</p>}
-          {onClick && (
+          {onClick && hint && (
             <p className="text-[11px] text-gray-400 flex items-center gap-0.5 pt-0.5">
-              Ver conversaciones
+              {hint}
               <ChevronDown className={cn('h-3 w-3 transition-transform', active && 'rotate-180')} />
             </p>
           )}
@@ -96,6 +100,8 @@ export default function WebMarketingTab({
   const [data, setData] = useState<WebMarketingMetrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [showChat, setShowChat] = useState(initialChatOpen)
+  const [showForms, setShowForms] = useState(false)
+  const [showCal, setShowCal] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -136,20 +142,48 @@ export default function WebMarketingTab({
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Kpi
-          icon={Globe}
-          label="Leads por la web"
-          value={fmt(data.web_leads)}
-          sub="Origen web o canal web en el período"
+          icon={CalendarDays}
+          label="Agendaron en el calendario"
+          value={data.cal_available ? fmt(data.cal_bookings) : '—'}
+          sub={
+            data.cal_available
+              ? data.cal_upcoming > 0
+                ? `${data.cal_upcoming} reuniones próximas · reunion-agente-llamada`
+                : 'Calendario web — reunion-agente-llamada'
+              : 'Ejecuta CREATE_CAL_BOOKINGS.sql y configura el webhook'
+          }
+          hint="Ver lead y reunión"
+          active={showCal}
+          onClick={data.cal_available ? () => {
+            setShowCal((v) => !v)
+            if (!showCal) {
+              setShowForms(false)
+              setShowChat(false)
+            }
+          } : undefined}
         />
         <Kpi
           icon={FileText}
           label="Formulario rellenado"
           value={fmt(data.form_submissions)}
           sub={
-            data.conversion_form_pct != null
-              ? `${data.conversion_form_pct}% sobre leads web`
-              : 'Sin leads web en el período'
+            data.form_submissions_available
+              ? data.form_submissions_pending > 0
+                ? `${data.form_submissions_pending} pendientes de contactar`
+                : 'Todos gestionados en el período'
+              : data.conversion_form_pct != null
+                ? `${data.conversion_form_pct}% sobre leads web`
+                : 'Sin leads web en el período'
           }
+          hint="Ver formularios"
+          active={showForms}
+          onClick={() => {
+            setShowForms((v) => !v)
+            if (!showForms) {
+              setShowChat(false)
+              setShowCal(false)
+            }
+          }}
         />
         <Kpi
           icon={MessageCircle}
@@ -162,10 +196,33 @@ export default function WebMarketingTab({
                 }`
               : 'Chat no configurado (DATABASE_URL_chat)'
           }
+          hint="Ver conversaciones"
           active={showChat}
-          onClick={data.chat_available ? () => setShowChat((v) => !v) : undefined}
+          onClick={data.chat_available ? () => {
+            setShowChat((v) => !v)
+            if (!showChat) {
+              setShowForms(false)
+              setShowCal(false)
+            }
+          } : undefined}
         />
       </div>
+
+      {showCal && data.cal_available && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-800 px-0.5">
+            Calendario web — lead y reunión
+          </h3>
+          <WebCalBookingsPanel period={period} />
+        </div>
+      )}
+
+      {showForms && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-gray-800 px-0.5">Formularios web — envíos n8n</h3>
+          <WebFormSubmissionsPanel period={period} />
+        </div>
+      )}
 
       {showChat && data.chat_available && (
         <div className="space-y-2">
@@ -202,6 +259,20 @@ export default function WebMarketingTab({
             </div>
             <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
               <div className="h-full bg-gray-800 rounded-full w-full" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Agendaron calendario</span>
+              <span className="font-semibold">{data.cal_available ? fmt(data.cal_bookings) : '—'}</span>
+            </div>
+            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+              <div
+                className="h-full bg-violet-600 rounded-full"
+                style={{
+                  width: `${data.web_leads > 0 && data.cal_available ? Math.min(100, (data.cal_bookings / data.web_leads) * 100) : data.cal_bookings > 0 ? 100 : 0}%`,
+                }}
+              />
             </div>
           </div>
           <div className="space-y-2">

@@ -93,6 +93,7 @@ const NAV: NavItem[] = [
   { href: '/developer', label: 'Dashboard', icon: LayoutDashboard, roles: ['developer'] },
   { href: '/comercial', label: 'Métricas', icon: LayoutDashboard, roles: ['comercial'] },
   { href: '/comercial/campanas', label: 'Campañas', icon: Megaphone, roles: ['comercial'] },
+  { href: '/comercial/pipeline', label: 'Pipeline', icon: Workflow, roles: ['comercial'] },
   { href: '/comercial/reuniones', label: 'Reuniones', icon: Calendar, roles: ['comercial'] },
   { href: '/comercial/llamar-mas-tarde', label: 'Llamar más tarde', icon: Clock, roles: ['comercial'] },
   { href: '/comercial/objeciones', label: 'Objeciones', icon: MessageSquare, roles: ['comercial'] },

@@ -11,6 +11,7 @@ export const DEVELOPER_PAGE_PREFIXES = [
 export const COMERCIAL_PAGE_PREFIXES = [
   '/comercial',
   '/coldcalling',
+  '/pipelines',
   '/developer/facturas',
   '/login',
 ] as const
@@ -19,6 +20,7 @@ export const COMERCIAL_PAGE_PREFIXES = [
 export const COMERCIAL_ONLY_ROUTES = [
   '/comercial',
   '/comercial/campanas',
+  '/comercial/pipeline',
   '/comercial/reuniones',
   '/comercial/llamar-mas-tarde',
   '/comercial/objeciones',
@@ -37,6 +39,7 @@ export const DEVELOPER_API_PREFIXES = [
 export const COMERCIAL_API_PREFIXES = [
   '/api/auth/',
   '/api/coldcall/',
+  '/api/pipelines/',
   '/api/developer/invoices',
 ] as const
 

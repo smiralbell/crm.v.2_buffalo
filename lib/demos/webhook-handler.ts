@@ -1,5 +1,6 @@
 import {
   findActiveDemoByPhone,
+  findPrincipalActiveDemo,
   getConversationMessages,
   listAuthorizedPhones,
   saveConversationMessages,
@@ -100,6 +101,20 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
           demo_id: demo.demo_id,
         })
       }
+    }
+  }
+
+  if (!demo) {
+    demo = await findPrincipalActiveDemo()
+    if (demo) {
+      await logDemoWebhook({
+        step: 'principal_fallback',
+        level: 'info',
+        message: `Número ${phone} no está en ninguna demo de cliente → agente principal Buffalo (${demo.nombre_cliente})`,
+        event: data.event,
+        phone,
+        demo_id: demo.demo_id,
+      })
     }
   }
 
