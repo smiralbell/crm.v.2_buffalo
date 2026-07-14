@@ -74,6 +74,7 @@ interface CampaignCallOutcomesProps {
   leadPhone: string | null
   leadPhoneDisplay: string | null
   persona?: ComercialPersona
+  presentationUrl?: string | null
   saving: boolean
   saved: boolean
   saveError: string
@@ -92,6 +93,7 @@ export default function CampaignCallOutcomes({
   leadPhone,
   leadPhoneDisplay,
   persona = DEFAULT_CEO_PERSONA,
+  presentationUrl,
   saving,
   saved,
   saveError,
@@ -130,8 +132,8 @@ export default function CampaignCallOutcomes({
     setWhatsappSent(false)
     setEmailSent(false)
     setLocalError('')
-    if (id === 'info_enviada') setContactMessage(contactTemplate('info', lead, persona))
-    else if (id === 'interesado') setContactMessage(contactTemplate('interesado', lead, persona))
+    if (id === 'info_enviada') setContactMessage(contactTemplate('info', lead, persona, presentationUrl))
+    else if (id === 'interesado') setContactMessage(contactTemplate('interesado', lead, persona, presentationUrl))
     else if (id === 'no_interesado') setContactMessage(contactTemplate('no_interesado', lead, persona))
     else if (id === 'llamar_tarde') {
       const defaultAt = defaultCallbackDatetime()

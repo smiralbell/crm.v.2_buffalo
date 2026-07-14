@@ -45,6 +45,7 @@ export interface ColdCallCampaign {
   column_mapping?: Record<string, string> | null
   script_markdown_es?: string | null
   script_markdown_ca?: string | null
+  presentation_url?: string | null
   stats?: CampaignStats
   assignee_name?: string | null
 }

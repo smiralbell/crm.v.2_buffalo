@@ -5,7 +5,11 @@ import { presentationMessageLines } from '@/lib/coldcall/presentation-link'
 export type WhatsAppTemplateKind = 'interesado' | 'no_interesado'
 export type ContactTemplateKind = WhatsAppTemplateKind | 'info'
 
-export { BUFFALO_PRESENTATION_URL } from '@/lib/coldcall/presentation-link'
+export {
+  BUFFALO_PRESENTATION_URL,
+  DEFAULT_PRESENTATION_URL,
+  resolvePresentationUrl,
+} from '@/lib/coldcall/presentation-link'
 
 export function firstName(nombre: string, firstNameField?: string | null): string {
   if (firstNameField?.trim()) return firstNameField.trim()
@@ -25,7 +29,8 @@ export function defaultInfoTemplate(
     first_name?: string | null
     empresa?: string | null
   },
-  persona: ComercialPersona = DEFAULT_CEO_PERSONA
+  persona: ComercialPersona = DEFAULT_CEO_PERSONA,
+  presentationUrl?: string | null
 ): string {
   const name = firstName(lead.nombre, lead.first_name)
   const empresa = lead.empresa?.trim()
@@ -36,7 +41,7 @@ export function defaultInfoTemplate(
     empresa
       ? `Como comentamos, te envío información sobre cómo Buffalo ayuda a empresas como ${empresa} con IA y automatización.`
       : 'Como comentamos, te envío información sobre cómo Buffalo ayuda a empresas con IA y automatización.',
-    ...presentationMessageLines(),
+    ...presentationMessageLines(presentationUrl),
     '',
     'Si te encaja, podemos hablar 15 minutos esta semana: nos ponemos cara, nos conocemos y vemos si podría haber algún encaje.',
     '',
@@ -48,7 +53,8 @@ export function defaultInfoTemplate(
 export function defaultWhatsAppTemplate(
   kind: WhatsAppTemplateKind,
   lead: { nombre: string; first_name?: string | null; empresa?: string | null },
-  persona: ComercialPersona = DEFAULT_CEO_PERSONA
+  persona: ComercialPersona = DEFAULT_CEO_PERSONA,
+  presentationUrl?: string | null
 ): string {
   const name = firstName(lead.nombre, lead.first_name)
   const empresa = lead.empresa?.trim()
@@ -61,7 +67,7 @@ export function defaultWhatsAppTemplate(
       empresa
         ? `Como comentamos, en Buffalo ayudamos a empresas como ${empresa} con soluciones de IA y automatización.`
         : 'Como comentamos, en Buffalo ayudamos a empresas con soluciones de IA y automatización.',
-      ...presentationMessageLines(),
+      ...presentationMessageLines(presentationUrl),
       '',
       'Te comparto la información y, si te encaja, podemos agendar una breve reunión esta semana.',
       '',
@@ -82,10 +88,11 @@ export function defaultWhatsAppTemplate(
 export function contactTemplate(
   kind: ContactTemplateKind,
   lead: { nombre: string; first_name?: string | null; empresa?: string | null },
-  persona: ComercialPersona = DEFAULT_CEO_PERSONA
+  persona: ComercialPersona = DEFAULT_CEO_PERSONA,
+  presentationUrl?: string | null
 ): string {
-  if (kind === 'info') return defaultInfoTemplate(lead, persona)
-  return defaultWhatsAppTemplate(kind, lead, persona)
+  if (kind === 'info') return defaultInfoTemplate(lead, persona, presentationUrl)
+  return defaultWhatsAppTemplate(kind, lead, persona, presentationUrl)
 }
 
 export function buildMailtoUrl(

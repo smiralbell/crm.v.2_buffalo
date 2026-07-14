@@ -92,6 +92,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
   const [objectionsEs, setObjectionsEs] = useState<ColdCallObjection[]>([])
   const [objectionsCa, setObjectionsCa] = useState<ColdCallObjection[]>([])
   const [persona, setPersona] = useState<ComercialPersona>(DEFAULT_CEO_PERSONA)
+  const [presentationUrl, setPresentationUrl] = useState<string | null>(null)
   const [scriptLang, setScriptLang] = useState<'es' | 'ca'>('es')
   const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -112,6 +113,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
         if (d.error) throw new Error(d.error)
         setCampaignName(d.campaign?.name || '')
         setColumnMapping(d.campaign?.column_mapping || {})
+        setPresentationUrl(d.campaign?.presentation_url ?? null)
         setLead(d.lead)
         setIndex(d.index ?? 0)
         setTotal(d.total ?? 0)
@@ -285,6 +287,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
                 leadPhone={leadPhone}
                 leadPhoneDisplay={leadPhoneDisplay}
                 persona={persona}
+                presentationUrl={presentationUrl}
                 saving={saving}
                 saved={saved}
                 saveError={saveError}

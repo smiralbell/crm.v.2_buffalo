@@ -91,6 +91,7 @@ function mapCampaignRow(r: {
   column_mapping?: unknown
   script_markdown_es?: string | null
   script_markdown_ca?: string | null
+  presentation_url?: string | null
 }): ColdCallCampaign {
   return {
     id: r.id,
@@ -106,6 +107,7 @@ function mapCampaignRow(r: {
     column_mapping: normalizeStoredMapping(parseJsonObject(r.column_mapping)),
     script_markdown_es: r.script_markdown_es ?? null,
     script_markdown_ca: r.script_markdown_ca ?? null,
+    presentation_url: r.presentation_url ?? null,
     stats: r.total_leads != null ? {
       total_leads: Number(r.total_leads),
       in_queue: Number(r.in_queue),
@@ -750,6 +752,19 @@ export async function saveCampaignScript(
     UPDATE coldcall_campaigns SET
       script_markdown_es = ${script.script_markdown_es ?? null},
       script_markdown_ca = ${script.script_markdown_ca ?? null},
+      updated_at = NOW()
+    WHERE id = ${campaignId}
+  `
+}
+
+export async function saveCampaignPresentation(
+  campaignId: number,
+  presentationUrl: string | null
+): Promise<void> {
+  const normalized = presentationUrl?.trim() || null
+  await prisma.$executeRaw`
+    UPDATE coldcall_campaigns SET
+      presentation_url = ${normalized},
       updated_at = NOW()
     WHERE id = ${campaignId}
   `

@@ -21,6 +21,7 @@ import type { ColdCallCampaign, ImportBatchResult } from '@/lib/coldcall/types'
 
 import CsvImportMappingDialog from '@/components/coldcall/CsvImportMappingDialog'
 import CampaignScriptEditor from '@/components/coldcall/CampaignScriptEditor'
+import CampaignPresentationEditor from '@/components/coldcall/CampaignPresentationEditor'
 import RequestProspectsButton from '@/components/coldcall/RequestProspectsButton'
 
 import { ColumnMappingEditor } from '@/components/coldcall/ColumnMappingEditor'
@@ -53,6 +54,8 @@ import {
   Globe,
 
   ExternalLink,
+
+  Link2,
 
   Copy,
 
@@ -113,6 +116,7 @@ export default function CampanaDetailPage() {
   const [importResult, setImportResult] = useState<ImportBatchResult | null>(null)
 
   const [scriptOpen, setScriptOpen] = useState(false)
+  const [presentationOpen, setPresentationOpen] = useState(false)
 
 
 
@@ -317,6 +321,24 @@ export default function CampanaDetailPage() {
           {campaign && (
 
             <div className="flex flex-wrap gap-2">
+
+              <Button
+
+                variant="outline"
+
+                size="sm"
+
+                className="rounded-xl gap-1.5"
+
+                onClick={() => setPresentationOpen(true)}
+
+              >
+
+                <Link2 className="h-3.5 w-3.5" />
+
+                Presentación
+
+              </Button>
 
               <Button
 
@@ -798,6 +820,17 @@ export default function CampanaDetailPage() {
           open={scriptOpen}
           onOpenChange={setScriptOpen}
           campaignId={parseInt(campaignId, 10)}
+        />
+      )}
+
+      {campaignId && (
+        <CampaignPresentationEditor
+          open={presentationOpen}
+          onOpenChange={setPresentationOpen}
+          campaignId={parseInt(campaignId, 10)}
+          onSaved={(url) =>
+            setCampaign((prev) => (prev ? { ...prev, presentation_url: url } : prev))
+          }
         />
       )}
 
