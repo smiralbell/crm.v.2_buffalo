@@ -1,0 +1,31 @@
+export const DEFAULT_BUFFALO_STAGES = [
+  'LEAD',
+  'CONTACTO',
+  'REUNIÓN',
+  'PROPUESTA ENVIADA',
+  'NEGOCIANDO',
+  'CONTRATO FIRMADO',
+  'FACTURA EMITIDA',
+  'ONBOARDING',
+  'EN DESARROLLO',
+  'ACTIVO',
+  'REMARKETING',
+] as const
+
+export const BUFFALO_STAGE_COLORS: Record<string, string> = {
+  LEAD: '#6B7280',
+  CONTACTO: '#3B82F6',
+  REUNIÓN: '#8B5CF6',
+  'PROPUESTA ENVIADA': '#F59E0B',
+  NEGOCIANDO: '#F97316',
+  'CONTRATO FIRMADO': '#10B981',
+  'FACTURA EMITIDA': '#06B6D4',
+  ONBOARDING: '#6366F1',
+  'EN DESARROLLO': '#2563EB',
+  ACTIVO: '#22C55E',
+  REMARKETING: '#EC4899',
+}
+
+export function defaultStageColor(name: string): string {
+  return BUFFALO_STAGE_COLORS[name] || '#3B82F6'
+}

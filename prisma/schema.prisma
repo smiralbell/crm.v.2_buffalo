@@ -183,8 +183,24 @@ model PipelineKanban {
   created_at  DateTime @default(now())
 
   cards       PipelineCard[]
+  stages      PipelineStage[]
 
   @@map("pipelines")
+}
+
+model PipelineStage {
+  id          String   @id @default(uuid()) @db.Uuid
+  pipeline_id String   @db.Uuid
+  name        String
+  color       String   @default("#3B82F6")
+  position    Int      @default(0)
+  created_at  DateTime @default(now())
+
+  pipeline    PipelineKanban @relation(fields: [pipeline_id], references: [id], onDelete: Cascade)
+
+  @@unique([pipeline_id, name])
+  @@index([pipeline_id, position])
+  @@map("pipeline_stages")
 }
 
 model PipelineCard {

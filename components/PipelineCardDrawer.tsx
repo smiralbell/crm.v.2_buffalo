@@ -16,6 +16,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useRouter } from 'next/router'
+import { BUFFALO_STAGE_COLORS, defaultStageColor } from '@/lib/pipelines/defaults'
+import type { PipelineStageRow } from '@/lib/pipelines/stages'
+
+export { BUFFALO_STAGE_COLORS }
 
 interface PipelineCard {
   id: string
@@ -30,34 +34,20 @@ interface PipelineCard {
   notes?: string | null
 }
 
-export const BUFFALO_STAGE_COLORS: Record<string, string> = {
-  'LEAD':              '#6B7280',
-  'CONTACTO':          '#3B82F6',
-  'REUNIÓN':           '#8B5CF6',
-  'PROPUESTA ENVIADA': '#F59E0B',
-  'NEGOCIANDO':        '#F97316',
-  'CONTRATO FIRMADO':  '#10B981',
-  'FACTURA EMITIDA':   '#06B6D4',
-  'ONBOARDING':        '#6366F1',
-  'EN DESARROLLO':     '#2563EB',
-  'ACTIVO':            '#22C55E',
-  'REMARKETING':       '#EC4899',
-}
-
 interface PipelineCardDrawerProps {
   card: PipelineCard | null
   pipelineId: string
-  stageOrder: string[]
+  stages: PipelineStageRow[]
   getEntityName: (id: string) => Promise<string>
   getEntityDetails: (id: string) => Promise<{ email?: string; telefono?: string }>
-  onCardMove: (cardId: string, newStage: string, newPosition: number, newColor?: string) => Promise<void>
+  onCardMove: (cardId: string, newStage: string, newPosition: number) => Promise<void>
   onClose: () => void
 }
 
 export default function PipelineCardDrawer({
   card,
   pipelineId,
-  stageOrder,
+  stages,
   getEntityName,
   getEntityDetails,
   onCardMove,
@@ -91,19 +81,21 @@ export default function PipelineCardDrawer({
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 
+  const stageOrder = stages.map((s) => s.name)
   const currentStageIndex = stageOrder.indexOf(card.stage)
-  const nextStage = currentStageIndex >= 0 && currentStageIndex < stageOrder.length - 1
-    ? stageOrder[currentStageIndex + 1]
-    : null
+  const nextStage =
+    currentStageIndex >= 0 && currentStageIndex < stageOrder.length - 1
+      ? stageOrder[currentStageIndex + 1]
+      : null
 
-  const stageColor = BUFFALO_STAGE_COLORS[card.stage] || '#3B82F6'
+  const stageColor =
+    stages.find((s) => s.name === card.stage)?.color || defaultStageColor(card.stage)
 
   const handleMoveNext = async () => {
     if (!nextStage) return
     setMoving(true)
     try {
-      const nextColor = BUFFALO_STAGE_COLORS[nextStage] || '#3B82F6'
-      await onCardMove(card.id, nextStage, 0, nextColor)
+      await onCardMove(card.id, nextStage, 0)
       onClose()
     } finally {
       setMoving(false)
@@ -256,17 +248,15 @@ export default function PipelineCardDrawer({
             </div>
             {/* Progress segments */}
             <div className="flex gap-1">
-              {stageOrder.map((stage, i) => (
+              {stages.map((stage, i) => (
                 <div
-                  key={stage}
-                  title={stage}
+                  key={stage.id}
+                  title={stage.name}
                   className={cn(
                     'h-1.5 flex-1 rounded-full transition-all',
                     i <= currentStageIndex ? 'opacity-100' : 'opacity-15'
                   )}
-                  style={{
-                    backgroundColor: BUFFALO_STAGE_COLORS[stage] || '#3B82F6',
-                  }}
+                  style={{ backgroundColor: stage.color }}
                 />
               ))}
             </div>
@@ -307,7 +297,7 @@ export default function PipelineCardDrawer({
                   <span className="text-gray-600">Mover a</span>
                   <span
                     className="ml-1.5 font-bold"
-                    style={{ color: BUFFALO_STAGE_COLORS[nextStage] || '#3B82F6' }}
+                    style={{ color: stages.find((s) => s.name === nextStage)?.color || defaultStageColor(nextStage) }}
                   >
                     {nextStage}
                   </span>

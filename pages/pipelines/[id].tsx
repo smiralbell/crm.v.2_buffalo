@@ -1,26 +1,11 @@
 import { GetServerSideProps } from 'next'
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/router'
+import { useState, useCallback } from 'react'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import PipelineLayout from '@/components/PipelineLayout'
 import KanbanBoard from '@/components/KanbanBoard'
-import PipelineCardDrawer, { BUFFALO_STAGE_COLORS } from '@/components/PipelineCardDrawer'
-
-// Etapas por defecto del pipeline comercial de Buffalo
-const DEFAULT_BUFFALO_STAGES = [
-  'LEAD',
-  'CONTACTO',
-  'REUNIÓN',
-  'PROPUESTA ENVIADA',
-  'NEGOCIANDO',
-  'CONTRATO FIRMADO',
-  'FACTURA EMITIDA',
-  'ONBOARDING',
-  'EN DESARROLLO',
-  'ACTIVO',
-  'REMARKETING',
-]
+import PipelineCardDrawer from '@/components/PipelineCardDrawer'
+import { getPipelineStages, type PipelineStageRow } from '@/lib/pipelines/stages'
 
 interface PipelineCard {
   id: string
@@ -47,54 +32,37 @@ interface Pipeline {
 interface PipelineDetailProps {
   pipeline: Pipeline
   initialCards: PipelineCard[]
+  initialStages: PipelineStageRow[]
   availableEntities: Array<{ id: string; name: string }>
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
     await requireAuth(context)
-  } catch (error) {
+  } catch {
     return { redirect: { destination: '/login', permanent: false } }
   }
 
   const pipelineId = context.params?.id as string
-
-  if (!pipelineId) {
-    return { notFound: true }
-  }
+  if (!pipelineId) return { notFound: true }
 
   try {
-    // Obtener pipeline directamente con Prisma
     const pipeline = await prisma.pipelineKanban.findUnique({
       where: { id: pipelineId },
     })
+    if (!pipeline) return { notFound: true }
 
-    if (!pipeline) {
-      return { notFound: true }
-    }
-
-    // Obtener cards directamente con Prisma
-    const cards = await prisma.pipelineCard.findMany({
-      where: {
-        pipeline_id: pipelineId,
-        deleted_at: null,
-      },
-      orderBy: [
-        { stage: 'asc' },
-        { position: 'asc' },
-      ],
-    })
-
-    // Obtener entidades disponibles (contactos o clientes) directamente con Prisma
-    const contacts = await prisma.contact.findMany({
-      take: 100, // Limitar para no sobrecargar
-      orderBy: { created_at: 'desc' },
-    })
-
-    const availableEntities = contacts.map((c) => ({
-      id: String(c.id),
-      name: c.nombre || c.email || 'Sin nombre',
-    }))
+    const [cards, stages, contacts] = await Promise.all([
+      prisma.pipelineCard.findMany({
+        where: { pipeline_id: pipelineId, deleted_at: null },
+        orderBy: [{ stage: 'asc' }, { position: 'asc' }],
+      }),
+      getPipelineStages(pipelineId),
+      prisma.contact.findMany({
+        take: 100,
+        orderBy: { created_at: 'desc' },
+      }),
+    ])
 
     return {
       props: {
@@ -104,6 +72,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           entity_type: pipeline.entity_type as 'client' | 'contact',
           created_at: pipeline.created_at.toISOString(),
         },
+        initialStages: stages,
         initialCards: cards.map((card) => ({
           id: card.id,
           entity_id: card.entity_id,
@@ -118,7 +87,10 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           created_at: card.created_at.toISOString(),
           updated_at: card.updated_at.toISOString(),
         })),
-        availableEntities,
+        availableEntities: contacts.map((c) => ({
+          id: String(c.id),
+          name: c.nombre || c.email || 'Sin nombre',
+        })),
       },
     }
   } catch (error) {
@@ -127,77 +99,43 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   }
 }
 
-export default function PipelineDetail({ pipeline, initialCards, availableEntities }: PipelineDetailProps) {
-  const router = useRouter()
+export default function PipelineDetail({
+  pipeline,
+  initialCards,
+  initialStages,
+  availableEntities,
+}: PipelineDetailProps) {
   const [cards, setCards] = useState<PipelineCard[]>(initialCards)
+  const [stages, setStages] = useState<PipelineStageRow[]>(initialStages)
   const [loading, setLoading] = useState(false)
   const [drawerCard, setDrawerCard] = useState<PipelineCard | null>(null)
 
-  // Inicializar stageOrder sin localStorage para evitar error de hidratación
-  const [stageOrder, setStageOrder] = useState<string[]>(() => {
-    // Si hay cards, usar sus stages como base; si no, usar los defaults de Buffalo
-    const stages = Array.from(new Set(initialCards.map((c) => c.stage)))
-    return stages.length > 0 ? stages : DEFAULT_BUFFALO_STAGES
-  })
-
-  // Cargar desde localStorage después de la hidratación
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(`pipeline_${pipeline.id}_stage_order`)
-      // Stages that actually have cards — must always be visible
-      const cardStages = Array.from(new Set(initialCards.map((c) => c.stage)))
-
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved)
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            // Merge: keep saved order, but append any card stages not yet in the list
-            const merged = Array.from(new Set([...parsed, ...cardStages]))
-            setStageOrder(merged)
-            localStorage.setItem(`pipeline_${pipeline.id}_stage_order`, JSON.stringify(merged))
-            return
-          }
-        } catch (error) {
-          console.error('Error parsing stage order from localStorage:', error)
-        }
-      }
-      // Sin datos guardados: defaults + stages de tarjetas existentes
-      const defaultOrder = Array.from(new Set([
-        ...DEFAULT_BUFFALO_STAGES,
-        ...cardStages,
-      ]))
-      setStageOrder(defaultOrder)
-      localStorage.setItem(`pipeline_${pipeline.id}_stage_order`, JSON.stringify(defaultOrder))
+  const reloadCards = useCallback(async () => {
+    const res = await fetch(`/api/pipelines/${pipeline.id}/cards`)
+    if (res.ok) {
+      const data = await res.json()
+      setCards(data.cards || [])
     }
   }, [pipeline.id])
 
-  const handleCardMove = async (cardId: string, newStage: string, newPosition: number, newColor?: string) => {
+  const reloadStages = useCallback(async () => {
+    const res = await fetch(`/api/pipelines/${pipeline.id}/stages`)
+    if (res.ok) {
+      const data = await res.json()
+      setStages(data.stages || [])
+    }
+  }, [pipeline.id])
+
+  const handleCardMove = async (cardId: string, newStage: string, newPosition: number) => {
     setLoading(true)
     try {
       const res = await fetch(`/api/pipelines/${pipeline.id}/cards`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          card_id: cardId,
-          stage: newStage,
-          position: newPosition,
-          stage_color: newColor,
-        }),
+        body: JSON.stringify({ card_id: cardId, stage: newStage, position: newPosition }),
       })
-
-      if (!res.ok) {
-        throw new Error('Error al mover tarjeta')
-      }
-
-      // Recargar cards
-      const cardsRes = await fetch(`/api/pipelines/${pipeline.id}/cards`)
-      if (cardsRes.ok) {
-        const data = await cardsRes.json()
-        setCards(data.cards || [])
-      }
-    } catch (error) {
-      console.error('Error moving card:', error)
-      throw error
+      if (!res.ok) throw new Error('Error al mover tarjeta')
+      await reloadCards()
     } finally {
       setLoading(false)
     }
@@ -215,12 +153,7 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
   }) => {
     setLoading(true)
     try {
-      // Validar que entityId sea válido
-      if (!data.entity_id || typeof data.entity_id !== 'string' || data.entity_id.trim().length === 0) {
-        throw new Error('ID de entidad inválido')
-      }
-
-      console.log('Creating card:', data)
+      if (!data.entity_id?.trim()) throw new Error('ID de entidad inválido')
 
       const res = await fetch(`/api/pipelines/${pipeline.id}/cards`, {
         method: 'POST',
@@ -239,19 +172,10 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }))
-        console.error('Error response:', errorData)
         throw new Error(errorData.error || 'Error al crear tarjeta')
       }
 
-      // Recargar cards
-      const cardsRes = await fetch(`/api/pipelines/${pipeline.id}/cards`)
-      if (cardsRes.ok) {
-        const data = await cardsRes.json()
-        setCards(data.cards || [])
-      }
-    } catch (error) {
-      console.error('Error creating card:', error)
-      throw error
+      await reloadCards()
     } finally {
       setLoading(false)
     }
@@ -272,21 +196,11 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
           ...(data.notes !== undefined && { notes: data.notes }),
         }),
       })
-
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }))
         throw new Error(errorData.error || 'Error al actualizar tarjeta')
       }
-
-      // Recargar cards
-      const cardsRes = await fetch(`/api/pipelines/${pipeline.id}/cards`)
-      if (cardsRes.ok) {
-        const data = await cardsRes.json()
-        setCards(data.cards || [])
-      }
-    } catch (error) {
-      console.error('Error updating card:', error)
-      throw error
+      await reloadCards()
     } finally {
       setLoading(false)
     }
@@ -298,20 +212,11 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
       const res = await fetch(`/api/pipelines/${pipeline.id}/cards/${cardId}`, {
         method: 'DELETE',
       })
-
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ error: 'Error desconocido' }))
         throw new Error(errorData.error || 'Error al eliminar tarjeta')
       }
-
-      const cardsRes = await fetch(`/api/pipelines/${pipeline.id}/cards`)
-      if (cardsRes.ok) {
-        const data = await cardsRes.json()
-        setCards(data.cards || [])
-      }
-    } catch (error) {
-      console.error('Error deleting card:', error)
-      throw error
+      await reloadCards()
     } finally {
       setLoading(false)
     }
@@ -319,16 +224,12 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
 
   const getEntityName = async (entityId: string): Promise<string> => {
     try {
-      const entityType = pipeline.entity_type
       const entityIdNum = parseInt(entityId, 10)
-      if (isNaN(entityIdNum)) {
-        return 'Sin nombre'
-      }
-
-      const res = await fetch(`/api/${entityType === 'contact' ? 'contacts' : 'contacts'}/${entityIdNum}`)
+      if (isNaN(entityIdNum)) return 'Sin nombre'
+      const res = await fetch(`/api/contacts/${entityIdNum}`)
       if (res.ok) {
         const data = await res.json()
-        return entityType === 'contact' ? (data.nombre || data.email || 'Sin nombre') : (data.nombre || 'Sin nombre')
+        return data.nombre || data.email || 'Sin nombre'
       }
     } catch (error) {
       console.error('Error fetching entity name:', error)
@@ -338,19 +239,12 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
 
   const getEntityDetails = async (entityId: string): Promise<{ email?: string; telefono?: string }> => {
     try {
-      const entityType = pipeline.entity_type
       const entityIdNum = parseInt(entityId, 10)
-      if (isNaN(entityIdNum)) {
-        return {}
-      }
-
-      const res = await fetch(`/api/${entityType === 'contact' ? 'contacts' : 'contacts'}/${entityIdNum}`)
+      if (isNaN(entityIdNum)) return {}
+      const res = await fetch(`/api/contacts/${entityIdNum}`)
       if (res.ok) {
         const data = await res.json()
-        return {
-          email: data.email || undefined,
-          telefono: data.telefono || undefined,
-        }
+        return { email: data.email || undefined, telefono: data.telefono || undefined }
       }
     } catch (error) {
       console.error('Error fetching entity details:', error)
@@ -364,35 +258,15 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
       const res = await fetch(`/api/pipelines/${pipeline.id}/stages`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          old_stage: oldStage,
-          new_stage: newStage,
-          new_color: newColor,
-        }),
+        body: JSON.stringify({ old_stage: oldStage, new_stage: newStage, new_color: newColor }),
       })
-
       if (!res.ok) {
-        throw new Error('Error al editar columna')
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error al editar columna')
       }
-
-      // Recargar cards
-      const cardsRes = await fetch(`/api/pipelines/${pipeline.id}/cards`)
-      if (cardsRes.ok) {
-        const data = await cardsRes.json()
-        setCards(data.cards || [])
-      }
-
-      // Actualizar orden si cambió el nombre
-      if (oldStage !== newStage) {
-        const newOrder = stageOrder.map((s) => (s === oldStage ? newStage : s))
-        setStageOrder(newOrder)
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(`pipeline_${pipeline.id}_stage_order`, JSON.stringify(newOrder))
-        }
-      }
-    } catch (error) {
-      console.error('Error editing stage:', error)
-      throw error
+      const data = await res.json()
+      setStages(data.stages || [])
+      await reloadCards()
     } finally {
       setLoading(false)
     }
@@ -406,130 +280,73 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stage_name: stageName }),
       })
-
       if (!res.ok) {
-        throw new Error('Error al eliminar columna')
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error al eliminar columna')
       }
-
-      // Remover del orden
-      const newOrder = stageOrder.filter((s) => s !== stageName)
-      setStageOrder(newOrder)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(`pipeline_${pipeline.id}_stage_order`, JSON.stringify(newOrder))
-      }
-    } catch (error) {
-      console.error('Error deleting stage:', error)
-      throw error
+      const data = await res.json()
+      setStages(data.stages || [])
     } finally {
       setLoading(false)
     }
   }
 
-  const handleStageCreate = async (stageName: string, color: string) => {
+  const handleStageCreate = async (stageName: string, color: string, insertAt?: number) => {
     setLoading(true)
     try {
       const res = await fetch(`/api/pipelines/${pipeline.id}/stages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          stage_name: stageName,
-          color,
-        }),
+        body: JSON.stringify({ stage_name: stageName, color, insert_at: insertAt }),
       })
-
       if (!res.ok) {
-        throw new Error('Error al crear columna')
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error al crear columna')
       }
+      const data = await res.json()
+      setStages(data.stages || [])
+    } finally {
+      setLoading(false)
+    }
+  }
 
-      // Agregar al orden
-      const newOrder = [...stageOrder, stageName]
-      setStageOrder(newOrder)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(`pipeline_${pipeline.id}_stage_order`, JSON.stringify(newOrder))
+  const handleStageMove = async (stageName: string, direction: 'left' | 'right') => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/pipelines/${pipeline.id}/stages`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage_name: stageName, direction }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Error al mover columna')
       }
-
-      // Recargar cards para asegurar que todo esté sincronizado
-      const cardsRes = await fetch(`/api/pipelines/${pipeline.id}/cards`)
-      if (cardsRes.ok) {
-        const data = await cardsRes.json()
-        setCards(data.cards || [])
-      }
-    } catch (error) {
-      console.error('Error creating stage:', error)
-      throw error
+      const data = await res.json()
+      setStages(data.stages || [])
     } finally {
       setLoading(false)
     }
   }
 
   const handleTagAdd = async (cardId: string, tag: string) => {
-    setLoading(true)
-    try {
-      const card = cards.find((c) => c.id === cardId)
-      if (!card) return
-
-      const newTags = [...(card.tags || []), tag]
-
-      const res = await fetch(`/api/pipelines/${pipeline.id}/cards/${cardId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tags: newTags,
-        }),
-      })
-
-      if (!res.ok) {
-        throw new Error('Error al agregar etiqueta')
-      }
-
-      // Actualizar localmente
-      setCards(cards.map((c) => (c.id === cardId ? { ...c, tags: newTags } : c)))
-    } catch (error) {
-      console.error('Error adding tag:', error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
+    const card = cards.find((c) => c.id === cardId)
+    if (!card) return
+    const newTags = [...(card.tags || []), tag]
+    setCards(cards.map((c) => (c.id === cardId ? { ...c, tags: newTags } : c)))
+    await handleCardUpdate(cardId, { tags: newTags })
   }
 
   const handleTagRemove = async (cardId: string, tag: string) => {
-    setLoading(true)
-    try {
-      const card = cards.find((c) => c.id === cardId)
-      if (!card) return
-
-      const newTags = (card.tags || []).filter((t) => t !== tag)
-
-      const res = await fetch(`/api/pipelines/${pipeline.id}/cards/${cardId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tags: newTags,
-        }),
-      })
-
-      if (!res.ok) {
-        throw new Error('Error al eliminar etiqueta')
-      }
-
-      // Actualizar localmente
-      setCards(cards.map((c) => (c.id === cardId ? { ...c, tags: newTags } : c)))
-    } catch (error) {
-      console.error('Error removing tag:', error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleCardClick = (card: PipelineCard) => {
-    setDrawerCard(card)
+    const card = cards.find((c) => c.id === cardId)
+    if (!card) return
+    const newTags = (card.tags || []).filter((t) => t !== tag)
+    setCards(cards.map((c) => (c.id === cardId ? { ...c, tags: newTags } : c)))
+    await handleCardUpdate(cardId, { tags: newTags })
   }
 
   const totalCards = cards.length
-  const totalValue = cards.reduce((sum, card) => {
-    return sum + (card.amount ? Number(card.amount) : 0)
-  }, 0)
+  const totalValue = cards.reduce((sum, card) => sum + (card.amount ? Number(card.amount) : 0), 0)
 
   return (
     <PipelineLayout
@@ -544,11 +361,10 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
         </div>
       )}
 
-      {/* Card detail drawer */}
       <PipelineCardDrawer
         card={drawerCard}
         pipelineId={pipeline.id}
-        stageOrder={stageOrder}
+        stages={stages}
         getEntityName={getEntityName}
         getEntityDetails={getEntityDetails}
         onCardMove={handleCardMove}
@@ -558,6 +374,7 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
       <KanbanBoard
         pipelineId={pipeline.id}
         cards={cards}
+        stages={stages}
         entityType={pipeline.entity_type}
         onCardMove={handleCardMove}
         onCardCreate={handleCardCreate}
@@ -566,21 +383,14 @@ export default function PipelineDetail({ pipeline, initialCards, availableEntiti
         onStageEdit={handleStageEdit}
         onStageDelete={handleStageDelete}
         onStageCreate={handleStageCreate}
+        onStageMove={handleStageMove}
         onTagAdd={handleTagAdd}
         onTagRemove={handleTagRemove}
-        onCardClick={handleCardClick}
+        onCardClick={setDrawerCard}
         getEntityName={getEntityName}
         getEntityDetails={getEntityDetails}
         availableEntities={availableEntities}
-        stageOrder={stageOrder}
-        onStageOrderChange={(newOrder) => {
-          setStageOrder(newOrder)
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(`pipeline_${pipeline.id}_stage_order`, JSON.stringify(newOrder))
-          }
-        }}
       />
     </PipelineLayout>
   )
 }
-

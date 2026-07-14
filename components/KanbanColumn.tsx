@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus, X, Edit2, MoreVertical, Search, Trash2, Palette, Settings } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, X, Edit2, MoreVertical, Search, Trash2, Palette, Settings, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -61,6 +61,9 @@ interface KanbanColumnProps {
   onAddCardCancel: () => void
   onStageEdit: (stageName: string, newName: string, newColor: string) => void
   onStageDelete: (stageName: string) => void
+  onStageMove?: (stageName: string, direction: 'left' | 'right') => void
+  canMoveLeft?: boolean
+  canMoveRight?: boolean
   onTagAdd: (cardId: string, tag: string) => void
   onTagRemove: (cardId: string, tag: string) => void
   onCardClick?: (card: PipelineCard) => void
@@ -89,6 +92,9 @@ export default function KanbanColumn({
   onAddCardCancel,
   onStageEdit,
   onStageDelete,
+  onStageMove,
+  canMoveLeft = false,
+  canMoveRight = false,
   onTagAdd,
   onTagRemove,
   onCardClick,
@@ -107,11 +113,18 @@ export default function KanbanColumn({
   const [editingCard, setEditingCard] = useState<PipelineCard | null>(null)
   const [selectedEntityForNewCard, setSelectedEntityForNewCard] = useState<{ id: string; name: string } | null>(null)
 
+  useEffect(() => {
+    setEditName(stage.name)
+    setEditColor(stage.color)
+  }, [stage.name, stage.color])
+
   const isDraggedOver = draggedOver?.stage === stage.name
 
   const handleSaveEdit = () => {
-    if (editName.trim() && editName !== stage.name) {
-      onStageEdit(stage.name, editName.trim(), editColor)
+    const trimmed = editName.trim()
+    if (!trimmed) return
+    if (trimmed !== stage.name || editColor !== stage.color) {
+      onStageEdit(stage.name, trimmed, editColor)
     }
     setIsEditing(false)
   }
@@ -194,10 +207,26 @@ export default function KanbanColumn({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                <DropdownMenuItem onClick={() => {
+                  setEditName(stage.name)
+                  setEditColor(stage.color)
+                  setIsEditing(true)
+                }}>
                   <Edit2 className="h-4 w-4 mr-2" />
                   Editar columna
                 </DropdownMenuItem>
+                {onStageMove && canMoveLeft && (
+                  <DropdownMenuItem onClick={() => onStageMove(stage.name, 'left')}>
+                    <ChevronLeft className="h-4 w-4 mr-2" />
+                    Mover a la izquierda
+                  </DropdownMenuItem>
+                )}
+                {onStageMove && canMoveRight && (
+                  <DropdownMenuItem onClick={() => onStageMove(stage.name, 'right')}>
+                    <ChevronRight className="h-4 w-4 mr-2" />
+                    Mover a la derecha
+                  </DropdownMenuItem>
+                )}
                 {cards.length === 0 && (
                   <DropdownMenuItem
                     onClick={() => onStageDelete(stage.name)}

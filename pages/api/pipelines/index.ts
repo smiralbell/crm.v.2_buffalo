@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { seedDefaultStagesForPipeline } from '@/lib/pipelines/stages'
 import { z } from 'zod'
 
 const pipelineSchema = z.object({
@@ -53,6 +54,8 @@ export default async function handler(
           entity_type: data.entity_type,
         },
       })
+
+      await seedDefaultStagesForPipeline(pipeline.id)
 
       return res.status(201).json(pipeline)
     }
