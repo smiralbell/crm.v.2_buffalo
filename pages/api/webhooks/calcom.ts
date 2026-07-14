@@ -6,6 +6,7 @@ import {
   type CalWebhookBody,
 } from '@/lib/marketing/cal-bookings-webhook'
 import { upsertCalBookingFromWebhook } from '@/lib/marketing/cal-bookings'
+import { syncCalBookingToWebPipeline } from '@/lib/pipelines/web'
 
 export const config = {
   api: {
@@ -58,6 +59,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     await upsertCalBookingFromWebhook(parsed)
+    void syncCalBookingToWebPipeline({
+      uid: parsed.uid,
+      attendee_name: parsed.attendee_name,
+      attendee_email: parsed.attendee_email,
+      title: parsed.title,
+      start: parsed.start_time,
+    }).catch((err) => console.error('[webhooks/calcom] pipeline sync', err))
     console.log(`[Cal.com] ${parsed.trigger_event} | ${parsed.attendee_email || parsed.uid}`)
     return res.status(200).json({
       ok: true,

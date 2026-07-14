@@ -1,28 +1,27 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { FileText, MessageCircle, CalendarDays, Info, ChevronDown } from 'lucide-react'
+import { FileText, MessageCircle, CalendarDays, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import AgentChatsPanel from '@/components/AgentChatsPanel'
 import WebFormSubmissionsPanel from '@/components/WebFormSubmissionsPanel'
 import WebCalBookingsPanel from '@/components/WebCalBookingsPanel'
-import type { WebMarketingMetrics } from '@/lib/marketing/web-metrics.types'
+import WebDashboardAlerts from '@/components/marketing/WebDashboardAlerts'
+import type { WebDashboardMetrics } from '@/lib/marketing/web-dashboard.types'
+
+const WebChannelTimelineChart = dynamic(
+  () => import('@/components/marketing/WebChannelTimelineChart'),
+  { ssr: false }
+)
+const WebChannelBarChart = dynamic(
+  () => import('@/components/marketing/WebChannelBarChart'),
+  { ssr: false }
+)
 
 function fmt(n: number) {
   return n.toLocaleString('es-ES')
-}
-
-const estadoColors: Record<string, string> = {
-  frio: 'bg-blue-50 text-blue-700',
-  caliente: 'bg-orange-50 text-orange-700',
-  cerrado: 'bg-green-50 text-green-700',
-  cliente: 'bg-emerald-50 text-emerald-700',
-  perdido: 'bg-red-50 text-red-700',
-  reunion: 'bg-purple-50 text-purple-700',
-  propuesta: 'bg-yellow-50 text-yellow-700',
 }
 
 function Kpi({
@@ -33,6 +32,7 @@ function Kpi({
   icon: Icon,
   active,
   onClick,
+  accent,
 }: {
   label: string
   value: string
@@ -41,6 +41,7 @@ function Kpi({
   icon: React.ElementType
   active?: boolean
   onClick?: () => void
+  accent?: string
 }) {
   const inner = (
     <CardContent className="pt-5 pb-4">
@@ -56,10 +57,13 @@ function Kpi({
             </p>
           )}
         </div>
-        <span className={cn(
-          'shrink-0 rounded-lg p-2',
-          active ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500'
-        )}>
+        <span
+          className={cn(
+            'shrink-0 rounded-lg p-2',
+            active ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500'
+          )}
+          style={!active && accent ? { backgroundColor: `${accent}18`, color: accent } : undefined}
+        >
           <Icon className="h-4 w-4" />
         </span>
       </div>
@@ -73,9 +77,7 @@ function Kpi({
         onClick={onClick}
         className={cn(
           'w-full text-left rounded-xl transition-all',
-          active
-            ? 'ring-2 ring-gray-900 shadow-sm'
-            : 'hover:ring-1 hover:ring-gray-200'
+          active ? 'ring-2 ring-gray-900 shadow-sm' : 'hover:ring-1 hover:ring-gray-200'
         )}
       >
         <Card className="shadow-sm border-gray-200/80 h-full">{inner}</Card>
@@ -90,6 +92,20 @@ function Kpi({
   )
 }
 
+function ShareBar({ label, pct, color }: { label: string; pct: number; color: string }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between text-sm">
+        <span className="text-gray-600">{label}</span>
+        <span className="font-semibold tabular-nums">{pct}%</span>
+      </div>
+      <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
+    </div>
+  )
+}
+
 export default function WebMarketingTab({
   period,
   initialChatOpen = false,
@@ -97,7 +113,7 @@ export default function WebMarketingTab({
   period: string
   initialChatOpen?: boolean
 }) {
-  const [data, setData] = useState<WebMarketingMetrics | null>(null)
+  const [data, setData] = useState<WebDashboardMetrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [showChat, setShowChat] = useState(initialChatOpen)
   const [showForms, setShowForms] = useState(false)
@@ -107,7 +123,7 @@ export default function WebMarketingTab({
     setLoading(true)
     try {
       const qs = period ? `?period=${encodeURIComponent(period)}` : ''
-      const res = await fetch(`/api/marketing/web-metrics${qs}`)
+      const res = await fetch(`/api/marketing/web-dashboard${qs}`)
       if (res.ok) setData(await res.json())
     } finally {
       setLoading(false)
@@ -124,10 +140,16 @@ export default function WebMarketingTab({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-pulse">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-28 bg-gray-100 rounded-xl" />
-        ))}
+      <div className="space-y-4 animate-pulse">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-28 bg-gray-100 rounded-xl" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="h-72 bg-gray-100 rounded-xl" />
+          <div className="h-72 bg-gray-100 rounded-xl" />
+        </div>
       </div>
     )
   }
@@ -138,224 +160,141 @@ export default function WebMarketingTab({
     )
   }
 
+  const closeOthers = (panel: 'cal' | 'forms' | 'chat') => {
+    if (panel !== 'cal') setShowCal(false)
+    if (panel !== 'forms') setShowForms(false)
+    if (panel !== 'chat') setShowChat(false)
+  }
+
   return (
     <div className="space-y-6">
+      <WebDashboardAlerts alerts={data.alerts} />
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Kpi
           icon={CalendarDays}
           label="Agendaron en el calendario"
-          value={data.cal_available ? fmt(data.cal_bookings) : '—'}
+          value={data.cal_available ? fmt(data.totals.cal) : '—'}
           sub={
             data.cal_available
-              ? data.cal_upcoming > 0
-                ? `${data.cal_upcoming} reuniones próximas · reunion-agente-llamada`
-                : 'Calendario web — reunion-agente-llamada'
-              : 'Ejecuta CREATE_CAL_BOOKINGS.sql y configura el webhook'
+              ? data.cal_upcoming_today > 0
+                ? `${data.cal_upcoming_today} hoy · ${data.cal_upcoming} próximas`
+                : data.cal_upcoming > 0
+                  ? `${data.cal_upcoming} reuniones próximas`
+                  : 'Cal.com — reunion-agente-llamada'
+              : 'Webhook Cal.com + CREATE_CAL_BOOKINGS.sql'
           }
           hint="Ver lead y reunión"
           active={showCal}
+          accent="#8B5CF6"
           onClick={data.cal_available ? () => {
             setShowCal((v) => !v)
-            if (!showCal) {
-              setShowForms(false)
-              setShowChat(false)
-            }
+            if (!showCal) closeOthers('cal')
           } : undefined}
         />
         <Kpi
           icon={FileText}
           label="Formulario rellenado"
-          value={fmt(data.form_submissions)}
+          value={data.form_available ? fmt(data.totals.form) : '—'}
           sub={
-            data.form_submissions_available
-              ? data.form_submissions_pending > 0
-                ? `${data.form_submissions_pending} pendientes de contactar`
+            data.form_available
+              ? data.form_pending > 0
+                ? `${data.form_pending} pendientes de contactar`
                 : 'Todos gestionados en el período'
-              : data.conversion_form_pct != null
-                ? `${data.conversion_form_pct}% sobre leads web`
-                : 'Sin leads web en el período'
+              : 'Ejecuta CREATE_WEB_FORM_SUBMISSIONS.sql'
           }
           hint="Ver formularios"
           active={showForms}
-          onClick={() => {
+          accent="#374151"
+          onClick={data.form_available ? () => {
             setShowForms((v) => !v)
-            if (!showForms) {
-              setShowChat(false)
-              setShowCal(false)
-            }
-          }}
+            if (!showForms) closeOthers('forms')
+          } : undefined}
         />
         <Kpi
           icon={MessageCircle}
           label="Respondieron al chat"
-          value={data.chat_available ? fmt(data.chat_replied) : '—'}
+          value={fmt(data.totals.chat)}
           sub={
             data.chat_available
-              ? `${fmt(data.chat_sessions)} sesiones · ${
-                  data.conversion_chat_pct != null ? `${data.conversion_chat_pct}% engagement` : '—'
-                }`
-              : 'Chat no configurado (DATABASE_URL_chat)'
+              ? `${data.share_chat_pct}% del tráfico web · widget IA`
+              : 'Configura DATABASE_URL_chat'
           }
           hint="Ver conversaciones"
           active={showChat}
-          onClick={data.chat_available ? () => {
+          accent="#3B82F6"
+          onClick={() => {
             setShowChat((v) => !v)
-            if (!showChat) {
-              setShowForms(false)
-              setShowCal(false)
-            }
-          } : undefined}
+            if (!showChat) closeOthers('chat')
+          }}
         />
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="shadow-sm border-gray-200/80">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold text-gray-900">Actividad en el tiempo</CardTitle>
+            <p className="text-xs text-gray-500 font-normal">Formulario, calendario y widget por día</p>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <WebChannelTimelineChart data={data.timeline} />
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-gray-200/80">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold text-gray-900">Comparativa de vías</CardTitle>
+            <p className="text-xs text-gray-500 font-normal">
+              {fmt(data.totals.total)} entradas web en el período
+            </p>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <WebChannelBarChart totals={data.totals} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="shadow-sm border-gray-200/80">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold text-gray-900">Mix de canales web</CardTitle>
+          <p className="text-xs text-gray-500 font-normal">
+            Distribución del tráfico convertido · Pipeline WEB sincronizado
+            {data.pipeline_available ? ` (${data.pipeline_synced} tarjetas)` : ' (pipeline no encontrado)'}
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <ShareBar label="Formulario web" pct={data.share_form_pct} color="#374151" />
+          <ShareBar label="Calendario Cal.com" pct={data.share_cal_pct} color="#8B5CF6" />
+          <ShareBar label="Widget chat" pct={data.share_chat_pct} color="#3B82F6" />
+          {data.cal_from_form_pct != null && data.totals.form > 0 && (
+            <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
+              Tasa formulario → calendario:{' '}
+              <span className="font-semibold text-gray-800">{data.cal_from_form_pct}%</span>
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {showCal && data.cal_available && (
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-800 px-0.5">
-            Calendario web — lead y reunión
-          </h3>
+          <h3 className="text-sm font-semibold text-gray-800 px-0.5">Calendario — lead y reunión</h3>
           <WebCalBookingsPanel period={period} />
         </div>
       )}
 
-      {showForms && (
+      {showForms && data.form_available && (
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-gray-800 px-0.5">Formularios web — envíos n8n</h3>
           <WebFormSubmissionsPanel period={period} />
         </div>
       )}
 
-      {showChat && data.chat_available && (
+      {showChat && (
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-gray-800 px-0.5">Chat IA — conversaciones</h3>
           <AgentChatsPanel embedded />
         </div>
       )}
-
-      {!data.chat_available && (
-        <Card className="border-amber-200/80 bg-amber-50/40">
-          <CardContent className="pt-4 pb-4 flex gap-3">
-            <Info className="h-5 w-5 text-amber-700 shrink-0" />
-            <p className="text-sm text-amber-950/90">
-              Para métricas de chat, configura <code className="text-xs">DATABASE_URL_chat</code> con la base
-              del historial n8n. Los leads web se detectan por <code className="text-xs">origen_principal</code>{' '}
-              (web, formulario_web, etc.).
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card className="shadow-sm border-gray-200/80">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold text-gray-900">Embudo web</CardTitle>
-          <p className="text-xs text-gray-500 font-normal mt-0.5">
-            Visita → formulario o chat con respuesta del visitante
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Leads web</span>
-              <span className="font-semibold">{fmt(data.web_leads)}</span>
-            </div>
-            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-              <div className="h-full bg-gray-800 rounded-full w-full" />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Agendaron calendario</span>
-              <span className="font-semibold">{data.cal_available ? fmt(data.cal_bookings) : '—'}</span>
-            </div>
-            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-              <div
-                className="h-full bg-violet-600 rounded-full"
-                style={{
-                  width: `${data.web_leads > 0 && data.cal_available ? Math.min(100, (data.cal_bookings / data.web_leads) * 100) : data.cal_bookings > 0 ? 100 : 0}%`,
-                }}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Formulario completado</span>
-              <span className="font-semibold">{fmt(data.form_submissions)}</span>
-            </div>
-            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-              <div
-                className="h-full bg-slate-600 rounded-full"
-                style={{
-                  width: `${data.web_leads > 0 ? Math.min(100, (data.form_submissions / data.web_leads) * 100) : 0}%`,
-                }}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Chat con respuesta</span>
-              <span className="font-semibold">{data.chat_available ? fmt(data.chat_replied) : '—'}</span>
-            </div>
-            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-              <div
-                className="h-full bg-slate-400 rounded-full"
-                style={{
-                  width: `${
-                    data.chat_sessions > 0
-                      ? Math.min(100, (data.chat_replied / data.chat_sessions) * 100)
-                      : 0
-                  }%`,
-                }}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-sm border-gray-200/80">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold text-gray-900">Últimos leads web</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.recent_web_leads.length === 0 ? (
-            <p className="text-sm text-gray-400 py-6 text-center">
-              Sin leads con origen web en este período. Asigna{' '}
-              <code className="text-xs">origen_principal: web</code> o{' '}
-              <code className="text-xs">formulario_web</code> al crear el lead desde n8n.
-            </p>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {data.recent_web_leads.map((lead) => (
-                <Link
-                  key={lead.id}
-                  href={`/leads/${lead.id}`}
-                  className="flex items-center justify-between gap-3 py-3 hover:bg-gray-50/80 -mx-2 px-2 rounded-lg transition-colors"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`}
-                    </p>
-                    <p className="text-xs text-gray-500 truncate">
-                      {lead.contact?.empresa || lead.origen_principal || '—'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {lead.estado && (
-                      <Badge
-                        variant="secondary"
-                        className={`text-[10px] ${estadoColors[lead.estado] || 'bg-gray-100 text-gray-600'}`}
-                      >
-                        {lead.estado}
-                      </Badge>
-                    )}
-                    <span className="text-xs text-gray-400">
-                      {new Date(lead.created_at).toLocaleDateString('es-ES')}
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   )
 }
