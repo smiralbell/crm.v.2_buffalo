@@ -1,9 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireColdCallAPI } from '@/lib/auth'
 import { parseCsvText } from '@/lib/coldcall/apollo-csv'
-import { guessColumnMapping } from '@/lib/coldcall/field-mapping'
+import { guessColumnMapping, applyColumnMapping, validateMapping, type ColumnMapping } from '@/lib/coldcall/field-mapping'
 import { getCampaignById } from '@/lib/coldcall/campaigns'
 import { parseCampaignId, requireCampaignAccess } from '@/lib/coldcall/api-access'
+import {
+  findOtherCampaignMatchesForLeads,
+  summarizeOtherCampaignMatches,
+} from '@/lib/coldcall/import-duplicate-check'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -17,7 +21,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const campaign = await getCampaignById(id)
     if (!campaign) return res.status(404).json({ error: 'Campaña no encontrada' })
 
-    const { csv_text } = req.body as { csv_text?: string }
+    const { csv_text, column_mapping } = req.body as {
+      csv_text?: string
+      column_mapping?: ColumnMapping
+    }
     if (!csv_text?.trim()) return res.status(400).json({ error: 'CSV vacío' })
 
     const rows = parseCsvText(csv_text)
@@ -27,6 +34,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const suggested_mapping = guessColumnMapping(headers)
     const sample_rows = rows.slice(0, 5)
 
+    let other_campaign_duplicates: {
+      count: number
+      samples: { nombre: string; campaign_name: string; match_type: string }[]
+    } | null = null
+
+    if (column_mapping && !validateMapping(column_mapping)) {
+      const mapping = column_mapping as ColumnMapping
+      const leads = rows.map((row) => {
+        const f = applyColumnMapping(row, mapping)
+        return { dedupeKey: f.dedupeKey, telefono: f.telefono, nombre: f.nombre }
+      })
+      const index = await findOtherCampaignMatchesForLeads(id, leads)
+      other_campaign_duplicates = summarizeOtherCampaignMatches(leads, index)
+    }
+
     return res.status(200).json({
       headers,
       sample_rows,
@@ -34,6 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       rows_total: rows.length,
       existing_mapping: campaign.column_mapping,
       existing_columns: campaign.import_columns,
+      other_campaign_duplicates,
     })
   } catch (error) {
     console.error('[coldcall/campaigns/[id]/import/preview]', error)

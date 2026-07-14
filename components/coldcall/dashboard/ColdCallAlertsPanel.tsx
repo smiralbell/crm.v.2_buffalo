@@ -32,8 +32,8 @@ export default function ColdCallAlertsPanel({ alerts }: { alerts: ColdCallAlert[
     return (
       <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
         <CheckCircle2 className="h-5 w-5 text-gray-400" />
-        <p className="text-sm text-gray-500">Sin alertas pendientes</p>
-        <p className="text-xs text-gray-400">Reuniones, callbacks y llamadas al día</p>
+        <p className="text-sm text-gray-500">Nada pendiente</p>
+        <p className="text-xs text-gray-400">Callbacks y reuniones de hoy o mañana aparecerán aquí</p>
       </div>
     )
   }

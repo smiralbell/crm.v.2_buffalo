@@ -1,6 +1,11 @@
 import { prisma } from '@/lib/prisma'
 import type { ColumnMapping } from './field-mapping'
 import { applyColumnMapping, normalizeStoredMapping } from './field-mapping'
+import {
+  findOtherCampaignMatchesForLeads,
+  resolveOtherCampaignMatch,
+  summarizeOtherCampaignMatches,
+} from './import-duplicate-check'
 import type { ColdCallScope } from './scope'
 import { getScopeFilterParams } from './scope'
 import type { ColdCallCampaign, CsvLeadInput, ImportBatchResult } from './types'
@@ -253,8 +258,19 @@ export async function importLeadsToCampaign(input: {
   const batchId = batchRows[0].id
 
   let rowsImported = 0
+  let rowsUpdated = 0
   let rowsSkippedDuplicate = 0
   let rowsSkippedDnc = 0
+  let rowsSkippedOtherCampaign = 0
+
+  const otherCampaignIndex = await findOtherCampaignMatchesForLeads(
+    input.campaignId,
+    input.leads.map((lead) => ({
+      dedupeKey: lead.dedupeKey,
+      telefono: lead.telefono,
+      nombre: lead.nombre,
+    }))
+  )
 
   const campaign = await prisma.$queryRaw<{ assigned_to_user_id: number | null }[]>`
     SELECT assigned_to_user_id FROM coldcall_campaigns WHERE id = ${input.campaignId} LIMIT 1
@@ -267,6 +283,11 @@ export async function importLeadsToCampaign(input: {
       continue
     }
 
+    if (resolveOtherCampaignMatch(lead, otherCampaignIndex)) {
+      rowsSkippedOtherCampaign++
+      continue
+    }
+
     const existing = await prisma.$queryRaw<{ id: number }[]>`
       SELECT id FROM coldcall_prospects
       WHERE dedupe_key = ${lead.dedupeKey}
@@ -275,7 +296,27 @@ export async function importLeadsToCampaign(input: {
       LIMIT 1
     `
     if (existing[0]) {
-      rowsSkippedDuplicate++
+      await prisma.$executeRaw`
+        UPDATE coldcall_prospects SET
+          nombre = ${lead.nombre},
+          first_name = ${lead.firstName || null},
+          last_name = ${lead.lastName || null},
+          empresa = ${lead.empresa},
+          telefono = ${lead.telefono},
+          email = ${lead.email},
+          zona = ${lead.ciudad},
+          sector = ${lead.sector},
+          cargo = ${lead.cargo},
+          linkedin = ${lead.linkedin},
+          web = ${lead.web},
+          cif = ${lead.cif},
+          direccion = ${lead.direccion},
+          do_not_call = ${lead.doNotCall},
+          apollo_data = ${JSON.stringify(lead.rawData)}::jsonb,
+          updated_at = NOW()
+        WHERE id = ${existing[0].id}
+      `
+      rowsUpdated++
       continue
     }
 
@@ -344,12 +385,24 @@ export async function importLeadsToCampaign(input: {
     WHERE id = ${batchId}
   `
 
+  const otherCampaignSummary = summarizeOtherCampaignMatches(
+    input.leads.map((lead) => ({
+      dedupeKey: lead.dedupeKey,
+      telefono: lead.telefono,
+      nombre: lead.nombre,
+    })),
+    otherCampaignIndex
+  )
+
   return {
     batch_id: batchId,
     rows_total: input.leads.length,
     rows_imported: rowsImported,
+    rows_updated: rowsUpdated,
     rows_skipped_duplicate: rowsSkippedDuplicate,
     rows_skipped_dnc: rowsSkippedDnc,
+    rows_skipped_other_campaign: rowsSkippedOtherCampaign,
+    other_campaign_samples: otherCampaignSummary.samples,
   }
 }
 

@@ -13,11 +13,15 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 
 import { displayValue, stageLabel, type CampaignLeadRow } from '@/lib/coldcall/lead-table'
+import { resolveLeadWeb, telHref } from '@/lib/coldcall/lead-links'
+import { saveLastCampaignId } from '@/lib/coldcall/last-campaign'
+import { formatPhoneForDisplay } from '@/lib/coldcall/whatsapp'
 
 import type { ColdCallCampaign, ImportBatchResult } from '@/lib/coldcall/types'
 
 import CsvImportMappingDialog from '@/components/coldcall/CsvImportMappingDialog'
 import CampaignScriptEditor from '@/components/coldcall/CampaignScriptEditor'
+import RequestProspectsButton from '@/components/coldcall/RequestProspectsButton'
 
 import { ColumnMappingEditor } from '@/components/coldcall/ColumnMappingEditor'
 import {
@@ -45,6 +49,12 @@ import {
   Upload,
 
   BookOpen,
+
+  Globe,
+
+  ExternalLink,
+
+  Copy,
 
 } from 'lucide-react'
 
@@ -334,6 +344,28 @@ export default function CampanaDetailPage() {
 
                 className="rounded-xl gap-1.5"
 
+                asChild
+
+              >
+
+                <Link href={`/comercial/duplicados?campaign=${campaign.id}`}>
+
+                  <Copy className="h-3.5 w-3.5" />
+
+                  Duplicados
+
+                </Link>
+
+              </Button>
+
+              <Button
+
+                variant="outline"
+
+                size="sm"
+
+                className="rounded-xl gap-1.5"
+
                 onClick={() => setShowMapping((v) => !v)}
 
                 disabled={!importColumns.length}
@@ -364,9 +396,20 @@ export default function CampanaDetailPage() {
 
               </Button>
 
+              {user?.role === 'comercial' && (
+                <RequestProspectsButton
+                  campaignId={campaign.id}
+                  size="sm"
+                  className="rounded-xl gap-1.5"
+                />
+              )}
+
               <Button size="sm" className="rounded-xl gap-1.5 bg-gray-900 hover:bg-gray-800" asChild>
 
-                <Link href={`/coldcalling/campanas/${campaign.id}/llamadas`}>
+                <Link
+                  href={`/coldcalling/campanas/${campaign.id}/llamadas`}
+                  onClick={() => saveLastCampaignId(campaign.id)}
+                >
 
                   <Phone className="h-3.5 w-3.5" />
 
@@ -486,8 +529,16 @@ export default function CampanaDetailPage() {
 
         {importResult && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-            Importación: <strong>{importResult.rows_imported}</strong> nuevos ·{' '}
-            {importResult.rows_skipped_duplicate} duplicados
+            Importación: <strong>{importResult.rows_imported}</strong> nuevos
+            {importResult.rows_updated > 0 && (
+              <> · <strong>{importResult.rows_updated}</strong> actualizados</>
+            )}
+            {importResult.rows_skipped_duplicate > 0 && (
+              <> · {importResult.rows_skipped_duplicate} duplicados</>
+            )}
+            {(importResult.rows_skipped_other_campaign ?? 0) > 0 && (
+              <> · {importResult.rows_skipped_other_campaign} omitidos (ya en otra campaña)</>
+            )}
           </div>
         )}
 
@@ -535,49 +586,99 @@ export default function CampanaDetailPage() {
 
             <div className="overflow-x-auto">
 
-              <table className="w-full text-sm text-left">
+              <table className="w-full text-base text-left">
 
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50/90">
-                    <th className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">#</th>
-                    <th className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">Nombre</th>
-                    <th className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">Teléfono</th>
-                    <th className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">Correo</th>
-                    <th className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">Estado</th>
-                    <th className="px-3 py-2.5 font-semibold text-gray-700 whitespace-nowrap">Llamadas</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">#</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap min-w-[180px]">Nombre</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Teléfono</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Correo</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Web</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Estado</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap text-center">Llamadas</th>
+                    <th className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap w-28" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {leads.map((lead, idx) => (
+                  {leads.map((lead, idx) => {
+                    const webUrl = resolveLeadWeb(
+                      { raw_data: lead.raw_data },
+                      mapping
+                    )
+                    const tel = telHref(lead.telefono)
+                    const phoneLabel = lead.telefono
+                      ? formatPhoneForDisplay(lead.telefono) || lead.telefono
+                      : null
+
+                    return (
                     <tr
                       key={lead.id}
-                      className="hover:bg-gray-50/60 cursor-pointer"
-                      onClick={() =>
-                        router.push(`/coldcalling/campanas/${campaignId}/llamadas?leadId=${lead.id}`)
-                      }
+                      className="hover:bg-gray-50/60"
                     >
-                      <td className="px-3 py-2 text-gray-400 whitespace-nowrap">
+                      <td className="px-4 py-3.5 text-gray-400 whitespace-nowrap text-sm">
                         {(page - 1) * PAGE_SIZE + idx + 1}
                       </td>
-                      <td className="px-3 py-2 text-gray-900 font-medium whitespace-nowrap">
+                      <td className="px-4 py-3.5 text-gray-900 font-semibold">
                         {displayValue(lead.nombre)}
                       </td>
-                      <td className="px-3 py-2 text-gray-800 whitespace-nowrap">
-                        {displayValue(lead.telefono)}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        {tel && phoneLabel ? (
+                          <a
+                            href={tel}
+                            className="text-gray-900 font-medium hover:text-blue-700 tabular-nums"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {phoneLabel}
+                          </a>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
-                      <td className="px-3 py-2 text-gray-800 whitespace-nowrap max-w-[200px] truncate">
+                      <td className="px-4 py-3.5 text-gray-800 max-w-[220px] truncate">
                         {displayValue(lead.email)}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <Badge variant="outline" className="font-normal text-xs">
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        {webUrl ? (
+                          <a
+                            href={webUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 font-medium text-sm"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Globe className="h-4 w-4 shrink-0" />
+                            Web
+                            <ExternalLink className="h-3 w-3 opacity-60" />
+                          </a>
+                        ) : (
+                          <span className="text-gray-400 text-sm">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <Badge variant="outline" className="font-normal text-sm">
                           {stageLabel(lead.stage)}
                         </Badge>
                       </td>
-                      <td className="px-3 py-2 text-gray-800 whitespace-nowrap">
+                      <td className="px-4 py-3.5 text-gray-800 whitespace-nowrap text-center tabular-nums">
                         {lead.call_count ?? lead.call_attempts}
                       </td>
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <Button
+                          size="sm"
+                          className="rounded-xl h-9 gap-1.5 bg-gray-900 hover:bg-gray-800"
+                          onClick={() => {
+                            saveLastCampaignId(parseInt(campaignId!, 10))
+                            router.push(`/coldcalling/campanas/${campaignId}/llamadas?leadId=${lead.id}`)
+                          }}
+                        >
+                          <Phone className="h-3.5 w-3.5" />
+                          Llamar
+                        </Button>
+                      </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
 
               </table>

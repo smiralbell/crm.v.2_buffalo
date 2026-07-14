@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireColdCallAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { applyCallOutcome } from '@/lib/coldcall/call-outcomes'
+import { parseReunionDatetimeInput } from '@/lib/coldcall/meeting-datetime'
 import { assertProspectAccess, getColdCallScope } from '@/lib/coldcall/scope'
 import { resolveCrmUserFkId } from '@/lib/crm-users'
 
@@ -32,8 +33,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const retryAt =
         reunion_fecha &&
         ['reunion_agendada', 'llamar_tarde'].includes(resultado)
-          ? new Date(reunion_fecha)
+          ? parseReunionDatetimeInput(reunion_fecha)
           : null
+
+      if (resultado === 'reunion_agendada' && !retryAt) {
+        return res.status(400).json({
+          error: 'Falta la fecha de la reunión. Agenda en Cal.com antes de guardar.',
+        })
+      }
+
+      if (resultado === 'llamar_tarde' && !retryAt) {
+        return res.status(400).json({
+          error: 'Indica cuándo volver a llamar.',
+        })
+      }
 
       const createdById = await resolveCrmUserFkId(user.id)
 

@@ -26,9 +26,12 @@ import {
 import type { ColdCallCampaign, ImportBatchResult } from '@/lib/coldcall/types'
 import CsvImportMappingDialog from '@/components/coldcall/CsvImportMappingDialog'
 import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
+import AdminProspectRequestsPanel from '@/components/coldcall/AdminProspectRequestsPanel'
+import RequestProspectsButton from '@/components/coldcall/RequestProspectsButton'
 import { coldCallScopeQuery } from '@/lib/coldcall/api-query'
 import type { ColdCallFilter } from '@/lib/coldcall/scope'
 import { useAuth } from '@/components/AuthContext'
+import { saveLastCampaignId } from '@/lib/coldcall/last-campaign'
 
 export default function ColdCallingCampanasTab({
   filter: filterProp,
@@ -151,6 +154,8 @@ export default function ColdCallingCampanasTab({
 
   return (
     <div className="space-y-6">
+      {user?.role === 'admin' && <AdminProspectRequestsPanel reloadToken={reloadToken} />}
+
       <div
         className={`flex flex-col gap-3 sm:flex-row sm:items-center ${
           hideToolbar ? 'sm:justify-end' : 'sm:justify-between'
@@ -172,13 +177,20 @@ export default function ColdCallingCampanasTab({
           <Plus className="h-4 w-4" />
           Nueva campaña
         </Button>
+        {user?.role === 'comercial' && (
+          <RequestProspectsButton size="sm" className="rounded-xl gap-1.5 sm:order-1" />
+        )}
       </div>
 
       {importResult && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          Importación completada: <strong>{importResult.rows_imported}</strong> nuevos ·{' '}
-          {importResult.rows_skipped_duplicate} duplicados · {importResult.rows_skipped_dnc} Do Not
-          Call
+          Importación: <strong>{importResult.rows_imported}</strong> nuevos
+          {importResult.rows_updated > 0 && (
+            <> · <strong>{importResult.rows_updated}</strong> actualizados</>
+          )}
+          {importResult.rows_skipped_dnc > 0 && (
+            <> · {importResult.rows_skipped_dnc} Do Not Call</>
+          )}
         </div>
       )}
 
@@ -264,7 +276,10 @@ export default function ColdCallingCampanasTab({
                   CSV Apollo
                 </Button>
                 <Button size="sm" className="rounded-xl gap-1.5 bg-gray-900 hover:bg-gray-800" asChild>
-                  <Link href={`/coldcalling/campanas/${c.id}/llamadas`}>
+                  <Link
+                    href={`/coldcalling/campanas/${c.id}/llamadas`}
+                    onClick={() => saveLastCampaignId(c.id)}
+                  >
                     <Phone className="h-3.5 w-3.5" />
                     Llamar
                     <ArrowRight className="h-3.5 w-3.5" />

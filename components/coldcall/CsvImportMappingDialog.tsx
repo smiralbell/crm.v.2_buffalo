@@ -80,6 +80,13 @@ export default function CsvImportMappingDialog({
 
   const [csvText, setCsvText] = useState('')
 
+  const [otherCampaignDupes, setOtherCampaignDupes] = useState<{
+    count: number
+    samples: { nombre: string; campaign_name: string; match_type: string }[]
+  } | null>(null)
+
+  const [checkingDupes, setCheckingDupes] = useState(false)
+
 
 
   useEffect(() => {
@@ -154,6 +161,74 @@ export default function CsvImportMappingDialog({
 
 
 
+  useEffect(() => {
+
+    if (!open || !csvText || loading) return
+
+    const err = validateMapping(mapping)
+
+    if (err) {
+
+      setOtherCampaignDupes(null)
+
+      return
+
+    }
+
+
+
+    let cancelled = false
+
+    const timer = setTimeout(async () => {
+
+      setCheckingDupes(true)
+
+      try {
+
+        const res = await fetch(`/api/coldcall/campaigns/${campaignId}/import/preview`, {
+
+          method: 'POST',
+
+          headers: { 'Content-Type': 'application/json' },
+
+          body: JSON.stringify({ csv_text: csvText, column_mapping: mapping }),
+
+        })
+
+        const data = await res.json()
+
+        if (!cancelled && res.ok) {
+
+          setOtherCampaignDupes(data.other_campaign_duplicates ?? null)
+
+        }
+
+      } catch {
+
+        if (!cancelled) setOtherCampaignDupes(null)
+
+      } finally {
+
+        if (!cancelled) setCheckingDupes(false)
+
+      }
+
+    }, 400)
+
+
+
+    return () => {
+
+      cancelled = true
+
+      clearTimeout(timer)
+
+    }
+
+  }, [open, csvText, loading, mapping, campaignId])
+
+
+
   const handleImport = async () => {
 
     const err = validateMapping(mapping)
@@ -196,12 +271,12 @@ export default function CsvImportMappingDialog({
 
       if (!res.ok) throw new Error(data.error || 'Error al importar')
 
-      if (data.rows_imported === 0) {
-        alert(
-          `No se importó ningún lead nuevo.\n` +
-            `${data.rows_imported} importados · ${data.rows_skipped_duplicate} duplicados en esta campaña\n\n` +
-            `Si ya subiste este archivo antes en esta campaña, los contactos ya existen.`
-        )
+      if (data.rows_imported === 0 && !data.rows_updated) {
+        const parts = [
+          `${data.rows_skipped_other_campaign || 0} ya en otra campaña`,
+          `${data.rows_skipped_dnc || 0} omitidos (Do Not Call)`,
+        ]
+        alert(`No se importó ningún lead.\n${parts.join(' · ')}`)
       }
 
       onImported(data)
@@ -261,6 +336,56 @@ export default function CsvImportMappingDialog({
 
 
             <ColumnMappingEditor headers={headers} mapping={mapping} onChange={setMapping} />
+
+
+
+            {checkingDupes && (
+
+              <p className="text-xs text-gray-400">Comprobando duplicados en otras campañas…</p>
+
+            )}
+
+
+
+            {otherCampaignDupes && otherCampaignDupes.count > 0 && (
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 space-y-1">
+
+                <p>
+
+                  <strong>{otherCampaignDupes.count}</strong> lead
+
+                  {otherCampaignDupes.count === 1 ? '' : 's'} ya está
+
+                  {otherCampaignDupes.count === 1 ? '' : 'n'} en otra campaña y no se importará
+
+                  {otherCampaignDupes.count === 1 ? '' : 'n'}.
+
+                </p>
+
+                <ul className="text-xs text-amber-800 list-disc pl-4">
+
+                  {otherCampaignDupes.samples.map((s, i) => (
+
+                    <li key={i}>
+
+                      {s.nombre} → <strong>{s.campaign_name}</strong>
+
+                    </li>
+
+                  ))}
+
+                  {otherCampaignDupes.count > otherCampaignDupes.samples.length && (
+
+                    <li>…y {otherCampaignDupes.count - otherCampaignDupes.samples.length} más</li>
+
+                  )}
+
+                </ul>
+
+              </div>
+
+            )}
 
 
 

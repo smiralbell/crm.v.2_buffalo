@@ -15,6 +15,16 @@ export const COMERCIAL_PAGE_PREFIXES = [
   '/login',
 ] as const
 
+/** Rutas exclusivas del panel comercial (además de coldcalling compartido). */
+export const COMERCIAL_ONLY_ROUTES = [
+  '/comercial',
+  '/comercial/campanas',
+  '/comercial/reuniones',
+  '/comercial/llamar-mas-tarde',
+  '/comercial/objeciones',
+  '/comercial/duplicados',
+] as const
+
 export const DEVELOPER_API_PREFIXES = [
   '/api/auth/',
   '/api/developer/',

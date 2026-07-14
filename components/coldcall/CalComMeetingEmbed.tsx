@@ -94,6 +94,24 @@ export default function CalComMeetingEmbed({
             })
           },
         })
+
+        Cal.ns[CAL_NAMESPACE]('on', {
+          action: 'bookingSuccessful',
+          callback: (e: Event) => {
+            const detail = (e as CustomEvent).detail as {
+              booking?: { startTime?: string; endTime?: string; uid?: string; title?: string }
+              startTime?: string
+            }
+            const startTime = detail?.booking?.startTime ?? detail?.startTime
+            if (!startTime) return
+            onBookedRef.current({
+              startTime,
+              endTime: detail?.booking?.endTime,
+              uid: detail?.booking?.uid,
+              title: detail?.booking?.title,
+            })
+          },
+        })
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : 'Error al cargar el calendario')

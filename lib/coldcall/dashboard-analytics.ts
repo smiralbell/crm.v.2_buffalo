@@ -17,6 +17,12 @@ export interface ColdCallDashboardData {
     meetings_total: number
     meetings_this_week: number
     interested_this_week: number
+    interested_today: number
+    meetings_today: number
+    contacted_today: number
+    contacted_this_week: number
+    callbacks_today: number
+    callbacks_this_week: number
     conversion_rate: number
     interest_rate: number
     contact_rate: number
@@ -186,7 +192,7 @@ function buildAlerts(
     campaign_id: number | null
     campaign_name: string | null
     next_retry_at: Date | null
-    reunion_fecha: Date | null
+    last_reunion_fecha: Date | null
     last_result: string | null
   }[],
   now: Date,
@@ -194,17 +200,13 @@ function buildAlerts(
 ): ColdCallAlert[] {
   const todayEnd = new Date(todayStart)
   todayEnd.setHours(23, 59, 59, 999)
-  const tomorrowEnd = new Date(todayEnd)
-  tomorrowEnd.setDate(tomorrowEnd.getDate() + 1)
+  const tomorrowStart = new Date(todayEnd)
+  tomorrowStart.setMilliseconds(1)
+  const tomorrowEnd = new Date(todayStart)
+  tomorrowEnd.setDate(tomorrowEnd.getDate() + 2)
+  tomorrowEnd.setHours(23, 59, 59, 999)
 
   const alerts: ColdCallAlert[] = []
-  const seen = new Set<string>()
-
-  const push = (alert: ColdCallAlert) => {
-    if (seen.has(alert.id)) return
-    seen.add(alert.id)
-    alerts.push(alert)
-  }
 
   for (const row of rows) {
     const name = firstName(row.nombre)
@@ -213,131 +215,107 @@ function buildAlerts(
         ? `/coldcalling/campanas/${row.campaign_id}/llamadas?leadId=${row.id}`
         : null
 
-    const meetingAt = row.reunion_fecha ? new Date(row.reunion_fecha) : null
-    const retryAt = row.next_retry_at ? new Date(row.next_retry_at) : null
+    const lastResult = row.last_result || ''
     const isCallback =
       row.stage === 'volver_a_llamar' ||
       row.estado === 'llamar_tarde' ||
-      row.last_result === 'llamar_tarde'
+      lastResult === 'llamar_tarde'
     const isMeeting =
       row.stage === 'reunion_agendada' ||
       row.estado === 'reunion_agendada' ||
-      row.last_result === 'reunion_agendada'
+      lastResult === 'reunion_agendada'
 
-    if (meetingAt && meetingAt >= todayStart && meetingAt <= todayEnd) {
-      push({
-        id: `reunion-hoy-${row.id}`,
-        type: 'reunion_hoy',
-        priority: 'high',
-        title: `Reunión hoy con ${name}`,
-        message: `A las ${fmtTime(meetingAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
-        lead_id: row.id,
-        campaign_id: row.campaign_id,
-        action_href: href,
-        action_label: 'Ver lead',
-        at: meetingAt.toISOString(),
-      })
-    } else if (meetingAt && meetingAt > todayEnd && meetingAt <= tomorrowEnd) {
-      push({
-        id: `reunion-prox-${row.id}`,
-        type: 'reunion_proxima',
-        priority: 'medium',
-        title: `Reunión mañana con ${name}`,
-        message: `${fmtShortDate(meetingAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
-        lead_id: row.id,
-        campaign_id: row.campaign_id,
-        action_href: href,
-        action_label: 'Ver lead',
-        at: meetingAt.toISOString(),
-      })
-    } else if (isMeeting && meetingAt && meetingAt > tomorrowEnd) {
-      push({
-        id: `reunion-fut-${row.id}`,
-        type: 'reunion_proxima',
-        priority: 'low',
-        title: `Reunión agendada: ${name}`,
-        message: `${fmtShortDate(meetingAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
-        lead_id: row.id,
-        campaign_id: row.campaign_id,
-        action_href: href,
-        action_label: 'Ver lead',
-        at: meetingAt.toISOString(),
-      })
+    const callbackAt =
+      lastResult === 'llamar_tarde' && row.last_reunion_fecha
+        ? new Date(row.last_reunion_fecha)
+        : row.next_retry_at
+          ? new Date(row.next_retry_at)
+          : null
+
+    const meetingAt =
+      isMeeting && row.last_reunion_fecha && lastResult !== 'llamar_tarde'
+        ? new Date(row.last_reunion_fecha)
+        : null
+
+    // Un solo aviso por lead: callback primero, luego reunión próxima
+    if (isCallback && callbackAt) {
+      if (callbackAt < now) {
+        alerts.push({
+          id: `callback-${row.id}`,
+          type: 'llamar_atrasado',
+          priority: 'high',
+          title: `Llamar a ${name}`,
+          message: `Callback atrasado · ${fmtShortDate(callbackAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
+          lead_id: row.id,
+          campaign_id: row.campaign_id,
+          action_href: href,
+          action_label: 'Llamar ahora',
+          at: callbackAt.toISOString(),
+        })
+        continue
+      }
+      if (callbackAt >= todayStart && callbackAt <= todayEnd) {
+        alerts.push({
+          id: `callback-${row.id}`,
+          type: 'llamar_hoy',
+          priority: 'high',
+          title: `Llamar hoy a ${name}`,
+          message: `A las ${fmtTime(callbackAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
+          lead_id: row.id,
+          campaign_id: row.campaign_id,
+          action_href: href,
+          action_label: 'Llamar',
+          at: callbackAt.toISOString(),
+        })
+        continue
+      }
+      if (callbackAt > todayEnd && callbackAt <= tomorrowEnd) {
+        alerts.push({
+          id: `callback-${row.id}`,
+          type: 'llamar_hoy',
+          priority: 'medium',
+          title: `Llamar mañana a ${name}`,
+          message: `${fmtShortDate(callbackAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
+          lead_id: row.id,
+          campaign_id: row.campaign_id,
+          action_href: href,
+          action_label: 'Ver lead',
+          at: callbackAt.toISOString(),
+        })
+        continue
+      }
     }
 
-    if (retryAt && retryAt < now) {
-      push({
-        id: `retry-overdue-${row.id}`,
-        type: 'llamar_atrasado',
-        priority: 'high',
-        title: `Llamada atrasada: ${name}`,
-        message: `Debías llamar el ${fmtShortDate(retryAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
-        lead_id: row.id,
-        campaign_id: row.campaign_id,
-        action_href: href,
-        action_label: 'Llamar ahora',
-        at: retryAt.toISOString(),
-      })
-    } else if (retryAt && retryAt >= todayStart && retryAt <= todayEnd) {
-      push({
-        id: `retry-today-${row.id}`,
-        type: 'llamar_hoy',
-        priority: 'medium',
-        title: `Llamar hoy a ${name}`,
-        message: `Programado a las ${fmtTime(retryAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
-        lead_id: row.id,
-        campaign_id: row.campaign_id,
-        action_href: href,
-        action_label: 'Llamar',
-        at: retryAt.toISOString(),
-      })
-    }
-
-    if (isCallback && meetingAt && meetingAt < now && !seen.has(`retry-overdue-${row.id}`)) {
-      push({
-        id: `callback-overdue-${row.id}`,
-        type: 'llamar_atrasado',
-        priority: 'high',
-        title: `Se te pasó llamar a ${name}`,
-        message: `Quedó pendiente desde el ${fmtShortDate(meetingAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
-        lead_id: row.id,
-        campaign_id: row.campaign_id,
-        action_href: href,
-        action_label: 'Llamar ahora',
-        at: meetingAt.toISOString(),
-      })
-    } else if (
-      isCallback &&
-      meetingAt &&
-      meetingAt >= todayStart &&
-      meetingAt <= todayEnd &&
-      !seen.has(`retry-today-${row.id}`)
-    ) {
-      push({
-        id: `callback-today-${row.id}`,
-        type: 'llamar_hoy',
-        priority: 'medium',
-        title: `Tienes que llamar a ${name}`,
-        message: `Callback a las ${fmtTime(meetingAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
-        lead_id: row.id,
-        campaign_id: row.campaign_id,
-        action_href: href,
-        action_label: 'Llamar',
-        at: meetingAt.toISOString(),
-      })
-    } else if (isCallback && !meetingAt && !retryAt) {
-      push({
-        id: `callback-pend-${row.id}`,
-        type: 'callback_pendiente',
-        priority: 'low',
-        title: `Callback pendiente: ${name}`,
-        message: `Marcado como "llamar más tarde"${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
-        lead_id: row.id,
-        campaign_id: row.campaign_id,
-        action_href: href,
-        action_label: 'Llamar',
-        at: null,
-      })
+    if (isMeeting && meetingAt && meetingAt >= now) {
+      if (meetingAt >= todayStart && meetingAt <= todayEnd) {
+        alerts.push({
+          id: `meeting-${row.id}`,
+          type: 'reunion_hoy',
+          priority: 'medium',
+          title: `Reunión hoy con ${name}`,
+          message: `A las ${fmtTime(meetingAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
+          lead_id: row.id,
+          campaign_id: row.campaign_id,
+          action_href: href,
+          action_label: 'Ver lead',
+          at: meetingAt.toISOString(),
+        })
+        continue
+      }
+      if (meetingAt > todayEnd && meetingAt <= tomorrowEnd) {
+        alerts.push({
+          id: `meeting-${row.id}`,
+          type: 'reunion_proxima',
+          priority: 'low',
+          title: `Reunión mañana: ${name}`,
+          message: `${fmtShortDate(meetingAt)}${row.campaign_name ? ` · ${row.campaign_name}` : ''}`,
+          lead_id: row.id,
+          campaign_id: row.campaign_id,
+          action_href: href,
+          action_label: 'Ver lead',
+          at: meetingAt.toISOString(),
+        })
+      }
     }
   }
 
@@ -351,7 +329,7 @@ function buildAlerts(
       if (b.at) return 1
       return 0
     })
-    .slice(0, 15)
+    .slice(0, 8)
 }
 
 export async function getColdCallDashboard(scope: ColdCallScope): Promise<ColdCallDashboardData> {
@@ -454,6 +432,12 @@ export async function getColdCallDashboard(scope: ColdCallScope): Promise<ColdCa
         meetings_total: number
         meetings_this_week: number
         interested_this_week: number
+        interested_today: number
+        meetings_today: number
+        contacted_today: number
+        contacted_this_week: number
+        callbacks_today: number
+        callbacks_this_week: number
         positive_total: number
       }[]
     >`
@@ -466,6 +450,12 @@ export async function getColdCallDashboard(scope: ColdCallScope): Promise<ColdCa
         COUNT(*) FILTER (WHERE resultado = 'reunion_agendada')::int AS meetings_total,
         COUNT(*) FILTER (WHERE resultado = 'reunion_agendada' AND fecha >= ${weekStart})::int AS meetings_this_week,
         COUNT(*) FILTER (WHERE resultado = 'interesado' AND fecha >= ${weekStart})::int AS interested_this_week,
+        COUNT(*) FILTER (WHERE resultado = 'interesado' AND fecha >= ${todayStart})::int AS interested_today,
+        COUNT(*) FILTER (WHERE resultado = 'reunion_agendada' AND fecha >= ${todayStart})::int AS meetings_today,
+        COUNT(*) FILTER (WHERE resultado != 'sin_respuesta' AND fecha >= ${todayStart})::int AS contacted_today,
+        COUNT(*) FILTER (WHERE resultado != 'sin_respuesta' AND fecha >= ${weekStart})::int AS contacted_this_week,
+        COUNT(*) FILTER (WHERE resultado = 'llamar_tarde' AND fecha >= ${todayStart})::int AS callbacks_today,
+        COUNT(*) FILTER (WHERE resultado = 'llamar_tarde' AND fecha >= ${weekStart})::int AS callbacks_this_week,
         COUNT(*) FILTER (WHERE resultado IN ('interesado', 'reunion_agendada'))::int AS positive_total
       FROM coldcall_calls c
       INNER JOIN coldcall_prospects p ON p.id = c.prospect_id AND p.deleted_at IS NULL
@@ -702,7 +692,7 @@ export async function getColdCallDashboard(scope: ColdCallScope): Promise<ColdCa
         campaign_id: number | null
         campaign_name: string | null
         next_retry_at: Date | null
-        reunion_fecha: Date | null
+        last_reunion_fecha: Date | null
         last_result: string | null
       }[]
     >`
@@ -714,7 +704,7 @@ export async function getColdCallDashboard(scope: ColdCallScope): Promise<ColdCa
         camp.id AS campaign_id,
         camp.name AS campaign_name,
         p.next_retry_at,
-        COALESCE(lc.reunion_fecha, p.next_retry_at) AS reunion_fecha,
+        lc.reunion_fecha AS last_reunion_fecha,
         lc.resultado AS last_result
       FROM coldcall_prospects p
       LEFT JOIN coldcall_campaigns camp ON camp.id = p.campaign_id
@@ -737,13 +727,25 @@ export async function getColdCallDashboard(scope: ColdCallScope): Promise<ColdCa
           )
         )
         AND (
-          p.stage IN ('reunion_agendada', 'volver_a_llamar', 'interesado_info_enviada')
-          OR p.estado IN ('reunion_agendada', 'llamar_tarde', 'interesado')
-          OR p.next_retry_at IS NOT NULL
-          OR lc.reunion_fecha IS NOT NULL
+          p.stage IN ('reunion_agendada', 'volver_a_llamar')
+          OR p.estado IN ('reunion_agendada', 'llamar_tarde')
+          OR (p.next_retry_at IS NOT NULL AND p.next_retry_at <= NOW() + INTERVAL '2 days')
+          OR (
+            lc.resultado = 'reunion_agendada'
+            AND lc.reunion_fecha IS NOT NULL
+            AND lc.reunion_fecha >= NOW() - INTERVAL '1 hour'
+            AND lc.reunion_fecha <= NOW() + INTERVAL '2 days'
+          )
+          OR (
+            lc.resultado = 'llamar_tarde'
+            AND lc.reunion_fecha IS NOT NULL
+            AND lc.reunion_fecha <= NOW() + INTERVAL '2 days'
+          )
         )
-      ORDER BY p.next_retry_at ASC NULLS LAST, lc.reunion_fecha ASC NULLS LAST
-      LIMIT 60
+      ORDER BY
+        p.next_retry_at ASC NULLS LAST,
+        lc.reunion_fecha ASC NULLS LAST
+      LIMIT 40
     `,
     prisma.$queryRaw<
       {
@@ -799,6 +801,12 @@ export async function getColdCallDashboard(scope: ColdCallScope): Promise<ColdCa
     meetings_total: 0,
     meetings_this_week: 0,
     interested_this_week: 0,
+    interested_today: 0,
+    meetings_today: 0,
+    contacted_today: 0,
+    contacted_this_week: 0,
+    callbacks_today: 0,
+    callbacks_this_week: 0,
     positive_total: 0,
   }
 
@@ -929,6 +937,12 @@ export async function getColdCallDashboard(scope: ColdCallScope): Promise<ColdCa
       meetings_total: ck.meetings_total,
       meetings_this_week: ck.meetings_this_week,
       interested_this_week: ck.interested_this_week,
+      interested_today: ck.interested_today,
+      meetings_today: ck.meetings_today,
+      contacted_today: ck.contacted_today,
+      contacted_this_week: ck.contacted_this_week,
+      callbacks_today: ck.callbacks_today,
+      callbacks_this_week: ck.callbacks_this_week,
       conversion_rate:
         ck.total_calls > 0 ? Math.round((ck.meetings_total / ck.total_calls) * 100) : 0,
       interest_rate:

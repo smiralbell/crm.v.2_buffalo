@@ -62,8 +62,11 @@ export interface ImportBatchResult {
   batch_id: number
   rows_total: number
   rows_imported: number
+  rows_updated: number
   rows_skipped_duplicate: number
   rows_skipped_dnc: number
+  rows_skipped_other_campaign?: number
+  other_campaign_samples?: { nombre: string; campaign_name: string; match_type: string }[]
 }
 
 export interface CsvLeadInput {

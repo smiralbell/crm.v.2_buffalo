@@ -1,3 +1,5 @@
+import { parse } from 'csv-parse/sync'
+
 function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -150,6 +152,28 @@ export function parseApolloCsvRow(row: Record<string, string>) {
 }
 
 export function parseCsvText(text: string): Record<string, string>[] {
+  if (!text?.trim()) return []
+
+  try {
+    const records = parse(text, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      bom: true,
+      relax_quotes: true,
+      relax_column_count: true,
+    }) as Record<string, string>[]
+
+    return records.filter((row) =>
+      Object.values(row).some((v) => String(v ?? '').trim())
+    )
+  } catch {
+    return parseCsvTextLegacy(text)
+  }
+}
+
+/** Fallback si csv-parse falla con un formato raro */
+function parseCsvTextLegacy(text: string): Record<string, string>[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim())
   if (lines.length < 2) return []
 

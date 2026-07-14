@@ -9,7 +9,11 @@ import { Button } from '@/components/ui/button'
 import { outcomeLabel } from '@/lib/coldcall/lead-table'
 import type { ColdCallDashboardData } from '@/lib/coldcall/dashboard-analytics'
 import ColdCallAlertsPanel from '@/components/coldcall/dashboard/ColdCallAlertsPanel'
+import ColdCallFunnel, { type FunnelStep } from '@/components/coldcall/dashboard/ColdCallFunnel'
 import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
+import ComercialIncentiveCard from '@/components/coldcall/ComercialIncentiveCard'
+import RequestProspectsCta from '@/components/coldcall/RequestProspectsCta'
+import AdminProspectRequestsPanel from '@/components/coldcall/AdminProspectRequestsPanel'
 import { coldCallScopeQuery } from '@/lib/coldcall/api-query'
 import type { ColdCallFilter } from '@/lib/coldcall/scope'
 import { useAuth } from '@/components/AuthContext'
@@ -73,6 +77,42 @@ function InsightPill({ label, value, hint }: { label: string; value: string; hin
       {hint && <p className="text-[11px] text-gray-400 mt-0.5">{hint}</p>}
     </div>
   )
+}
+
+function buildFunnelSteps(kpis: ColdCallDashboardData['kpis'], period: 'today' | 'week'): FunnelStep[] {
+  const isToday = period === 'today'
+  return [
+    {
+      key: 'calls',
+      label: 'Llamadas',
+      value: isToday ? kpis.calls_today : kpis.calls_this_week,
+      hint: isToday ? 'Registradas hoy' : 'Desde el lunes',
+    },
+    {
+      key: 'contacted',
+      label: 'Contestaron',
+      value: isToday ? kpis.contacted_today : kpis.contacted_this_week,
+      hint: 'Hubo conversación (no sin respuesta)',
+    },
+    {
+      key: 'info',
+      label: 'Pide info',
+      value: isToday ? kpis.interested_today : kpis.interested_this_week,
+      hint: 'Interesado — quiere más info, sin reunión',
+    },
+    {
+      key: 'meeting',
+      label: 'Quiere reunión',
+      value: isToday ? kpis.meetings_today : kpis.meetings_this_week,
+      hint: 'Reunión agendada en Cal.com',
+    },
+    {
+      key: 'callback',
+      label: 'Llamar más tarde',
+      value: isToday ? kpis.callbacks_today : kpis.callbacks_this_week,
+      hint: '"Llámame el lunes a las 10" — no es reunión',
+    },
+  ]
 }
 
 function fmtDateTime(iso: string): string {
@@ -158,9 +198,13 @@ export default function ColdCallingDashboard({
 
   const { kpis, insights } = data
   const recentCalls = data.recent_calls.slice(0, 2)
+  const isComercial = user?.role === 'comercial'
+  const isAdmin = user?.role === 'admin'
 
   return (
     <div className="space-y-6">
+      {isAdmin && <AdminProspectRequestsPanel reloadToken={reloadToken} />}
+      {isComercial && <RequestProspectsCta />}
       {!hideToolbar && (
         <ColdCallScopeToolbar
           filter={effectiveFilter}
@@ -169,59 +213,78 @@ export default function ColdCallingDashboard({
           loading={loading}
         />
       )}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard
-          label="Interesados"
-          value={kpis.interested_total}
-          sub={`${kpis.interested_this_week} esta semana · ${kpis.positive_leads} leads activos`}
+      {isComercial && (
+        <ComercialIncentiveCard
+          meetingsThisWeek={kpis.meetings_this_week}
         />
-        <KpiCard
-          label="Reuniones agendadas"
-          value={kpis.meetings_total}
-          sub={`${kpis.meetings_this_week} esta semana`}
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ColdCallFunnel
+          title="Embudo de hoy"
+          subtitle="Resultados independientes — pide info y quiere reunión son cosas distintas"
+          steps={buildFunnelSteps(kpis, 'today')}
         />
-        <KpiCard
-          label="Tasa de interés"
-          value={`${kpis.interest_rate}%`}
-          sub={`${kpis.conversion_rate}% conv. a reunión`}
-        />
-        <KpiCard
-          label="Duración media"
-          value={kpis.avg_duration_min > 0 ? `${kpis.avg_duration_min} min` : '—'}
-          sub={
-            kpis.avg_duration_interested_min > 0
-              ? `${kpis.avg_duration_interested_min} min en positivos`
-              : 'Todas las llamadas'
-          }
+        <ColdCallFunnel
+          title="Embudo de la semana"
+          subtitle="Acumulado desde el lunes"
+          steps={buildFunnelSteps(kpis, 'week')}
         />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard
-          label="Llamadas hoy"
-          value={kpis.calls_today}
-          sub={`${kpis.calls_this_week} esta semana`}
-          trend={kpis.week_change_pct}
-        />
-        <KpiCard label="Total llamadas" value={kpis.total_calls} sub={`${kpis.leads_contacted} leads contactados`} />
-        <KpiCard label="Leads en cola" value={kpis.leads_in_queue} sub={`${kpis.total_leads} leads totales`} />
-        <KpiCard
-          label="Callbacks pendientes"
-          value={kpis.callback_leads}
-          sub={`${kpis.contact_rate}% del listado llamado`}
-        />
-      </div>
-
-      {/* Insights + Alertas — rellena el hueco */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-        <div className="lg:col-span-4 grid grid-cols-2 gap-3">
+        <Card className="shadow-sm border-gray-200/80 lg:col-span-5 flex flex-col">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Bell className="h-4 w-4 text-gray-500" />
+                <CardTitle className="text-sm font-semibold text-gray-700">Tu agenda</CardTitle>
+              </div>
+              {data.alerts.length > 0 && (
+                <Badge variant="secondary" className="text-[10px] font-normal">
+                  {data.alerts.length} pendiente{data.alerts.length === 1 ? '' : 's'}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Reuniones Cal.com y callbacks por separado</p>
+          </CardHeader>
+          <CardContent className="flex-1 pt-0">
+            <ColdCallAlertsPanel alerts={data.alerts} />
+          </CardContent>
+        </Card>
+
+        <div className="lg:col-span-7 grid grid-cols-2 gap-3">
+          <KpiCard
+            label="Leads en cola"
+            value={kpis.leads_in_queue}
+            sub={`${kpis.total_leads} en campañas activas`}
+          />
+          <KpiCard
+            label="Callbacks pendientes"
+            value={kpis.callback_leads}
+            sub="Marcados para volver a llamar"
+          />
+          <KpiCard
+            label="Tasa de interés"
+            value={`${kpis.interest_rate}%`}
+            sub={`${kpis.conversion_rate}% pasan a reunión`}
+          />
+          <KpiCard
+            label="Duración media"
+            value={kpis.avg_duration_min > 0 ? `${kpis.avg_duration_min} min` : '—'}
+            sub={
+              kpis.avg_duration_interested_min > 0
+                ? `${kpis.avg_duration_interested_min} min en positivos`
+                : 'Todas las llamadas'
+            }
+          />
           <InsightPill
-            label="Mejor hora para llamar"
+            label="Mejor hora"
             value={insights.best_hour_label ?? '—'}
             hint={
               insights.best_hour_rate > 0
-                ? `${insights.best_hour_rate}% respuestas positivas`
-                : 'Sin datos suficientes'
+                ? `${insights.best_hour_rate}% positivas`
+                : 'Sin datos'
             }
           />
           <InsightPill
@@ -229,41 +292,21 @@ export default function ColdCallingDashboard({
             value={insights.best_weekday ?? '—'}
             hint={
               insights.best_weekday_rate > 0
-                ? `${insights.best_weekday_rate}% respuestas positivas`
-                : 'Sin datos suficientes'
+                ? `${insights.best_weekday_rate}% positivas`
+                : 'Sin datos'
             }
           />
-          <InsightPill
-            label="Campañas activas"
-            value={String(kpis.active_campaigns)}
-            hint={`${kpis.campaigns} en total`}
-          />
-          <InsightPill
-            label="Llamadas registradas"
-            value={String(kpis.total_calls)}
-            hint="Histórico completo"
-          />
         </div>
-
-        <Card className="shadow-sm border-gray-200/80 lg:col-span-8 flex flex-col">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Bell className="h-4 w-4 text-gray-500" />
-                <CardTitle className="text-sm font-semibold text-gray-700">Alertas</CardTitle>
-              </div>
-              {data.alerts.length > 0 && (
-                <Badge variant="secondary" className="text-[10px] font-normal">
-                  {data.alerts.length}
-                </Badge>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="flex-1 pt-0">
-            <ColdCallAlertsPanel alerts={data.alerts} />
-          </CardContent>
-        </Card>
       </div>
+
+      {!isComercial && (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard label="Total llamadas" value={kpis.total_calls} sub={`${kpis.leads_contacted} leads contactados`} />
+        <KpiCard label="Interesados total" value={kpis.interested_total} sub={`${kpis.positive_leads} leads activos`} />
+        <KpiCard label="Reuniones total" value={kpis.meetings_total} />
+        <KpiCard label="Campañas activas" value={kpis.active_campaigns} sub={`${kpis.campaigns} en total`} />
+      </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Card className="shadow-sm border-gray-200/80">

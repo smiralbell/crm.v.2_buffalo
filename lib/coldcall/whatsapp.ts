@@ -96,45 +96,6 @@ export function buildWhatsAppUrl(phone: string | null | undefined, message: stri
   return `https://web.whatsapp.com/send?phone=${normalized}&text=${text}`
 }
 
-function firstName(nombre: string, firstName?: string | null): string {
-  if (firstName?.trim()) return firstName.trim()
-  return nombre.trim().split(/\s+/)[0] || nombre.trim()
-}
-
-export type WhatsAppTemplateKind = 'interesado' | 'no_interesado'
-
-export function defaultWhatsAppTemplate(
-  kind: WhatsAppTemplateKind,
-  lead: { nombre: string; first_name?: string | null; empresa?: string | null }
-): string {
-  const name = firstName(lead.nombre, lead.first_name)
-  const empresa = lead.empresa?.trim()
-
-  if (kind === 'interesado') {
-    return [
-      `Hola ${name},`,
-      '',
-      'Gracias por tu tiempo en la llamada de hoy.',
-      empresa
-        ? `Como comentamos, en Buffalo ayudamos a empresas como ${empresa} con soluciones de IA y automatización.`
-        : 'Como comentamos, en Buffalo ayudamos a empresas con soluciones de IA y automatización.',
-      '',
-      'Te comparto la información y, si te encaja, podemos agendar una breve reunión esta semana.',
-      '',
-      'Un saludo.',
-    ].join('\n')
-  }
-
-  return [
-    `Hola ${name},`,
-    '',
-    'Gracias por atendernos hoy.',
-    'Quedamos a tu disposición por si en el futuro necesitáis apoyo.',
-    '',
-    'Un saludo.',
-  ].join('\n')
-}
-
 export function openWhatsApp(phone: string | null | undefined, message: string): boolean {
   const trimmed = message.trim()
   if (!trimmed) return false

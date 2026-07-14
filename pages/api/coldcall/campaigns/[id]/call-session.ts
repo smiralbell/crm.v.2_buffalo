@@ -2,6 +2,10 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireColdCallAPI } from '@/lib/auth'
 import { getCallSession } from '@/lib/coldcall/campaigns'
 import { parseCampaignId, requireCampaignAccess } from '@/lib/coldcall/api-access'
+import { resolveCrmUserFkId } from '@/lib/crm-users'
+import { getUserObjections } from '@/lib/coldcall/objections'
+import { getComercialPersonaForUserId } from '@/lib/coldcall/comercial-persona-loader'
+import { applyPersonaToScriptBoxes } from '@/lib/coldcall/comercial-persona'
 import {
   DEFAULT_SCRIPT_MARKDOWN_CA,
   DEFAULT_SCRIPT_MARKDOWN_ES,
@@ -27,6 +31,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const mdEs = campaign.script_markdown_es?.trim() || DEFAULT_SCRIPT_MARKDOWN_ES
     const mdCa = campaign.script_markdown_ca?.trim() || DEFAULT_SCRIPT_MARKDOWN_CA
 
+    const persona = await getComercialPersonaForUserId(user.id)
+
+    const crmUserId = await resolveCrmUserFkId(user.id)
+    const objections = crmUserId
+      ? await getUserObjections(crmUserId)
+      : { es: [], ca: [], isCustom: false }
+
     return res.json({
       campaign,
       lead: lead
@@ -49,8 +60,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       prevId,
       nextId,
       script: {
-        es: parseScriptMarkdown(mdEs),
-        ca: parseScriptMarkdown(mdCa),
+        es: applyPersonaToScriptBoxes(parseScriptMarkdown(mdEs), persona),
+        ca: applyPersonaToScriptBoxes(parseScriptMarkdown(mdCa), persona),
+      },
+      persona,
+      objections: {
+        es: objections.es,
+        ca: objections.ca,
+        is_custom: objections.isCustom,
       },
     })
   } catch (error) {
