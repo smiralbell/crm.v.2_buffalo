@@ -5,7 +5,7 @@ import { countPendingWebFormSubmissions, isWebFormSubmissionsTableAvailable } fr
 import { countUpcomingCalBookings, isCalBookingsReady, listCalBookings } from '@/lib/marketing/cal-bookings'
 import { listWebFormSubmissions } from '@/lib/marketing/web-form-submissions'
 import type { WebDashboardMetrics, WebDashboardAlert, WebTimelinePoint } from '@/lib/marketing/web-dashboard.types'
-import { getWebPipelineId, syncAllWebSourcesToPipeline } from '@/lib/pipelines/web'
+import { getWebPipelineInfo, syncAllWebSourcesToPipeline } from '@/lib/pipelines/web'
 
 export type { WebDashboardMetrics, WebDashboardAlert, WebTimelinePoint } from '@/lib/marketing/web-dashboard.types'
 
@@ -141,8 +141,12 @@ function buildAlerts(input: {
 }
 
 export async function getWebDashboardMetrics(period: string): Promise<WebDashboardMetrics> {
-  const pipelineAvailable = !!(await getWebPipelineId())
-  const pipelineSynced = pipelineAvailable ? await syncAllWebSourcesToPipeline(period) : 0
+  const pipelineInfo = await getWebPipelineInfo()
+  const syncResult = pipelineInfo.web_pipeline_id
+    ? await syncAllWebSourcesToPipeline(period)
+    : { synced: 0, errors: ['Pipeline WEB no encontrado'] }
+
+  const pipelineAvailable = !!pipelineInfo.web_pipeline_id
 
   const formsOk = await isWebFormSubmissionsTableAvailable()
   const calOk = await isCalBookingsReady()
@@ -208,8 +212,13 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
     chat_available: chatReplied > 0 || totals.chat >= 0,
     form_available: formsOk,
     cal_available: calOk,
-    pipeline_synced: pipelineSynced,
+    pipeline_synced: syncResult.synced,
     pipeline_available: pipelineAvailable,
+    pipeline_errors: syncResult.errors,
+    web_pipeline_id: pipelineInfo.web_pipeline_id,
+    web_pipeline_name: pipelineInfo.web_pipeline_name,
+    web_stages: pipelineInfo.web_stages,
+    all_pipelines: pipelineInfo.all_pipelines,
     share_form_pct: Math.round((totals.form / totalAll) * 1000) / 10,
     share_cal_pct: Math.round((totals.cal / totalAll) * 1000) / 10,
     share_chat_pct: Math.round((totals.chat / totalAll) * 1000) / 10,

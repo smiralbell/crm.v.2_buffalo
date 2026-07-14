@@ -5,14 +5,13 @@ import { AGENT_CHAT_HISTORY_TABLE } from '@/lib/agent-chat-history'
 import { parseAgentChatMessage } from '@/lib/agent-chat-history'
 import { listWebFormSubmissions } from '@/lib/marketing/web-form-submissions'
 import { listCalBookings } from '@/lib/marketing/cal-bookings'
-import { BUFFALO_STAGE_COLORS } from '@/lib/pipelines/defaults'
+import { BUFFALO_STAGE_COLORS, defaultStageColor } from '@/lib/pipelines/defaults'
 
 export const WEB_PIPELINE_NAME = 'WEB'
 export const WEB_TAG = 'web'
 
-export const WEB_STAGES = ['LEAD', 'CONTACTO', 'REUNIÓN'] as const
-export type WebPipelineStage = (typeof WEB_STAGES)[number]
 export type WebSourceChannel = 'form' | 'chat' | 'cal'
+type LogicalStage = 'LEAD' | 'CONTACTO' | 'REUNION'
 
 const SOURCE_TAG: Record<WebSourceChannel, string> = {
   form: 'web-form',
@@ -20,19 +19,29 @@ const SOURCE_TAG: Record<WebSourceChannel, string> = {
   cal: 'web-cal',
 }
 
-const CHANNEL_STAGE: Record<WebSourceChannel, WebPipelineStage> = {
+const CHANNEL_LOGICAL: Record<WebSourceChannel, LogicalStage> = {
   form: 'LEAD',
   chat: 'LEAD',
-  cal: 'REUNIÓN',
-}
-
-const STAGE_RANK: Record<string, number> = {
-  LEAD: 1,
-  CONTACTO: 2,
-  REUNIÓN: 3,
+  cal: 'REUNION',
 }
 
 let cachedPipelineId: string | null | undefined
+
+function normalizeStage(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim()
+}
+
+function stageRank(name: string): number {
+  const n = normalizeStage(name)
+  if (n.includes('REUNION')) return 3
+  if (n.includes('CONTACTO') || n === 'CONTACT') return 2
+  if (n.includes('LEAD')) return 1
+  return 0
+}
 
 export async function getWebPipelineId(): Promise<string | null> {
   if (process.env.WEB_PIPELINE_ID?.trim()) return process.env.WEB_PIPELINE_ID.trim()
@@ -40,7 +49,9 @@ export async function getWebPipelineId(): Promise<string | null> {
 
   const rows = await prisma.$queryRaw<{ id: string }[]>`
     SELECT id::text AS id FROM pipelines
-    WHERE LOWER(name) = LOWER(${WEB_PIPELINE_NAME})
+    WHERE LOWER(TRIM(name)) = LOWER(${WEB_PIPELINE_NAME})
+       OR LOWER(TRIM(name)) LIKE 'web%'
+    ORDER BY CASE WHEN LOWER(TRIM(name)) = LOWER(${WEB_PIPELINE_NAME}) THEN 0 ELSE 1 END
     LIMIT 1
   `
   cachedPipelineId = rows[0]?.id ?? null
@@ -51,34 +62,81 @@ export async function isWebPipeline(pipelineId: string): Promise<boolean> {
   return (await getWebPipelineId()) === pipelineId
 }
 
-export async function ensureWebPipelineStages(pipelineId: string): Promise<void> {
-  const existing = await prisma.pipelineStage.findMany({
-    where: { pipeline_id: pipelineId },
-    select: { name: true, position: true },
+export interface WebPipelineInfo {
+  web_pipeline_id: string | null
+  web_pipeline_name: string | null
+  web_stages: { id: string; name: string }[]
+  all_pipelines: { id: string; name: string; entity_type: string }[]
+}
+
+export async function getWebPipelineInfo(): Promise<WebPipelineInfo> {
+  const all = await prisma.pipelineKanban.findMany({
+    select: { id: true, name: true, entity_type: true },
+    orderBy: { name: 'asc' },
+  })
+
+  const webId = await getWebPipelineId()
+  if (!webId) {
+    return {
+      web_pipeline_id: null,
+      web_pipeline_name: null,
+      web_stages: [],
+      all_pipelines: all.map((p) => ({
+        id: p.id,
+        name: p.name,
+        entity_type: p.entity_type,
+      })),
+    }
+  }
+
+  const web = await prisma.pipelineKanban.findUnique({
+    where: { id: webId },
+    select: { name: true },
+  })
+
+  const stages = await prisma.pipelineStage.findMany({
+    where: { pipeline_id: webId },
+    select: { id: true, name: true },
     orderBy: { position: 'asc' },
   })
-  const known = new Set(existing.map((s) => s.name))
-  let nextPosition = existing.reduce((max, s) => Math.max(max, s.position), -1) + 1
 
-  for (const name of WEB_STAGES) {
-    if (known.has(name)) continue
-    await prisma.pipelineStage.create({
-      data: {
-        pipeline_id: pipelineId,
-        name,
-        color: BUFFALO_STAGE_COLORS[name] || '#3B82F6',
-        position: nextPosition++,
-      },
-    })
+  return {
+    web_pipeline_id: webId,
+    web_pipeline_name: web?.name ?? WEB_PIPELINE_NAME,
+    web_stages: stages,
+    all_pipelines: all.map((p) => ({
+      id: p.id,
+      name: p.name,
+      entity_type: p.entity_type,
+    })),
   }
 }
 
-function stageColor(stage: string): string {
-  return BUFFALO_STAGE_COLORS[stage] || '#3B82F6'
-}
+async function buildStageMap(pipelineId: string): Promise<Map<LogicalStage, string>> {
+  const stages = await prisma.pipelineStage.findMany({
+    where: { pipeline_id: pipelineId },
+    select: { name: true },
+    orderBy: { position: 'asc' },
+  })
 
-function shouldAdvanceStage(current: string, target: WebPipelineStage): boolean {
-  return (STAGE_RANK[target] ?? 0) >= (STAGE_RANK[current] ?? 0)
+  const map = new Map<LogicalStage, string>()
+
+  for (const stage of stages) {
+    const n = normalizeStage(stage.name)
+    if (n.includes('LEAD') && !map.has('LEAD')) map.set('LEAD', stage.name)
+    if ((n.includes('CONTACTO') || n === 'CONTACT') && !map.has('CONTACTO')) {
+      map.set('CONTACTO', stage.name)
+    }
+    if (n.includes('REUNION') && !map.has('REUNION')) map.set('REUNION', stage.name)
+  }
+
+  if (!map.has('LEAD')) map.set('LEAD', stages[0]?.name || 'LEAD')
+  if (!map.has('CONTACTO')) map.set('CONTACTO', stages[1]?.name || 'CONTACTO')
+  if (!map.has('REUNION')) {
+    map.set('REUNION', stages.find((s) => normalizeStage(s.name).includes('REUNION'))?.name || 'REUNIÓN')
+  }
+
+  return map
 }
 
 async function nextCardPosition(pipelineId: string, stage: string): Promise<number> {
@@ -96,7 +154,6 @@ async function findWebCard(pipelineId: string, contactId: number) {
       pipeline_id: pipelineId,
       entity_id: String(contactId),
       deleted_at: null,
-      tags: { has: WEB_TAG },
     },
   })
 }
@@ -168,19 +225,23 @@ export async function ensureWebContact(input: {
 export async function syncWebContactToPipeline(
   contactId: number,
   channel: WebSourceChannel,
-  notes?: string | null
+  notes?: string | null,
+  stageMap?: Map<LogicalStage, string>
 ): Promise<string | null> {
   const pipelineId = await getWebPipelineId()
   if (!pipelineId) return null
 
-  await ensureWebPipelineStages(pipelineId)
+  const stages = stageMap || (await buildStageMap(pipelineId))
+  const logical = CHANNEL_LOGICAL[channel]
+  const targetStage = stages.get(logical)
+  if (!targetStage) return null
 
-  const targetStage = CHANNEL_STAGE[channel]
   const sourceTag = SOURCE_TAG[channel]
   const existing = await findWebCard(pipelineId, contactId)
 
   if (existing) {
-    const nextStage = shouldAdvanceStage(existing.stage, targetStage) ? targetStage : existing.stage
+    const nextStage =
+      stageRank(targetStage) >= stageRank(existing.stage) ? targetStage : existing.stage
     const tags = Array.from(new Set([...existing.tags, WEB_TAG, sourceTag]))
     const position =
       existing.stage === nextStage ? existing.position : await nextCardPosition(pipelineId, nextStage)
@@ -189,7 +250,7 @@ export async function syncWebContactToPipeline(
       where: { id: existing.id },
       data: {
         stage: nextStage,
-        stage_color: stageColor(nextStage),
+        stage_color: defaultStageColor(nextStage),
         position,
         tags,
         notes: notes?.trim() || existing.notes,
@@ -205,7 +266,7 @@ export async function syncWebContactToPipeline(
       entity_id: String(contactId),
       entity_type: 'contact',
       stage: targetStage,
-      stage_color: stageColor(targetStage),
+      stage_color: BUFFALO_STAGE_COLORS[targetStage] || defaultStageColor(targetStage),
       position,
       tags: [WEB_TAG, sourceTag],
       notes: notes?.trim() || null,
@@ -308,11 +369,11 @@ async function listChatSessionsWithUserReply(limit = 300): Promise<string[]> {
 
 async function isChatSessionSynced(sessionId: string): Promise<boolean> {
   try {
-    const result = await query<{ ok: number }>(
-      `SELECT 1 AS ok FROM web_chat_pipeline_sync WHERE session_id = $1 LIMIT 1`,
+    const result = await query<{ pipeline_card_id: string | null }>(
+      `SELECT pipeline_card_id FROM web_chat_pipeline_sync WHERE session_id = $1 LIMIT 1`,
       [sessionId]
     )
-    return result.rows.length > 0
+    return !!result.rows[0]?.pipeline_card_id
   } catch {
     return false
   }
@@ -349,43 +410,64 @@ export async function syncChatSessionToWebPipeline(sessionId: string): Promise<s
     'chat',
     email ? `Widget web · ${sessionId.slice(0, 12)}` : `Sesión chat ${sessionId.slice(0, 12)}`
   )
-  await markChatSessionSynced(sessionId, contactId, cardId)
+  if (cardId) await markChatSessionSynced(sessionId, contactId, cardId)
   return cardId
 }
 
-/** Sincroniza formularios, calendario y chat al pipeline WEB. */
-export async function syncAllWebSourcesToPipeline(period?: string): Promise<number> {
-  const pipelineId = await getWebPipelineId()
-  if (!pipelineId) return 0
+export interface WebPipelineSyncResult {
+  synced: number
+  errors: string[]
+}
 
+/** Sincroniza formularios, calendario y chat al pipeline WEB. */
+export async function syncAllWebSourcesToPipeline(period?: string): Promise<WebPipelineSyncResult> {
+  const pipelineId = await getWebPipelineId()
+  if (!pipelineId) {
+    return { synced: 0, errors: ['Pipeline WEB no encontrado. Crea uno llamado WEB o define WEB_PIPELINE_ID.'] }
+  }
+
+  const stageMap = await buildStageMap(pipelineId)
   let synced = 0
+  const errors: string[] = []
   const now = new Date()
   const currentPeriod = period || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
   const forms = await listWebFormSubmissions(currentPeriod, 500)
   for (const form of forms) {
-    const cardId = await syncWebFormToPipeline(form)
-    if (cardId) synced++
+    try {
+      const cardId = await syncWebFormToPipeline(form)
+      if (cardId) synced++
+    } catch (e) {
+      errors.push(`Form #${form.id}: ${e instanceof Error ? e.message : 'error'}`)
+    }
   }
 
   const bookings = await listCalBookings(currentPeriod, 500)
   for (const booking of bookings) {
     if (booking.status === 'cancelled' || booking.status === 'rejected') continue
-    const cardId = await syncCalBookingToWebPipeline({
-      uid: booking.uid,
-      attendee_name: booking.attendee_name,
-      attendee_email: booking.attendee_email,
-      title: booking.title,
-      start: booking.start,
-    })
-    if (cardId) synced++
+    try {
+      const cardId = await syncCalBookingToWebPipeline({
+        uid: booking.uid,
+        attendee_name: booking.attendee_name,
+        attendee_email: booking.attendee_email,
+        title: booking.title,
+        start: booking.start,
+      })
+      if (cardId) synced++
+    } catch (e) {
+      errors.push(`Cal ${booking.uid}: ${e instanceof Error ? e.message : 'error'}`)
+    }
   }
 
   const sessions = await listChatSessionsWithUserReply(200)
   for (const sessionId of sessions) {
-    const cardId = await syncChatSessionToWebPipeline(sessionId)
-    if (cardId) synced++
+    try {
+      const cardId = await syncChatSessionToWebPipeline(sessionId)
+      if (cardId) synced++
+    } catch (e) {
+      errors.push(`Chat ${sessionId.slice(0, 8)}: ${e instanceof Error ? e.message : 'error'}`)
+    }
   }
 
-  return synced
+  return { synced, errors }
 }

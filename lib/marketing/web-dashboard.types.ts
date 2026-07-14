@@ -36,6 +36,11 @@ export interface WebDashboardMetrics {
   cal_available: boolean
   pipeline_synced: number
   pipeline_available: boolean
+  pipeline_errors: string[]
+  web_pipeline_id: string | null
+  web_pipeline_name: string | null
+  web_stages: { id: string; name: string }[]
+  all_pipelines: { id: string; name: string; entity_type: string }[]
   share_form_pct: number
   share_cal_pct: number
   share_chat_pct: number

@@ -13,6 +13,7 @@ import {
   isColdCallPipeline,
   syncColdCallPipelineForScope,
 } from '@/lib/pipelines/cold-calling'
+import { isWebPipeline, syncAllWebSourcesToPipeline } from '@/lib/pipelines/web'
 
 interface PipelineCard {
   id: string
@@ -63,6 +64,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     if (!pipeline) return { notFound: true }
 
     const coldCall = await isColdCallPipeline(pipelineId)
+    const webPipeline = await isWebPipeline(pipelineId)
     if (coldCall && user.role !== 'admin' && user.role !== 'comercial') {
       return { notFound: true }
     }
@@ -76,6 +78,12 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     if (coldCall) {
       await syncColdCallPipelineForScope(scope)
       cardsRaw = await getColdCallPipelineCards(scope, pipelineId)
+    } else if (webPipeline) {
+      await syncAllWebSourcesToPipeline()
+      cardsRaw = await prisma.pipelineCard.findMany({
+        where: { pipeline_id: pipelineId, deleted_at: null },
+        orderBy: [{ stage: 'asc' }, { position: 'asc' }],
+      })
     } else {
       cardsRaw = await prisma.pipelineCard.findMany({
         where: { pipeline_id: pipelineId, deleted_at: null },

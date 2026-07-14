@@ -1,22 +1,19 @@
 'use client'
 
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileText, MessageCircle, CalendarDays, ChevronDown } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { ChevronDown, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import AgentChatsPanel from '@/components/AgentChatsPanel'
 import WebFormSubmissionsPanel from '@/components/WebFormSubmissionsPanel'
 import WebCalBookingsPanel from '@/components/WebCalBookingsPanel'
-import WebDashboardAlerts from '@/components/marketing/WebDashboardAlerts'
 import type { WebDashboardMetrics } from '@/lib/marketing/web-dashboard.types'
 
 const WebChannelTimelineChart = dynamic(
   () => import('@/components/marketing/WebChannelTimelineChart'),
-  { ssr: false }
-)
-const WebChannelBarChart = dynamic(
-  () => import('@/components/marketing/WebChannelBarChart'),
   { ssr: false }
 )
 
@@ -24,48 +21,38 @@ function fmt(n: number) {
   return n.toLocaleString('es-ES')
 }
 
-function Kpi({
+function pct(num: number, den: number): string {
+  if (!den) return '0%'
+  return ((num / den) * 100).toFixed(1) + '%'
+}
+
+function KpiCard({
   label,
   value,
   sub,
-  hint,
-  icon: Icon,
   active,
+  hint,
   onClick,
-  accent,
 }: {
   label: string
   value: string
   sub?: string
-  hint?: string
-  icon: React.ElementType
   active?: boolean
+  hint?: string
   onClick?: () => void
-  accent?: string
 }) {
   const inner = (
     <CardContent className="pt-5 pb-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="space-y-1 min-w-0">
-          <p className="text-xs text-gray-500 font-medium">{label}</p>
-          <p className="text-2xl font-semibold text-gray-900 leading-tight">{value}</p>
-          {sub && <p className="text-xs text-gray-400">{sub}</p>}
-          {onClick && hint && (
-            <p className="text-[11px] text-gray-400 flex items-center gap-0.5 pt-0.5">
-              {hint}
-              <ChevronDown className={cn('h-3 w-3 transition-transform', active && 'rotate-180')} />
-            </p>
-          )}
-        </div>
-        <span
-          className={cn(
-            'shrink-0 rounded-lg p-2',
-            active ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500'
-          )}
-          style={!active && accent ? { backgroundColor: `${accent}18`, color: accent } : undefined}
-        >
-          <Icon className="h-4 w-4" />
-        </span>
+      <div className="space-y-1">
+        <p className="text-xs text-gray-500 font-medium truncate">{label}</p>
+        <p className="text-2xl font-semibold text-gray-900 leading-tight">{value}</p>
+        {sub && <p className="text-xs text-gray-400">{sub}</p>}
+        {onClick && hint && (
+          <p className="text-[11px] text-gray-400 flex items-center gap-0.5 pt-0.5">
+            {hint}
+            <ChevronDown className={cn('h-3 w-3 transition-transform', active && 'rotate-180')} />
+          </p>
+        )}
       </div>
     </CardContent>
   )
@@ -85,22 +72,31 @@ function Kpi({
     )
   }
 
-  return (
-    <Card className="shadow-sm border-gray-200/80">
-      {inner}
-    </Card>
-  )
+  return <Card className="shadow-sm border-gray-200/80">{inner}</Card>
 }
 
-function ShareBar({ label, pct, color }: { label: string; pct: number; color: string }) {
+function FunnelBar({
+  label,
+  count,
+  total,
+  color,
+}: {
+  label: string
+  count: number
+  total: number
+  color: string
+}) {
+  const w = total > 0 ? Math.max(2, (count / total) * 100) : 0
   return (
-    <div className="space-y-1.5">
-      <div className="flex justify-between text-sm">
+    <div className="space-y-1">
+      <div className="flex justify-between items-center text-xs">
         <span className="text-gray-600">{label}</span>
-        <span className="font-semibold tabular-nums">{pct}%</span>
+        <span className="font-semibold text-gray-800">
+          {fmt(count)} <span className="text-gray-400 font-normal">({pct(count, total)})</span>
+        </span>
       </div>
-      <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+      <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${w}%` }} />
       </div>
     </div>
   )
@@ -141,14 +137,11 @@ export default function WebMarketingTab({
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
+        <div className="h-20 bg-gray-100 rounded-xl" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-28 bg-gray-100 rounded-xl" />
           ))}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="h-72 bg-gray-100 rounded-xl" />
-          <div className="h-72 bg-gray-100 rounded-xl" />
         </div>
       </div>
     )
@@ -160,6 +153,8 @@ export default function WebMarketingTab({
     )
   }
 
+  const total = data.totals.total || 0
+
   const closeOthers = (panel: 'cal' | 'forms' | 'chat') => {
     if (panel !== 'cal') setShowCal(false)
     if (panel !== 'forms') setShowForms(false)
@@ -168,61 +163,119 @@ export default function WebMarketingTab({
 
   return (
     <div className="space-y-6">
-      <WebDashboardAlerts alerts={data.alerts} />
+      <Card className="shadow-sm border-gray-200/80">
+        <CardContent className="py-3 px-4 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-gray-700">Pipelines — IDs para configuración</p>
+            {data.web_pipeline_id ? (
+              <Link
+                href={`/pipelines/${data.web_pipeline_id}`}
+                className="text-xs text-gray-600 hover:text-gray-900 inline-flex items-center gap-1"
+              >
+                Abrir pipeline WEB
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {data.all_pipelines.map((p) => (
+              <Link
+                key={p.id}
+                href={`/pipelines/${p.id}`}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] transition-colors',
+                  p.id === data.web_pipeline_id
+                    ? 'border-gray-900 bg-gray-900 text-white'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                )}
+              >
+                <span className="font-medium">{p.name}</span>
+                <code className={cn('font-mono', p.id === data.web_pipeline_id ? 'text-gray-300' : 'text-gray-400')}>
+                  {p.id}
+                </code>
+              </Link>
+            ))}
+          </div>
+          {data.web_pipeline_id ? (
+            <p className="text-[11px] text-gray-500">
+              WEB activo: <code className="text-gray-700">{data.web_pipeline_id}</code>
+              {data.web_stages.length > 0 && (
+                <>
+                  {' '}
+                  · Columnas:{' '}
+                  {data.web_stages.map((s) => `${s.name} (${s.id.slice(0, 8)}…)`).join(', ')}
+                </>
+              )}
+              {data.pipeline_synced > 0 && (
+                <span className="text-gray-600"> · {data.pipeline_synced} tarjetas sincronizadas</span>
+              )}
+            </p>
+          ) : (
+            <p className="text-[11px] text-amber-800">
+              No se encontró pipeline WEB. Crea uno llamado <strong>WEB</strong> o define{' '}
+              <code>WEB_PIPELINE_ID</code> en el servidor.
+            </p>
+          )}
+          {data.pipeline_errors.length > 0 && (
+            <p className="text-[11px] text-red-700">{data.pipeline_errors.slice(0, 3).join(' · ')}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {data.form_pending > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline" className="text-xs border-amber-200 text-amber-800 bg-amber-50">
+            {data.form_pending} formularios pendientes
+          </Badge>
+          {data.cal_upcoming_today > 0 && (
+            <Badge variant="outline" className="text-xs border-gray-200 text-gray-700">
+              {data.cal_upcoming_today} reunión{data.cal_upcoming_today > 1 ? 'es' : ''} hoy
+            </Badge>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Kpi
-          icon={CalendarDays}
+        <KpiCard
           label="Agendaron en el calendario"
           value={data.cal_available ? fmt(data.totals.cal) : '—'}
           sub={
             data.cal_available
-              ? data.cal_upcoming_today > 0
-                ? `${data.cal_upcoming_today} hoy · ${data.cal_upcoming} próximas`
-                : data.cal_upcoming > 0
-                  ? `${data.cal_upcoming} reuniones próximas`
-                  : 'Cal.com — reunion-agente-llamada'
-              : 'Webhook Cal.com + CREATE_CAL_BOOKINGS.sql'
+              ? data.cal_upcoming > 0
+                ? `${data.cal_upcoming} próximas`
+                : 'Cal.com web'
+              : 'Webhook + CREATE_CAL_BOOKINGS.sql'
           }
           hint="Ver lead y reunión"
           active={showCal}
-          accent="#8B5CF6"
           onClick={data.cal_available ? () => {
             setShowCal((v) => !v)
             if (!showCal) closeOthers('cal')
           } : undefined}
         />
-        <Kpi
-          icon={FileText}
+        <KpiCard
           label="Formulario rellenado"
           value={data.form_available ? fmt(data.totals.form) : '—'}
           sub={
             data.form_available
               ? data.form_pending > 0
-                ? `${data.form_pending} pendientes de contactar`
-                : 'Todos gestionados en el período'
-              : 'Ejecuta CREATE_WEB_FORM_SUBMISSIONS.sql'
+                ? `${data.form_pending} pendientes`
+                : 'Todos gestionados'
+              : 'CREATE_WEB_FORM_SUBMISSIONS.sql'
           }
           hint="Ver formularios"
           active={showForms}
-          accent="#374151"
           onClick={data.form_available ? () => {
             setShowForms((v) => !v)
             if (!showForms) closeOthers('forms')
           } : undefined}
         />
-        <Kpi
-          icon={MessageCircle}
+        <KpiCard
           label="Respondieron al chat"
           value={fmt(data.totals.chat)}
-          sub={
-            data.chat_available
-              ? `${data.share_chat_pct}% del tráfico web · widget IA`
-              : 'Configura DATABASE_URL_chat'
-          }
+          sub="Widget IA · sesiones con respuesta"
           hint="Ver conversaciones"
           active={showChat}
-          accent="#3B82F6"
           onClick={() => {
             setShowChat((v) => !v)
             if (!showChat) closeOthers('chat')
@@ -232,48 +285,33 @@ export default function WebMarketingTab({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="shadow-sm border-gray-200/80">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold text-gray-900">Actividad en el tiempo</CardTitle>
-            <p className="text-xs text-gray-500 font-normal">Formulario, calendario y widget por día</p>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-gray-900">Embudo web</CardTitle>
+            <p className="text-xs text-gray-500 font-normal">Calendario · formulario · widget</p>
           </CardHeader>
-          <CardContent className="pb-4">
-            <WebChannelTimelineChart data={data.timeline} />
+          <CardContent className="space-y-4">
+            <FunnelBar label="Calendario Cal.com" count={data.totals.cal} total={total} color="bg-gray-800" />
+            <FunnelBar label="Formulario completado" count={data.totals.form} total={total} color="bg-slate-600" />
+            <FunnelBar label="Chat con respuesta" count={data.totals.chat} total={total} color="bg-slate-400" />
+            {data.cal_from_form_pct != null && data.totals.form > 0 && (
+              <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
+                Formulario → calendario:{' '}
+                <span className="font-semibold text-gray-800">{data.cal_from_form_pct}%</span>
+              </p>
+            )}
           </CardContent>
         </Card>
 
         <Card className="shadow-sm border-gray-200/80">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold text-gray-900">Comparativa de vías</CardTitle>
-            <p className="text-xs text-gray-500 font-normal">
-              {fmt(data.totals.total)} entradas web en el período
-            </p>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold text-gray-900">Actividad diaria</CardTitle>
+            <p className="text-xs text-gray-500 font-normal">{fmt(total)} entradas en el período</p>
           </CardHeader>
-          <CardContent className="pb-4">
-            <WebChannelBarChart totals={data.totals} />
+          <CardContent className="pb-2">
+            <WebChannelTimelineChart data={data.timeline} />
           </CardContent>
         </Card>
       </div>
-
-      <Card className="shadow-sm border-gray-200/80">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold text-gray-900">Mix de canales web</CardTitle>
-          <p className="text-xs text-gray-500 font-normal">
-            Distribución del tráfico convertido · Pipeline WEB sincronizado
-            {data.pipeline_available ? ` (${data.pipeline_synced} tarjetas)` : ' (pipeline no encontrado)'}
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ShareBar label="Formulario web" pct={data.share_form_pct} color="#374151" />
-          <ShareBar label="Calendario Cal.com" pct={data.share_cal_pct} color="#8B5CF6" />
-          <ShareBar label="Widget chat" pct={data.share_chat_pct} color="#3B82F6" />
-          {data.cal_from_form_pct != null && data.totals.form > 0 && (
-            <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
-              Tasa formulario → calendario:{' '}
-              <span className="font-semibold text-gray-800">{data.cal_from_form_pct}%</span>
-            </p>
-          )}
-        </CardContent>
-      </Card>
 
       {showCal && data.cal_available && (
         <div className="space-y-2">
@@ -284,14 +322,14 @@ export default function WebMarketingTab({
 
       {showForms && data.form_available && (
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-800 px-0.5">Formularios web — envíos n8n</h3>
+          <h3 className="text-sm font-semibold text-gray-800 px-0.5">Formularios web</h3>
           <WebFormSubmissionsPanel period={period} />
         </div>
       )}
 
       {showChat && (
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-800 px-0.5">Chat IA — conversaciones</h3>
+          <h3 className="text-sm font-semibold text-gray-800 px-0.5">Chat IA</h3>
           <AgentChatsPanel embedded />
         </div>
       )}
