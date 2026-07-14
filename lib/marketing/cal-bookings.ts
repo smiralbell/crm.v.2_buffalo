@@ -156,13 +156,13 @@ export async function countUpcomingCalBookings(): Promise<number> {
 }
 
 async function enrichCalBookingsWithLeads(bookings: CalBookingRow[]): Promise<CalBookingRow[]> {
-  const emails = [
-    ...new Set(
+  const emails = Array.from(
+    new Set(
       bookings
         .map((b) => b.attendee_email?.trim().toLowerCase())
         .filter((e): e is string => !!e)
-    ),
-  ]
+    )
+  )
   if (emails.length === 0) return bookings
 
   const contacts = await prisma.contact.findMany({
