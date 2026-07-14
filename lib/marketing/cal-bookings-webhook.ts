@@ -60,19 +60,33 @@ function getEventSlugFilter(): string {
   return (process.env.CALCOM_EVENT_SLUG?.trim() || DEFAULT_CAL_EVENT_SLUG).toLowerCase()
 }
 
+function normalizeCalSignature(header: string): string {
+  let value = header.trim()
+  if (value.toLowerCase().startsWith('sha256=')) {
+    value = value.slice(7)
+  }
+  return value.toLowerCase()
+}
+
 export function verifyCalWebhookSignature(rawBody: string, signatureHeader: string | undefined): boolean {
   const secret = process.env.CALCOM_WEBHOOK_SECRET?.trim()
   if (!secret) return true
   if (!signatureHeader?.trim()) return false
 
-  const expected = createHmac('sha256', secret).update(rawBody).digest('hex')
-  const received = signatureHeader.trim().toLowerCase()
+  const received = normalizeCalSignature(signatureHeader)
+  const expected = createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex')
 
-  try {
-    return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(received, 'hex'))
-  } catch {
-    return expected === received
+  if (expected === received) return true
+
+  if (expected.length === received.length) {
+    try {
+      return timingSafeEqual(Buffer.from(expected, 'utf8'), Buffer.from(received, 'utf8'))
+    } catch {
+      return false
+    }
   }
+
+  return false
 }
 
 function resolveBookingPayload(body: CalWebhookBody): CalWebhookBookingPayload {

@@ -37,7 +37,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const signature = req.headers['x-cal-signature-256'] as string | undefined
   if (!verifyCalWebhookSignature(rawBody, signature)) {
-    return res.status(401).json({ error: 'Firma de webhook inválida' })
+    const secretConfigured = !!process.env.CALCOM_WEBHOOK_SECRET?.trim()
+    console.error('[webhooks/calcom] firma inválida', {
+      secretConfigured,
+      hasSignatureHeader: !!signature,
+      bodyLength: rawBody.length,
+    })
+    return res.status(401).json({
+      error: secretConfigured
+        ? 'Firma de webhook inválida. CALCOM_WEBHOOK_SECRET debe coincidir exactamente con el secret del webhook en Cal.com.'
+        : 'Falta header x-cal-signature-256. Configura el mismo secret en Cal.com y en CALCOM_WEBHOOK_SECRET.',
+    })
   }
 
   let body: CalWebhookBody
