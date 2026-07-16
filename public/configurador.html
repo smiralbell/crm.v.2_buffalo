@@ -184,6 +184,8 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
 .btn-action:hover{background:rgba(34,217,122,.2);}
 .btn-send{background:rgba(74,158,224,.12);border:1px solid rgba(74,158,224,.3);color:var(--blue);font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:"IBM Plex Sans",sans-serif;display:flex;align-items:center;gap:5px;transition:background .15s;white-space:nowrap;}
 .btn-send:hover{background:rgba(74,158,224,.22);}
+.btn-view{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.85);font-size:12px;font-weight:700;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:"IBM Plex Sans",sans-serif;display:flex;align-items:center;gap:5px;transition:background .15s;white-space:nowrap;}
+.btn-view:hover{background:rgba(255,255,255,.12);}
 .toast-msg{font-size:11px;color:var(--green);font-family:"IBM Plex Mono",monospace;padding:8px 12px;background:rgba(34,217,122,.08);border:1px solid rgba(34,217,122,.2);border-radius:8px;margin-top:6px;display:none;}
 </style>
 </head>
@@ -417,6 +419,10 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 Generar
               </button>
+              <button class="btn-view" type="button" onclick="viewDoc('propuesta')" title="Abrir sin marcar como enviada">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Ver
+              </button>
               <button class="btn-send" onclick="sendDoc('propuesta')">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 Enviar
@@ -434,6 +440,10 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
               <button class="btn-action" onclick="copyOnboardingLink()">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                 Copiar link
+              </button>
+              <button class="btn-view" type="button" onclick="viewDoc('onboarding')" title="Abrir formulario sin marcar como enviado">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Ver
               </button>
               <button class="btn-send" onclick="sendDoc('onboarding')">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -453,6 +463,10 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 Generar
               </button>
+              <button class="btn-view" type="button" onclick="viewDoc('contrato')" title="Abrir sin marcar como enviado">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Ver
+              </button>
               <button class="btn-send" onclick="sendDoc('contrato')">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 Enviar
@@ -470,6 +484,10 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
               <button class="btn-action" onclick="generateFactura()">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 Generar
+              </button>
+              <button class="btn-view" type="button" onclick="viewDoc('factura')" title="Abrir / borrador sin marcar enviada">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                Ver
               </button>
               <button class="btn-send" onclick="sendDoc('factura')">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -589,8 +607,91 @@ function selMaint(type) {
 }
 
 // ── RESTORE saved config (used when CRM reopens the configurator) ──
+/** Proyecto a medida (brief + IA) — estado global */
+var CUSTOM = null;
+
+function isCustomMode() {
+  return CUSTOM && CUSTOM.mode === 'custom';
+}
+
+function customTotal() {
+  if (!CUSTOM) return 0;
+  if (CUSTOM.setup_total_eur != null && Number.isFinite(+CUSTOM.setup_total_eur)) {
+    return Math.round(+CUSTOM.setup_total_eur);
+  }
+  return (CUSTOM.line_items || []).reduce(function(s, i) { return s + (Number(i.amount_eur) || 0); }, 0);
+}
+
+function customMonthly() {
+  if (!CUSTOM || CUSTOM.monthly_fee_eur == null) return 0;
+  return Math.round(Number(CUSTOM.monthly_fee_eur) || 0);
+}
+
+function activateCustomMode(cfg) {
+  CUSTOM = cfg;
+  try {
+    var step1 = document.getElementById('step1');
+    if (step1) step1.style.display = 'none';
+    var step2 = document.getElementById('step2');
+    if (step2) step2.style.display = 'block';
+    var layout = document.querySelector('.step2-layout');
+    if (layout && layout.children[0]) layout.children[0].style.display = 'none';
+    if (layout) layout.style.gridTemplateColumns = '1fr';
+
+    if (cfg.nombre && document.getElementById('f-name')) document.getElementById('f-name').value = cfg.nombre;
+    if (cfg.empresa && document.getElementById('f-company')) document.getElementById('f-company').value = cfg.empresa;
+    if (cfg.email && document.getElementById('f-email')) document.getElementById('f-email').value = cfg.email;
+    if (cfg.city && document.getElementById('f-city')) document.getElementById('f-city').value = cfg.city;
+    if (cfg.plazo && document.getElementById('f-plazo')) document.getElementById('f-plazo').value = cfg.plazo;
+    if (cfg.ref && document.getElementById('f-ref')) document.getElementById('f-ref').value = cfg.ref;
+
+    var host = document.getElementById('customProjectPanel');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'customProjectPanel';
+      host.className = 'form-card';
+      host.style.marginBottom = '14px';
+      var right = layout && layout.children[1];
+      if (right) right.insertBefore(host, right.firstChild);
+      else if (step2) step2.insertBefore(host, step2.firstChild);
+    }
+
+    var lines = (cfg.line_items || []).map(function(l) {
+      return '<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:4px 0;border-bottom:1px solid rgba(0,0,0,.06)"><span>' +
+        (l.description || '') + '</span><strong>' + fmtSp(l.amount_eur || 0) + '</strong></div>';
+    }).join('');
+    var scope = (cfg.scope_items || []).map(function(s) {
+      return '<li style="margin:4px 0">' + s + '</li>';
+    }).join('');
+
+    host.innerHTML =
+      '<div class="form-title">Proyecto a medida</div>' +
+      '<div style="font-size:16px;font-weight:700;margin:4px 0 8px">' + (cfg.title || 'Proyecto') + '</div>' +
+      (cfg.description ? '<p style="font-size:13px;opacity:.75;margin-bottom:12px">' + cfg.description + '</p>' : '') +
+      (scope ? '<ul style="font-size:13px;padding-left:18px;margin:0 0 14px">' + scope + '</ul>' : '') +
+      '<div style="margin-bottom:10px">' + lines + '</div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700"><span>Setup</span><span>' + fmtSp(customTotal()) + '</span></div>' +
+      (customMonthly() ? '<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px;opacity:.8"><span>Mensualidad</span><span>' + fmtSp(customMonthly()) + '/mes</span></div>' : '') +
+      '<div style="font-size:12px;opacity:.55;margin-top:10px">Pago: ' +
+        (cfg.payment_split === '100_upfront' ? '100% al inicio' : '50% / 50%') +
+        ' · Plazo: ' + (cfg.plazo || '—') + '</div>';
+
+    // Totales laterales
+    var totEl = document.getElementById('totSetup');
+    if (totEl) { totEl.textContent = fmtSp(customTotal()); totEl.dataset.val = customTotal(); }
+    var mEl = document.getElementById('totMaint');
+    if (mEl && customMonthly()) { mEl.textContent = fmtSp(customMonthly()) + '/mes'; }
+  } catch (e) {
+    console.warn('activateCustomMode', e);
+  }
+}
+
 function restoreFromConfig(cfg) {
   if (!cfg) return;
+  if (cfg.mode === 'custom') {
+    activateCustomMode(cfg);
+    return;
+  }
   try {
     // ── Voz ──────────────────────────────────────────────────────────────
     if (cfg.voz) {
@@ -669,6 +770,10 @@ function restoreFromConfig(cfg) {
 
 // ── CALC ──
 function calcSetup() {
+  if (isCustomMode()) {
+    var t = customTotal();
+    return { voz: 0, chat: 0, dash: 0, sub: t, disc: 0, total: t, clonadaSel: false };
+  }
   let voz=0, chat=0, dash=0;
   if (S.voz.on) {
     voz = S.voz.base + S.voz.lang;
@@ -797,6 +902,22 @@ function buildOnboardingConfig() {
   const company = document.getElementById('f-company')?.value || '';
   const email   = document.getElementById('f-email')?.value   || '';
   const ref     = document.getElementById('f-ref')?.value     || ('BUF-2026-'+Date.now().toString().slice(-4));
+  const leadIdParam = new URLSearchParams(location.search).get('leadId') || '';
+
+  if (isCustomMode()) {
+    return Object.assign({}, CUSTOM, {
+      mode: 'custom',
+      ref: ref || CUSTOM.ref,
+      empresa: company || CUSTOM.empresa,
+      nombre: name || CUSTOM.nombre,
+      email: email || CUSTOM.email,
+      city: document.getElementById('f-city')?.value || CUSTOM.city,
+      plazo: document.getElementById('f-plazo')?.value || CUSTOM.plazo,
+      leadId: leadIdParam ? Number(leadIdParam) : CUSTOM.leadId,
+      setup_total_eur: customTotal(),
+      monthly_fee_eur: customMonthly() || null,
+    });
+  }
 
   const getOpt = (cardId, txt) => !!document.querySelector(`#${cardId} .opt.sel .opt-name`)
     ? Array.from(document.querySelectorAll(`#${cardId} .opt.sel .opt-name`)).some(n=>n.textContent.toLowerCase().includes(txt.toLowerCase()))
@@ -806,6 +927,7 @@ function buildOnboardingConfig() {
 
   return {
     ref, empresa: company, nombre: name, email,
+    leadId: leadIdParam ? Number(leadIdParam) : undefined,
     voz: S.voz.on,
     voz_outbound:     getOpt('cVoz','outbound'),
     voz_crm:          getOpt('cVoz','crm'),
@@ -857,6 +979,19 @@ function showToast(msg, color='green') {
   t._t = setTimeout(()=>t.style.display='none', 4000);
 }
 
+// ── VIEW (sin marcar enviado / sin avanzar pipeline) ──
+function viewDoc(type) {
+  if (type === 'propuesta') return generateProposal();
+  if (type === 'contrato')  return generateContrato();
+  if (type === 'factura')   return generateFactura();
+  if (type === 'onboarding') {
+    const url = getOnboardingUrl();
+    (window.top || window).open(url, '_blank');
+    showToast('Formulario abierto (sin marcar enviado)', 'blue');
+    return;
+  }
+}
+
 // ── SEND BY EMAIL ──
 function sendDoc(type) {
   const email   = document.getElementById('f-email')?.value   || '';
@@ -887,11 +1022,17 @@ function sendDoc(type) {
     body = `Hola ${firstName},\n\nAdjunto la factura correspondiente al primer pago del proyecto ${ref}.\n\nImporte: ${fmtSp(half)} + IVA 21% = ${fmtSp(Math.round(half*1.21))}\n\nFormas de pago:\n— Transferencia bancaria: ES12 3456 7890 1234 5678 9012\n— Concepto: ${ref}-F01\n\nUna vez confirmado el pago, arrancamos.\n\nUn saludo,\nEquipo Buffalo AI\nhola@agenciabuffalo.es`;
   }
 
-  if (email) {
-    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  } else {
+  if (!email) {
     showToast('Rellena primero el email del cliente', 'orange');
+    return;
   }
+
+  // En CRM: notificar al parent para avanzar el embudo global (solo Enviar)
+  if (window.parent && window.parent !== window && typeof window.__buffaloNotifySend === 'function') {
+    window.__buffaloNotifySend(type);
+  }
+
+  window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 // ── PROPOSAL GENERATION ──
@@ -902,6 +1043,35 @@ function generateProposal() {
   const city    = document.getElementById('f-city')?.value    || 'Barcelona';
   const plazo   = document.getElementById('f-plazo')?.value;
   const ref     = document.getElementById('f-ref')?.value     || ('BUF-2026-'+Date.now().toString().slice(-4));
+
+  if (isCustomMode()) {
+    const total = customTotal();
+    const half = CUSTOM.payment_split === '100_upfront' ? total : Math.ceil(total / 2);
+    const mAmt = customMonthly();
+    const today = new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'});
+    const scopeLis = (CUSTOM.scope_items || []).map(function(s){ return '<li>'+s+'</li>'; }).join('');
+    const pricingRows = (CUSTOM.line_items || []).map(function(l){
+      return '<tr><td>'+l.description+'</td><td style="text-align:right;font-weight:600;">'+fmtSp(l.amount_eur)+'</td></tr>';
+    }).join('');
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Propuesta ${ref}</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:"IBM Plex Sans",Arial,sans-serif;color:#111;background:#fff;font-size:11pt;line-height:1.65}.page{max-width:800px;margin:0 auto;padding:48px 56px}h1{font-size:22pt;font-weight:700;margin:0 0 8px}.meta{color:#666;font-size:10pt;margin-bottom:28px}.block{margin:22px 0}h2{font-size:12pt;margin-bottom:8px}ul{margin:8px 0 8px 18px}table{width:100%;border-collapse:collapse;margin-top:12px}td{padding:8px 0;border-bottom:1px solid #eee}.total{font-weight:700;font-size:13pt}</style></head><body><div class="page">
+<h1>${CUSTOM.title || 'Propuesta de servicios'}</h1>
+<div class="meta">${company||name} · ${ref} · ${today}${city? ' · '+city:''}</div>
+${CUSTOM.description?`<div class="block"><p>${CUSTOM.description}</p></div>`:''}
+<div class="block"><h2>Alcance</h2><ul>${scopeLis||'<li>Servicios según briefing acordado</li>'}</ul></div>
+<div class="block"><h2>Inversión</h2><table>${pricingRows}
+<tr><td class="total">Total setup (sin IVA)</td><td class="total" style="text-align:right">${fmtSp(total)}</td></tr></table>
+<p style="margin-top:12px">Forma de pago: <strong>${CUSTOM.payment_split==='100_upfront'?'100% al inicio':`50% (${fmtSp(half)}) al firmar + 50% a la entrega`}</strong>.</p>
+${mAmt?`<p>Mensualidad: <strong>${fmtSp(mAmt)} + IVA/mes</strong>.</p>`:''}
+<p>Plazo estimado: <strong>${plazo||CUSTOM.plazo||'4–6 semanas'}</strong>.</p>
+</div>
+<p style="margin-top:36px;font-size:10pt;color:#666">Buffalo IA Global Digital Solutions S.L. · hola@agenciabuffalo.es</p>
+</div><script>window.onload=()=>setTimeout(()=>window.print(),600);<\/script></body></html>`;
+    const w = window.open('','_blank'); w.document.write(html); w.document.close();
+    return;
+  }
+
   const { voz, chat, dash, disc, total, clonadaSel } = calcSetup();
   const half = Math.ceil(total/2);
   const mAmt = S.maint ? Math.round(total*(S.maint==='connect'?0.10:0.15)) : 0;
@@ -1021,16 +1191,29 @@ function generateContrato() {
   const email   = document.getElementById('f-email')?.value   || '';
   const city    = document.getElementById('f-city')?.value    || 'Barcelona';
   const ref     = document.getElementById('f-ref')?.value     || ('BUF-2026-'+Date.now().toString().slice(-4));
-  const { voz, chat, dash, total, clonadaSel } = calcSetup();
-  const half = Math.ceil(total/2);
-  const mAmt = S.maint ? Math.round(total*(S.maint==='connect'?0.10:0.15)) : 0;
-  const today = new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'});
 
-  let serviciosDesc = [];
+  let total, half, mAmt, serviciosDesc;
+  if (isCustomMode()) {
+    total = customTotal();
+    half = CUSTOM.payment_split === '100_upfront' ? total : Math.ceil(total / 2);
+    mAmt = customMonthly();
+    serviciosDesc = (CUSTOM.scope_items && CUSTOM.scope_items.length)
+      ? CUSTOM.scope_items.slice()
+      : [CUSTOM.title || 'Servicios de inteligencia artificial a medida'];
+    if (mAmt) serviciosDesc.push('Mantenimiento / mensualidad (' + fmtSp(mAmt) + '/mes)');
+  } else {
+  const calc = calcSetup();
+  total = calc.total;
+  half = Math.ceil(total/2);
+  mAmt = S.maint ? Math.round(total*(S.maint==='connect'?0.10:0.15)) : 0;
+  serviciosDesc = [];
   if (S.voz.on) { serviciosDesc.push('Agente de voz con inteligencia artificial (Inbound 24/7' + (document.querySelector('#cVoz .opt.sel .opt-name')?.textContent?' + add-ons seleccionados':'')+')'); }
   if (S.chat.on) { serviciosDesc.push('Agente de chat con inteligencia artificial' + (document.querySelector('#cChat .opt.sel .opt-name')?.textContent?' + canales y capacidades seleccionados':'')); }
   if (S.dash.on) { const t=document.querySelector('#dashTiers .dash-tier.sel .dash-name'); serviciosDesc.push('Dashboard / Aplicación de control'+(t?' ('+t.textContent+')':'')); }
   if (S.maint) { serviciosDesc.push('Plan de mantenimiento mensual Buffalo '+(S.maint==='cloud'?'Cloud (15%)':'Connect (10%)')); }
+  }
+
+  const today = new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'});
 
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Contrato ${ref}</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -1063,12 +1246,14 @@ function generateContrato() {
 
 <div class="clausula"><h2>Segunda. Precio y condiciones de pago</h2>
 <p>El precio total acordado para el desarrollo e implementación del sistema asciende a <strong>${fmtSp(total)} + IVA (21%)</strong>, lo que supone un total de <strong>${fmtSp(Math.round(total*1.21))}</strong> con impuestos incluidos.</p>
-<p>El pago se estructura en dos partes iguales:</p>
+${(isCustomMode() && CUSTOM.payment_split === '100_upfront')
+  ? `<p>El pago se abona íntegramente a la firma del presente contrato: <strong>${fmtSp(total)}</strong> + IVA.</p>`
+  : `<p>El pago se estructura en dos partes iguales:</p>
 <ul>
   <li><strong>Primer pago: ${fmtSp(half)}</strong> — A la firma del presente contrato. Da inicio al desarrollo.</li>
   <li><strong>Segundo pago: ${fmtSp(total-half)}</strong> — Antes de la puesta en producción del sistema, una vez el Cliente haya validado el funcionamiento.</li>
-</ul>
-${S.maint?`<p>Adicionalmente, el Cliente contrata el plan de mantenimiento mensual <strong>Buffalo ${S.maint==='cloud'?'Cloud':'Connect'}</strong> por importe de <strong>${fmtSp(mAmt)} + IVA/mes</strong>, que comenzará a facturarse a partir del mes siguiente a la puesta en producción.</p>`:''}
+</ul>`}
+${(isCustomMode() ? mAmt : S.maint)?`<p>Adicionalmente, el Cliente contrata un mantenimiento / mensualidad por importe de <strong>${fmtSp(mAmt)} + IVA/mes</strong>${!isCustomMode() && S.maint ? ' (Buffalo '+(S.maint==='cloud'?'Cloud':'Connect')+')' : ''}, que comenzará a facturarse a partir del mes siguiente a la puesta en producción.</p>`:''}
 </div>
 
 <div class="clausula"><h2>Tercera. Plazo de ejecución</h2>
@@ -1118,17 +1303,34 @@ function generateFactura() {
   const city    = document.getElementById('f-city')?.value    || '';
   const ref     = document.getElementById('f-ref')?.value     || ('BUF-2026-'+Date.now().toString().slice(-4));
   const { voz, chat, dash, disc, total, clonadaSel } = calcSetup();
-  const half = Math.ceil(total/2);
+  const payAll = isCustomMode() && CUSTOM.payment_split === '100_upfront';
+  const half = payAll ? total : Math.ceil(total/2);
   const iva = Math.round(half*0.21);
   const totalConIva = half + iva;
   const today = new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'});
   const invoiceNum = ref+'-F01';
 
   const lines = [];
+  if (isCustomMode()) {
+    (CUSTOM.line_items || []).forEach(function(l) {
+      const amt = payAll ? Math.round(l.amount_eur) : Math.ceil(Number(l.amount_eur) / 2);
+      lines.push({
+        desc: l.description + (payAll ? '' : ' (50% s/contrato)'),
+        amt: amt,
+      });
+    });
+    if (!lines.length) {
+      lines.push({
+        desc: (CUSTOM.title || 'Servicios') + (payAll ? '' : ' (50% s/contrato)'),
+        amt: half,
+      });
+    }
+  } else {
   if (S.voz.on) lines.push({ desc:'Agente de Voz con Inteligencia Artificial (50% s/contrato)', amt: Math.ceil(voz/2) });
   if (S.chat.on) lines.push({ desc:'Agente de Chat con Inteligencia Artificial (50% s/contrato)', amt: Math.ceil(chat/2) });
   if (S.dash.on) { const t=document.querySelector('#dashTiers .dash-tier.sel .dash-name'); lines.push({ desc:'Dashboard / Aplicación'+(t?' '+t.textContent:'')+ ' (50% s/contrato)', amt: Math.ceil(dash/2) }); }
   if (disc>0) lines.push({ desc:'Descuento Pack Voz + Chat (−10%)', amt: -Math.floor(disc/2) });
+  }
 
   const lineRows = lines.map(l=>`<tr><td style="padding:10px 16px;border-bottom:1px solid #f0f0f0;">${l.desc}</td><td style="padding:10px 16px;text-align:right;border-bottom:1px solid #f0f0f0;font-family:'IBM Plex Mono',monospace;font-weight:600;">${fmtSp(l.amt)}</td></tr>`).join('');
 
@@ -1313,6 +1515,8 @@ recalc();
       .cta-row { background:#f9fafb !important; border-color:#e5e7eb !important; }
       .btn-action { background:#f3f4f6 !important; border-color:#e5e7eb !important; color:#111827 !important; }
       .btn-action:hover { background:#e5e7eb !important; }
+      .btn-view { background:#ffffff !important; border-color:#d1d5db !important; color:#374151 !important; }
+      .btn-view:hover { background:#f3f4f6 !important; }
       .toast-msg { color:#374151 !important; border-color:#e5e7eb !important; background:#f9fafb !important; }
     `;
     document.head.appendChild(style);
@@ -1389,8 +1593,22 @@ recalc();
   function buildProjectData() {
     try {
       const { voz, chat, dash, sub, disc, total } = calcSetup();
-      const mAmt = S.maint ? Math.round(total * (S.maint === 'connect' ? 0.10 : 0.15)) : 0;
+      const mAmt = isCustomMode()
+        ? customMonthly()
+        : (S.maint ? Math.round(total * (S.maint === 'connect' ? 0.10 : 0.15)) : 0);
       const lines = [];
+      if (isCustomMode()) {
+        if (CUSTOM.title) lines.push('Proyecto: ' + CUSTOM.title);
+        (CUSTOM.scope_items || []).forEach(function(s) { lines.push('• ' + s); });
+        (CUSTOM.line_items || []).forEach(function(l) {
+          lines.push('• ' + l.description + ': ' + fmtSp(l.amount_eur));
+        });
+        lines.push('Total setup: ' + fmtSp(total));
+        if (mAmt > 0) lines.push('Mensualidad: ' + fmtSp(mAmt) + '/mes');
+        var configObjC = buildOnboardingConfig();
+        var projectConfigC = btoa(unescape(encodeURIComponent(JSON.stringify(configObjC))));
+        return { projectTotal: total, projectNotes: lines.join('\n'), projectMaint: mAmt, projectConfig: projectConfigC };
+      }
       if (S.voz.on) {
         var vozOpts = [];
         document.querySelectorAll('#cVoz .opt.sel:not(.opt-clonada)').forEach(function(o) {
@@ -1490,8 +1708,13 @@ recalc();
       window.parent.postMessage({ type: 'buffalo_crm_save_error', error: 'no_lead' }, '*');
       return false;
     }
-    if (!data.projectTotal && !data.projectNotes) {
+    if (!isCustomMode() && !data.projectTotal && !data.projectNotes) {
       showToast('Activa al menos un agente para guardar', 'orange');
+      window.parent.postMessage({ type: 'buffalo_crm_save_error', error: 'empty' }, '*');
+      return false;
+    }
+    if (isCustomMode() && !data.projectTotal) {
+      showToast('El proyecto a medida no tiene importe', 'orange');
       window.parent.postMessage({ type: 'buffalo_crm_save_error', error: 'empty' }, '*');
       return false;
     }
@@ -1575,36 +1798,53 @@ recalc();
       const city_f    = document.getElementById('f-city')?.value    || '';
 
       const { voz, chat, dash, disc, total: totalBruto } = calcSetup();
-      const half = Math.ceil(totalBruto / 2);
+      const payAll = isCustomMode() && CUSTOM.payment_split === '100_upfront';
+      const half = payAll ? totalBruto : Math.ceil(totalBruto / 2);
       const ivaAmt = Math.round(half * 0.21);
       const totalConIva = half + ivaAmt;
 
       const services = [];
-      if (S.voz.on) {
-        services.push({
-          description: 'Agente de Voz con Inteligencia Artificial (50% s/contrato)',
-          quantity: 1, price: Math.ceil(voz / 2), tax: 21, total: Math.ceil(voz / 2)
+      if (isCustomMode()) {
+        (CUSTOM.line_items || []).forEach(function(l) {
+          var price = payAll ? Math.round(l.amount_eur) : Math.ceil(Number(l.amount_eur) / 2);
+          services.push({
+            description: l.description + (payAll ? '' : ' (50% s/contrato)'),
+            quantity: 1, price: price, tax: 21, total: price
+          });
         });
-      }
-      if (S.chat.on) {
-        services.push({
-          description: 'Agente de Chat con Inteligencia Artificial (50% s/contrato)',
-          quantity: 1, price: Math.ceil(chat / 2), tax: 21, total: Math.ceil(chat / 2)
-        });
-      }
-      if (S.dash.on) {
-        const t = document.querySelector('#dashTiers .dash-tier.sel .dash-name');
-        services.push({
-          description: 'Dashboard / Aplicación' + (t ? ' ' + t.textContent : '') + ' (50% s/contrato)',
-          quantity: 1, price: Math.ceil(dash / 2), tax: 21, total: Math.ceil(dash / 2)
-        });
-      }
-      if (disc > 0) {
-        const discLine = Math.floor(disc / 2);
-        services.push({
-          description: 'Descuento Pack Voz + Chat (−10%)',
-          quantity: 1, price: -discLine, tax: 0, total: -discLine
-        });
+        if (!services.length) {
+          services.push({
+            description: (CUSTOM.title || 'Servicios') + (payAll ? '' : ' (50% s/contrato)'),
+            quantity: 1, price: half, tax: 21, total: half
+          });
+        }
+      } else {
+        if (S.voz.on) {
+          services.push({
+            description: 'Agente de Voz con Inteligencia Artificial (50% s/contrato)',
+            quantity: 1, price: Math.ceil(voz / 2), tax: 21, total: Math.ceil(voz / 2)
+          });
+        }
+        if (S.chat.on) {
+          services.push({
+            description: 'Agente de Chat con Inteligencia Artificial (50% s/contrato)',
+            quantity: 1, price: Math.ceil(chat / 2), tax: 21, total: Math.ceil(chat / 2)
+          });
+        }
+        if (S.dash.on) {
+          const t = document.querySelector('#dashTiers .dash-tier.sel .dash-name');
+          services.push({
+            description: 'Dashboard / Aplicación' + (t ? ' ' + t.textContent : '') + ' (50% s/contrato)',
+            quantity: 1, price: Math.ceil(dash / 2), tax: 21, total: Math.ceil(dash / 2)
+          });
+        }
+        if (disc > 0) {
+          const discLine = Math.floor(disc / 2);
+          services.push({
+            description: 'Descuento Pack Voz + Chat (−10%)',
+            quantity: 1, price: -discLine, tax: 0, total: -discLine
+          });
+        }
       }
 
       window.parent.postMessage(crmPayload('emitir_factura', {
@@ -1629,31 +1869,19 @@ recalc();
     }
   };
 
-  // ── Patch click listener: move pipeline card on every relevant action ──
-  document.addEventListener('click', function(e) {
+  // Solo Enviar (sendDoc) avanza el embudo. Generar / Ver / Copiar link NO.
+  window.__buffaloNotifySend = function(type) {
     if (!window.parent || window.parent === window) return;
-    const btn = e.target.closest('button, [onclick]');
-    if (!btn) return;
-    const txt = (btn.textContent || '').trim().toLowerCase();
-    const oc  = (btn.getAttribute('onclick') || '').toLowerCase();
-
-    // Propuesta — "generateProposal()" (English fn name) or "sendDoc('propuesta')"
-    if (txt.includes('propuesta') || oc.includes('propuesta') || oc.includes('proposal')) {
-      window.parent.postMessage(crmPayload('enviar_propuesta'), '*');
-    }
-    // Contrato — "generateContrato()" or "sendDoc('contrato')"
-    if (txt.includes('contrato') || oc.includes('contrato')) {
-      window.parent.postMessage(crmPayload('enviar_contrato'), '*');
-    }
-    // Onboarding — "copyOnboardingLink()" or "sendDoc('onboarding')"
-    if (txt.includes('onboarding') || oc.includes('onboarding')) {
-      window.parent.postMessage(crmPayload('enviar_onboarding'), '*');
-    }
-    // Factura — handled by the patched generateFactura(), but also catch sendDoc('factura')
-    if (oc === "senddoc('factura')" || oc.includes("senddoc('factura')")) {
-      window.parent.postMessage(crmPayload('emitir_factura'), '*');
-    }
-  }, true);
+    var map = {
+      propuesta: 'enviar_propuesta',
+      contrato: 'enviar_contrato',
+      onboarding: 'enviar_onboarding',
+      factura: 'enviar_factura',
+    };
+    var action = map[type];
+    if (!action) return;
+    window.parent.postMessage(crmPayload(action), '*');
+  };
 
 })();
 </script>

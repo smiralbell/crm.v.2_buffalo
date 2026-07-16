@@ -145,6 +145,8 @@ export default async function handler(
         }
       }
 
+      const status = data.status || 'draft'
+
       // Crear factura
       const invoice = await prisma.invoice.create({
         data: {
@@ -162,9 +164,20 @@ export default async function handler(
           subtotal: data.subtotal,
           iva: data.iva,
           total: data.total,
-          status: data.status || 'draft',
+          status,
         },
       })
+
+      if (status === 'sent' && invoice.client_email) {
+        try {
+          const { advanceLeadOnGlobalByContactEmail } = await import(
+            '@/lib/pipelines/onboarding-global'
+          )
+          await advanceLeadOnGlobalByContactEmail(invoice.client_email, 'enviar_factura')
+        } catch (e) {
+          console.error('[invoices] pipeline FACTURA EMITIDA', e)
+        }
+      }
 
       return res.status(201).json({
         ...invoice,

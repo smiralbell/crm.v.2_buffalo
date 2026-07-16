@@ -161,7 +161,7 @@ export default function OnboardingPage() {
         }
       } catch { /* best-effort */ }
 
-      // Go directly to configurator — no intermediate hub step
+      // Ir al configurador (elige paquete vs a medida)
       const params = new URLSearchParams()
       if (leadId)          params.set('lead',     String(leadId))
       if (contact.nombre)  params.set('nombre',   contact.nombre)
@@ -223,6 +223,7 @@ export default function OnboardingPage() {
     const crd = overrideCard     || urlCard
     if (pip) params.set('pipeline', pip)
     if (crd) params.set('card',     crd)
+    params.set('mode', 'packaged')
     router.push(`/onboarding/configure?${params.toString()}`)
   }
 
@@ -315,12 +316,60 @@ export default function OnboardingPage() {
                 <button onClick={() => setSelected(null)} className="text-gray-300 hover:text-gray-500 transition-colors flex-shrink-0 p-1">
                   <X className="h-4 w-4" />
                 </button>
-                <button
-                  onClick={() => void handleConfigure(selected)}
-                  className="px-5 h-10 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition-colors flex-shrink-0"
-                >
-                  Configurar proyecto
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => void handleConfigure(selected)}
+                    className="px-4 h-10 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition-colors"
+                  >
+                    Paquete Buffalo
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const params = new URLSearchParams()
+                      // resolve lead like handleConfigure
+                      let resolvedLeadId: number | null = null
+                      try {
+                        const lRes = await fetch(
+                          `/api/leads?search=${encodeURIComponent(selected.email || selected.nombre || '')}&pageSize=5`
+                        )
+                        if (lRes.ok) {
+                          const lData = await lRes.json()
+                          const match = (lData.leads || []).find(
+                            (l: Lead) => l.contact?.id === selected.id
+                          )
+                          if (match) resolvedLeadId = match.id
+                        }
+                      } catch { /* */ }
+                      if (!resolvedLeadId) {
+                        try {
+                          const createRes = await fetch('/api/leads', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              contact_id: selected.id,
+                              estado: 'frio',
+                              prioridad: 'media',
+                            }),
+                          })
+                          if (createRes.ok) resolvedLeadId = (await createRes.json()).id
+                          else if (createRes.status === 409) {
+                            const err = await createRes.json().catch(() => ({}))
+                            resolvedLeadId = err.leadId ?? null
+                          }
+                        } catch { /* */ }
+                      }
+                      if (resolvedLeadId) params.set('lead', String(resolvedLeadId))
+                      if (selected.nombre) params.set('nombre', selected.nombre)
+                      if (selected.empresa) params.set('empresa', selected.empresa)
+                      if (selected.email) params.set('email', selected.email)
+                      if (selected.ciudad) params.set('ciudad', selected.ciudad || '')
+                      router.push(`/onboarding/custom?${params.toString()}`)
+                    }}
+                    className="px-4 h-10 border border-gray-300 text-gray-900 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
+                  >
+                    A medida (IA)
+                  </button>
+                </div>
               </div>
             )}
 

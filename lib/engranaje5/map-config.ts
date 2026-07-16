@@ -21,9 +21,11 @@ function mapDashTier(tier?: string | null): DashboardTier | null {
 }
 
 function resolveServiceType(cfg: ConfiguradorConfig): ProyectoServiceType {
+  if (cfg.mode === 'custom' && cfg.service_type) return cfg.service_type
   if (cfg.voz) return 'voice_agent'
   if (cfg.chat) return 'text_agent'
   if (cfg.dash) return 'dashboard_app'
+  if (cfg.mode === 'custom') return 'automation'
   return 'voice_agent'
 }
 
@@ -78,12 +80,23 @@ export function mapConfigToProyecto(
     fallbackName?: string
   } = {}
 ): ProyectoUpsertPayload {
+  const isCustom = cfg.mode === 'custom'
   const name =
+    (isCustom ? cfg.title?.trim() : '') ||
     cfg.empresa?.trim() ||
     cfg.nombre?.trim() ||
     opts.fallbackName?.trim() ||
     cfg.ref?.trim() ||
     'Proyecto Buffalo'
+
+  const setupFromConfig =
+    cfg.setup_total_eur != null && Number.isFinite(cfg.setup_total_eur)
+      ? Number(cfg.setup_total_eur)
+      : null
+  const monthlyFromConfig =
+    cfg.monthly_fee_eur != null && Number.isFinite(Number(cfg.monthly_fee_eur))
+      ? Number(cfg.monthly_fee_eur)
+      : null
 
   return {
     name,
@@ -103,15 +116,32 @@ export function mapConfigToProyecto(
     addon_voice_in_chat: Boolean(cfg.chat_audios),
     dashboard_tier: cfg.dash ? mapDashTier(cfg.dash_tier) : null,
     languages_count: resolveLanguagesCount(cfg),
-    setup_fee_eur: opts.setupFee ?? null,
-    monthly_fee_eur: cfg.maint ? (opts.monthlyFee ?? null) : null,
-    has_mensualidad: Boolean(cfg.maint),
-    maint_plan: cfg.maint ?? null,
+    setup_fee_eur: opts.setupFee ?? setupFromConfig,
+    monthly_fee_eur: isCustom
+      ? opts.monthlyFee ?? monthlyFromConfig
+      : cfg.maint
+        ? opts.monthlyFee ?? null
+        : null,
+    has_mensualidad: isCustom
+      ? Boolean(monthlyFromConfig || opts.monthlyFee)
+      : Boolean(cfg.maint),
+    maint_plan: isCustom ? (monthlyFromConfig || opts.monthlyFee ? 'custom' : null) : cfg.maint ?? null,
     has_voz: Boolean(cfg.voz),
     has_chat: Boolean(cfg.chat),
     has_dash: Boolean(cfg.dash),
     has_pack: Boolean(cfg.pack),
   }
+}
+
+export function isValidConfiguradorConfig(cfg: ConfiguradorConfig | null): boolean {
+  if (!cfg) return false
+  if (cfg.mode === 'custom') {
+    return Boolean(
+      (cfg.title || cfg.empresa || cfg.nombre) &&
+        (cfg.setup_total_eur || (cfg.line_items && cfg.line_items.length > 0))
+    )
+  }
+  return Boolean(cfg.voz || cfg.chat || cfg.dash)
 }
 
 export function parseConfiguradorConfig(raw?: string | null): ConfiguradorConfig | null {

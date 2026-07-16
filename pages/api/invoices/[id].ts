@@ -114,6 +114,21 @@ export default async function handler(
         return res.status(404).json({ error: 'Factura no encontrada' })
       }
 
+      // Marcar enviada → FACTURA EMITIDA en embudo global
+      if (data.status === 'sent' && invoice.status !== 'sent') {
+        try {
+          const { advanceLeadOnGlobalByContactEmail } = await import(
+            '@/lib/pipelines/onboarding-global'
+          )
+          const email = updated.client_email || invoice.client_email
+          if (email) {
+            await advanceLeadOnGlobalByContactEmail(email, 'enviar_factura')
+          }
+        } catch (e) {
+          console.error('[invoices] pipeline FACTURA EMITIDA', e)
+        }
+      }
+
       return res.status(200).json({
         ...updated,
         subtotal: Number(updated.subtotal),

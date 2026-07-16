@@ -1,9 +1,24 @@
 /** Config JSON from configurador.html → buildOnboardingConfig() */
+export interface ConfiguradorLineItem {
+  description: string
+  amount_eur: number
+}
+
+export interface ConfiguradorCustomQuestion {
+  id: string
+  label: string
+  type?: 'text' | 'textarea'
+}
+
 export interface ConfiguradorConfig {
+  mode?: 'packaged' | 'custom'
   ref?: string
   empresa?: string
   nombre?: string
   email?: string
+  leadId?: number
+  city?: string
+  plazo?: string
   voz?: boolean
   voz_outbound?: boolean
   voz_crm?: boolean
@@ -24,6 +39,18 @@ export interface ConfiguradorConfig {
   dash_tier?: string | null
   maint?: 'cloud' | 'connect' | null
   pack?: boolean
+
+  /** Proyecto a medida (no empaquetado) */
+  title?: string
+  description?: string
+  service_type?: ProyectoServiceType
+  scope_items?: string[]
+  line_items?: ConfiguradorLineItem[]
+  setup_total_eur?: number
+  monthly_fee_eur?: number | null
+  payment_split?: '50_50' | '100_upfront'
+  onboarding_notes?: string
+  custom_questions?: ConfiguradorCustomQuestion[]
 }
 
 export type ProyectoServiceType =

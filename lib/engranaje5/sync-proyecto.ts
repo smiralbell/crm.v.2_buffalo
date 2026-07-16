@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import { prisma } from '@/lib/prisma'
-import { mapConfigToProyecto, parseConfiguradorConfig } from './map-config'
+import { isValidConfiguradorConfig, mapConfigToProyecto, parseConfiguradorConfig } from './map-config'
 
 export interface SyncProyectoInput {
   leadId: number
@@ -41,7 +41,7 @@ export async function syncProyectoFromLead(input: SyncProyectoInput) {
   const configRaw = input.configuracion ?? lead.configuracion
   const cfg = parseConfiguradorConfig(configRaw)
 
-  if (!cfg) {
+  if (!isValidConfiguradorConfig(cfg)) {
     return { skipped: true as const, reason: 'Sin configuración válida' }
   }
 
@@ -159,5 +159,15 @@ export async function syncProyectoFromLead(input: SyncProyectoInput) {
   const proyecto = rows[0]
   if (!proyecto) throw new Error('No se pudo crear el proyecto')
 
-  return { skipped: false as const, proyecto }
+  // Nuevo proyecto → columna PROPUESTA CREADA del embudo global
+  try {
+    const { advanceLeadOnGlobalPipeline } = await import('@/lib/pipelines/onboarding-global')
+    await advanceLeadOnGlobalPipeline(lead.id, 'crear_proyecto', {
+      amount: setupFee,
+    })
+  } catch (e) {
+    console.error('[sync-proyecto] pipeline PROPUESTA CREADA', e)
+  }
+
+  return { skipped: false as const, proyecto, created: true as const }
 }

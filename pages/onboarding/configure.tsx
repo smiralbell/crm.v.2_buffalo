@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
-import { ChevronLeft, CheckCircle, Settings, Save, Loader2 } from 'lucide-react'
-import { BUFFALO_STAGE_COLORS } from '@/components/PipelineCardDrawer'
+import { ChevronLeft, CheckCircle, Settings, Save, Loader2, Package, Sparkles } from 'lucide-react'
+import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 
 interface InvoiceData {
   client_name: string; client_company_name?: string; client_email?: string
@@ -12,19 +12,27 @@ interface InvoiceData {
   subtotal: number; iva: number; total: number; status?: string
 }
 
-const STAGE_ADVANCE: Record<string, string> = {
+/** Acciones del configurador → avance en pipeline GLOBAL (no WEB/Cold Calling) */
+const GLOBAL_PIPELINE_ACTIONS = new Set([
+  'enviar_propuesta',
+  'enviar_contrato',
+  'enviar_factura',
+  'enviar_onboarding',
+])
+
+const ACTION_STAGE_LABEL: Record<string, string> = {
   enviar_propuesta:  'PROPUESTA ENVIADA',
-  enviar_contrato:   'CONTRATO FIRMADO',
-  emitir_factura:    'FACTURA EMITIDA',
+  enviar_contrato:   'CONTRATO ENVIADO',
+  enviar_factura:    'FACTURA EMITIDA',
   enviar_onboarding: 'ONBOARDING',
 }
 
 // Maps configurator action → lead.estado DB value
 const ACTION_TO_ESTADO: Record<string, string> = {
   enviar_propuesta:  'propuesta',
-  enviar_contrato:   'cerrado',
+  enviar_contrato:   'negociando',
   enviar_onboarding: 'activo',
-  emitir_factura:    'activo',
+  enviar_factura:    'activo',
 }
 
 export default function ConfigurePage() {
@@ -43,8 +51,20 @@ export default function ConfigurePage() {
   const [ensuringLead, setEnsuringLead]     = useState(false)
 
   // Read URL params
-  const { lead, nombre, empresa, email, ciudad, pipeline, card } = router.query as Record<string, string>
+  const { lead, nombre, empresa, email, ciudad, pipeline, card, mode } = router.query as Record<string, string>
   const activeLeadId = resolvedLeadId || lead || ''
+  const [pickedMode, setPickedMode] = useState<'packaged' | 'custom' | null>(null)
+
+  const effectiveMode: 'packaged' | 'custom' | null =
+    (mode === 'custom' || mode === 'packaged' ? mode : null) ||
+    pickedMode ||
+    (savedConfig
+      ? parseConfiguradorConfig(savedConfig)?.mode === 'custom'
+        ? 'custom'
+        : savedConfig
+          ? 'packaged'
+          : null
+      : null)
 
   // Resolved pipeline + card (from URL params OR auto-discovered)
   const [resolvedPipeline, setResolvedPipeline] = useState('')
@@ -154,9 +174,42 @@ export default function ConfigurePage() {
       .catch(() => { /* best-effort */ })
   }, [router.isReady, activeLeadId, pipeline, card])
 
+  // Si eligen a medida sin config aún → brief + IA
+  useEffect(() => {
+    if (!router.isReady) return
+    if (effectiveMode !== 'custom') return
+    if (savedConfig && parseConfiguradorConfig(savedConfig)?.mode === 'custom') return
+
+    const params = new URLSearchParams()
+    if (activeLeadId) params.set('lead', activeLeadId)
+    if (nombre) params.set('nombre', nombre)
+    if (empresa) params.set('empresa', empresa)
+    if (email) params.set('email', email)
+    if (ciudad) params.set('ciudad', ciudad || '')
+    if (pipeline) params.set('pipeline', pipeline)
+    if (card) params.set('card', card)
+    router.replace(`/onboarding/custom?${params.toString()}`)
+  }, [
+    router.isReady,
+    effectiveMode,
+    savedConfig,
+    activeLeadId,
+    nombre,
+    empresa,
+    email,
+    ciudad,
+    pipeline,
+    card,
+    router,
+  ])
+
   // ── Step 2: build iframe URL once we have all params ────────────────
   useEffect(() => {
     if (!router.isReady) return
+    if (!effectiveMode) return
+    if (effectiveMode === 'custom' && !(savedConfig && parseConfiguradorConfig(savedConfig)?.mode === 'custom')) {
+      return
+    }
 
     const p = new URLSearchParams({ crm: '1' })
     if (nombre)           p.set('nombre',     nombre)
@@ -174,7 +227,7 @@ export default function ConfigurePage() {
     p.set('baseurl', typeof window !== 'undefined' ? window.location.origin : '')
 
     setIframeUrl(`/configurador.html?${p.toString()}`)
-  }, [router.isReady, nombre, empresa, email, ciudad, activeLeadId, resolvedPipeline, resolvedCard, savedConfig])
+  }, [router.isReady, effectiveMode, nombre, empresa, email, ciudad, activeLeadId, resolvedPipeline, resolvedCard, savedConfig])
 
   // ── postMessage listener: pipeline moves + invoice + height ─────────
   useEffect(() => {
@@ -184,7 +237,7 @@ export default function ConfigurePage() {
         if (event.data.error === 'no_lead') {
           toast('No hay lead vinculado — no se pudo guardar', 'err')
         } else if (event.data.error === 'empty') {
-          toast('Activa al menos un agente antes de guardar', 'err')
+          toast('Falta configuración para guardar', 'err')
         }
         return
       }
@@ -204,7 +257,6 @@ export default function ConfigurePage() {
       const pip  = evPipeline || resolvedPipeline
       const crd  = evCard     || resolvedCard
       const lid  = evLead || activeLeadId
-      const targetStage = STAGE_ADVANCE[action]
 
       // ── Auto-save draft + update pipeline card amount ──────────────────
       if (action === 'guardar_borrador') {
@@ -243,7 +295,7 @@ export default function ConfigurePage() {
       }
 
       // ── Sync lead: valor + notas + estado ──────────────────────────────
-      if (lid) {
+      if (lid && action !== 'emitir_factura') {
         const nuevoEstado = ACTION_TO_ESTADO[action]
         try {
           await updateLead(String(lid), projectTotal, projectNotes, nuevoEstado, projectConfig)
@@ -256,17 +308,17 @@ export default function ConfigurePage() {
         }
       }
 
+      // Generar / Ver factura → borrador CRM, SIN avanzar pipeline
       if (action === 'emitir_factura' && invoiceData) {
         try {
           const res = await fetch('/api/invoices', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(invoiceData as InvoiceData),
+            body: JSON.stringify({ ...(invoiceData as InvoiceData), status: 'draft' }),
           })
           if (res.ok) {
             const inv = await res.json()
-            if (pip && crd) await movePipelineCard(pip, crd, 'FACTURA EMITIDA', projectTotal)
-            toast(`Factura ${inv.invoice_number} creada`, 'ok')
+            toast(`Factura ${inv.invoice_number} creada (borrador)`, 'ok')
             setTimeout(() => router.push(`/invoices/${inv.id}`), 1800)
           } else {
             const e = await res.json().catch(() => ({}))
@@ -276,9 +328,30 @@ export default function ConfigurePage() {
         return
       }
 
-      if (targetStage) {
-        if (pip && crd) await movePipelineCard(pip, crd, targetStage, projectTotal)
-        toast(`Pipeline → ${targetStage}`, 'ok')
+      // Enviar * → embudo GLOBAL
+      if (lid && GLOBAL_PIPELINE_ACTIONS.has(action)) {
+        const label = ACTION_STAGE_LABEL[action] || action
+        try {
+          const res = await fetch('/api/onboarding/pipeline-advance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              leadId: Number(lid),
+              action,
+              amount: projectTotal ?? null,
+            }),
+          })
+          const data = await res.json().catch(() => ({}))
+          if (res.ok && data.ok) {
+            toast(`Pipeline global → ${data.stage || label}`, 'ok')
+          } else {
+            console.error('pipeline-advance', data)
+            toast(data.reason || data.error || 'No se pudo avanzar el pipeline', 'err')
+          }
+        } catch (e) {
+          console.error('pipeline-advance failed', e)
+          toast('Error al avanzar el pipeline global', 'err')
+        }
       }
     }
 
@@ -292,20 +365,6 @@ export default function ConfigurePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ card_id: crd, amount }),
     })
-  }
-
-  const movePipelineCard = async (pip: string, crd: string, stage: string, amount?: number) => {
-    await fetch(`/api/pipelines/${pip}/cards`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        card_id:     crd,
-        stage,
-        position:    0,
-        stage_color: BUFFALO_STAGE_COLORS[stage] || '#3B82F6',
-        ...(amount != null ? { amount } : {}),
-      }),
-    }).catch(console.error)
   }
 
   const syncProyecto = async (
@@ -440,8 +499,55 @@ export default function ConfigurePage() {
         </div>
       </div>
 
+      {/* Mode picker */}
+      {!effectiveMode && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <button
+            type="button"
+            onClick={() => {
+              setPickedMode('packaged')
+              void router.replace(
+                { pathname: router.pathname, query: { ...router.query, mode: 'packaged' } },
+                undefined,
+                { shallow: true }
+              )
+            }}
+            className="text-left rounded-2xl border border-gray-200 bg-white p-6 hover:border-gray-900 hover:shadow-sm transition-all"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Package className="h-4 w-4 text-gray-800" />
+              <span className="text-sm font-semibold text-gray-900">Paquete Buffalo</span>
+            </div>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Configurador de agentes (voz, chat, dashboard). Precios y add-ons empaquetados.
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPickedMode('custom')
+              void router.replace(
+                { pathname: router.pathname, query: { ...router.query, mode: 'custom' } },
+                undefined,
+                { shallow: true }
+              )
+            }}
+            className="text-left rounded-2xl border border-gray-200 bg-white p-6 hover:border-gray-900 hover:shadow-sm transition-all"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="h-4 w-4 text-gray-800" />
+              <span className="text-sm font-semibold text-gray-900">Proyecto a medida</span>
+            </div>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Brief + IA. Ideal cuando el servicio no encaja en los paquetes. Luego propuesta,
+              contrato, factura y onboarding igual.
+            </p>
+          </button>
+        </div>
+      )}
+
       {/* Configurador */}
-      {iframeUrl ? (
+      {effectiveMode && iframeUrl ? (
         <iframe
           ref={iframeRef}
           src={iframeUrl}
@@ -455,11 +561,11 @@ export default function ConfigurePage() {
           scrolling="no"
           title="Configurador de proyecto Buffalo"
         />
-      ) : (
+      ) : effectiveMode ? (
         <div className="h-64 flex items-center justify-center text-sm text-gray-400">
-          Cargando configurador...
+          {effectiveMode === 'custom' ? 'Abriendo brief + IA…' : 'Cargando configurador...'}
         </div>
-      )}
+      ) : null}
       </div>
     </Layout>
   )

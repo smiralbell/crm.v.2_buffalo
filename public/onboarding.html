@@ -225,6 +225,14 @@ let activeSteps = [];
 // ─── STEP DEFINITIONS ───────────────────────────────────────────────────────
 function buildScopeItems() {
   const items = [];
+  if (CFG.mode === 'custom') {
+    if (CFG.title) items.push({ label: 'Proyecto', detail: CFG.title });
+    (CFG.scope_items || []).forEach((s, i) => {
+      items.push({ label: i === 0 ? 'Alcance' : '', detail: s });
+    });
+    if (CFG.plazo) items.push({ label: 'Plazo', detail: CFG.plazo });
+    return items;
+  }
   if (CFG.voz) {
     let addons = ['Agente Inbound 24/7'];
     if (CFG.voz_outbound) addons.push('Agente Outbound + trigger');
@@ -293,6 +301,24 @@ const STEP_DEFS = [
       ${field('desc_proceso','textarea','¿Cómo es el proceso de venta/cierre habitual?','Desde que contacta un cliente hasta que cierra','','El cliente llama → cualificamos → si es viable pasamos al asesor → se firma…',false,3)}
       ${field('desc_web','text','Web de la empresa',null,'','https://tuempresa.com',false)}
     `
+  },
+
+  // 1b – CUSTOM QUESTIONS (proyecto a medida)
+  {
+    id: 'custom_qs',
+    show: () => CFG.mode === 'custom' && Array.isArray(CFG.custom_questions) && CFG.custom_questions.length > 0,
+    tag: 'Detalle del proyecto',
+    title: () => `Datos específicos del proyecto`,
+    sub: () => CFG.onboarding_notes || 'Necesitamos esta información para arrancar el desarrollo.',
+    render: () => (CFG.custom_questions || []).map(q =>
+      field(
+        'custom_' + (q.id || 'q'),
+        q.type === 'text' ? 'text' : 'textarea',
+        q.label,
+        null, '', '', true,
+        q.type === 'text' ? undefined : 4
+      )
+    ).join('')
   },
 
   // 2 – VOZ: FLUJO Y NOMBRE
@@ -825,6 +851,18 @@ async function submitForm() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+
+    // Avisa al CRM → EN DESARROLLO en embudo global (best-effort)
+    try {
+      const crmBase = (CFG.crmBase || location.origin || '').replace(/\/$/, '');
+      if (crmBase) {
+        await fetch(crmBase + '/api/webhooks/onboarding-form', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
+    } catch (_) { /* ignore */ }
 
     if (!res.ok && res.status !== 404) throw new Error(res.status);
     showDone();
