@@ -112,6 +112,7 @@ const OUTCOME_ORDER = [
   'llamar_tarde',
   'sin_respuesta',
   'buzon_voz',
+  'otra_persona',
   'no_interesado',
   'no_contactar',
   'numero_erroneo',

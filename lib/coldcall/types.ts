@@ -27,6 +27,7 @@ export const CALL_OUTCOMES = [
   'interesado',
   'reunion_agendada',
   'no_interesado',
+  'otra_persona',
   'numero_erroneo',
 ] as const
 
@@ -54,6 +55,8 @@ export interface CampaignStats {
   total_leads: number
   in_queue: number
   contacted: number
+  /** Leads aún sin ninguna llamada (call_attempts = 0). */
+  pending_to_call: number
   interested: number
   meetings: number
   dnc: number

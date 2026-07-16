@@ -17,6 +17,7 @@ const ESTADO_LABELS: Record<string, string> = {
   interesado: 'Interesado',
   reunion_agendada: 'Reunión agendada',
   no_interesado: 'No interesado',
+  otra_persona: 'Otra persona',
   sin_respuesta: 'Sin respuesta',
   llamar_tarde: 'Llamar más tarde',
   no_contactar: 'No contactar',
@@ -40,12 +41,17 @@ export function displayValue(v: string | null | undefined): string {
 }
 
 /** Verde = pendiente de llamar · Rojo = ya llamado al menos una vez */
+export function isLeadCalled(
+  lead: Pick<CampaignLeadRow, 'call_count' | 'call_attempts'>
+): boolean {
+  return Number(lead.call_count || 0) > 0 || Number(lead.call_attempts || 0) > 0
+}
+
 export function leadCallStatus(lead: Pick<CampaignLeadRow, 'call_count' | 'call_attempts'>): {
   called: boolean
   rowClassName: string
 } {
-  const calls = Number(lead.call_count ?? lead.call_attempts ?? 0)
-  const called = calls > 0
+  const called = isLeadCalled(lead)
   return {
     called,
     rowClassName: called

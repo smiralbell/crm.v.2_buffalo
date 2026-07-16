@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import CallTimerBar, { useCallTimer } from '@/components/coldcall/CallTimerBar'
 import type { ComercialPersona } from '@/lib/coldcall/comercial-persona'
@@ -33,6 +34,7 @@ import {
   Send,
   ThumbsDown,
   ThumbsUp,
+  UserRound,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
@@ -42,7 +44,13 @@ const CalComMeetingEmbed = dynamic(() => import('@/components/coldcall/CalComMee
   loading: () => <div className="py-6 text-center text-sm text-gray-400">Cargando calendario...</div>,
 })
 
-export type UiOutcome = 'sin_respuesta' | 'llamar_tarde' | 'info_enviada' | 'interesado' | 'no_interesado'
+export type UiOutcome =
+  | 'sin_respuesta'
+  | 'llamar_tarde'
+  | 'info_enviada'
+  | 'interesado'
+  | 'no_interesado'
+  | 'otra_persona'
 type InteresadoFollowUp = 'reunion' | 'sin_reunion'
 
 const OUTCOMES: { id: UiOutcome; label: string; icon: LucideIcon; color: string }[] = [
@@ -50,6 +58,7 @@ const OUTCOMES: { id: UiOutcome; label: string; icon: LucideIcon; color: string 
   { id: 'llamar_tarde', label: 'Llamar más tarde', icon: Clock, color: 'border-amber-200 hover:bg-amber-50' },
   { id: 'info_enviada', label: 'Pide info', icon: Send, color: 'border-blue-200 hover:bg-blue-50' },
   { id: 'interesado', label: 'Interesado', icon: ThumbsUp, color: 'border-emerald-200 hover:bg-emerald-50' },
+  { id: 'otra_persona', label: 'Otra persona', icon: UserRound, color: 'border-violet-200 hover:bg-violet-50' },
   { id: 'no_interesado', label: 'No interesado', icon: ThumbsDown, color: 'border-red-100 hover:bg-red-50' },
 ]
 
@@ -86,6 +95,9 @@ interface CampaignCallOutcomesProps {
     callbackAt: string
     whatsappSent: boolean
     emailSent: boolean
+    referredNombre?: string
+    referredTelefono?: string
+    referredEmail?: string
   }) => void
 }
 
@@ -115,6 +127,9 @@ export default function CampaignCallOutcomes({
   const [manualMeetingMode, setManualMeetingMode] = useState(false)
   const [localError, setLocalError] = useState('')
   const [messageEdited, setMessageEdited] = useState(false)
+  const [referredNombre, setReferredNombre] = useState('')
+  const [referredTelefono, setReferredTelefono] = useState('')
+  const [referredEmail, setReferredEmail] = useState('')
 
   const updateCallbackMessage = (datetimeLocal: string) => {
     if (!messageEdited) {
@@ -136,6 +151,9 @@ export default function CampaignCallOutcomes({
     setWhatsappSent(false)
     setEmailSent(false)
     setLocalError('')
+    setReferredNombre('')
+    setReferredTelefono('')
+    setReferredEmail('')
     if (id === 'info_enviada') setContactMessage(contactTemplate('info', lead, persona, presentationUrl))
     else if (id === 'interesado') setContactMessage(contactTemplate('interesado', lead, persona, presentationUrl))
     else if (id === 'no_interesado') setContactMessage(contactTemplate('no_interesado', lead, persona))
@@ -234,13 +252,44 @@ export default function CampaignCallOutcomes({
       )
       return
     }
+    if (resultado === 'otra_persona') {
+      if (!referredNombre.trim()) {
+        setLocalError('Indica el nombre de la persona que se encarga.')
+        return
+      }
+      if (!referredTelefono.trim() && !referredEmail.trim()) {
+        setLocalError('Indica al menos el teléfono o el email de esa persona.')
+        return
+      }
+    }
+
+    const referralBlock =
+      resultado === 'otra_persona'
+        ? [
+            `Se encarga otra persona: ${referredNombre.trim()}`,
+            referredTelefono.trim() ? `Tel: ${referredTelefono.trim()}` : null,
+            referredEmail.trim() ? `Email: ${referredEmail.trim()}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        : ''
+
+    const notesWithReferral = referralBlock
+      ? notas.trim()
+        ? `${notas.trim()}\n${referralBlock}`
+        : referralBlock
+      : notas
+
     onSave({
       resultado: apiOutcome,
-      notas,
+      notas: notesWithReferral,
       duracionSec: callTimer.getDurationSec(),
       callbackAt: resultado === 'interesado' && interesadoFollowUp === 'reunion' ? bookingIso : callbackAt,
       whatsappSent,
       emailSent,
+      referredNombre: referredNombre.trim(),
+      referredTelefono: referredTelefono.trim(),
+      referredEmail: referredEmail.trim(),
     })
   }
 
@@ -273,7 +322,7 @@ export default function CampaignCallOutcomes({
         <p className="text-xs text-gray-500 mt-0.5">Elige y guarda — pasa al siguiente lead al instante</p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {OUTCOMES.map((o) => {
           const Icon = o.icon
           const active = resultado === o.id
@@ -296,7 +345,10 @@ export default function CampaignCallOutcomes({
       </div>
 
       {/* Contacto rápido — solo cuando hay mensaje informativo */}
-      {resultado && resultado !== 'llamar_tarde' && resultado !== 'sin_respuesta' && (
+      {resultado &&
+        resultado !== 'llamar_tarde' &&
+        resultado !== 'sin_respuesta' &&
+        resultado !== 'otra_persona' && (
       <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 space-y-2">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
           Enviar info (WhatsApp o Gmail)
@@ -536,6 +588,40 @@ export default function CampaignCallOutcomes({
             </div>
           )}
 
+          {resultado === 'otra_persona' && (
+            <div className="space-y-3 rounded-xl border border-violet-100 bg-violet-50/40 p-3">
+              <div>
+                <p className="text-sm font-semibold text-violet-950">¿Quién se encarga?</p>
+                <p className="text-xs text-violet-900/80 mt-0.5">
+                  Creamos un lead nuevo en cola con estos datos para que puedas llamarle.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Input
+                  value={referredNombre}
+                  onChange={(e) => setReferredNombre(e.target.value)}
+                  placeholder="Nombre *"
+                  className="rounded-xl bg-white"
+                  autoFocus
+                />
+                <Input
+                  value={referredTelefono}
+                  onChange={(e) => setReferredTelefono(e.target.value)}
+                  placeholder="Teléfono"
+                  className="rounded-xl bg-white"
+                  inputMode="tel"
+                />
+                <Input
+                  value={referredEmail}
+                  onChange={(e) => setReferredEmail(e.target.value)}
+                  placeholder="Email"
+                  className="rounded-xl bg-white"
+                  type="email"
+                />
+              </div>
+            </div>
+          )}
+
           {resultado === 'no_interesado' && (
             <p className="text-sm text-gray-600">Opcional: mensaje de cierre por WhatsApp arriba.</p>
           )}
@@ -568,6 +654,8 @@ export default function CampaignCallOutcomes({
             </span>
           ) : saving ? (
             'Guardando...'
+          ) : resultado === 'otra_persona' ? (
+            'Guardar y llamar a esa persona →'
           ) : (
             'Guardar y siguiente →'
           )}

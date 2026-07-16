@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireColdCallAPI } from '@/lib/auth'
-import { getCampaignById, listCampaignLeads } from '@/lib/coldcall/campaigns'
+import { getCampaignById, listCampaignLeads, type CampaignLeadCallFilter } from '@/lib/coldcall/campaigns'
 import { parseCampaignId, requireCampaignAccess } from '@/lib/coldcall/api-access'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,11 +19,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'Campaña no encontrada' })
     }
 
-    const { page = '1', limit = '50', q } = req.query as Record<string, string>
+    const { page = '1', limit = '50', q, callFilter } = req.query as Record<string, string>
+    const filter: CampaignLeadCallFilter =
+      callFilter === 'pending' || callFilter === 'called' ? callFilter : 'all'
+
     const { leads, total } = await listCampaignLeads(id, {
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
       q,
+      callFilter: filter,
     })
 
     const import_columns =
@@ -49,6 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       total,
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
+      callFilter: filter,
     })
   } catch (error) {
     if (error instanceof Error && ['Forbidden', 'No session', 'Invalid session'].includes(error.message)) {

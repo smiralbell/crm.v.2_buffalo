@@ -66,6 +66,7 @@ export function resolvePipelineStageFromOutcome(
     case 'reunion_agendada':
       return 'REUNIÓN'
     case 'no_interesado':
+    case 'otra_persona':
     case 'no_contactar':
       return 'NO INTERESADO'
     default:

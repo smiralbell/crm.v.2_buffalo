@@ -159,6 +159,9 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
     callbackAt: string
     whatsappSent: boolean
     emailSent: boolean
+    referredNombre?: string
+    referredTelefono?: string
+    referredEmail?: string
   }) => {
     if (!lead) return
     setSaving(true)
@@ -180,6 +183,9 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
         reunion_fecha: reunionFecha,
         whatsapp_enviado: payload.whatsappSent,
         email_enviado: payload.emailSent,
+        referred_nombre: payload.referredNombre || undefined,
+        referred_telefono: payload.referredTelefono || undefined,
+        referred_email: payload.referredEmail || undefined,
       }),
     })
 
@@ -190,7 +196,14 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
       return
     }
 
+    const data = await res.json().catch(() => ({}))
     setSaved(true)
+
+    if (payload.resultado === 'otra_persona' && data.referred_prospect_id) {
+      setTimeout(() => goLead(Number(data.referred_prospect_id)), 120)
+      return
+    }
+
     setTimeout(advanceAfterSave, 120)
   }
 
@@ -249,9 +262,16 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <span className="px-2.5 text-sm text-gray-500 tabular-nums whitespace-nowrap">
-                <span className="font-semibold text-gray-900">{index + 1}</span>
-                <span className="mx-1 text-gray-300">/</span>
-                <span>{total}</span>
+                {index >= 0 ? (
+                  <>
+                    <span className="font-semibold text-gray-900">{index + 1}</span>
+                    <span className="mx-1 text-gray-300">/</span>
+                    <span>{total}</span>
+                    <span className="ml-1.5 text-[11px] text-gray-400 hidden sm:inline">por llamar</span>
+                  </>
+                ) : (
+                  <span className="text-xs text-gray-500">Ya llamado</span>
+                )}
               </span>
               <Button
                 variant="ghost"

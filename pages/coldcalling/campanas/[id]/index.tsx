@@ -97,6 +97,8 @@ export default function CampanaDetailPage() {
 
   const [searchInput, setSearchInput] = useState('')
 
+  const [callFilter, setCallFilter] = useState<'all' | 'pending' | 'called'>('pending')
+
   const [loading, setLoading] = useState(true)
 
 
@@ -131,6 +133,8 @@ export default function CampanaDetailPage() {
       page: String(page),
 
       limit: String(PAGE_SIZE),
+
+      callFilter,
 
     })
 
@@ -170,7 +174,7 @@ export default function CampanaDetailPage() {
 
       .finally(() => setLoading(false))
 
-  }, [campaignId, page, search])
+  }, [campaignId, page, search, callFilter])
 
 
 
@@ -303,6 +307,30 @@ export default function CampanaDetailPage() {
                 <p className="text-sm text-gray-600">
 
                   <strong>{total}</strong> leads importados
+
+                  {campaign.stats && (
+
+                    <>
+
+                      {' · '}
+
+                      <span className="text-emerald-700 font-medium">
+
+                        Faltan {campaign.stats.pending_to_call ?? 0} por llamar
+
+                      </span>
+
+                      {' · '}
+
+                      <span className="text-gray-500">
+
+                        {campaign.stats.contacted ?? 0} ya llamados
+
+                      </span>
+
+                    </>
+
+                  )}
 
                 </p>
 
@@ -437,6 +465,10 @@ export default function CampanaDetailPage() {
 
                   Empiezo llamada
 
+                  {typeof campaign.stats?.pending_to_call === 'number' && campaign.stats.pending_to_call > 0
+                    ? ` (${campaign.stats.pending_to_call})`
+                    : ''}
+
                 </Link>
 
               </Button>
@@ -474,6 +506,68 @@ export default function CampanaDetailPage() {
           </div>
 
         )}
+
+
+
+        <div className="inline-flex rounded-xl border border-gray-200 bg-white p-0.5">
+
+          {(
+
+            [
+
+              { id: 'pending' as const, label: 'Por llamar', count: campaign?.stats?.pending_to_call },
+
+              { id: 'called' as const, label: 'Ya llamados', count: campaign?.stats?.contacted },
+
+              { id: 'all' as const, label: 'Todos', count: campaign?.stats?.total_leads },
+
+            ] as const
+
+          ).map((tab) => (
+
+            <Button
+
+              key={tab.id}
+
+              type="button"
+
+              size="sm"
+
+              variant={callFilter === tab.id ? 'default' : 'ghost'}
+
+              className={`rounded-lg h-8 gap-1.5 ${
+
+                callFilter === tab.id ? 'bg-gray-900 hover:bg-gray-800' : 'text-gray-600'
+
+              }`}
+
+              onClick={() => {
+
+                setPage(1)
+
+                setCallFilter(tab.id)
+
+              }}
+
+            >
+
+              {tab.label}
+
+              {typeof tab.count === 'number' && (
+
+                <span className={`text-[10px] tabular-nums ${callFilter === tab.id ? 'text-white/80' : 'text-gray-400'}`}>
+
+                  {tab.count}
+
+                </span>
+
+              )}
+
+            </Button>
+
+          ))}
+
+        </div>
 
 
 
@@ -606,16 +700,24 @@ export default function CampanaDetailPage() {
 
           <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
 
-            <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50 text-xs text-gray-600">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-sm bg-emerald-400" />
-                Sin llamar
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-sm bg-red-400" />
-                Ya llamado
-              </span>
-            </div>
+            {callFilter === 'all' ? (
+              <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50 text-xs text-gray-600">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-emerald-400" />
+                  Sin llamar
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-red-400" />
+                  Ya llamado
+                </span>
+              </div>
+            ) : (
+              <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50/50 text-xs text-gray-600">
+                {callFilter === 'pending'
+                  ? 'Solo leads que aún no se han llamado.'
+                  : 'Solo leads que ya tienen al menos una llamada.'}
+              </div>
+            )}
 
             <div className="overflow-x-auto">
 
@@ -644,11 +746,17 @@ export default function CampanaDetailPage() {
                       ? formatPhoneForDisplay(lead.telefono) || lead.telefono
                       : null
                     const { called, rowClassName } = leadCallStatus(lead)
+                    const rowTone =
+                      callFilter === 'all'
+                        ? rowClassName
+                        : callFilter === 'pending'
+                          ? 'bg-white hover:bg-emerald-50/40'
+                          : 'bg-white hover:bg-red-50/40'
 
                     return (
                     <tr
                       key={lead.id}
-                      className={rowClassName}
+                      className={rowTone}
                     >
                       <td className="px-4 py-3.5 text-gray-400 whitespace-nowrap text-sm">
                         {(page - 1) * PAGE_SIZE + idx + 1}
@@ -693,9 +801,11 @@ export default function CampanaDetailPage() {
                         <Badge
                           variant="outline"
                           className={`font-normal text-sm ${
-                            called
-                              ? 'border-red-200 bg-white/70 text-red-800'
-                              : 'border-emerald-200 bg-white/70 text-emerald-800'
+                            callFilter === 'all'
+                              ? called
+                                ? 'border-red-200 bg-white/70 text-red-800'
+                                : 'border-emerald-200 bg-white/70 text-emerald-800'
+                              : 'border-gray-200 bg-white text-gray-700'
                           }`}
                         >
                           {stageLabel(lead.stage)}
@@ -703,7 +813,11 @@ export default function CampanaDetailPage() {
                       </td>
                       <td
                         className={`px-4 py-3.5 whitespace-nowrap text-center tabular-nums font-semibold ${
-                          called ? 'text-red-800' : 'text-emerald-800'
+                          callFilter === 'all'
+                            ? called
+                              ? 'text-red-800'
+                              : 'text-emerald-800'
+                            : 'text-gray-800'
                         }`}
                       >
                         {lead.call_count ?? lead.call_attempts}

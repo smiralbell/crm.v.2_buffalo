@@ -28,6 +28,7 @@ export async function listCampaigns(scope: ColdCallScope): Promise<ColdCallCampa
       total_leads: string | number
       in_queue: string | number
       contacted: string | number
+      pending_to_call: string | number
       interested: string | number
       meetings: string | number
       dnc: string | number
@@ -42,8 +43,20 @@ export async function listCampaigns(scope: ColdCallScope): Promise<ColdCallCampa
           AND p.stage IN ('nuevo', 'en_cola', 'volver_a_llamar')
       )::int AS in_queue,
       COUNT(p.id) FILTER (
-        WHERE p.deleted_at IS NULL AND p.call_attempts > 0
+        WHERE p.deleted_at IS NULL
+          AND (
+            COALESCE(p.call_attempts, 0) > 0
+            OR EXISTS (SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = p.id)
+          )
       )::int AS contacted,
+      COUNT(p.id) FILTER (
+        WHERE p.deleted_at IS NULL
+          AND p.do_not_call = FALSE
+          AND COALESCE(p.call_attempts, 0) = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = p.id
+          )
+      )::int AS pending_to_call,
       COUNT(p.id) FILTER (
         WHERE p.deleted_at IS NULL AND p.stage IN ('interesado_info_enviada', 'reunion_agendada')
       )::int AS interested,
@@ -85,6 +98,7 @@ function mapCampaignRow(r: {
   total_leads?: string | number
   in_queue?: string | number
   contacted?: string | number
+  pending_to_call?: string | number
   interested?: string | number
   meetings?: string | number
   dnc?: string | number
@@ -113,6 +127,7 @@ function mapCampaignRow(r: {
       total_leads: Number(r.total_leads),
       in_queue: Number(r.in_queue),
       contacted: Number(r.contacted),
+      pending_to_call: Number(r.pending_to_call ?? 0),
       interested: Number(r.interested),
       meetings: Number(r.meetings),
       dnc: Number(r.dnc),
@@ -152,6 +167,7 @@ export async function getCampaignById(id: number): Promise<ColdCallCampaign | nu
       total_leads: string | number
       in_queue: string | number
       contacted: string | number
+      pending_to_call: string | number
       interested: string | number
       meetings: string | number
       dnc: string | number
@@ -166,8 +182,20 @@ export async function getCampaignById(id: number): Promise<ColdCallCampaign | nu
           AND p.stage IN ('nuevo', 'en_cola', 'volver_a_llamar')
       )::int AS in_queue,
       COUNT(p.id) FILTER (
-        WHERE p.deleted_at IS NULL AND p.call_attempts > 0
+        WHERE p.deleted_at IS NULL
+          AND (
+            COALESCE(p.call_attempts, 0) > 0
+            OR EXISTS (SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = p.id)
+          )
       )::int AS contacted,
+      COUNT(p.id) FILTER (
+        WHERE p.deleted_at IS NULL
+          AND p.do_not_call = FALSE
+          AND COALESCE(p.call_attempts, 0) = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = p.id
+          )
+      )::int AS pending_to_call,
       COUNT(p.id) FILTER (
         WHERE p.deleted_at IS NULL AND p.stage IN ('interesado_info_enviada', 'reunion_agendada')
       )::int AS interested,
@@ -242,6 +270,7 @@ export async function createCampaign(input: {
       total_leads: 0,
       in_queue: 0,
       contacted: 0,
+      pending_to_call: 0,
       interested: 0,
       meetings: 0,
       dnc: 0,
@@ -554,17 +583,134 @@ export async function applyCampaignMappingToLeads(campaignId: number): Promise<n
   return updated
 }
 
+export type CampaignLeadCallFilter = 'all' | 'pending' | 'called'
+
 export async function listCampaignLeads(
   campaignId: number,
-  opts: { page?: number; limit?: number; q?: string } = {}
+  opts: {
+    page?: number
+    limit?: number
+    q?: string
+    callFilter?: CampaignLeadCallFilter
+  } = {}
 ): Promise<{ leads: CampaignLeadListRow[]; total: number }> {
   const page = Math.max(1, opts.page ?? 1)
   const limit = Math.min(200, Math.max(1, opts.limit ?? 50))
   const offset = (page - 1) * limit
   const q = opts.q?.trim()
+  const callFilter = opts.callFilter ?? 'all'
+  const pattern = q ? `%${q}%` : null
 
-  if (q) {
-    const pattern = `%${q}%`
+  // Prisma raw SQL needs explicit branches for filters.
+  if (callFilter === 'pending' && pattern) {
+    const [countRows, leads] = await Promise.all([
+      prisma.$queryRaw<{ count: string | number }[]>`
+        SELECT COUNT(*)::int AS count FROM coldcall_prospects
+        WHERE campaign_id = ${campaignId}
+          AND deleted_at IS NULL
+          AND COALESCE(call_attempts, 0) = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = coldcall_prospects.id
+          )
+          AND (
+            nombre ILIKE ${pattern}
+            OR empresa ILIKE ${pattern}
+            OR email ILIKE ${pattern}
+            OR telefono ILIKE ${pattern}
+            OR apollo_data::text ILIKE ${pattern}
+          )
+      `,
+      prisma.$queryRaw<CampaignLeadListRow[]>`
+        SELECT
+          id, nombre, telefono, email,
+          CASE
+            WHEN stage IN (
+              'interesado_info_enviada', 'reunion_agendada', 'no_interesado',
+              'volver_a_llamar', 'descartado_numero_erroneo'
+            ) THEN stage
+            WHEN estado IS NOT NULL AND estado NOT IN ('pendiente', 'nuevo') THEN estado
+            ELSE COALESCE(NULLIF(stage, ''), 'nuevo')
+          END AS stage,
+          COALESCE(call_attempts, 0)::int AS call_attempts,
+          (SELECT COUNT(*)::int FROM coldcall_calls WHERE prospect_id = coldcall_prospects.id) AS call_count,
+          apollo_data AS raw_data,
+          created_at
+        FROM coldcall_prospects
+        WHERE campaign_id = ${campaignId}
+          AND deleted_at IS NULL
+          AND COALESCE(call_attempts, 0) = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = coldcall_prospects.id
+          )
+          AND (
+            nombre ILIKE ${pattern}
+            OR empresa ILIKE ${pattern}
+            OR email ILIKE ${pattern}
+            OR telefono ILIKE ${pattern}
+            OR apollo_data::text ILIKE ${pattern}
+          )
+        ORDER BY created_at ASC, id ASC
+        LIMIT ${limit} OFFSET ${offset}
+      `,
+    ])
+    return { leads: normalizeLeadRows(leads), total: Number(countRows[0]?.count ?? 0) }
+  }
+
+  if (callFilter === 'called' && pattern) {
+    const [countRows, leads] = await Promise.all([
+      prisma.$queryRaw<{ count: string | number }[]>`
+        SELECT COUNT(*)::int AS count FROM coldcall_prospects
+        WHERE campaign_id = ${campaignId}
+          AND deleted_at IS NULL
+          AND (
+            COALESCE(call_attempts, 0) > 0
+            OR EXISTS (SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = coldcall_prospects.id)
+          )
+          AND (
+            nombre ILIKE ${pattern}
+            OR empresa ILIKE ${pattern}
+            OR email ILIKE ${pattern}
+            OR telefono ILIKE ${pattern}
+            OR apollo_data::text ILIKE ${pattern}
+          )
+      `,
+      prisma.$queryRaw<CampaignLeadListRow[]>`
+        SELECT
+          id, nombre, telefono, email,
+          CASE
+            WHEN stage IN (
+              'interesado_info_enviada', 'reunion_agendada', 'no_interesado',
+              'volver_a_llamar', 'descartado_numero_erroneo'
+            ) THEN stage
+            WHEN estado IS NOT NULL AND estado NOT IN ('pendiente', 'nuevo') THEN estado
+            ELSE COALESCE(NULLIF(stage, ''), 'nuevo')
+          END AS stage,
+          COALESCE(call_attempts, 0)::int AS call_attempts,
+          (SELECT COUNT(*)::int FROM coldcall_calls WHERE prospect_id = coldcall_prospects.id) AS call_count,
+          apollo_data AS raw_data,
+          created_at
+        FROM coldcall_prospects
+        WHERE campaign_id = ${campaignId}
+          AND deleted_at IS NULL
+          AND (
+            COALESCE(call_attempts, 0) > 0
+            OR EXISTS (SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = coldcall_prospects.id)
+          )
+          AND (
+            nombre ILIKE ${pattern}
+            OR empresa ILIKE ${pattern}
+            OR email ILIKE ${pattern}
+            OR telefono ILIKE ${pattern}
+            OR apollo_data::text ILIKE ${pattern}
+          )
+        ORDER BY created_at ASC, id ASC
+        LIMIT ${limit} OFFSET ${offset}
+      `,
+    ])
+    return { leads: normalizeLeadRows(leads), total: Number(countRows[0]?.count ?? 0) }
+  }
+
+  if (pattern) {
     const [countRows, leads] = await Promise.all([
       prisma.$queryRaw<{ count: string | number }[]>`
         SELECT COUNT(*)::int AS count FROM coldcall_prospects
@@ -580,10 +726,7 @@ export async function listCampaignLeads(
       `,
       prisma.$queryRaw<CampaignLeadListRow[]>`
         SELECT
-          id,
-          nombre,
-          telefono,
-          email,
+          id, nombre, telefono, email,
           CASE
             WHEN stage IN (
               'interesado_info_enviada', 'reunion_agendada', 'no_interesado',
@@ -606,6 +749,92 @@ export async function listCampaignLeads(
             OR telefono ILIKE ${pattern}
             OR apollo_data::text ILIKE ${pattern}
           )
+        ORDER BY
+          CASE
+          WHEN COALESCE(call_attempts, 0) = 0
+            AND NOT EXISTS (SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = coldcall_prospects.id)
+          THEN 0 ELSE 1 END,
+          created_at ASC,
+          id ASC
+        LIMIT ${limit} OFFSET ${offset}
+      `,
+    ])
+    return { leads: normalizeLeadRows(leads), total: Number(countRows[0]?.count ?? 0) }
+  }
+
+  if (callFilter === 'pending') {
+    const [countRows, leads] = await Promise.all([
+      prisma.$queryRaw<{ count: string | number }[]>`
+        SELECT COUNT(*)::int AS count FROM coldcall_prospects
+        WHERE campaign_id = ${campaignId}
+          AND deleted_at IS NULL
+          AND COALESCE(call_attempts, 0) = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = coldcall_prospects.id
+          )
+      `,
+      prisma.$queryRaw<CampaignLeadListRow[]>`
+        SELECT
+          id, nombre, telefono, email,
+          CASE
+            WHEN stage IN (
+              'interesado_info_enviada', 'reunion_agendada', 'no_interesado',
+              'volver_a_llamar', 'descartado_numero_erroneo'
+            ) THEN stage
+            WHEN estado IS NOT NULL AND estado NOT IN ('pendiente', 'nuevo') THEN estado
+            ELSE COALESCE(NULLIF(stage, ''), 'nuevo')
+          END AS stage,
+          COALESCE(call_attempts, 0)::int AS call_attempts,
+          (SELECT COUNT(*)::int FROM coldcall_calls WHERE prospect_id = coldcall_prospects.id) AS call_count,
+          apollo_data AS raw_data,
+          created_at
+        FROM coldcall_prospects
+        WHERE campaign_id = ${campaignId}
+          AND deleted_at IS NULL
+          AND COALESCE(call_attempts, 0) = 0
+          AND NOT EXISTS (
+            SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = coldcall_prospects.id
+          )
+        ORDER BY created_at ASC, id ASC
+        LIMIT ${limit} OFFSET ${offset}
+      `,
+    ])
+    return { leads: normalizeLeadRows(leads), total: Number(countRows[0]?.count ?? 0) }
+  }
+
+  if (callFilter === 'called') {
+    const [countRows, leads] = await Promise.all([
+      prisma.$queryRaw<{ count: string | number }[]>`
+        SELECT COUNT(*)::int AS count FROM coldcall_prospects
+        WHERE campaign_id = ${campaignId}
+          AND deleted_at IS NULL
+          AND (
+            COALESCE(call_attempts, 0) > 0
+            OR EXISTS (SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = coldcall_prospects.id)
+          )
+      `,
+      prisma.$queryRaw<CampaignLeadListRow[]>`
+        SELECT
+          id, nombre, telefono, email,
+          CASE
+            WHEN stage IN (
+              'interesado_info_enviada', 'reunion_agendada', 'no_interesado',
+              'volver_a_llamar', 'descartado_numero_erroneo'
+            ) THEN stage
+            WHEN estado IS NOT NULL AND estado NOT IN ('pendiente', 'nuevo') THEN estado
+            ELSE COALESCE(NULLIF(stage, ''), 'nuevo')
+          END AS stage,
+          COALESCE(call_attempts, 0)::int AS call_attempts,
+          (SELECT COUNT(*)::int FROM coldcall_calls WHERE prospect_id = coldcall_prospects.id) AS call_count,
+          apollo_data AS raw_data,
+          created_at
+        FROM coldcall_prospects
+        WHERE campaign_id = ${campaignId}
+          AND deleted_at IS NULL
+          AND (
+            COALESCE(call_attempts, 0) > 0
+            OR EXISTS (SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = coldcall_prospects.id)
+          )
         ORDER BY created_at ASC, id ASC
         LIMIT ${limit} OFFSET ${offset}
       `,
@@ -620,10 +849,7 @@ export async function listCampaignLeads(
     `,
     prisma.$queryRaw<CampaignLeadListRow[]>`
       SELECT
-        id,
-        nombre,
-        telefono,
-        email,
+        id, nombre, telefono, email,
         CASE
           WHEN stage IN (
             'interesado_info_enviada', 'reunion_agendada', 'no_interesado',
@@ -638,7 +864,13 @@ export async function listCampaignLeads(
         created_at
       FROM coldcall_prospects
       WHERE campaign_id = ${campaignId} AND deleted_at IS NULL
-      ORDER BY created_at ASC, id ASC
+      ORDER BY
+        CASE
+          WHEN COALESCE(call_attempts, 0) = 0
+            AND NOT EXISTS (SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = coldcall_prospects.id)
+          THEN 0 ELSE 1 END,
+        created_at ASC,
+        id ASC
       LIMIT ${limit} OFFSET ${offset}
     `,
   ])
@@ -790,13 +1022,40 @@ export async function saveCampaignPresentation(
   `
 }
 
+/** IDs de leads aún sin llamar (cola de “Empiezo llamada”). */
+export async function listPendingCampaignLeadIds(campaignId: number): Promise<number[]> {
+  const rows = await prisma.$queryRaw<{ id: number }[]>`
+    SELECT id FROM coldcall_prospects
+    WHERE campaign_id = ${campaignId}
+      AND deleted_at IS NULL
+      AND do_not_call = FALSE
+      AND COALESCE(call_attempts, 0) = 0
+      AND NOT EXISTS (
+        SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = coldcall_prospects.id
+      )
+    ORDER BY created_at ASC, id ASC
+  `
+  return rows.map((r) => r.id)
+}
+
 export async function listCampaignLeadIds(campaignId: number): Promise<number[]> {
   const rows = await prisma.$queryRaw<{ id: number }[]>`
     SELECT id FROM coldcall_prospects
     WHERE campaign_id = ${campaignId} AND deleted_at IS NULL
-    ORDER BY created_at ASC, id ASC
+    ORDER BY
+      CASE
+        WHEN COALESCE(call_attempts, 0) = 0
+          AND NOT EXISTS (SELECT 1 FROM coldcall_calls cc WHERE cc.prospect_id = id)
+        THEN 0 ELSE 1 END,
+      created_at ASC,
+      id ASC
   `
   return rows.map((r) => r.id)
+}
+
+export async function getFirstPendingLeadId(campaignId: number): Promise<number | null> {
+  const ids = await listPendingCampaignLeadIds(campaignId)
+  return ids[0] ?? null
 }
 
 export async function getLastCalledLeadId(campaignId: number): Promise<number | null> {
@@ -815,28 +1074,54 @@ export async function getCallSession(campaignId: number, leadId?: number) {
   const campaign = await getCampaignById(campaignId)
   if (!campaign) return null
 
-  const leadIds = await listCampaignLeadIds(campaignId)
-  if (leadIds.length === 0) {
-    return { campaign, leadIds, index: -1, lead: null, prevId: null, nextId: null }
+  // La estación de llamadas solo recorre los “por llamar”.
+  const pendingIds = await listPendingCampaignLeadIds(campaignId)
+
+  if (!leadId) {
+    if (pendingIds.length === 0) {
+      return {
+        campaign,
+        leadIds: [],
+        index: -1,
+        lead: null,
+        prevId: null,
+        nextId: null,
+      }
+    }
+    const currentId = pendingIds[0]
+    const lead = await getCampaignLeadById(campaignId, currentId)
+    return {
+      campaign,
+      leadIds: pendingIds,
+      index: 0,
+      lead,
+      prevId: null,
+      nextId: pendingIds.length > 1 ? pendingIds[1] : null,
+    }
   }
 
-  let resolvedLeadId = leadId
-  if (!resolvedLeadId) {
-    resolvedLeadId = (await getLastCalledLeadId(campaignId)) ?? leadIds[0]
+  const pendingIndex = pendingIds.indexOf(leadId)
+  if (pendingIndex >= 0) {
+    const lead = await getCampaignLeadById(campaignId, leadId)
+    return {
+      campaign,
+      leadIds: pendingIds,
+      index: pendingIndex,
+      lead,
+      prevId: pendingIndex > 0 ? pendingIds[pendingIndex - 1] : null,
+      nextId:
+        pendingIndex < pendingIds.length - 1 ? pendingIds[pendingIndex + 1] : null,
+    }
   }
 
-  let index = leadIds.indexOf(resolvedLeadId)
-  if (index < 0) index = 0
-
-  const currentId = leadIds[index]
-  const lead = currentId ? await getCampaignLeadById(campaignId, currentId) : null
-
+  // Lead ya llamado (abriendo desde el listado): se muestra, y “siguiente” vuelve a la cola.
+  const lead = await getCampaignLeadById(campaignId, leadId)
   return {
     campaign,
-    leadIds,
-    index,
+    leadIds: pendingIds,
+    index: -1,
     lead,
-    prevId: index > 0 ? leadIds[index - 1] : null,
-    nextId: index < leadIds.length - 1 ? leadIds[index + 1] : null,
+    prevId: null,
+    nextId: pendingIds[0] ?? null,
   }
 }
