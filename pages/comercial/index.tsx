@@ -3,6 +3,7 @@ import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
 import { canAccessColdCall } from '@/lib/auth-rbac'
 import ColdCallingDashboard from '@/components/coldcall/ColdCallingDashboard'
+import ComercialHomeCockpit from '@/components/coldcall/ComercialHomeCockpit'
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
@@ -10,16 +11,20 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     if (!canAccessColdCall(user.role)) {
       return { redirect: { destination: '/login', permanent: false } }
     }
+    return { props: { role: user.role } }
   } catch {
     return { redirect: { destination: '/login', permanent: false } }
   }
-  return { props: {} }
 }
 
-export default function ComercialDashboardPage() {
+export default function ComercialDashboardPage({
+  role,
+}: {
+  role: 'admin' | 'comercial' | 'developer'
+}) {
   return (
     <Layout>
-      <ColdCallingDashboard />
+      {role === 'comercial' ? <ComercialHomeCockpit /> : <ColdCallingDashboard />}
     </Layout>
   )
 }

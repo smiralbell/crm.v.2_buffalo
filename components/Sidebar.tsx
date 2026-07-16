@@ -45,6 +45,7 @@ const NAV: NavItem[] = [
       { href: '/invoices/recurring', label: 'Recurrentes' },
     ],
   },
+  { href: '/finances', label: 'Finanzas', icon: DollarSign, roles: ['admin'] },
   { href: '/pipelines', label: 'Pipelines', icon: Workflow, roles: ['admin'] },
   {
     href: '/marketing',
@@ -88,14 +89,12 @@ const NAV: NavItem[] = [
     roles: ['admin', 'developer'],
     children: [{ href: '/retencion', label: 'Clientes con mensualidad', developerLabel: 'Proyectos' }],
   },
-  { href: '/finances', label: 'Finanzas', icon: DollarSign, roles: ['admin'] },
   { href: '/tickets', label: 'Tickets', icon: Ticket, roles: ['admin', 'developer'] },
   { href: '/developer', label: 'Dashboard', icon: LayoutDashboard, roles: ['developer'] },
-  { href: '/comercial', label: 'Métricas', icon: LayoutDashboard, roles: ['comercial'] },
+  { href: '/comercial', label: 'Inicio', icon: LayoutDashboard, roles: ['comercial'] },
   { href: '/comercial/campanas', label: 'Campañas', icon: Megaphone, roles: ['comercial'] },
   { href: '/comercial/pipeline', label: 'Pipeline', icon: Workflow, roles: ['comercial'] },
   { href: '/comercial/reuniones', label: 'Reuniones', icon: Calendar, roles: ['comercial'] },
-  { href: '/comercial/preparar-demos', label: 'Preparar demos', icon: Bot, roles: ['admin'] },
   { href: '/comercial/llamar-mas-tarde', label: 'Llamar más tarde', icon: Clock, roles: ['comercial'] },
   { href: '/comercial/objeciones', label: 'Objeciones', icon: MessageSquare, roles: ['comercial'] },
   { href: '/comercial/duplicados', label: 'Duplicados', icon: Copy, roles: ['comercial'] },
@@ -110,7 +109,6 @@ const NAV: NavItem[] = [
     ],
   },
   { href: '/demos', label: 'Demos', icon: Bot, roles: ['admin'] },
-  { href: '/usuarios', label: 'Usuarios', icon: Users, roles: ['admin'] },
 ]
 
 export default function Sidebar() {
@@ -436,7 +434,21 @@ export default function Sidebar() {
         </nav>
       </div>
 
-      <div className="border-t border-gray-100 p-3 shrink-0">
+      <div className="border-t border-gray-100 p-3 shrink-0 space-y-0.5">
+        {isAdmin && (
+          <Link
+            href="/usuarios"
+            className={cn(
+              'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+              router.pathname === '/usuarios' || router.pathname.startsWith('/usuarios/')
+                ? 'bg-gray-100 text-gray-900'
+                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+            )}
+          >
+            <Users className="h-4 w-4 shrink-0" />
+            <span className="flex-1">Usuarios</span>
+          </Link>
+        )}
         <Button
           variant="ghost"
           size="sm"
