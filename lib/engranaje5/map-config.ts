@@ -133,7 +133,9 @@ export function mapConfigToProyecto(
   }
 }
 
-export function isValidConfiguradorConfig(cfg: ConfiguradorConfig | null): boolean {
+export function isValidConfiguradorConfig(
+  cfg: ConfiguradorConfig | null
+): cfg is ConfiguradorConfig {
   if (!cfg) return false
   if (cfg.mode === 'custom') {
     return Boolean(
