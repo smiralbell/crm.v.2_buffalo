@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import {
+  getCalWebhookFilterConfig,
   isCalWebhookRelevantTrigger,
   parseCalWebhookBooking,
   verifyCalWebhookSignature,
@@ -20,6 +21,10 @@ async function readRawBody(req: NextApiRequest): Promise<string> {
     chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
   }
   return Buffer.concat(chunks).toString('utf8')
+}
+
+function logCal(step: string, data?: Record<string, unknown>) {
+  console.log(`[webhooks/calcom] ${step}`, data ? JSON.stringify(data) : '')
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -58,39 +63,85 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const trigger = body.triggerEvent?.trim()
+  logCal('received', {
+    trigger,
+    bodyLength: rawBody.length,
+    hasPayload: !!body.payload,
+    filter: getCalWebhookFilterConfig(),
+  })
+
+  // Ping de prueba Cal.com → 200 sin guardar
+  if (trigger === 'PING' || trigger === 'TEST_EVENT' || !trigger) {
+    logCal('ping_ok', { trigger: trigger || '(empty)' })
+    return res.status(200).json({ ok: true, ping: true, trigger: trigger || null })
+  }
+
   if (!isCalWebhookRelevantTrigger(trigger)) {
-    return res.status(200).json({ ok: true, ignored: true, trigger })
+    logCal('ignored_trigger', { trigger })
+    return res.status(200).json({
+      ok: true,
+      ignored: true,
+      reason: 'unsupported_trigger',
+      trigger,
+    })
   }
 
   const parsed = parseCalWebhookBooking(body)
-  if (!parsed) {
-    return res.status(200).json({ ok: true, ignored: true, reason: 'event_filter_or_missing_uid' })
-  }
-
-  try {
-    await upsertCalBookingFromWebhook(parsed)
-    void syncCalBookingToWebPipeline({
-      uid: parsed.uid,
-      attendee_name: parsed.attendee_name,
-      attendee_email: parsed.attendee_email,
-      title: parsed.title,
-      start: parsed.start_time,
-    }).catch((err) => console.error('[webhooks/calcom] pipeline sync', err))
-    console.log(`[Cal.com] ${parsed.trigger_event} | ${parsed.attendee_email || parsed.uid}`)
+  if (!parsed.ok) {
+    logCal('ignored_parse', {
+      reason: parsed.reason,
+      detail: parsed.detail,
+    })
     return res.status(200).json({
       ok: true,
-      uid: parsed.uid,
-      trigger: parsed.trigger_event,
-      status: parsed.status,
+      ignored: true,
+      reason: parsed.reason,
+      detail: parsed.detail,
+    })
+  }
+
+  const booking = parsed.booking
+
+  try {
+    await upsertCalBookingFromWebhook(booking)
+    logCal('saved', {
+      uid: booking.uid,
+      email: booking.attendee_email,
+      slug: booking.event_type_slug,
+      status: booking.status,
+      start: booking.start_time,
+    })
+
+    void syncCalBookingToWebPipeline({
+      uid: booking.uid,
+      attendee_name: booking.attendee_name,
+      attendee_email: booking.attendee_email,
+      title: booking.title,
+      start: booking.start_time,
+    })
+      .then((cardId) => logCal('pipeline_sync', { uid: booking.uid, cardId }))
+      .catch((err) =>
+        console.error('[webhooks/calcom] pipeline sync', err instanceof Error ? err.message : err)
+      )
+
+    return res.status(200).json({
+      ok: true,
+      saved: true,
+      uid: booking.uid,
+      trigger: booking.trigger_event,
+      status: booking.status,
+      attendee_email: booking.attendee_email,
+      event_type_slug: booking.event_type_slug,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error interno'
     if (msg.includes('cal_bookings') && msg.includes('does not exist')) {
+      console.error('[webhooks/calcom] tabla cal_bookings no existe')
       return res.status(503).json({
         error: 'Tabla cal_bookings no existe. Ejecuta prisma/CREATE_CAL_BOOKINGS.sql',
       })
     }
-    console.error('[webhooks/calcom]', err)
+    console.error('[webhooks/calcom] save error', err)
     return res.status(500).json({ error: msg })
   }
 }

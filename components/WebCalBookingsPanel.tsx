@@ -54,18 +54,22 @@ export default function WebCalBookingsPanel({ period }: { period: string }) {
   const [configured, setConfigured] = useState(true)
   const [tableMissing, setTableMissing] = useState(false)
   const [error, setError] = useState('')
+  const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const qs = period ? `?period=${encodeURIComponent(period)}` : ''
-      const res = await fetch(`/api/marketing/cal-bookings${qs}`)
+      const params = new URLSearchParams()
+      if (period) params.set('period', period)
+      params.set('debug', '1')
+      const res = await fetch(`/api/marketing/cal-bookings?${params.toString()}`)
       const data = await res.json()
       if (res.ok) {
         setRows(data.bookings || [])
         setConfigured(data.configured !== false)
         setTableMissing(!!data.table_missing)
+        setDebugInfo(data.debug || null)
       } else {
         setError(data.error || 'No se pudieron cargar las reservas')
       }
@@ -115,10 +119,42 @@ export default function WebCalBookingsPanel({ period }: { period: string }) {
   }
 
   if (rows.length === 0) {
+    const totalDb = typeof debugInfo?.total_in_db === 'number' ? debugInfo.total_in_db : null
+    const recent = Array.isArray(debugInfo?.recent_all_periods)
+      ? (debugInfo.recent_all_periods as Array<Record<string, unknown>>)
+      : []
+
     return (
       <Card className="border-gray-200/80">
-        <CardContent className="py-10 text-center text-sm text-gray-500">
-          Sin reservas en este período. Cuando alguien agende en Cal.com, aparecerá aquí con sus datos de lead.
+        <CardContent className="py-8 space-y-3">
+          <p className="text-center text-sm text-gray-500">
+            Sin reservas en este período. Cuando alguien agende en Cal.com, aparecerá aquí.
+          </p>
+          {totalDb != null && (
+            <p className="text-center text-xs text-gray-400">
+              En la base de datos hay {totalDb} reserva{totalDb === 1 ? '' : 's'} en total
+              {totalDb > 0 && period ? ` (ninguna del período ${period})` : ''}.
+            </p>
+          )}
+          {recent.length > 0 && (
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-left">
+              <p className="text-[11px] font-medium text-gray-600 mb-1">Últimas recibidas (cualquier mes)</p>
+              <ul className="space-y-1">
+                {recent.slice(0, 5).map((r) => (
+                  <li key={String(r.uid)} className="text-[11px] text-gray-500 font-mono truncate">
+                    {String(r.booked_at || '—')} · {String(r.email || 'sin email')} · {String(r.slug || '—')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {totalDb === 0 && (
+            <p className="text-center text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              El ping de Cal.com da 200 pero no guarda reservas. Tras una reserva real, mira en Cal.com →
+              Webhooks → historial de entregas: si pone <code>ignored: true</code>, el CRM descartó el
+              evento (filtro de slug o trigger). Revisa los logs del servidor: <code>[webhooks/calcom]</code>.
+            </p>
+          )}
         </CardContent>
       </Card>
     )

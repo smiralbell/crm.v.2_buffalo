@@ -56,9 +56,24 @@ export interface ParsedCalWebhookBooking {
   payload: CalWebhookBody
 }
 
-function getEventSlugFilter(): string {
-  return (process.env.CALCOM_EVENT_SLUG?.trim() || DEFAULT_CAL_EVENT_SLUG).toLowerCase()
+/** Solo filtra si CALCOM_EVENT_SLUG o CALCOM_EVENT_TYPE_ID están en el .env. Sin ellos, acepta todos. */
+function getEventSlugFilter(): string | null {
+  const slug = process.env.CALCOM_EVENT_SLUG?.trim()
+  if (!slug || slug === '*' || slug.toLowerCase() === 'all') return null
+  return slug.toLowerCase()
 }
+
+export function getCalWebhookFilterConfig() {
+  return {
+    event_slug: getEventSlugFilter(),
+    event_type_id: process.env.CALCOM_EVENT_TYPE_ID?.trim() || null,
+    default_slug_hint: DEFAULT_CAL_EVENT_SLUG,
+  }
+}
+
+export type ParseCalWebhookResult =
+  | { ok: true; booking: ParsedCalWebhookBooking }
+  | { ok: false; reason: string; detail?: Record<string, unknown> }
 
 function normalizeCalSignature(header: string): string {
   let value = header.trim()
@@ -134,49 +149,115 @@ function durationMinutes(start: string | undefined, end: string | undefined): nu
   return Math.round(ms / 60_000)
 }
 
-export function matchesCalEventFilter(payload: CalWebhookBookingPayload): boolean {
-  const slugFilter = getEventSlugFilter()
+export function matchesCalEventFilter(payload: CalWebhookBookingPayload): {
+  match: boolean
+  reason?: string
+  receivedSlug?: string | null
+  receivedEventTypeId?: number | null
+} {
   const eventTypeId = process.env.CALCOM_EVENT_TYPE_ID?.trim()
-  if (eventTypeId && payload.eventTypeId != null) {
-    return String(payload.eventTypeId) === eventTypeId
+  const slugFilter = getEventSlugFilter()
+  const receivedSlug = payload.type?.trim() || null
+  const receivedEventTypeId = payload.eventTypeId ?? null
+
+  if (eventTypeId) {
+    if (receivedEventTypeId == null) {
+      return {
+        match: false,
+        reason: `filtro CALCOM_EVENT_TYPE_ID=${eventTypeId} pero el payload no trae eventTypeId`,
+        receivedSlug,
+        receivedEventTypeId,
+      }
+    }
+    if (String(receivedEventTypeId) !== eventTypeId) {
+      return {
+        match: false,
+        reason: `eventTypeId ${receivedEventTypeId} ≠ filtro ${eventTypeId}`,
+        receivedSlug,
+        receivedEventTypeId,
+      }
+    }
+    return { match: true, receivedSlug, receivedEventTypeId }
   }
-  if (!slugFilter) return true
-  const slug = payload.type?.trim().toLowerCase()
-  return slug === slugFilter
+
+  if (!slugFilter) {
+    return { match: true, receivedSlug, receivedEventTypeId }
+  }
+
+  const slug = receivedSlug?.toLowerCase() || ''
+  if (slug === slugFilter) {
+    return { match: true, receivedSlug, receivedEventTypeId }
+  }
+
+  return {
+    match: false,
+    reason: `type "${receivedSlug || '(vacío)'}" ≠ filtro CALCOM_EVENT_SLUG="${slugFilter}"`,
+    receivedSlug,
+    receivedEventTypeId,
+  }
 }
 
-export function parseCalWebhookBooking(body: CalWebhookBody): ParsedCalWebhookBooking | null {
+export function parseCalWebhookBooking(body: CalWebhookBody): ParseCalWebhookResult {
   const trigger = body.triggerEvent?.trim() || 'BOOKING_CREATED'
   const payload = resolveBookingPayload(body)
   const uid = payload.uid?.trim()
-  if (!uid) return null
+  if (!uid) {
+    return {
+      ok: false,
+      reason: 'missing_uid',
+      detail: {
+        trigger,
+        hasPayloadWrapper: !!body.payload,
+        payloadKeys: Object.keys(payload || {}),
+      },
+    }
+  }
 
-  if (!matchesCalEventFilter(payload)) return null
+  const filter = matchesCalEventFilter(payload)
+  if (!filter.match) {
+    return {
+      ok: false,
+      reason: 'event_filter',
+      detail: {
+        trigger,
+        uid,
+        filter_reason: filter.reason,
+        received_slug: filter.receivedSlug,
+        received_event_type_id: filter.receivedEventTypeId,
+        filter_config: getCalWebhookFilterConfig(),
+      },
+    }
+  }
 
   const attendee = payload.attendees?.[0]
   const start = payload.startTime || null
   const end = payload.endTime || null
 
   return {
-    uid,
-    trigger_event: trigger,
-    title: payload.title?.trim() || 'Reunión',
-    status: statusFromTrigger(trigger, payload),
-    start_time: start,
-    end_time: end,
-    duration_minutes: durationMinutes(start || undefined, end || undefined),
-    attendee_name: attendee?.name?.trim() || null,
-    attendee_email: attendee?.email?.trim() || null,
-    location: resolveLocation(payload),
-    event_type_slug: payload.type?.trim() || null,
-    event_type_id: payload.eventTypeId ?? null,
-    booked_at: body.createdAt || new Date().toISOString(),
-    payload: body,
+    ok: true,
+    booking: {
+      uid,
+      trigger_event: trigger,
+      title: payload.title?.trim() || 'Reunión',
+      status: statusFromTrigger(trigger, payload),
+      start_time: start,
+      end_time: end,
+      duration_minutes: durationMinutes(start || undefined, end || undefined),
+      attendee_name: attendee?.name?.trim() || null,
+      attendee_email: attendee?.email?.trim() || null,
+      location: resolveLocation(payload),
+      event_type_slug: payload.type?.trim() || null,
+      event_type_id: payload.eventTypeId ?? null,
+      booked_at: body.createdAt || new Date().toISOString(),
+      payload: body,
+    },
   }
 }
 
 export function isCalWebhookRelevantTrigger(trigger: string | undefined): boolean {
   if (!trigger) return false
+  // Ping de prueba de Cal.com
+  if (trigger === 'PING' || trigger === 'TEST_EVENT') return false
   return [
     'BOOKING_CREATED',
     'BOOKING_CANCELLED',
