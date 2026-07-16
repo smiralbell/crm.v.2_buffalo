@@ -14,6 +14,10 @@ import {
   syncColdCallPipelineForScope,
 } from '@/lib/pipelines/cold-calling'
 import { isWebPipeline, syncAllWebSourcesToPipeline } from '@/lib/pipelines/web'
+import {
+  backfillReunionsToGlobalFunnel,
+  isGlobalPipeline,
+} from '@/lib/pipelines/global-funnel'
 
 interface PipelineCard {
   id: string
@@ -65,6 +69,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
     const coldCall = await isColdCallPipeline(pipelineId)
     const webPipeline = await isWebPipeline(pipelineId)
+    const globalPipeline = await isGlobalPipeline(pipelineId)
     if (coldCall && user.role !== 'admin' && user.role !== 'comercial') {
       return { notFound: true }
     }
@@ -80,6 +85,12 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       cardsRaw = await getColdCallPipelineCards(scope, pipelineId)
     } else if (webPipeline) {
       await syncAllWebSourcesToPipeline()
+      cardsRaw = await prisma.pipelineCard.findMany({
+        where: { pipeline_id: pipelineId, deleted_at: null },
+        orderBy: [{ stage: 'asc' }, { position: 'asc' }],
+      })
+    } else if (globalPipeline) {
+      await backfillReunionsToGlobalFunnel()
       cardsRaw = await prisma.pipelineCard.findMany({
         where: { pipeline_id: pipelineId, deleted_at: null },
         orderBy: [{ stage: 'asc' }, { position: 'asc' }],

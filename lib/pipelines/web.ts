@@ -6,6 +6,7 @@ import { parseAgentChatMessage } from '@/lib/agent-chat-history'
 import { listWebFormSubmissions } from '@/lib/marketing/web-form-submissions'
 import { listCalBookings } from '@/lib/marketing/cal-bookings'
 import { BUFFALO_STAGE_COLORS, defaultStageColor } from '@/lib/pipelines/defaults'
+import { isReunionStageName, syncContactToGlobalReunion } from '@/lib/pipelines/global-funnel'
 
 export const WEB_PIPELINE_NAME = 'WEB'
 export const WEB_TAG = 'web'
@@ -256,6 +257,15 @@ export async function syncWebContactToPipeline(
         notes: notes?.trim() || existing.notes,
       },
     })
+
+    if (isReunionStageName(nextStage)) {
+      void syncContactToGlobalReunion({
+        contactId,
+        notes: notes?.trim() || existing.notes,
+        source: 'web',
+      }).catch((err) => console.error('[web] global reunion sync', err))
+    }
+
     return existing.id
   }
 
@@ -272,6 +282,15 @@ export async function syncWebContactToPipeline(
       notes: notes?.trim() || null,
     },
   })
+
+  if (isReunionStageName(targetStage)) {
+    void syncContactToGlobalReunion({
+      contactId,
+      notes: notes?.trim() || null,
+      source: 'web',
+    }).catch((err) => console.error('[web] global reunion sync', err))
+  }
+
   return card.id
 }
 

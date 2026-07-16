@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { ColdCallScope } from '@/lib/coldcall/scope'
 import { getScopeFilterParams } from '@/lib/coldcall/scope'
+import { syncColdCallProspectToGlobalReunion } from '@/lib/pipelines/global-funnel'
 
 export const COLDCALL_PIPELINE_NAME = 'Cold Calling'
 export const COLDCALL_TAG = 'coldcall'
@@ -213,6 +214,12 @@ export async function syncProspectPipelineCard(
       `
     }
 
+    if (stage === 'REUNIÓN') {
+      void syncColdCallProspectToGlobalReunion(prospect).catch((err) =>
+        console.error('[coldcall] global reunion sync', err)
+      )
+    }
+
     return existing.id
   }
 
@@ -234,6 +241,12 @@ export async function syncProspectPipelineCard(
     UPDATE coldcall_prospects SET synced_to_crm_as = ${card.id}, updated_at = NOW()
     WHERE id = ${prospectId}
   `
+
+  if (stage === 'REUNIÓN') {
+    void syncColdCallProspectToGlobalReunion(prospect).catch((err) =>
+      console.error('[coldcall] global reunion sync', err)
+    )
+  }
 
   return card.id
 }

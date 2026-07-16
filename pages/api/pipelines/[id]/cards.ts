@@ -4,6 +4,12 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { getColdCallScope } from '@/lib/coldcall/scope'
 import { getColdCallPipelineCards, isColdCallPipeline } from '@/lib/pipelines/cold-calling'
+import { isWebPipeline } from '@/lib/pipelines/web'
+import {
+  isReunionStageName,
+  syncColdCallProspectToGlobalReunion,
+  syncContactToGlobalReunion,
+} from '@/lib/pipelines/global-funnel'
 
 const createCardSchema = z.object({
   entity_id: z.union([z.string(), z.number()]).transform((val) => String(val)), // Acepta string o number, convierte a string
@@ -300,6 +306,44 @@ export default async function handler(
           ...(data.amount != null ? { amount: data.amount } : {}),
         },
       })
+
+      // Si pasan a REUNIÓN en WEB o Cold Calling → también al embudo global Buffalo
+      if (isReunionStageName(data.stage) && !isReunionStageName(card.stage)) {
+        const [webPipe, coldPipe] = await Promise.all([
+          isWebPipeline(pipelineId),
+          isColdCallPipeline(pipelineId),
+        ])
+
+        if (webPipe) {
+          const contactId = parseInt(updated.entity_id, 10)
+          if (!Number.isNaN(contactId)) {
+            void syncContactToGlobalReunion({
+              contactId,
+              notes: updated.notes,
+              source: 'web',
+            }).catch((err) => console.error('[pipelines/cards] global sync web', err))
+          }
+        } else if (coldPipe) {
+          const prospectId = parseInt(updated.entity_id, 10)
+          if (!Number.isNaN(prospectId)) {
+            const prospect = await prisma.coldCallProspect.findFirst({
+              where: { id: prospectId, deleted_at: null },
+              select: {
+                id: true,
+                nombre: true,
+                empresa: true,
+                telefono: true,
+                email: true,
+              },
+            })
+            if (prospect) {
+              void syncColdCallProspectToGlobalReunion(prospect).catch((err) =>
+                console.error('[pipelines/cards] global sync coldcall', err)
+              )
+            }
+          }
+        }
+      }
 
       return res.status(200).json(updated)
     }
