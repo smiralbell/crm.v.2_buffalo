@@ -75,69 +75,94 @@ async function countChatRepliedInPeriod(_period: string): Promise<number> {
   }
 }
 
+function isToday(iso: string): boolean {
+  return dayKey(iso) === dayKey(new Date().toISOString())
+}
+
 function buildAlerts(input: {
   formPending: number
-  calUpcoming: number
+  formsToday: number
   calToday: number
-  totals: { form: number; cal: number; chat: number }
-  pipelineAvailable: boolean
+  calBookedToday: number
+  calUpcoming: number
+  chatReplied: number
+  newLeadsToday: number
+  period: string
+  webPipelineId: string | null
 }): WebDashboardAlert[] {
   const alerts: WebDashboardAlert[] = []
+  const periodQs = `?period=${encodeURIComponent(input.period)}`
+
+  if (input.newLeadsToday > 0) {
+    alerts.push({
+      id: 'new-leads',
+      severity: 'info',
+      title: `${input.newLeadsToday} lead${input.newLeadsToday > 1 ? 's' : ''} nuevo${input.newLeadsToday > 1 ? 's' : ''} hoy`,
+      message: 'Entradas web de hoy (formulario o calendario) listas para revisar.',
+      href: input.webPipelineId ? `/pipelines/${input.webPipelineId}` : '/pipelines',
+    })
+  }
 
   if (input.formPending > 0) {
     alerts.push({
       id: 'form-pending',
-      severity: input.formPending >= 5 ? 'urgent' : 'warning',
-      title: `${input.formPending} formulario${input.formPending > 1 ? 's' : ''} sin contactar`,
-      message: 'Revisa los envíos del formulario web y marca como contactado.',
+      severity: input.formPending >= 3 ? 'urgent' : 'warning',
+      title: `${input.formPending} formulario${input.formPending > 1 ? 's' : ''} pendiente${input.formPending > 1 ? 's' : ''} de contactar`,
+      message: 'Hay envíos del formulario web sin marcar como contactados.',
+      href: `/marketing/web/formularios${periodQs}`,
+    })
+  }
+
+  if (input.formsToday > 0) {
+    alerts.push({
+      id: 'forms-today',
+      severity: 'info',
+      title: `${input.formsToday} formulario${input.formsToday > 1 ? 's' : ''} hoy`,
+      message: 'Nuevos envíos recibidos hoy desde la web.',
+      href: `/marketing/web/formularios${periodQs}`,
+    })
+  }
+
+  if (input.calBookedToday > 0) {
+    alerts.push({
+      id: 'cal-booked-today',
+      severity: 'info',
+      title: `${input.calBookedToday} reserva${input.calBookedToday > 1 ? 's' : ''} de calendario hoy`,
+      message: 'Alguien acaba de agendar en Cal.com.',
+      href: `/marketing/web/calendario${periodQs}`,
     })
   }
 
   if (input.calToday > 0) {
     alerts.push({
-      id: 'cal-today',
-      severity: 'info',
-      title: `${input.calToday} reunión${input.calToday > 1 ? 'es' : ''} hoy`,
-      message: 'Agendas del calendario Cal.com programadas para hoy.',
-    })
-  }
-
-  if (input.calUpcoming > 0) {
-    alerts.push({
-      id: 'cal-upcoming',
-      severity: 'info',
-      title: `${input.calUpcoming} reuniones próximas`,
-      message: 'Reservas confirmadas en el calendario web.',
-    })
-  }
-
-  const total = input.totals.form + input.totals.cal + input.totals.chat
-  if (total === 0) {
-    alerts.push({
-      id: 'no-activity',
-      severity: 'info',
-      title: 'Sin actividad web en el período',
-      message: 'Cuando lleguen formularios, chats o reservas Cal.com aparecerán aquí.',
-    })
-  } else if (input.totals.cal === 0 && input.totals.form + input.totals.chat >= 3) {
-    alerts.push({
-      id: 'no-cal',
+      id: 'cal-meetings-today',
       severity: 'warning',
-      title: 'Tráfico web sin conversiones a calendario',
-      message: 'Hay formularios o chats pero ninguna reserva Cal.com este mes.',
+      title: `${input.calToday} reunión${input.calToday > 1 ? 'es' : ''} programada${input.calToday > 1 ? 's' : ''} para hoy`,
+      message: 'Revisa hora y enlace de la videollamada.',
+      href: `/marketing/web/calendario${periodQs}`,
     })
   }
 
-  if (!input.pipelineAvailable) {
+  if (input.chatReplied > 0) {
     alerts.push({
-      id: 'no-pipeline',
+      id: 'chat-attention',
       severity: 'warning',
-      title: 'Pipeline WEB no encontrado',
-      message: 'Crea un pipeline llamado WEB con columnas LEAD, CONTACTO y REUNIÓN.',
+      title: `${input.chatReplied} chat${input.chatReplied > 1 ? 's' : ''} con respuesta del visitante`,
+      message: 'Revisa el widget: puede haber conversaciones pendientes de seguimiento humano.',
+      href: '/marketing/web/chat',
     })
   }
 
-  return alerts
+  if (alerts.length === 0) {
+    alerts.push({
+      id: 'all-clear',
+      severity: 'info',
+      title: 'Sin alertas pendientes',
+      message: 'No hay formularios pendientes ni reuniones urgentes ahora mismo.',
+    })
+  }
+
+  return alerts.slice(0, 8)
 }
 
 export async function getWebDashboardMetrics(period: string): Promise<WebDashboardMetrics> {
@@ -193,6 +218,9 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
   const formPending = formsOk ? await countPendingWebFormSubmissions(period) : 0
   const calUpcoming = calOk ? await countUpcomingCalBookings() : 0
   const calToday = calOk ? await countCalBookingsToday() : 0
+  const formsToday = forms.filter((f) => isToday(f.submitted_at)).length
+  const calBookedToday = bookings.filter((b) => isToday(b.created_at)).length
+  const newLeadsToday = formsToday + calBookedToday
 
   return {
     period,
@@ -200,10 +228,14 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
     timeline: buildTimeline(period, formByDay, calByDay, chatByDay),
     alerts: buildAlerts({
       formPending,
-      calUpcoming,
+      formsToday,
       calToday,
-      totals,
-      pipelineAvailable,
+      calBookedToday,
+      calUpcoming,
+      chatReplied,
+      newLeadsToday,
+      period,
+      webPipelineId: pipelineInfo.web_pipeline_id,
     }),
     form_pending: formPending,
     cal_upcoming: calUpcoming,

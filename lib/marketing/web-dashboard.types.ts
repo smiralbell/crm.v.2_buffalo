@@ -5,6 +5,7 @@ export interface WebDashboardAlert {
   severity: WebAlertSeverity
   title: string
   message: string
+  href?: string
 }
 
 export interface WebTimelinePoint {

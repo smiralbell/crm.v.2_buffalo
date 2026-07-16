@@ -4,12 +4,8 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { ChevronDown, ExternalLink } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import AgentChatsPanel from '@/components/AgentChatsPanel'
-import WebFormSubmissionsPanel from '@/components/WebFormSubmissionsPanel'
-import WebCalBookingsPanel from '@/components/WebCalBookingsPanel'
+import { ArrowUpRight } from 'lucide-react'
+import WebDashboardAlerts from '@/components/marketing/WebDashboardAlerts'
 import type { WebDashboardMetrics } from '@/lib/marketing/web-dashboard.types'
 
 const WebChannelTimelineChart = dynamic(
@@ -26,53 +22,39 @@ function pct(num: number, den: number): string {
   return ((num / den) * 100).toFixed(1) + '%'
 }
 
-function KpiCard({
+function KpiLink({
   label,
   value,
   sub,
-  active,
-  hint,
-  onClick,
+  href,
 }: {
   label: string
   value: string
   sub?: string
-  active?: boolean
-  hint?: string
-  onClick?: () => void
+  href: string
 }) {
-  const inner = (
-    <CardContent className="pt-5 pb-4">
-      <div className="space-y-1">
-        <p className="text-xs text-gray-500 font-medium truncate">{label}</p>
-        <p className="text-2xl font-semibold text-gray-900 leading-tight">{value}</p>
-        {sub && <p className="text-xs text-gray-400">{sub}</p>}
-        {onClick && hint && (
-          <p className="text-[11px] text-gray-400 flex items-center gap-0.5 pt-0.5">
-            {hint}
-            <ChevronDown className={cn('h-3 w-3 transition-transform', active && 'rotate-180')} />
-          </p>
-        )}
-      </div>
-    </CardContent>
+  return (
+    <Link
+      href={href}
+      className="block rounded-xl transition-all hover:ring-1 hover:ring-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-900"
+    >
+      <Card className="shadow-sm border-gray-200/80 h-full group">
+        <CardContent className="pt-5 pb-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1 min-w-0">
+              <p className="text-xs text-gray-500 font-medium truncate">{label}</p>
+              <p className="text-2xl font-semibold text-gray-900 leading-tight">{value}</p>
+              {sub && <p className="text-xs text-gray-400">{sub}</p>}
+              <p className="text-[11px] text-gray-400 pt-0.5 group-hover:text-gray-600">
+                Abrir detalle →
+              </p>
+            </div>
+            <ArrowUpRight className="h-4 w-4 text-gray-300 group-hover:text-gray-600 shrink-0 mt-0.5" />
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   )
-
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className={cn(
-          'w-full text-left rounded-xl transition-all',
-          active ? 'ring-2 ring-gray-900 shadow-sm' : 'hover:ring-1 hover:ring-gray-200'
-        )}
-      >
-        <Card className="shadow-sm border-gray-200/80 h-full">{inner}</Card>
-      </button>
-    )
-  }
-
-  return <Card className="shadow-sm border-gray-200/80">{inner}</Card>
 }
 
 function FunnelBar({
@@ -104,16 +86,12 @@ function FunnelBar({
 
 export default function WebMarketingTab({
   period,
-  initialChatOpen = false,
 }: {
   period: string
   initialChatOpen?: boolean
 }) {
   const [data, setData] = useState<WebDashboardMetrics | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showChat, setShowChat] = useState(initialChatOpen)
-  const [showForms, setShowForms] = useState(false)
-  const [showCal, setShowCal] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -130,19 +108,19 @@ export default function WebMarketingTab({
     void load()
   }, [load])
 
-  useEffect(() => {
-    if (initialChatOpen) setShowChat(true)
-  }, [initialChatOpen])
-
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
-        <div className="h-20 bg-gray-100 rounded-xl" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-28 bg-gray-100 rounded-xl" />
           ))}
         </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="h-64 bg-gray-100 rounded-xl" />
+          <div className="h-64 bg-gray-100 rounded-xl" />
+        </div>
+        <div className="h-64 bg-gray-100 rounded-xl" />
       </div>
     )
   }
@@ -154,89 +132,12 @@ export default function WebMarketingTab({
   }
 
   const total = data.totals.total || 0
-
-  const closeOthers = (panel: 'cal' | 'forms' | 'chat') => {
-    if (panel !== 'cal') setShowCal(false)
-    if (panel !== 'forms') setShowForms(false)
-    if (panel !== 'chat') setShowChat(false)
-  }
+  const periodQs = period ? `?period=${encodeURIComponent(period)}` : ''
 
   return (
     <div className="space-y-6">
-      <Card className="shadow-sm border-gray-200/80">
-        <CardContent className="py-3 px-4 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium text-gray-700">Pipelines — IDs para configuración</p>
-            {data.web_pipeline_id ? (
-              <Link
-                href={`/pipelines/${data.web_pipeline_id}`}
-                className="text-xs text-gray-600 hover:text-gray-900 inline-flex items-center gap-1"
-              >
-                Abrir pipeline WEB
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {data.all_pipelines.map((p) => (
-              <Link
-                key={p.id}
-                href={`/pipelines/${p.id}`}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] transition-colors',
-                  p.id === data.web_pipeline_id
-                    ? 'border-gray-900 bg-gray-900 text-white'
-                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-                )}
-              >
-                <span className="font-medium">{p.name}</span>
-                <code className={cn('font-mono', p.id === data.web_pipeline_id ? 'text-gray-300' : 'text-gray-400')}>
-                  {p.id}
-                </code>
-              </Link>
-            ))}
-          </div>
-          {data.web_pipeline_id ? (
-            <p className="text-[11px] text-gray-500">
-              WEB activo: <code className="text-gray-700">{data.web_pipeline_id}</code>
-              {data.web_stages.length > 0 && (
-                <>
-                  {' '}
-                  · Columnas:{' '}
-                  {data.web_stages.map((s) => `${s.name} (${s.id.slice(0, 8)}…)`).join(', ')}
-                </>
-              )}
-              {data.pipeline_synced > 0 && (
-                <span className="text-gray-600"> · {data.pipeline_synced} tarjetas sincronizadas</span>
-              )}
-            </p>
-          ) : (
-            <p className="text-[11px] text-amber-800">
-              No se encontró pipeline WEB. Crea uno llamado <strong>WEB</strong> o define{' '}
-              <code>WEB_PIPELINE_ID</code> en el servidor.
-            </p>
-          )}
-          {data.pipeline_errors.length > 0 && (
-            <p className="text-[11px] text-red-700">{data.pipeline_errors.slice(0, 3).join(' · ')}</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {data.form_pending > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="outline" className="text-xs border-amber-200 text-amber-800 bg-amber-50">
-            {data.form_pending} formularios pendientes
-          </Badge>
-          {data.cal_upcoming_today > 0 && (
-            <Badge variant="outline" className="text-xs border-gray-200 text-gray-700">
-              {data.cal_upcoming_today} reunión{data.cal_upcoming_today > 1 ? 'es' : ''} hoy
-            </Badge>
-          )}
-        </div>
-      )}
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <KpiCard
+        <KpiLink
           label="Agendaron en el calendario"
           value={data.cal_available ? fmt(data.totals.cal) : '—'}
           sub={
@@ -244,16 +145,11 @@ export default function WebMarketingTab({
               ? data.cal_upcoming > 0
                 ? `${data.cal_upcoming} próximas`
                 : 'Cal.com web'
-              : 'Webhook + CREATE_CAL_BOOKINGS.sql'
+              : 'Webhook pendiente de configurar'
           }
-          hint="Ver lead y reunión"
-          active={showCal}
-          onClick={data.cal_available ? () => {
-            setShowCal((v) => !v)
-            if (!showCal) closeOthers('cal')
-          } : undefined}
+          href={`/marketing/web/calendario${periodQs}`}
         />
-        <KpiCard
+        <KpiLink
           label="Formulario rellenado"
           value={data.form_available ? fmt(data.totals.form) : '—'}
           sub={
@@ -261,25 +157,15 @@ export default function WebMarketingTab({
               ? data.form_pending > 0
                 ? `${data.form_pending} pendientes`
                 : 'Todos gestionados'
-              : 'CREATE_WEB_FORM_SUBMISSIONS.sql'
+              : 'Tabla de formularios no disponible'
           }
-          hint="Ver formularios"
-          active={showForms}
-          onClick={data.form_available ? () => {
-            setShowForms((v) => !v)
-            if (!showForms) closeOthers('forms')
-          } : undefined}
+          href={`/marketing/web/formularios${periodQs}`}
         />
-        <KpiCard
+        <KpiLink
           label="Respondieron al chat"
           value={fmt(data.totals.chat)}
           sub="Widget IA · sesiones con respuesta"
-          hint="Ver conversaciones"
-          active={showChat}
-          onClick={() => {
-            setShowChat((v) => !v)
-            if (!showChat) closeOthers('chat')
-          }}
+          href="/marketing/web/chat"
         />
       </div>
 
@@ -304,35 +190,28 @@ export default function WebMarketingTab({
 
         <Card className="shadow-sm border-gray-200/80">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-gray-900">Actividad diaria</CardTitle>
-            <p className="text-xs text-gray-500 font-normal">{fmt(total)} entradas en el período</p>
+            <CardTitle className="text-base font-semibold text-gray-900">Alertas</CardTitle>
+            <p className="text-xs text-gray-500 font-normal">
+              Leads nuevos, pendientes y seguimiento
+            </p>
           </CardHeader>
-          <CardContent className="pb-2">
-            <WebChannelTimelineChart data={data.timeline} />
+          <CardContent>
+            <WebDashboardAlerts alerts={data.alerts} />
           </CardContent>
         </Card>
       </div>
 
-      {showCal && data.cal_available && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-800 px-0.5">Calendario — lead y reunión</h3>
-          <WebCalBookingsPanel period={period} />
-        </div>
-      )}
-
-      {showForms && data.form_available && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-800 px-0.5">Formularios web</h3>
-          <WebFormSubmissionsPanel period={period} />
-        </div>
-      )}
-
-      {showChat && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-800 px-0.5">Chat IA</h3>
-          <AgentChatsPanel embedded />
-        </div>
-      )}
+      <Card className="shadow-sm border-gray-200/80">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold text-gray-900">Actividad diaria</CardTitle>
+          <p className="text-xs text-gray-500 font-normal">
+            {fmt(total)} entradas en el período · formulario, calendario y widget
+          </p>
+        </CardHeader>
+        <CardContent className="pb-2">
+          <WebChannelTimelineChart data={data.timeline} />
+        </CardContent>
+      </Card>
     </div>
   )
 }
