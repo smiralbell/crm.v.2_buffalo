@@ -62,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       result,
     })
 
-    return res.status(200).json({ ok: true, ...result })
+    return res.status(200).json({ ...result, ok: result.ok !== false })
   } catch (err) {
     console.error('[webhooks/onboarding-form]', err)
     return res.status(500).json({
