@@ -72,13 +72,16 @@ export async function applyCallOutcome(input: {
     return { deleted: true }
   }
 
+  const trimmedNotes = input.notas?.trim() || null
+
   await prisma.$executeRaw`
     UPDATE coldcall_prospects SET
       estado = ${estado},
       stage = ${stage},
       call_attempts = ${callAttempts},
       next_retry_at = ${nextRetryAt},
-      lost_reason = ${input.outcome === 'no_interesado' ? input.notas || null : null},
+      lost_reason = ${input.outcome === 'no_interesado' ? trimmedNotes : null},
+      notas = COALESCE(${trimmedNotes}, notas),
       updated_at = NOW()
     WHERE id = ${input.prospectId}
   `
@@ -88,7 +91,7 @@ export async function applyCallOutcome(input: {
     VALUES (
       ${input.prospectId},
       'call_result',
-      ${input.notas || null},
+      ${trimmedNotes},
       ${input.outcome},
       ${input.userId ?? null}
     )

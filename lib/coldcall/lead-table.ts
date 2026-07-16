@@ -38,3 +38,27 @@ export function displayValue(v: string | null | undefined): string {
   if (v != null && String(v).trim() !== '') return String(v).trim()
   return '—'
 }
+
+/** Verde = pendiente de llamar · Rojo = ya llamado al menos una vez */
+export function leadCallStatus(lead: Pick<CampaignLeadRow, 'call_count' | 'call_attempts'>): {
+  called: boolean
+  rowClassName: string
+} {
+  const calls = Number(lead.call_count ?? lead.call_attempts ?? 0)
+  const called = calls > 0
+  return {
+    called,
+    rowClassName: called
+      ? 'bg-red-50 hover:bg-red-100/80'
+      : 'bg-emerald-50 hover:bg-emerald-100/80',
+  }
+}
+
+export function campaignExhausted(stats?: {
+  total_leads?: number
+  contacted?: number
+} | null): boolean {
+  const total = Number(stats?.total_leads ?? 0)
+  const contacted = Number(stats?.contacted ?? 0)
+  return total > 0 && contacted >= total
+}

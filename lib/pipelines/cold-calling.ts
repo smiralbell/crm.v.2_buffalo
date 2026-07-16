@@ -97,6 +97,14 @@ export function resolvePipelineStageFromProspect(prospect: {
 }
 
 export async function ensureColdCallPipelineStages(pipelineId: string): Promise<void> {
+  // Evitar crash si el Prisma Client en memoria está desfasado tras un generate
+  if (!prisma.pipelineStage?.findMany) {
+    console.warn(
+      '[cold-calling] prisma.pipelineStage no disponible; reinicia el servidor (npm run dev)'
+    )
+    return
+  }
+
   const existing = await prisma.pipelineStage.findMany({
     where: { pipeline_id: pipelineId },
     select: { name: true, position: true },
@@ -124,11 +132,36 @@ interface ProspectRow {
   empresa: string | null
   telefono: string | null
   email: string | null
+  notas: string | null
   stage: string
   call_attempts: number
   assigned_user_id: number | null
   campaign_id: number | null
   synced_to_crm_as: string | null
+}
+
+function buildPipelineCardNotes(prospect: {
+  empresa: string | null
+  telefono: string | null
+  notas: string | null
+}): string | null {
+  const meta = [prospect.empresa, prospect.telefono].filter(Boolean).join(' · ')
+  const note = prospect.notas?.trim() || ''
+  if (meta && note) return `${meta}\n\n${note}`
+  return note || meta || null
+}
+
+async function latestCallNote(prospectId: number): Promise<string | null> {
+  const rows = await prisma.$queryRaw<{ notas: string | null }[]>`
+    SELECT notas
+    FROM coldcall_calls
+    WHERE prospect_id = ${prospectId}
+      AND notas IS NOT NULL
+      AND TRIM(notas) <> ''
+    ORDER BY fecha DESC
+    LIMIT 1
+  `
+  return rows[0]?.notas?.trim() || null
 }
 
 async function loadProspect(prospectId: number): Promise<ProspectRow | null> {
@@ -139,6 +172,7 @@ async function loadProspect(prospectId: number): Promise<ProspectRow | null> {
       p.empresa,
       p.telefono,
       p.email,
+      p.notas,
       p.stage,
       p.call_attempts,
       p.assigned_user_id,
@@ -184,6 +218,18 @@ export async function syncProspectPipelineCard(
 
   await ensureColdCallPipelineStages(pipelineId)
 
+  if (!prospect.notas?.trim()) {
+    const fromCall = await latestCallNote(prospectId)
+    if (fromCall) {
+      prospect.notas = fromCall
+      await prisma.$executeRaw`
+        UPDATE coldcall_prospects
+        SET notas = ${fromCall}, updated_at = NOW()
+        WHERE id = ${prospectId} AND (notas IS NULL OR TRIM(notas) = '')
+      `
+    }
+  }
+
   const stage =
     opts?.outcome != null
       ? resolvePipelineStageFromOutcome(opts.outcome, opts.callAttempts ?? prospect.call_attempts)
@@ -192,6 +238,8 @@ export async function syncProspectPipelineCard(
   const stageColor = COLDCALL_STAGE_COLORS[stage]
   const entityId = String(prospectId)
   const existing = await findCardForProspect(pipelineId, prospectId)
+
+  const cardNotes = buildPipelineCardNotes(prospect)
 
   if (existing) {
     const position =
@@ -203,7 +251,7 @@ export async function syncProspectPipelineCard(
         stage,
         stage_color: stageColor,
         position,
-        notes: prospect.empresa || prospect.telefono || existing.notes,
+        notes: cardNotes,
       },
     })
 
@@ -233,7 +281,7 @@ export async function syncProspectPipelineCard(
       stage_color: stageColor,
       position,
       tags: [COLDCALL_TAG],
-      notes: [prospect.empresa, prospect.telefono].filter(Boolean).join(' · ') || null,
+      notes: cardNotes,
     },
   })
 
@@ -464,24 +512,53 @@ export async function getColdCallPipelineCards(scope: ColdCallScope, pipelineId:
 
 export async function getColdCallProspectDisplayMap(
   entityIds: string[]
-): Promise<Record<string, { nombre: string; email: string | null; telefono: string | null }>> {
+): Promise<
+  Record<
+    string,
+    {
+      nombre: string
+      email: string | null
+      telefono: string | null
+      notas: string | null
+      campaign_id: number | null
+    }
+  >
+> {
   const ids = entityIds.map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id))
   if (ids.length === 0) return {}
 
   const rows = await prisma.$queryRaw<
-    { id: number; nombre: string; email: string | null; telefono: string | null }[]
+    {
+      id: number
+      nombre: string
+      email: string | null
+      telefono: string | null
+      notas: string | null
+      campaign_id: number | null
+    }[]
   >`
-    SELECT id, nombre, email, telefono
+    SELECT id, nombre, email, telefono, notas, campaign_id
     FROM coldcall_prospects
     WHERE id = ANY(${ids}::int[]) AND deleted_at IS NULL
   `
 
-  const map: Record<string, { nombre: string; email: string | null; telefono: string | null }> = {}
+  const map: Record<
+    string,
+    {
+      nombre: string
+      email: string | null
+      telefono: string | null
+      notas: string | null
+      campaign_id: number | null
+    }
+  > = {}
   for (const row of rows) {
     map[String(row.id)] = {
       nombre: row.nombre,
       email: row.email,
       telefono: row.telefono,
+      notas: row.notas,
+      campaign_id: row.campaign_id,
     }
   }
   return map

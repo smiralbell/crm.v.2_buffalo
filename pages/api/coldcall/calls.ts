@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (resultado === 'reunion_agendada' && !retryAt) {
         return res.status(400).json({
-          error: 'Falta la fecha de la reunión. Agenda en Cal.com antes de guardar.',
+          error: 'Falta la fecha de la reunión. Indica día y hora o agenda en Cal.com.',
         })
       }
 

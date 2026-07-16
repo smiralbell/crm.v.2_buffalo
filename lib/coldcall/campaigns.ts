@@ -187,6 +187,24 @@ export async function getCampaignById(id: number): Promise<ColdCallCampaign | nu
   return rows[0] ? mapCampaignRow(rows[0]) : null
 }
 
+/** Asigna la campaña a un comercial y propaga a todos sus leads. */
+export async function updateCampaignAssignee(
+  campaignId: number,
+  assignedToUserId: number | null
+): Promise<ColdCallCampaign | null> {
+  await prisma.$executeRaw`
+    UPDATE coldcall_campaigns
+    SET assigned_to_user_id = ${assignedToUserId}, updated_at = NOW()
+    WHERE id = ${campaignId}
+  `
+  await prisma.$executeRaw`
+    UPDATE coldcall_prospects
+    SET assigned_user_id = ${assignedToUserId}, updated_at = NOW()
+    WHERE campaign_id = ${campaignId} AND deleted_at IS NULL
+  `
+  return getCampaignById(campaignId)
+}
+
 export async function createCampaign(input: {
   name: string
   description?: string

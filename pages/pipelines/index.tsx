@@ -38,7 +38,13 @@ interface PipelinesPageProps {
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
-    await requireAuth(context)
+    const user = await requireAuth(context)
+    if (user.role === 'comercial') {
+      return { redirect: { destination: '/comercial/pipeline', permanent: false } }
+    }
+    if (user.role !== 'admin') {
+      return { redirect: { destination: '/dashboard', permanent: false } }
+    }
   } catch {
     return { redirect: { destination: '/login', permanent: false } }
   }

@@ -1,14 +1,29 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireAdminAPI } from '@/lib/auth'
-import { findCrmUserById, setCrmUserActive, updateCrmUserPassword } from '@/lib/crm-users'
+import {
+  CrmUserEmailTakenError,
+  findCrmUserById,
+  setCrmUserActive,
+  updateCrmUserPassword,
+  updateCrmUserProfile,
+} from '@/lib/crm-users'
 
-const patchSchema = z.object({
-  active: z.boolean().optional(),
-  password: z.string().min(8, 'Mínimo 8 caracteres').optional(),
-}).refine((d) => d.active !== undefined || d.password !== undefined, {
-  message: 'Indica active o password',
-})
+const patchSchema = z
+  .object({
+    active: z.boolean().optional(),
+    password: z.string().min(8, 'Mínimo 8 caracteres').optional(),
+    name: z.string().min(1, 'Nombre obligatorio').optional(),
+    email: z.string().email('Email inválido').optional(),
+  })
+  .refine(
+    (d) =>
+      d.active !== undefined ||
+      d.password !== undefined ||
+      d.name !== undefined ||
+      d.email !== undefined,
+    { message: 'Indica active, password, name o email' }
+  )
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -25,6 +40,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const user = await updateCrmUserPassword(id, data.password)
         if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
         return res.status(200).json({ user, password: data.password })
+      }
+
+      if (data.name !== undefined || data.email !== undefined) {
+        try {
+          const user = await updateCrmUserProfile(id, {
+            name: data.name,
+            email: data.email,
+          })
+          if (!user) return res.status(404).json({ error: 'Usuario no encontrado' })
+          return res.status(200).json({ user })
+        } catch (err) {
+          if (err instanceof CrmUserEmailTakenError) {
+            return res.status(409).json({ error: 'Ese correo ya está en uso' })
+          }
+          if (err instanceof Error && err.message === 'NAME_REQUIRED') {
+            return res.status(400).json({ error: 'Nombre obligatorio' })
+          }
+          if (err instanceof Error && err.message === 'EMAIL_REQUIRED') {
+            return res.status(400).json({ error: 'Email obligatorio' })
+          }
+          throw err
+        }
       }
 
       if (data.active !== undefined) {

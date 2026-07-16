@@ -102,7 +102,11 @@ export default function CampaignScriptEditor({
 
             <p className="text-xs text-gray-500">
               Escribe en Markdown. Usa <code className="bg-gray-100 px-1 rounded">## Título</code>{' '}
-              para cada caja del guión y el texto normal debajo.
+              para cada caja del guión. En el texto puedes usar{' '}
+              <code className="bg-gray-100 px-1 rounded">{'{{nombre}}'}</code>,{' '}
+              <code className="bg-gray-100 px-1 rounded">(Nombre)</code> o{' '}
+              <code className="bg-gray-100 px-1 rounded">[Nombre]</code> — se sustituye por el lead
+              al llamar.
             </p>
 
             <Textarea

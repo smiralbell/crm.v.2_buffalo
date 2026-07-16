@@ -1,14 +1,18 @@
 import { GetServerSideProps } from 'next'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import PipelineLayout from '@/components/PipelineLayout'
 import KanbanBoard from '@/components/KanbanBoard'
 import PipelineCardDrawer from '@/components/PipelineCardDrawer'
+import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
 import { getPipelineStages, type PipelineStageRow } from '@/lib/pipelines/stages'
-import { getColdCallScope } from '@/lib/coldcall/scope'
+import { getColdCallScope, type ColdCallFilter } from '@/lib/coldcall/scope'
+import { coldCallScopeQuery } from '@/lib/coldcall/api-query'
+import { useAuth } from '@/components/AuthContext'
 import {
   getColdCallPipelineCards,
+  getColdCallPipelineId,
   getColdCallProspectDisplayMap,
   isColdCallPipeline,
   syncColdCallPipelineForScope,
@@ -47,7 +51,11 @@ interface PipelineDetailProps {
   initialStages: PipelineStageRow[]
   availableEntities: Array<{ id: string; name: string }>
   isColdCallPipeline: boolean
-  initialProspectDisplay: Record<string, { nombre: string; email: string | null; telefono: string | null }>
+  viewerRole: 'admin' | 'comercial' | 'developer'
+  initialProspectDisplay: Record<
+    string,
+    { nombre: string; email: string | null; telefono: string | null; notas: string | null; campaign_id: number | null }
+  >
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -72,6 +80,16 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     const globalPipeline = await isGlobalPipeline(pipelineId)
     if (coldCall && user.role !== 'admin' && user.role !== 'comercial') {
       return { notFound: true }
+    }
+    // Comercial: solo puede ver el pipeline de Cold Calling (sus leads)
+    if (user.role === 'comercial' && !coldCall) {
+      const coldId = await getColdCallPipelineId()
+      if (coldId) {
+        return {
+          redirect: { destination: `/pipelines/${coldId}`, permanent: false },
+        }
+      }
+      return { redirect: { destination: '/comercial', permanent: false } }
     }
     if (!coldCall && user.role !== 'admin') {
       return { notFound: true }
@@ -142,6 +160,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         initialStages: stages,
         initialCards,
         isColdCallPipeline: coldCall,
+        viewerRole: user.role,
         initialProspectDisplay,
         availableEntities: coldCall
           ? initialCards.map((c) => ({
@@ -166,20 +185,39 @@ export default function PipelineDetail({
   initialStages,
   availableEntities,
   isColdCallPipeline: isColdCall,
+  viewerRole,
   initialProspectDisplay,
 }: PipelineDetailProps) {
+  const { user } = useAuth()
+  const isComercialViewer = viewerRole === 'comercial' || user?.role === 'comercial'
   const [cards, setCards] = useState<PipelineCard[]>(initialCards)
   const [stages, setStages] = useState<PipelineStageRow[]>(initialStages)
   const [loading, setLoading] = useState(false)
   const [drawerCard, setDrawerCard] = useState<PipelineCard | null>(null)
+  const [scopeFilter, setScopeFilter] = useState<ColdCallFilter>('team')
+
+  useEffect(() => {
+    if (isComercialViewer && user?.id) {
+      setScopeFilter(user.id)
+    }
+  }, [isComercialViewer, user?.id])
 
   const reloadCards = useCallback(async () => {
-    const res = await fetch(`/api/pipelines/${pipeline.id}/cards`)
+    const q =
+      isColdCall && user?.role === 'admin'
+        ? coldCallScopeQuery(scopeFilter, user?.id)
+        : ''
+    const res = await fetch(`/api/pipelines/${pipeline.id}/cards${q}`)
     if (res.ok) {
       const data = await res.json()
       setCards(data.cards || [])
     }
-  }, [pipeline.id])
+  }, [pipeline.id, isColdCall, user?.role, user?.id, scopeFilter])
+
+  useEffect(() => {
+    if (!isColdCall || user?.role !== 'admin') return
+    reloadCards()
+  }, [scopeFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reloadStages = useCallback(async () => {
     const res = await fetch(`/api/pipelines/${pipeline.id}/stages`)
@@ -315,13 +353,16 @@ export default function PipelineDetail({
     return 'Sin nombre'
   }
 
-  const getEntityDetails = async (entityId: string): Promise<{ email?: string; telefono?: string }> => {
+  const getEntityDetails = async (
+    entityId: string
+  ): Promise<{ email?: string; telefono?: string; campaign_id?: number | null }> => {
     if (isColdCall) {
       const cached = initialProspectDisplay[entityId]
       if (cached) {
         return {
           email: cached.email || undefined,
           telefono: cached.telefono || undefined,
+          campaign_id: cached.campaign_id,
         }
       }
       try {
@@ -329,7 +370,11 @@ export default function PipelineDetail({
         if (res.ok) {
           const data = await res.json()
           const row = data[entityId]
-          return { email: row?.email, telefono: row?.telefono }
+          return {
+            email: row?.email,
+            telefono: row?.telefono,
+            campaign_id: row?.campaign_id ?? null,
+          }
         }
       } catch (error) {
         console.error('Error fetching prospect details:', error)
@@ -450,13 +495,42 @@ export default function PipelineDetail({
   return (
     <PipelineLayout
       currentPipelineId={pipeline.id}
-      currentPipelineName={pipeline.name}
+      currentPipelineName={
+        isComercialViewer && isColdCall ? 'Mi pipeline' : pipeline.name
+      }
       totalValue={totalValue}
       totalCards={totalCards}
+      lockedToCurrent={isComercialViewer}
+      backHref={isComercialViewer ? '/comercial' : '/pipelines'}
+      allowDelete={!isComercialViewer}
     >
       {loading && (
         <div className="absolute top-20 right-6 z-20 bg-white px-4 py-2 rounded-lg shadow-md text-sm text-gray-600">
           Guardando cambios...
+        </div>
+      )}
+
+      {isColdCall && !isComercialViewer && (
+        <div className="px-4 pt-3 pb-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-gray-500">
+            {scopeFilter === 'team'
+              ? 'Pipeline oficial — leads de todo el equipo'
+              : 'Pipeline filtrado por comercial'}
+          </p>
+          {user?.role === 'admin' && (
+            <ColdCallScopeToolbar
+              filter={scopeFilter}
+              onFilterChange={setScopeFilter}
+              onRefresh={reloadCards}
+              loading={loading}
+            />
+          )}
+        </div>
+      )}
+
+      {isColdCall && isComercialViewer && (
+        <div className="px-4 pt-3 pb-1">
+          <p className="text-sm text-gray-500">Solo aparecen los leads de tus campañas.</p>
         </div>
       )}
 
@@ -468,6 +542,7 @@ export default function PipelineDetail({
         getEntityDetails={getEntityDetails}
         onCardMove={handleCardMove}
         onClose={() => setDrawerCard(null)}
+        isColdCallPipeline={isColdCall}
       />
 
       <KanbanBoard

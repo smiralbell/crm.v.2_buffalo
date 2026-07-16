@@ -131,6 +131,13 @@ export default function LeadDetailPage() {
           </Button>
         </div>
 
+        {lead.notas?.trim() && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 shadow-sm space-y-2">
+            <h2 className="text-sm font-semibold text-amber-950">Últimas notas del comercial</h2>
+            <p className="text-sm text-amber-950/90 whitespace-pre-line leading-relaxed">{lead.notas}</p>
+          </div>
+        )}
+
         {lead.calls.length > 0 && (
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm space-y-3">
             <h2 className="text-sm font-semibold text-gray-900">Historial de llamadas</h2>

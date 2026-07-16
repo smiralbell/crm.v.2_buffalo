@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Loader2, Plus, Trash2, FolderKanban, Copy, KeyRound, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Trash2, FolderKanban, Copy, KeyRound, Eye, EyeOff, Pencil } from 'lucide-react'
 import type { DeveloperAssignment } from '@/lib/developer/assignments'
 import type { CrmRole } from '@/lib/auth'
 
@@ -82,6 +82,10 @@ export default function UsuarioDetailPage() {
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [resettingPassword, setResettingPassword] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
 
   const copyText = async (text: string, label: string) => {
     try {
@@ -180,6 +184,40 @@ export default function UsuarioDetailPage() {
     }
   }
 
+  const openProfileEdit = () => {
+    if (!user) return
+    setEditName(user.name)
+    setEditEmail(user.email)
+    setProfileOpen(true)
+  }
+
+  const saveProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user) return
+    setSavingProfile(true)
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editName.trim(),
+          email: editEmail.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al actualizar')
+      setUser((u) => (u && data.user ? { ...u, ...data.user } : u))
+      setCredentials((c) =>
+        c && data.user ? { ...c, email: data.user.email } : c
+      )
+      setProfileOpen(false)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
   const removeAssignment = async (assignmentId: string) => {
     if (!user || !confirm('¿Eliminar esta asignación?')) return
     const res = await fetch(`/api/users/${user.id}/assignments/${assignmentId}`, {
@@ -225,6 +263,14 @@ export default function UsuarioDetailPage() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  className="rounded-xl gap-1.5"
+                  onClick={openProfileEdit}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Editar nombre / correo
+                </Button>
                 <Button variant="outline" className="rounded-xl" onClick={toggleActive}>
                   {user.active ? 'Desactivar' : 'Activar'}
                 </Button>
@@ -522,6 +568,49 @@ export default function UsuarioDetailPage() {
               </Button>
               <Button type="submit" disabled={resettingPassword}>
                 {resettingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Guardar'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar nombre y correo</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={saveProfile} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit_name">Nombre</Label>
+              <Input
+                id="edit_name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Nombre visible"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit_email">Correo</Label>
+              <Input
+                id="edit_email"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="correo@ejemplo.com"
+                required
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Solo cambia nombre y correo. Rol y contraseña se quedan igual. Si cambias el correo,
+              ese usuario entra con el nuevo email la próxima vez.
+            </p>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setProfileOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={savingProfile}>
+                {savingProfile ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Guardar'}
               </Button>
             </DialogFooter>
           </form>

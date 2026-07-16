@@ -7,7 +7,7 @@ import { outcomeLabel } from '@/lib/coldcall/lead-table'
 import type { ScriptBox } from '@/lib/coldcall/script-parser'
 import type { ColdCallObjection } from '@/lib/coldcall/objections'
 import type { ComercialPersona } from '@/lib/coldcall/comercial-persona'
-import { DEFAULT_CEO_PERSONA } from '@/lib/coldcall/comercial-persona'
+import { DEFAULT_CEO_PERSONA, applyProspectToScriptBoxes } from '@/lib/coldcall/comercial-persona'
 import { resolveLeadPhone, formatPhoneForDisplay } from '@/lib/coldcall/whatsapp'
 import {
   ChevronLeft,
@@ -93,6 +93,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
   const [objectionsCa, setObjectionsCa] = useState<ColdCallObjection[]>([])
   const [persona, setPersona] = useState<ComercialPersona>(DEFAULT_CEO_PERSONA)
   const [presentationUrl, setPresentationUrl] = useState<string | null>(null)
+  const [gmailSender, setGmailSender] = useState<string | null>(null)
   const [scriptLang, setScriptLang] = useState<'es' | 'ca'>('es')
   const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -114,6 +115,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
         setCampaignName(d.campaign?.name || '')
         setColumnMapping(d.campaign?.column_mapping || {})
         setPresentationUrl(d.campaign?.presentation_url ?? null)
+        setGmailSender(d.gmail_sender ?? null)
         setLead(d.lead)
         setIndex(d.index ?? 0)
         setTotal(d.total ?? 0)
@@ -192,7 +194,8 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
     setTimeout(advanceAfterSave, 120)
   }
 
-  const script = scriptLang === 'es' ? scriptEs : scriptCa
+  const scriptBase = scriptLang === 'es' ? scriptEs : scriptCa
+  const script = lead ? applyProspectToScriptBoxes(scriptBase, lead) : scriptBase
   const objections = scriptLang === 'es' ? objectionsEs : objectionsCa
   const leadDisplay = lead
     ? splitLeadDisplayFields({ ...lead, callsCount: lead.calls?.length ?? 0 }, columnMapping)
@@ -274,6 +277,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
             phone={leadPhone}
             phoneDisplay={leadPhoneDisplay}
             email={lead.email}
+            gmailSender={gmailSender}
             webUrl={leadWebUrl}
             linkedinUrl={leadLinkedInUrl}
             extraFields={[...leadDisplay.primary, ...leadDisplay.extra]}
@@ -288,6 +292,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
                 leadPhoneDisplay={leadPhoneDisplay}
                 persona={persona}
                 presentationUrl={presentationUrl}
+                gmailSender={gmailSender}
                 saving={saving}
                 saved={saved}
                 saveError={saveError}
@@ -304,7 +309,7 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
                     {callHistory.map((c) => (
                       <li
                         key={c.id}
-                        className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs"
+                        className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-xs space-y-1"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <Badge variant="outline" className="font-normal text-[10px]">
@@ -312,6 +317,9 @@ export default function CampaignCallStation({ campaignId }: CampaignCallStationP
                           </Badge>
                           <span className="text-gray-400">{formatCallDate(c.fecha)}</span>
                         </div>
+                        {c.notas?.trim() && (
+                          <p className="text-gray-600 whitespace-pre-line leading-relaxed">{c.notas}</p>
+                        )}
                       </li>
                     ))}
                   </ul>

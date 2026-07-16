@@ -14,6 +14,7 @@ import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
 import ComercialIncentiveCard from '@/components/coldcall/ComercialIncentiveCard'
 import RequestProspectsCta from '@/components/coldcall/RequestProspectsCta'
 import AdminProspectRequestsPanel from '@/components/coldcall/AdminProspectRequestsPanel'
+import { MeetingRemindersBlock } from '@/components/coldcall/MeetingReminders'
 import { coldCallScopeQuery } from '@/lib/coldcall/api-query'
 import type { ColdCallFilter } from '@/lib/coldcall/scope'
 import { useAuth } from '@/components/AuthContext'
@@ -218,6 +219,8 @@ export default function ColdCallingDashboard({
           meetingsThisWeek={kpis.meetings_this_week}
         />
       )}
+
+      <MeetingRemindersBlock />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ColdCallFunnel

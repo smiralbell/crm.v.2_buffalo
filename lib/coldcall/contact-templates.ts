@@ -95,6 +95,10 @@ export function contactTemplate(
   return defaultWhatsAppTemplate(kind, lead, persona, presentationUrl)
 }
 
+/** Cuenta Gmail por defecto si el comercial no tiene una configurada. */
+export const FALLBACK_COLDCALL_GMAIL_SENDER =
+  process.env.NEXT_PUBLIC_COLDCALL_GMAIL_SENDER || 'sergimasoliver@gmail.com'
+
 export function buildMailtoUrl(
   email: string | null | undefined,
   subject: string,
@@ -102,4 +106,36 @@ export function buildMailtoUrl(
 ): string | null {
   if (!email?.trim()) return null
   return `mailto:${email.trim()}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+}
+
+/** Abre Gmail en el navegador con el borrador preparado (no usa Mail.app). */
+export function buildGmailComposeUrl(
+  email: string | null | undefined,
+  subject: string,
+  body: string,
+  senderGmail?: string | null
+): string | null {
+  if (!email?.trim()) return null
+  const params = new URLSearchParams({
+    view: 'cm',
+    fs: '1',
+    to: email.trim(),
+    su: subject,
+    body,
+  })
+  const sender = senderGmail?.trim()
+  if (sender) params.set('authuser', sender)
+  return `https://mail.google.com/mail/?${params.toString()}`
+}
+
+export function openGmailCompose(
+  email: string | null | undefined,
+  subject: string,
+  body: string,
+  senderGmail?: string | null
+): boolean {
+  const url = buildGmailComposeUrl(email, subject, body, senderGmail)
+  if (!url) return false
+  window.open(url, '_blank', 'noopener,noreferrer')
+  return true
 }

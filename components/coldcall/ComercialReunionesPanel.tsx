@@ -14,9 +14,12 @@ import {
   projectCommission,
 } from '@/lib/coldcall/commission'
 import ComercialIncentiveCard from '@/components/coldcall/ComercialIncentiveCard'
+import { MeetingRemindersBlock } from '@/components/coldcall/MeetingReminders'
+import MeetingsMonthCalendar from '@/components/coldcall/MeetingsMonthCalendar'
 import {
   Calendar,
   ExternalLink,
+  LayoutList,
   Loader2,
   Phone,
   RefreshCw,
@@ -56,11 +59,12 @@ export default function ComercialReunionesPanel() {
   const [meetings, setMeetings] = useState<MeetingRow[]>([])
   const [meetingsThisWeek, setMeetingsThisWeek] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [view, setView] = useState<'lista' | 'calendario'>('lista')
 
   const load = useCallback(() => {
     setLoading(true)
     Promise.all([
-      fetch('/api/coldcall/meetings').then((r) => r.json()),
+      fetch('/api/coldcall/meetings?daysBack=45&daysAhead=90').then((r) => r.json()),
       fetch('/api/coldcall/dashboard').then((r) => r.json()),
     ])
       .then(([meetingsData, dashboardData]) => {
@@ -92,7 +96,33 @@ export default function ComercialReunionesPanel() {
             No confundir con &quot;llámame más tarde&quot;.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <div className="inline-flex rounded-xl border border-gray-200 bg-white p-0.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={view === 'lista' ? 'default' : 'ghost'}
+              className={`rounded-lg gap-1.5 h-8 ${
+                view === 'lista' ? 'bg-gray-900 hover:bg-gray-800' : 'text-gray-600'
+              }`}
+              onClick={() => setView('lista')}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              Lista
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={view === 'calendario' ? 'default' : 'ghost'}
+              className={`rounded-lg gap-1.5 h-8 ${
+                view === 'calendario' ? 'bg-gray-900 hover:bg-gray-800' : 'text-gray-600'
+              }`}
+              onClick={() => setView('calendario')}
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              Calendario
+            </Button>
+          </div>
           <Button variant="outline" size="sm" className="rounded-xl gap-2" onClick={load} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Actualizar
@@ -113,6 +143,8 @@ export default function ComercialReunionesPanel() {
         compact={meetingsThisWeek === 0 && proximas.length === 0}
       />
 
+      <MeetingRemindersBlock alwaysShowConfirm />
+
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatCard label="Reuniones hoy" value={hoy.length} />
         <StatCard label="Próximas reuniones" value={proximas.length} />
@@ -127,6 +159,15 @@ export default function ComercialReunionesPanel() {
         <div className="py-20 flex justify-center">
           <Loader2 className="h-7 w-7 animate-spin text-gray-400" />
         </div>
+      ) : view === 'calendario' ? (
+        meetings.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 px-6 py-16 text-center">
+            <Calendar className="h-10 w-10 text-gray-300 mx-auto" />
+            <p className="mt-3 text-sm text-gray-500">No hay reuniones para mostrar en el calendario.</p>
+          </div>
+        ) : (
+          <MeetingsMonthCalendar meetings={meetings} />
+        )
       ) : meetings.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/80 px-6 py-16 text-center">
           <Calendar className="h-10 w-10 text-gray-300 mx-auto" />

@@ -83,3 +83,45 @@ export function applyPersonaToScriptBoxes<T extends { title: string; text: strin
     text: interpolateCallText(box.text, persona),
   }))
 }
+
+export function prospectFirstName(prospect: {
+  nombre: string
+  first_name?: string | null
+}): string {
+  if (prospect.first_name?.trim()) return prospect.first_name.trim()
+  const parts = prospect.nombre.trim().split(/\s+/)
+  return parts[0] || prospect.nombre.trim()
+}
+
+/** Sustituye placeholders del prospecto en el guión. */
+export function interpolateProspectInText(
+  text: string,
+  prospect: { nombre: string; first_name?: string | null; empresa?: string | null }
+): string {
+  const name = prospectFirstName(prospect)
+  const fullName = prospect.nombre.trim()
+  const empresa = prospect.empresa?.trim() || ''
+
+  return text
+    .replace(/\{\{prospect_name\}\}/gi, name)
+    .replace(/\{\{prospect_full\}\}/gi, fullName)
+    .replace(/\{\{nombre\}\}/gi, name)
+    .replace(/\{\{empresa\}\}/gi, empresa)
+    .replace(/\[Nombre\]/gi, name)
+    .replace(/\(Nombre\)/gi, name)
+    .replace(/\[nombre\]/g, name)
+    .replace(/\(nombre\)/g, name)
+    .replace(/\[Empresa\]/gi, empresa)
+    .replace(/\(Empresa\)/gi, empresa)
+}
+
+export function applyProspectToScriptBoxes<T extends { title: string; text: string }>(
+  boxes: T[],
+  prospect: { nombre: string; first_name?: string | null; empresa?: string | null }
+): T[] {
+  return boxes.map((box) => ({
+    ...box,
+    title: interpolateProspectInText(box.title, prospect),
+    text: interpolateProspectInText(box.text, prospect),
+  }))
+}

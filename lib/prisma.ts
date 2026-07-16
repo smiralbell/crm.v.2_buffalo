@@ -48,11 +48,16 @@ export function getPrismaClient(): PrismaClient {
   if (globalForPrisma.prisma) {
     const existing = globalForPrisma.prisma
     // Tras `prisma generate` con modelos nuevos, el proceso puede seguir con una instancia antigua
-    // sin delegados (p. ej. evaluationProject). Forzar recreación.
-    if (
+    // sin delegados (p. ej. evaluationProject / pipelineStage). Forzar recreación.
+    const stale =
       process.env.NODE_ENV === 'development' &&
-      typeof (existing as unknown as { evaluationProject?: unknown }).evaluationProject === 'undefined'
-    ) {
+      (typeof (existing as unknown as { evaluationProject?: unknown }).evaluationProject ===
+        'undefined' ||
+        typeof (existing as unknown as { pipelineStage?: unknown }).pipelineStage ===
+          'undefined' ||
+        typeof (existing as unknown as { pipelineKanban?: unknown }).pipelineKanban ===
+          'undefined')
+    if (stale) {
       void existing.$disconnect().catch(() => {})
       globalForPrisma.prisma = undefined
     } else {

@@ -393,6 +393,18 @@ export default function KanbanColumn({
                     {entityName}
                   </div>
 
+                  {card.notes?.trim() && (
+                    <p
+                      className={cn(
+                        'text-[11px] mb-3 line-clamp-3 leading-snug whitespace-pre-line',
+                        isWhiteCard ? 'text-gray-600' : 'text-white/90'
+                      )}
+                      title={card.notes}
+                    >
+                      {card.notes}
+                    </p>
+                  )}
+
                   {/* Etiquetas */}
                   {cardTags.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-3">

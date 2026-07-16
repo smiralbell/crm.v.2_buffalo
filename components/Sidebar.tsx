@@ -95,6 +95,7 @@ const NAV: NavItem[] = [
   { href: '/comercial/campanas', label: 'Campañas', icon: Megaphone, roles: ['comercial'] },
   { href: '/comercial/pipeline', label: 'Pipeline', icon: Workflow, roles: ['comercial'] },
   { href: '/comercial/reuniones', label: 'Reuniones', icon: Calendar, roles: ['comercial'] },
+  { href: '/comercial/preparar-demos', label: 'Preparar demos', icon: Bot, roles: ['admin'] },
   { href: '/comercial/llamar-mas-tarde', label: 'Llamar más tarde', icon: Clock, roles: ['comercial'] },
   { href: '/comercial/objeciones', label: 'Objeciones', icon: MessageSquare, roles: ['comercial'] },
   { href: '/comercial/duplicados', label: 'Duplicados', icon: Copy, roles: ['comercial'] },
@@ -134,7 +135,16 @@ export default function Sidebar() {
       )
     }
     if (role === 'comercial') {
-      const order = ['/comercial', '/comercial/campanas', '/comercial/reuniones', '/comercial/llamar-mas-tarde', '/comercial/objeciones', '/comercial/duplicados', '/developer/facturas']
+      const order = [
+        '/comercial',
+        '/comercial/campanas',
+        '/comercial/pipeline',
+        '/comercial/reuniones',
+        '/comercial/llamar-mas-tarde',
+        '/comercial/objeciones',
+        '/comercial/duplicados',
+        '/developer/facturas',
+      ]
       return [...items].sort((a, b) => order.indexOf(a.href) - order.indexOf(b.href))
     }
     return items
@@ -166,6 +176,7 @@ export default function Sidebar() {
     else if (item.href === '/gestion-proyecto') router.push('/gestion-proyecto')
     else if (item.href === '/comercial') router.push('/comercial')
     else if (item.href === '/comercial/campanas') router.push('/comercial/campanas')
+    else if (item.href === '/comercial/pipeline') router.push('/comercial/pipeline')
     else if (item.href === '/comercial/reuniones') router.push('/comercial/reuniones')
     else if (item.href === '/comercial/llamar-mas-tarde') router.push('/comercial/llamar-mas-tarde')
     else if (item.href === '/comercial/objeciones') router.push('/comercial/objeciones')
@@ -185,6 +196,12 @@ export default function Sidebar() {
 
   const isComercialNavActive = (href: string) => {
     if (href === '/comercial') return router.pathname === '/comercial'
+    if (href === '/comercial/pipeline') {
+      return (
+        router.pathname === '/comercial/pipeline' ||
+        router.pathname.startsWith('/pipelines/')
+      )
+    }
     return router.pathname === href || router.pathname.startsWith(`${href}/`)
   }
 
@@ -237,7 +254,15 @@ export default function Sidebar() {
               </Link>
               {navItems
                 .filter((item) =>
-                  ['/comercial', '/comercial/campanas', '/comercial/reuniones', '/comercial/llamar-mas-tarde', '/comercial/objeciones', '/comercial/duplicados'].includes(item.href)
+                  [
+                    '/comercial',
+                    '/comercial/campanas',
+                    '/comercial/pipeline',
+                    '/comercial/reuniones',
+                    '/comercial/llamar-mas-tarde',
+                    '/comercial/objeciones',
+                    '/comercial/duplicados',
+                  ].includes(item.href)
                 )
                 .map((item) => {
                   const Icon = item.icon

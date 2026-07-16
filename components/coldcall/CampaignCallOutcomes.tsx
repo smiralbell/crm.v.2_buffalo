@@ -6,8 +6,8 @@ import CallTimerBar, { useCallTimer } from '@/components/coldcall/CallTimerBar'
 import type { ComercialPersona } from '@/lib/coldcall/comercial-persona'
 import { DEFAULT_CEO_PERSONA } from '@/lib/coldcall/comercial-persona'
 import {
-  buildMailtoUrl,
   contactTemplate,
+  openGmailCompose,
 } from '@/lib/coldcall/contact-templates'
 import {
   callbackConfirmTemplate,
@@ -75,6 +75,7 @@ interface CampaignCallOutcomesProps {
   leadPhoneDisplay: string | null
   persona?: ComercialPersona
   presentationUrl?: string | null
+  gmailSender?: string | null
   saving: boolean
   saved: boolean
   saveError: string
@@ -94,6 +95,7 @@ export default function CampaignCallOutcomes({
   leadPhoneDisplay,
   persona = DEFAULT_CEO_PERSONA,
   presentationUrl,
+  gmailSender,
   saving,
   saved,
   saveError,
@@ -110,6 +112,7 @@ export default function CampaignCallOutcomes({
   const [emailSent, setEmailSent] = useState(false)
   const [calBooked, setCalBooked] = useState(false)
   const [calBookingSummary, setCalBookingSummary] = useState('')
+  const [manualMeetingMode, setManualMeetingMode] = useState(false)
   const [localError, setLocalError] = useState('')
   const [messageEdited, setMessageEdited] = useState(false)
 
@@ -126,6 +129,7 @@ export default function CampaignCallOutcomes({
     setInteresadoFollowUp(null)
     setCalBooked(false)
     setCalBookingSummary('')
+    setManualMeetingMode(false)
     setCallbackAt('')
     setBookingIso('')
     setMessageEdited(false)
@@ -162,6 +166,30 @@ export default function CampaignCallOutcomes({
     })
   }
 
+  const handleManualMeetingChange = (datetimeLocal: string) => {
+    setCallbackAt(datetimeLocal)
+    if (!datetimeLocal) {
+      setBookingIso('')
+      setCalBooked(false)
+      setCalBookingSummary('')
+      return
+    }
+    const iso = new Date(datetimeLocal).toISOString()
+    setBookingIso(iso)
+    setCalBooked(true)
+    const when = formatCallbackWhen(datetimeLocal)
+    setCalBookingSummary(`Registro manual · ${when}`)
+    setNotas((prev) => {
+      const block = `Reunión Cal.com: ${when} (registro manual)`
+      const cleaned = prev
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('Reunión Cal.com:'))
+        .join('\n')
+        .trim()
+      return cleaned ? `${cleaned}\n${block}` : block
+    })
+  }
+
   const handleWhatsApp = () => {
     const ok = openWhatsApp(leadPhone, contactMessage)
     if (!ok) {
@@ -173,16 +201,16 @@ export default function CampaignCallOutcomes({
   }
 
   const handleEmail = () => {
-    const url = buildMailtoUrl(
+    const ok = openGmailCompose(
       lead.email,
       `Información Buffalo AI · ${lead.empresa || lead.nombre}`,
-      contactMessage
+      contactMessage,
+      gmailSender
     )
-    if (!url) {
+    if (!ok) {
       setLocalError('Este lead no tiene email.')
       return
     }
-    window.location.href = url
     setEmailSent(true)
     setLocalError('')
   }
@@ -198,8 +226,12 @@ export default function CampaignCallOutcomes({
       setLocalError('Indica cuándo volver a llamar.')
       return
     }
-    if (resultado === 'interesado' && interesadoFollowUp === 'reunion' && (!calBooked || !bookingIso)) {
-      setLocalError('Agenda la reunión en Cal.com antes de guardar.')
+    if (resultado === 'interesado' && interesadoFollowUp === 'reunion' && !bookingIso) {
+      setLocalError(
+        manualMeetingMode
+          ? 'Indica el día y la hora de la reunión que ya agendaste.'
+          : 'Agenda la reunión en Cal.com o registra la fecha manualmente.'
+      )
       return
     }
     onSave({
@@ -267,7 +299,7 @@ export default function CampaignCallOutcomes({
       {resultado && resultado !== 'llamar_tarde' && resultado !== 'sin_respuesta' && (
       <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-3 space-y-2">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-          Enviar info (email o WhatsApp)
+          Enviar info (WhatsApp o Gmail)
         </p>
         <Textarea
           rows={3}
@@ -300,7 +332,7 @@ export default function CampaignCallOutcomes({
             onClick={handleEmail}
           >
             <Mail className="h-3.5 w-3.5" />
-            Email
+            Gmail
             {emailSent && <Check className="h-3 w-3" />}
           </Button>
         </div>
@@ -362,22 +394,22 @@ export default function CampaignCallOutcomes({
                     className="rounded-lg gap-1.5 bg-white"
                     disabled={!hasEmail || !contactMessage.trim() || !callbackAt}
                     onClick={() => {
-                      const url = buildMailtoUrl(
+                      const ok = openGmailCompose(
                         lead.email,
                         `Confirmación llamada · ${lead.empresa || lead.nombre}`,
-                        contactMessage
+                        contactMessage,
+                        gmailSender
                       )
-                      if (!url) {
+                      if (!ok) {
                         setLocalError('Este lead no tiene email.')
                         return
                       }
-                      window.location.href = url
                       setEmailSent(true)
                       setLocalError('')
                     }}
                   >
                     <Mail className="h-3.5 w-3.5" />
-                    Email
+                    Gmail
                     {emailSent && <Check className="h-3 w-3" />}
                   </Button>
                 </div>
@@ -404,6 +436,10 @@ export default function CampaignCallOutcomes({
                   onClick={() => {
                     setInteresadoFollowUp('reunion')
                     setCalBooked(false)
+                    setManualMeetingMode(false)
+                    setBookingIso('')
+                    setCallbackAt('')
+                    setCalBookingSummary('')
                   }}
                   className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border ${
                     interesadoFollowUp === 'reunion'
@@ -428,18 +464,66 @@ export default function CampaignCallOutcomes({
                 </button>
               </div>
               {interesadoFollowUp === 'reunion' && (
-                <div className="space-y-2">
-                  <CalComMeetingEmbed
-                    key={`cal-${lead.id}`}
-                    leadName={lead.nombre}
-                    leadEmail={lead.email}
-                    onBooked={handleCalBooked}
-                  />
-                  {calBooked && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualMeetingMode(false)
+                        setCalBooked(false)
+                        setBookingIso('')
+                        setCallbackAt('')
+                        setCalBookingSummary('')
+                      }}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium border ${
+                        !manualMeetingMode
+                          ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                          : 'border-gray-200 text-gray-600'
+                      }`}
+                    >
+                      Agendar en Cal.com
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualMeetingMode(true)
+                        setCalBooked(false)
+                        setBookingIso('')
+                        setCallbackAt('')
+                        setCalBookingSummary('')
+                      }}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-medium border ${
+                        manualMeetingMode
+                          ? 'bg-amber-50 text-amber-950 border-amber-200'
+                          : 'border-gray-200 text-gray-600'
+                      }`}
+                    >
+                      Ya agendé · registrar fecha
+                    </button>
+                  </div>
+
+                  {manualMeetingMode ? (
+                    <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 space-y-2">
+                      <p className="text-xs text-amber-950">
+                        Si ya pediste la reunión en Cal.com pero no pulsaste guardar, indica aquí el
+                        día y la hora y guarda.
+                      </p>
+                      <CallbackScheduler value={callbackAt} onChange={handleManualMeetingChange} />
+                    </div>
+                  ) : (
+                    <CalComMeetingEmbed
+                      key={`cal-${lead.id}`}
+                      leadName={lead.nombre}
+                      leadEmail={lead.email}
+                      onBooked={handleCalBooked}
+                    />
+                  )}
+
+                  {calBooked && bookingIso && (
                     <div className="space-y-2">
                       <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 flex items-center gap-2">
                         <Check className="h-3.5 w-3.5" />
-                        {calBookingSummary}
+                        {calBookingSummary || 'Reunión lista para guardar'}
                       </div>
                       <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                         Si cierra la venta: <strong>{formatEur(commissionPerClosedSale())}</strong> de
@@ -460,7 +544,7 @@ export default function CampaignCallOutcomes({
             rows={2}
             value={notas}
             onChange={(e) => setNotas(e.target.value)}
-            placeholder="Nota opcional..."
+            placeholder="Nota de la llamada (se guarda en el lead y en el pipeline)..."
             className="rounded-xl resize-none text-sm"
           />
         </div>

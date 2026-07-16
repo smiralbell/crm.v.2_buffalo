@@ -417,6 +417,13 @@ model ColdCallCall {
   whatsapp_enviado Boolean   @default(false)
   email_enviado    Boolean   @default(false)
   reunion_fecha    DateTime?
+  reunion_confirm_status String?
+  reunion_confirm_at DateTime?
+  reunion_confirm_by_user_id Int?
+  reunion_confirm_note String? @db.Text
+  demo_prep_status String?
+  demo_prep_at     DateTime?
+  demo_prep_by_user_id Int?
   created_by_user_id Int?
   created_at       DateTime  @default(now())
 

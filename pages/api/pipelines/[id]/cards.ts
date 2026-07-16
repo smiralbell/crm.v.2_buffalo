@@ -2,7 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { getColdCallScope } from '@/lib/coldcall/scope'
+import { parseColdCallFilterParam } from '@/lib/coldcall/api-query'
+import { resolveColdCallScope } from '@/lib/coldcall/scope'
 import { getColdCallPipelineCards, isColdCallPipeline } from '@/lib/pipelines/cold-calling'
 import { isWebPipeline } from '@/lib/pipelines/web'
 import {
@@ -83,7 +84,8 @@ export default async function handler(
 
       let cards
       if (coldCall) {
-        const scope = await getColdCallScope(user)
+        const filter = parseColdCallFilterParam(req.query.userId, user.id)
+        const scope = await resolveColdCallScope(user, filter)
         const rows = await getColdCallPipelineCards(scope, pipelineId)
         cards = rows.map((card) => ({
           ...card,

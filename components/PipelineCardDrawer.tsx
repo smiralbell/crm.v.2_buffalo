@@ -39,9 +39,14 @@ interface PipelineCardDrawerProps {
   pipelineId: string
   stages: PipelineStageRow[]
   getEntityName: (id: string) => Promise<string>
-  getEntityDetails: (id: string) => Promise<{ email?: string; telefono?: string }>
+  getEntityDetails: (id: string) => Promise<{
+    email?: string
+    telefono?: string
+    campaign_id?: number | null
+  }>
   onCardMove: (cardId: string, newStage: string, newPosition: number) => Promise<void>
   onClose: () => void
+  isColdCallPipeline?: boolean
 }
 
 export default function PipelineCardDrawer({
@@ -52,10 +57,15 @@ export default function PipelineCardDrawer({
   getEntityDetails,
   onCardMove,
   onClose,
+  isColdCallPipeline = false,
 }: PipelineCardDrawerProps) {
   const router = useRouter()
   const [entityName, setEntityName] = useState<string>('')
-  const [entityContactDetails, setEntityContactDetails] = useState<{ email?: string; telefono?: string }>({})
+  const [entityContactDetails, setEntityContactDetails] = useState<{
+    email?: string
+    telefono?: string
+    campaign_id?: number | null
+  }>({})
   const [moving, setMoving] = useState(false)
 
   useEffect(() => {
@@ -106,6 +116,15 @@ export default function PipelineCardDrawer({
     router.push(
       `/onboarding?lead=${card.entity_id}&pipeline=${pipelineId}&card=${card.id}`
     )
+  }
+
+  const handleOpenColdCallLead = () => {
+    const campaignId = entityContactDetails.campaign_id
+    if (campaignId) {
+      router.push(`/coldcalling/campanas/${campaignId}/leads/${card.entity_id}`)
+      return
+    }
+    router.push(`/coldcalling/campanas`)
   }
 
   return (
@@ -233,9 +252,11 @@ export default function PipelineCardDrawer({
             <div className="px-6 pb-4">
               <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
                 <StickyNote className="h-3.5 w-3.5" />
-                <span className="font-semibold uppercase tracking-wider">Notas</span>
+                <span className="font-semibold uppercase tracking-wider">
+                  {isColdCallPipeline ? 'Notas del comercial' : 'Notas'}
+                </span>
               </div>
-              <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3.5 leading-relaxed border border-gray-100">
+              <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3.5 leading-relaxed border border-gray-100 whitespace-pre-line">
                 {card.notes}
               </p>
             </div>
@@ -273,14 +294,23 @@ export default function PipelineCardDrawer({
 
         {/* Footer actions */}
         <div className="border-t border-gray-100 px-6 py-4 space-y-2.5 bg-white">
-          {/* Primary CTA */}
-          <Button
-            onClick={handleConfigure}
-            className="w-full h-11 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-xl"
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Configurar proyecto
-          </Button>
+          {isColdCallPipeline ? (
+            <Button
+              onClick={handleOpenColdCallLead}
+              className="w-full h-11 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-xl"
+            >
+              <User className="h-4 w-4 mr-2" />
+              Ver lead
+            </Button>
+          ) : (
+            <Button
+              onClick={handleConfigure}
+              className="w-full h-11 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-xl"
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Configurar proyecto
+            </Button>
+          )}
 
           {/* Move to next stage */}
           {nextStage && (

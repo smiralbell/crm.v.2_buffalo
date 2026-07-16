@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import type { LeadFieldRow } from '@/lib/coldcall/lead-display'
 import { telHref } from '@/lib/coldcall/lead-links'
+import { buildGmailComposeUrl } from '@/lib/coldcall/contact-templates'
 import { formatPhoneForDisplay } from '@/lib/coldcall/whatsapp'
 import { stageLabel } from '@/lib/coldcall/lead-table'
 import {
@@ -32,6 +33,7 @@ interface CallLeadHeaderProps {
   phone: string | null
   phoneDisplay: string | null
   email?: string | null
+  gmailSender?: string | null
   webUrl?: string | null
   linkedinUrl?: string | null
   onWhatsApp?: () => void
@@ -47,6 +49,7 @@ export default function CallLeadHeader({
   phone,
   phoneDisplay,
   email,
+  gmailSender,
   webUrl,
   linkedinUrl,
   onWhatsApp,
@@ -142,7 +145,9 @@ export default function CallLeadHeader({
           </button>
         ) : email ? (
           <a
-            href={`mailto:${email}`}
+            href={buildGmailComposeUrl(email, '', '', gmailSender) || '#'}
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white text-gray-800 px-3 py-4 hover:bg-gray-50 transition-colors text-center min-h-[88px]"
           >
             <Mail className="h-5 w-5" />

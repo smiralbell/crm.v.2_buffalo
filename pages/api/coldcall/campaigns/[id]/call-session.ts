@@ -4,7 +4,7 @@ import { getCallSession } from '@/lib/coldcall/campaigns'
 import { parseCampaignId, requireCampaignAccess } from '@/lib/coldcall/api-access'
 import { resolveCrmUserFkId } from '@/lib/crm-users'
 import { getUserObjections } from '@/lib/coldcall/objections'
-import { getComercialPersonaForUserId } from '@/lib/coldcall/comercial-persona-loader'
+import { getComercialPersonaForUserId, getColdcallGmailForUserId } from '@/lib/coldcall/comercial-persona-loader'
 import { applyPersonaToScriptBoxes } from '@/lib/coldcall/comercial-persona'
 import {
   DEFAULT_SCRIPT_MARKDOWN_CA,
@@ -32,6 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const mdCa = campaign.script_markdown_ca?.trim() || DEFAULT_SCRIPT_MARKDOWN_CA
 
     const persona = await getComercialPersonaForUserId(user.id)
+    const gmailSender = await getColdcallGmailForUserId(user.id)
 
     const crmUserId = await resolveCrmUserFkId(user.id)
     const objections = crmUserId
@@ -64,6 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ca: applyPersonaToScriptBoxes(parseScriptMarkdown(mdCa), persona),
       },
       persona,
+      gmail_sender: gmailSender,
       objections: {
         es: objections.es,
         ca: objections.ca,

@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 
 import { Badge } from '@/components/ui/badge'
 
-import { displayValue, stageLabel, type CampaignLeadRow } from '@/lib/coldcall/lead-table'
+import { displayValue, leadCallStatus, stageLabel, type CampaignLeadRow } from '@/lib/coldcall/lead-table'
 import { resolveLeadWeb, telHref } from '@/lib/coldcall/lead-links'
 import { saveLastCampaignId } from '@/lib/coldcall/last-campaign'
 import { formatPhoneForDisplay } from '@/lib/coldcall/whatsapp'
@@ -606,6 +606,17 @@ export default function CampanaDetailPage() {
 
           <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
 
+            <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50 text-xs text-gray-600">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-sm bg-emerald-400" />
+                Sin llamar
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-sm bg-red-400" />
+                Ya llamado
+              </span>
+            </div>
+
             <div className="overflow-x-auto">
 
               <table className="w-full text-base text-left">
@@ -632,11 +643,12 @@ export default function CampanaDetailPage() {
                     const phoneLabel = lead.telefono
                       ? formatPhoneForDisplay(lead.telefono) || lead.telefono
                       : null
+                    const { called, rowClassName } = leadCallStatus(lead)
 
                     return (
                     <tr
                       key={lead.id}
-                      className="hover:bg-gray-50/60"
+                      className={rowClassName}
                     >
                       <td className="px-4 py-3.5 text-gray-400 whitespace-nowrap text-sm">
                         {(page - 1) * PAGE_SIZE + idx + 1}
@@ -678,11 +690,22 @@ export default function CampanaDetailPage() {
                         )}
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap">
-                        <Badge variant="outline" className="font-normal text-sm">
+                        <Badge
+                          variant="outline"
+                          className={`font-normal text-sm ${
+                            called
+                              ? 'border-red-200 bg-white/70 text-red-800'
+                              : 'border-emerald-200 bg-white/70 text-emerald-800'
+                          }`}
+                        >
                           {stageLabel(lead.stage)}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3.5 text-gray-800 whitespace-nowrap text-center tabular-nums">
+                      <td
+                        className={`px-4 py-3.5 whitespace-nowrap text-center tabular-nums font-semibold ${
+                          called ? 'text-red-800' : 'text-emerald-800'
+                        }`}
+                      >
                         {lead.call_count ?? lead.call_attempts}
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap">

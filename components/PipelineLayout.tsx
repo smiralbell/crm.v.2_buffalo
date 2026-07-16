@@ -1,8 +1,6 @@
 'use client'
 
 import { ReactNode, useState, useEffect } from 'react'
-import { useRouter } from 'next/router'
-import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, Trash2, ArrowLeft } from 'lucide-react'
 import {
@@ -28,6 +26,10 @@ interface PipelineLayoutProps {
   currentPipelineName: string
   totalValue?: number
   totalCards?: number
+  /** Comercial: solo su Cold Calling, sin cambiar de embudo ni borrar. */
+  lockedToCurrent?: boolean
+  backHref?: string
+  allowDelete?: boolean
 }
 
 interface Pipeline {
@@ -36,21 +38,22 @@ interface Pipeline {
   entity_type: 'client' | 'contact'
 }
 
-export default function PipelineLayout({ 
-  children, 
+export default function PipelineLayout({
+  children,
   currentPipelineId,
   currentPipelineName,
   totalValue = 0,
-  totalCards = 0
+  totalCards = 0,
+  lockedToCurrent = false,
+  backHref = '/pipelines',
+  allowDelete = true,
 }: PipelineLayoutProps) {
-  const router = useRouter()
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
-  const [loading, setLoading] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    // Cargar todos los pipelines
+    if (lockedToCurrent) return
     const loadPipelines = async () => {
       try {
         const res = await fetch('/api/pipelines')
@@ -63,7 +66,7 @@ export default function PipelineLayout({
       }
     }
     loadPipelines()
-  }, [])
+  }, [lockedToCurrent])
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-ES', {
@@ -76,9 +79,13 @@ export default function PipelineLayout({
 
   const handlePipelineChange = (pipelineId: string) => {
     if (pipelineId !== currentPipelineId) {
-      // Usar window.location para forzar recarga completa y cargar los datos del nuevo pipeline
       window.location.href = `/pipelines/${pipelineId}`
     }
+  }
+
+  const handleBack = () => {
+    // Salida dura: el pipeline es fullscreen sin Layout y el client nav a veces se queda pillado
+    window.location.href = backHref
   }
 
   const handleDelete = async () => {
@@ -92,8 +99,7 @@ export default function PipelineLayout({
         throw new Error('Error al eliminar pipeline')
       }
 
-      // Redirigir a la lista de pipelines
-      router.push('/pipelines')
+      window.location.href = '/pipelines'
     } catch (error) {
       console.error('Error deleting pipeline:', error)
       alert('Error al eliminar el pipeline')
@@ -105,52 +111,65 @@ export default function PipelineLayout({
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-white flex flex-col">
-      {/* Header simplificado */}
       <div className="flex-shrink-0 bg-white border-b border-gray-200 z-10">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
-            {/* Izquierda: Botón volver + Desplegable de pipelines */}
             <div className="flex items-center gap-3">
-              {/* Botón volver */}
-              <Link href="/pipelines">
-                <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-gray-100">
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-              </Link>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="min-w-[200px] justify-between">
-                    <span className="font-medium">{currentPipelineName}</span>
-                    <ChevronDown className="h-4 w-4 ml-2" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-[200px]">
-                  {pipelines.map((pipeline) => (
-                    <DropdownMenuItem
-                      key={pipeline.id}
-                      onClick={() => handlePipelineChange(pipeline.id)}
-                      className={pipeline.id === currentPipelineId ? 'bg-blue-50 font-semibold' : ''}
-                    >
-                      {pipeline.name}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* Botón eliminar */}
               <Button
+                type="button"
                 variant="ghost"
-                size="sm"
-                onClick={() => setShowDeleteDialog(true)}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                size="icon"
+                className="h-9 w-9 hover:bg-gray-100"
+                onClick={handleBack}
+                title="Volver"
               >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Eliminar
+                <ArrowLeft className="h-4 w-4" />
               </Button>
+
+              {lockedToCurrent ? (
+                <div className="min-w-[200px] rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {currentPipelineName || 'Mi pipeline'}
+                  </p>
+                  <p className="text-[11px] text-gray-500">Solo tus leads</p>
+                </div>
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="min-w-[200px] justify-between">
+                      <span className="font-medium">{currentPipelineName}</span>
+                      <ChevronDown className="h-4 w-4 ml-2" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-[200px]">
+                    {pipelines.map((pipeline) => (
+                      <DropdownMenuItem
+                        key={pipeline.id}
+                        onClick={() => handlePipelineChange(pipeline.id)}
+                        className={
+                          pipeline.id === currentPipelineId ? 'bg-blue-50 font-semibold' : ''
+                        }
+                      >
+                        {pipeline.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+
+              {allowDelete && !lockedToCurrent && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Eliminar
+                </Button>
+              )}
             </div>
 
-            {/* Derecha: Métricas */}
             <div className="flex items-center gap-4 text-sm text-gray-700">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-gray-900">{formatCurrency(totalValue)}</span>
@@ -164,18 +183,15 @@ export default function PipelineLayout({
         </div>
       </div>
 
-      {/* Contenido del pipeline */}
-      <div className="flex-1 overflow-hidden bg-gray-50">
-        {children}
-      </div>
+      <div className="flex-1 overflow-hidden bg-gray-50">{children}</div>
 
-      {/* Dialog de confirmación para eliminar */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar pipeline?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acción eliminará el pipeline &quot;{currentPipelineName}&quot; y todas sus tarjetas. Esta acción no se puede deshacer.
+              Esta acción eliminará el pipeline &quot;{currentPipelineName}&quot; y todas sus
+              tarjetas. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

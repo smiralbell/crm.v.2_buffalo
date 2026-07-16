@@ -24,6 +24,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { ColdCallCampaign, ImportBatchResult } from '@/lib/coldcall/types'
+import { campaignExhausted } from '@/lib/coldcall/lead-table'
 import CsvImportMappingDialog from '@/components/coldcall/CsvImportMappingDialog'
 import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
 import AdminProspectRequestsPanel from '@/components/coldcall/AdminProspectRequestsPanel'
@@ -62,6 +63,8 @@ export default function ColdCallingCampanasTab({
   const [createOpen, setCreateOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [assignToUserId, setAssignToUserId] = useState<string>('')
+  const [comerciales, setComerciales] = useState<{ id: number; name: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [importResult, setImportResult] = useState<ImportBatchResult | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -118,26 +121,69 @@ export default function ColdCallingCampanasTab({
     load()
   }, [effectiveFilter, reloadToken])
 
+  useEffect(() => {
+    if (user?.role !== 'admin') return
+    fetch('/api/users')
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.users || [])
+          .filter((u: { active: boolean; role: string }) => u.active && u.role === 'comercial')
+          .map((u: { id: number; name: string }) => ({ id: u.id, name: u.name }))
+        setComerciales(list)
+      })
+      .catch(() => setComerciales([]))
+  }, [user?.role])
+
   const createCampaign = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
+    if (user?.role === 'admin' && !assignToUserId) {
+      alert('Elige el comercial dueño de esta campaña')
+      return
+    }
     setSaving(true)
     try {
+      const body: {
+        name: string
+        description?: string
+        assigned_to_user_id?: number
+      } = {
+        name: name.trim(),
+        description: description.trim() || undefined,
+      }
+      if (user?.role === 'admin' && assignToUserId) {
+        body.assigned_to_user_id = parseInt(assignToUserId, 10)
+      }
       const res = await fetch('/api/coldcall/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), description: description.trim() || undefined }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al crear')
       setCreateOpen(false)
       setName('')
       setDescription('')
+      setAssignToUserId('')
       load()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const reassignCampaign = async (campaignId: number, userId: string) => {
+    const assigned = userId ? parseInt(userId, 10) : null
+    const res = await fetch(`/api/coldcall/campaigns/${campaignId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assigned_to_user_id: assigned }),
+    })
+    if (res.ok) load()
+    else {
+      const data = await res.json().catch(() => ({}))
+      alert(data.error || 'No se pudo reasignar')
     }
   }
 
@@ -205,7 +251,11 @@ export default function ColdCallingCampanasTab({
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
-          {campaigns.map((c) => (
+          {campaigns.map((c) => {
+            const exhausted = campaignExhausted(c.stats)
+            const contacted = c.stats?.contacted ?? 0
+            const total = c.stats?.total_leads ?? 0
+            return (
             <div
               key={c.id}
               role="button"
@@ -217,13 +267,21 @@ export default function ColdCallingCampanasTab({
                   router.push(`/coldcalling/campanas/${c.id}`)
                 }
               }}
-              className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm space-y-4 cursor-pointer hover:border-gray-300 hover:shadow-md transition-all"
+              className={`rounded-2xl border p-5 shadow-sm space-y-4 cursor-pointer transition-all ${
+                exhausted
+                  ? 'border-red-300 bg-red-50 hover:border-red-400 hover:shadow-md'
+                  : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
+              }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-gray-900">{c.name}</h3>
+                  <h3 className={`font-semibold ${exhausted ? 'text-red-950' : 'text-gray-900'}`}>
+                    {c.name}
+                  </h3>
                   {c.description && (
-                    <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{c.description}</p>
+                    <p className={`text-sm mt-0.5 line-clamp-2 ${exhausted ? 'text-red-800/70' : 'text-gray-500'}`}>
+                      {c.description}
+                    </p>
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -236,31 +294,74 @@ export default function ColdCallingCampanasTab({
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
-                  <Badge variant="secondary">{c.status === 'active' ? 'Activa' : c.status}</Badge>
+                  <Badge
+                    variant="secondary"
+                    className={exhausted ? 'bg-red-200 text-red-900' : undefined}
+                  >
+                    {exhausted ? 'Completada' : c.status === 'active' ? 'Activa' : c.status}
+                  </Badge>
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-lg bg-gray-50 px-2 py-2">
-                  <p className="text-lg font-bold text-gray-900">{c.stats?.total_leads ?? 0}</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">Leads</p>
+                <div className={`rounded-lg px-2 py-2 ${exhausted ? 'bg-red-100/80' : 'bg-gray-50'}`}>
+                  <p className={`text-lg font-bold ${exhausted ? 'text-red-900' : 'text-gray-900'}`}>
+                    {total}
+                  </p>
+                  <p className={`text-[10px] uppercase tracking-wide ${exhausted ? 'text-red-700' : 'text-gray-500'}`}>
+                    Leads
+                  </p>
                 </div>
-                <div className="rounded-lg bg-gray-50 px-2 py-2">
-                  <p className="text-lg font-bold text-gray-900">{c.stats?.in_queue ?? 0}</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">En cola</p>
+                <div className={`rounded-lg px-2 py-2 ${exhausted ? 'bg-red-100/80' : 'bg-gray-50'}`}>
+                  <p className={`text-lg font-bold ${exhausted ? 'text-red-900' : 'text-gray-900'}`}>
+                    {c.stats?.in_queue ?? 0}
+                  </p>
+                  <p className={`text-[10px] uppercase tracking-wide ${exhausted ? 'text-red-700' : 'text-gray-500'}`}>
+                    En cola
+                  </p>
                 </div>
-                <div className="rounded-lg bg-gray-50 px-2 py-2">
-                  <p className="text-lg font-bold text-gray-900">{c.stats?.meetings ?? 0}</p>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wide">Reuniones</p>
+                <div className={`rounded-lg px-2 py-2 ${exhausted ? 'bg-red-100/80' : 'bg-gray-50'}`}>
+                  <p className={`text-lg font-bold ${exhausted ? 'text-red-900' : 'text-gray-900'}`}>
+                    {c.stats?.meetings ?? 0}
+                  </p>
+                  <p className={`text-[10px] uppercase tracking-wide ${exhausted ? 'text-red-700' : 'text-gray-500'}`}>
+                    Reuniones
+                  </p>
                 </div>
               </div>
 
-              {c.assignee_name && (
-                <p className="text-xs text-gray-500 flex items-center gap-1">
-                  <Users className="h-3.5 w-3.5" />
-                  {c.assignee_name}
+              {total > 0 && (
+                <p className={`text-xs ${exhausted ? 'text-red-800 font-medium' : 'text-gray-500'}`}>
+                  {exhausted
+                    ? 'Todos los leads ya han sido llamados'
+                    : `${contacted} de ${total} llamados`}
                 </p>
               )}
+
+              <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                {user?.role === 'admin' ? (
+                  <select
+                    value={c.assigned_to_user_id ?? ''}
+                    onChange={(e) => reassignCampaign(c.id, e.target.value)}
+                    className="text-xs border border-gray-200 rounded-lg pl-2 pr-6 py-1.5 bg-white text-gray-700 max-w-[180px]"
+                    title="Comercial dueño (su pipeline)"
+                  >
+                    <option value="">Sin asignar</option>
+                    {comerciales.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  c.assignee_name && (
+                    <p className="text-xs text-gray-500 flex items-center gap-1">
+                      <Users className="h-3.5 w-3.5" />
+                      {c.assignee_name}
+                    </p>
+                  )
+                )}
+              </div>
 
               <div className="flex flex-wrap gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
                 <Button
@@ -287,7 +388,8 @@ export default function ColdCallingCampanasTab({
                 </Button>
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -399,6 +501,28 @@ export default function ColdCallingCampanasTab({
                 rows={3}
               />
             </div>
+            {user?.role === 'admin' && (
+              <div className="space-y-2">
+                <Label htmlFor="camp_assign">Comercial (dueño del pipeline)</Label>
+                <select
+                  id="camp_assign"
+                  value={assignToUserId}
+                  onChange={(e) => setAssignToUserId(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white"
+                  required
+                >
+                  <option value="">Selecciona comercial…</option>
+                  {comerciales.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500">
+                  Solo ese comercial verá esta campaña y sus leads en su pipeline.
+                </p>
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
                 Cancelar

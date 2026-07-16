@@ -171,6 +171,56 @@ export async function setCrmUserActive(id: number, active: boolean): Promise<Crm
   return rows[0] ? toPublic(rows[0]) : null
 }
 
+export class CrmUserEmailTakenError extends Error {
+  constructor() {
+    super('EMAIL_TAKEN')
+    this.name = 'CrmUserEmailTakenError'
+  }
+}
+
+/** Actualiza solo nombre y/o email. No toca password, rol ni active. */
+export async function updateCrmUserProfile(
+  id: number,
+  input: { name?: string; email?: string }
+): Promise<CrmUserPublic | null> {
+  const existing = await findCrmUserById(id)
+  if (!existing) return null
+
+  const name =
+    input.name !== undefined ? input.name.trim() : existing.name
+  const email =
+    input.email !== undefined
+      ? input.email.trim().toLowerCase()
+      : existing.email
+
+  if (!name) throw new Error('NAME_REQUIRED')
+  if (!email) throw new Error('EMAIL_REQUIRED')
+
+  if (name === existing.name && email === existing.email) {
+    return toPublic(existing)
+  }
+
+  try {
+    const rows = await prisma.$queryRaw<CrmUserRow[]>`
+      UPDATE crm_users
+      SET name = ${name}, email = ${email}, updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING id, name, email, role, active, created_at, updated_at
+    `
+    return rows[0] ? toPublic(rows[0]) : null
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (
+      msg.includes('unique') ||
+      msg.includes('duplicate') ||
+      msg.includes('crm_users_email')
+    ) {
+      throw new CrmUserEmailTakenError()
+    }
+    throw err
+  }
+}
+
 export async function verifyCrmUserPassword(
   email: string,
   password: string

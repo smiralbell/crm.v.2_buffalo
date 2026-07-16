@@ -41,7 +41,7 @@ export const DEFAULT_SCRIPT_MARKDOWN_ES = `## Recepción
 ## Apertura
 Hola, buenas tardes. ¿Con quién hablo?
 
-Perfecto, [Nombre], encantado.
+Perfecto, {{nombre}}, encantado.
 
 {{speaker_intro_es}}. No sé si me tienes ubicado.
 
