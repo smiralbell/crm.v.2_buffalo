@@ -181,7 +181,13 @@ export function MeetingConfirmReminders({
                         size="sm"
                         variant="outline"
                         className="rounded-lg"
-                        onClick={() => openWhatsApp(m.telefono!)}
+                        onClick={() => {
+                          const when = fmtWhen(m.at)
+                          openWhatsApp(
+                            m.telefono,
+                            `Hola ${m.nombre.split(' ')[0]}, te escribo de Buffalo AI para confirmar la reunión del ${when.date} a las ${when.time}. ¿Te ha llegado la convocatoria?`
+                          )
+                        }}
                       >
                         WhatsApp
                       </Button>

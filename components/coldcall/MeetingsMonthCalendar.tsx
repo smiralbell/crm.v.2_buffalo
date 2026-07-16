@@ -59,8 +59,11 @@ export default function MeetingsMonthCalendar({
       list.push(m)
       map.set(key, list)
     }
-    for (const list of map.values()) {
-      list.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+    for (const list of Array.from(map.values())) {
+      list.sort(
+        (a: CalendarMeeting, b: CalendarMeeting) =>
+          new Date(a.at).getTime() - new Date(b.at).getTime()
+      )
     }
     return map
   }, [meetings])
