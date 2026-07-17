@@ -66,7 +66,7 @@ async function clearPrincipalFlag(tipo: DemoTipo, exceptDemoId?: number): Promis
 }
 
 export async function listDemos(): Promise<DemoListItem[]> {
-  const demos = await query<{
+  let demos: Awaited<ReturnType<typeof query<{
     id: number
     nombre_cliente: string
     prompt: string
@@ -78,12 +78,31 @@ export async function listDemos(): Promise<DemoListItem[]> {
     retell_kb_id: string | null
     voz_id: string | null
     direccion: string | null
+    es_principal?: boolean | null
     created_at: Date
-  }>(
-    `SELECT ${DEMO_SELECT}
-     FROM demos
-     ORDER BY created_at DESC`
-  )
+  }>>>
+
+  try {
+    demos = await query(
+      `SELECT ${DEMO_SELECT}
+       FROM demos
+       ORDER BY created_at DESC`
+    )
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    // Prod sin migración ALTER_DEMOS_PRINCIPAL.sql
+    if (msg.includes('es_principal')) {
+      demos = await query(
+        `SELECT id, nombre_cliente, prompt, base_conocimiento, frase_inicial, estado,
+                tipo, retell_agent_id, retell_llm_id, retell_kb_id, voz_id, direccion,
+                FALSE AS es_principal, created_at
+         FROM demos
+         ORDER BY created_at DESC`
+      )
+    } else {
+      throw err
+    }
+  }
 
   const numeros = await query<{ demo_id: number; numero_telefono: string }>(
     `SELECT demo_id, numero_telefono FROM demo_numeros ORDER BY demo_id, id`

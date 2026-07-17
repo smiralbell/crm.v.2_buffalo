@@ -21,35 +21,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const pathname = router.pathname
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch('/api/auth/me')
       if (!res.ok) {
-        setUser(null)
+        // Solo invalidar sesión en 401; no borrar user por errores transitorios
+        if (res.status === 401) setUser(null)
         return
       }
       const data = await res.json()
-      setUser(data.user)
+      if (data?.user) setUser(data.user)
     } catch {
-      setUser(null)
+      // Fallo de red: mantener user actual para no romper la UI (p. ej. botón Eliminar)
     }
   }, [])
 
   useEffect(() => {
-    if (router.pathname === '/login') {
+    if (pathname === '/login') {
       setLoading(false)
       return
     }
-    refresh().finally(() => setLoading(false))
-  }, [router.pathname, refresh])
+    let cancelled = false
+    ;(async () => {
+      await refresh()
+      if (!cancelled) setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [pathname, refresh])
 
   useEffect(() => {
-    if (loading || !user || router.pathname === '/login') return
-    if (!canAccessPage(router.pathname, user.role)) {
+    if (loading || !user || pathname === '/login') return
+    if (!canAccessPage(pathname, user.role)) {
       router.replace(defaultHomeForRole(user.role))
     }
-  }, [loading, user, router.pathname, router])
+  }, [loading, user, pathname, router])
 
   return (
     <AuthContext.Provider value={{ user, loading, refresh }}>

@@ -25,6 +25,7 @@ export const COMERCIAL_ONLY_ROUTES = [
   '/comercial/llamar-mas-tarde',
   '/comercial/objeciones',
   '/comercial/duplicados',
+  '/comercial/preparar-demos',
 ] as const
 
 export const DEVELOPER_API_PREFIXES = [

@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
+import { defaultHomeForRole } from '@/lib/auth-rbac'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -87,7 +88,14 @@ const tipoClass: Record<string, string> = {
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
-    await requireAuth(context)
+    const user = await requireAuth(context)
+    if (user.role !== 'admin') {
+      // Comerciales con acceso a prep van a su página; no a /demos (RBAC).
+      if (user.role === 'comercial') {
+        return { redirect: { destination: '/comercial/preparar-demos', permanent: false } }
+      }
+      return { redirect: { destination: defaultHomeForRole(user.role), permanent: false } }
+    }
   } catch {
     return { redirect: { destination: '/login', permanent: false } }
   }
