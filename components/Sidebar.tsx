@@ -215,27 +215,30 @@ export default function Sidebar() {
 
   return (
     <div className="flex h-screen w-60 shrink-0 flex-col border-r border-gray-100 bg-white">
-      <div className="border-b border-gray-100 px-4 py-5 shrink-0">
+      <div className="border-b border-gray-100 px-4 py-4 shrink-0">
         {role === 'comercial' ? (
           <ComercialSidebarBrand href={homeHref} />
         ) : (
-          <Link href={homeHref} className="flex items-center justify-center px-1">
+          <Link
+            href={homeHref}
+            className="flex items-center justify-center rounded-xl overflow-hidden bg-black px-2 py-2.5"
+          >
             <img
-              src="https://agenciabuffalo.es/wp-content/uploads/2025/10/Generated_Image_September_25__2025_-_11_16AM-removebg-preview.png"
-              alt="Buffalo AI"
-              className="h-[52px] w-auto object-contain"
+              src="https://agenciabuffalo.es/wp-content/uploads/2025/08/a58a83c2-193d-4bea-b71e-9aa1ca8e9d02.png"
+              alt="Buffalo IA"
+              className="h-11 w-auto max-w-full object-contain"
             />
           </Link>
         )}
         {user && (
-          <p className="mt-3 text-center text-[11px] text-gray-400 truncate px-1" title={user.email}>
+          <p className="mt-2.5 text-center text-[11px] text-gray-400 truncate px-1" title={user.email}>
             {user.name}
           </p>
         )}
       </div>
 
       <div className="sidebar-nav-fade flex-1 min-h-0 relative">
-        <nav className="sidebar-nav-scroll h-full py-4 px-3 space-y-0.5">
+        <nav className="sidebar-nav-scroll h-full py-3 px-2.5 space-y-0.5">
           {loading ? (
             <div className="px-1 py-2 space-y-2">
               {Array.from({ length: 5 }).map((_, i) => (
