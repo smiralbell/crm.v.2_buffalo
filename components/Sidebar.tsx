@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   LayoutDashboard, TrendingUp, FileText, LogOut, Workflow,
   DollarSign, Megaphone,
-  ChevronDown, ChevronRight, PackageCheck, HeartHandshake, Ticket, Bot, FolderKanban,
+  ChevronDown, ChevronRight, PackageCheck, HeartHandshake, Bot, FolderKanban,
   Users, Calendar, Phone, Clock, MessageSquare, Copy, ListChecks,
 } from 'lucide-react'
 import { getLastCampaignId, lastCampaignCallHref } from '@/lib/coldcall/last-campaign'
@@ -79,7 +79,10 @@ const NAV: NavItem[] = [
     badge: 'ENG 3',
     icon: FolderKanban,
     roles: ['admin', 'developer'],
-    children: [{ href: '/gestion-proyecto', label: 'Proyectos abiertos' }],
+    children: [
+      { href: '/gestion-proyecto', label: 'Proyectos abiertos' },
+      { href: '/tickets', label: 'Tickets', roles: ['admin', 'developer'] },
+    ],
   },
   {
     href: '/retencion',
@@ -89,7 +92,6 @@ const NAV: NavItem[] = [
     roles: ['admin', 'developer'],
     children: [{ href: '/retencion', label: 'Clientes con mensualidad', developerLabel: 'Proyectos' }],
   },
-  { href: '/tickets', label: 'Tickets', icon: Ticket, roles: ['admin', 'developer'] },
   { href: '/developer', label: 'Dashboard', icon: LayoutDashboard, roles: ['developer'] },
   { href: '/comercial', label: 'Inicio', icon: LayoutDashboard, roles: ['comercial'] },
   { href: '/comercial/campanas', label: 'Campañas', icon: Megaphone, roles: ['comercial'] },
@@ -127,7 +129,6 @@ export default function Sidebar() {
         '/developer',
         '/gestion-proyecto',
         '/retencion',
-        '/tickets',
         '/developer/facturas',
       ]
       return [...items].sort(
@@ -162,9 +163,13 @@ export default function Sidebar() {
   useEffect(() => {
     const updates: Record<string, boolean> = {}
     for (const item of navItems) {
-      if (item.children && router.pathname.startsWith(item.href)) {
-        updates[item.href] = true
-      }
+      if (!item.children) continue
+      const onParent =
+        router.pathname === item.href || router.pathname.startsWith(`${item.href}/`)
+      const onChild = item.children.some(
+        (c) => router.pathname === c.href || router.pathname.startsWith(`${c.href}/`)
+      )
+      if (onParent || onChild) updates[item.href] = true
     }
     setOpen((prev) => ({ ...prev, ...updates }))
   }, [router.pathname, navItems])
@@ -193,8 +198,14 @@ export default function Sidebar() {
     router.push('/login')
   }
 
-  const isParentActive = (item: NavItem) =>
-    router.pathname === item.href || router.pathname.startsWith(item.href + '/')
+  const isParentActive = (item: NavItem) => {
+    if (router.pathname === item.href || router.pathname.startsWith(`${item.href}/`)) return true
+    return Boolean(
+      item.children?.some(
+        (c) => router.pathname === c.href || router.pathname.startsWith(`${c.href}/`)
+      )
+    )
+  }
 
   const isComercialNavActive = (href: string) => {
     if (href === '/comercial') return router.pathname === '/comercial'
@@ -216,29 +227,29 @@ export default function Sidebar() {
   return (
     <div className="flex h-screen w-60 shrink-0 flex-col border-r border-gray-100 bg-white">
       <div className="border-b border-gray-100 px-4 py-4 shrink-0">
-        {role === 'comercial' ? (
-          <ComercialSidebarBrand href={homeHref} />
-        ) : (
-          <Link
-            href={homeHref}
-            className="flex items-center justify-center rounded-xl overflow-hidden bg-black px-2 py-2.5"
-          >
-            <img
-              src="https://agenciabuffalo.es/wp-content/uploads/2025/08/a58a83c2-193d-4bea-b71e-9aa1ca8e9d02.png"
-              alt="Buffalo IA"
-              className="h-11 w-auto max-w-full object-contain"
-            />
-          </Link>
-        )}
         {user && (
-          <p className="mt-2.5 text-center text-[11px] text-gray-400 truncate px-1" title={user.email}>
+          <p
+            className="mb-2.5 text-center text-xs font-medium text-gray-700 truncate px-1"
+            title={user.email}
+          >
             {user.name}
           </p>
         )}
+        {role === 'comercial' ? (
+          <ComercialSidebarBrand href={homeHref} />
+        ) : (
+          <Link href={homeHref} className="flex items-center justify-center px-1">
+            <img
+              src="https://agenciabuffalo.es/wp-content/uploads/2025/08/a58a83c2-193d-4bea-b71e-9aa1ca8e9d02.png"
+              alt="Buffalo IA"
+              className="h-12 w-auto max-w-full object-contain"
+            />
+          </Link>
+        )}
       </div>
 
-      <div className="sidebar-nav-fade flex-1 min-h-0 relative">
-        <nav className="sidebar-nav-scroll h-full py-3 px-2.5 space-y-0.5">
+      <div className="flex-1 min-h-0 relative">
+        <nav className="sidebar-nav-scroll hide-scrollbar h-full py-3 px-2.5 space-y-0.5">
           {loading ? (
             <div className="px-1 py-2 space-y-2">
               {Array.from({ length: 5 }).map((_, i) => (
