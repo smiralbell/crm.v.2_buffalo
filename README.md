@@ -122,10 +122,8 @@ Sistema de autenticación simple basado en variables de entorno:
 
 ## 🗄️ Base de Datos
 
-Las tablas se crean manualmente en PostgreSQL. Scripts SQL disponibles en:
-- `prisma/CREATE_INVOICES_TABLE.sql` - Tablas de facturas
-- `prisma/CREATE_PIPELINES_TABLES.sql` - Tablas de pipelines
-- `prisma/ADD_CARD_FIELDS.sql` - Campos adicionales de tarjetas
+Las tablas se crean manualmente en PostgreSQL. Scripts SQL en `prisma/` (`CREATE_*.sql`, `ALTER_*.sql`).
+Para levantar módulos concretos, ejecuta los scripts correspondientes (facturas, pipelines, coldcall, tickets, demos, etc.).
 
 ## 📄 Licencia
 

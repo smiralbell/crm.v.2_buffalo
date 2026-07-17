@@ -19,7 +19,7 @@ function createPrismaClient(): PrismaClient {
 
   // Configurar connection pool en DATABASE_URL si no está presente
   let databaseUrl = process.env.DATABASE_URL || ''
-  
+
   // Si no tiene parámetros de pool, agregarlos
   if (databaseUrl && !databaseUrl.includes('connection_limit')) {
     const separator = databaseUrl.includes('?') ? '&' : '?'
@@ -47,14 +47,11 @@ export function getPrismaClient(): PrismaClient {
   // Reutilizar el cliente existente si ya existe (tanto en desarrollo como en producción)
   if (globalForPrisma.prisma) {
     const existing = globalForPrisma.prisma
-    // Tras `prisma generate` con modelos nuevos, el proceso puede seguir con una instancia antigua
-    // sin delegados (p. ej. evaluationProject / pipelineStage). Forzar recreación.
+    // Tras `prisma generate` con modelos nuevos, el singleton puede seguir con una instancia antigua.
     const stale =
       process.env.NODE_ENV === 'development' &&
-      (typeof (existing as unknown as { evaluationProject?: unknown }).evaluationProject ===
+      (typeof (existing as unknown as { pipelineStage?: unknown }).pipelineStage ===
         'undefined' ||
-        typeof (existing as unknown as { pipelineStage?: unknown }).pipelineStage ===
-          'undefined' ||
         typeof (existing as unknown as { pipelineKanban?: unknown }).pipelineKanban ===
           'undefined')
     if (stale) {
@@ -85,7 +82,7 @@ export function getPrismaClient(): PrismaClient {
 export const prisma = new Proxy({} as PrismaClient, {
   get(_target, prop) {
     const client = getPrismaClient()
-    
+
     // Si el cliente es un objeto vacío (durante build sin DATABASE_URL), retornar métodos mock
     if (Object.keys(client).length === 0 && !process.env.DATABASE_URL && process.env.NEXT_PHASE === 'phase-production-build') {
       // Retornar un proxy para modelos que tenga métodos mock
@@ -104,7 +101,7 @@ export const prisma = new Proxy({} as PrismaClient, {
         }
       })
     }
-    
+
     const value = (client as any)[prop]
     if (typeof value === 'function') {
       return value.bind(client)
@@ -112,4 +109,3 @@ export const prisma = new Proxy({} as PrismaClient, {
     return value
   },
 })
-

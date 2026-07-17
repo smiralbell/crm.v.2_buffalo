@@ -36,16 +36,16 @@ const NAV: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin'] },
   { href: '/leads', label: 'Leads', icon: TrendingUp, roles: ['admin'] },
   {
-    href: '/invoices',
-    label: 'Facturas',
-    icon: FileText,
+    href: '/finances',
+    label: 'Finanzas',
+    icon: DollarSign,
     roles: ['admin'],
     children: [
-      { href: '/invoices', label: 'Listado' },
+      { href: '/finances', label: 'Resumen' },
+      { href: '/invoices', label: 'Facturas' },
       { href: '/invoices/recurring', label: 'Recurrentes' },
     ],
   },
-  { href: '/finances', label: 'Finanzas', icon: DollarSign, roles: ['admin'] },
   { href: '/pipelines', label: 'Pipelines', icon: Workflow, roles: ['admin'] },
   {
     href: '/marketing',
@@ -71,6 +71,7 @@ const NAV: NavItem[] = [
     children: [
       { href: '/onboarding', label: 'Proyectos activos', tab: 'projects' },
       { href: '/onboarding/configure', label: 'Configurador' },
+      { href: '/demos', label: 'Demos' },
     ],
   },
   {
@@ -111,7 +112,6 @@ const NAV: NavItem[] = [
       { href: '/developer/facturas/nueva', label: 'Nueva factura' },
     ],
   },
-  { href: '/demos', label: 'Demos', icon: Bot, roles: ['admin'] },
   { href: '/checklist', label: 'Checklist', icon: ListChecks, roles: ['admin'] },
 ]
 
@@ -180,6 +180,7 @@ export default function Sidebar() {
     else if (item.href === '/onboarding') router.push('/onboarding?tab=projects')
     else if (item.href === '/retencion') router.push('/retencion')
     else if (item.href === '/gestion-proyecto') router.push('/gestion-proyecto')
+    else if (item.href === '/finances') router.push('/finances')
     else if (item.href === '/comercial') router.push('/comercial')
     else if (item.href === '/comercial/campanas') router.push('/comercial/campanas')
     else if (item.href === '/comercial/pipeline') router.push('/comercial/pipeline')
@@ -225,7 +226,7 @@ export default function Sidebar() {
     role === 'developer' && child.developerLabel ? child.developerLabel : child.label
 
   return (
-    <div className="flex h-screen w-60 shrink-0 flex-col border-r border-gray-100 bg-white">
+    <div className="flex h-screen w-56 shrink-0 flex-col border-r border-gray-100 bg-white">
       <div className="border-b border-gray-100 px-4 py-4 shrink-0">
         {role === 'comercial' ? (
           <ComercialSidebarBrand href={homeHref} />
@@ -245,7 +246,7 @@ export default function Sidebar() {
           {loading ? (
             <div className="px-1 py-2 space-y-2">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-9 rounded-xl bg-gray-100 animate-pulse" />
+                <div key={i} className="h-8 rounded-lg bg-gray-100 animate-pulse" />
               ))}
             </div>
           ) : role === 'comercial' ? (
@@ -255,7 +256,7 @@ export default function Sidebar() {
               </p>
               <Link
                 href={callNowHref}
-                className="flex items-center justify-center gap-2 rounded-xl mx-0.5 mb-3 px-3 py-3 text-sm font-semibold bg-gray-900 text-white hover:bg-gray-800 transition-colors shadow-sm"
+                className="flex items-center justify-center gap-1.5 rounded-lg mx-0.5 mb-2 px-2.5 py-2 text-sm font-semibold bg-gray-900 text-white hover:bg-gray-800 transition-colors shadow-sm"
               >
                 <Phone className="h-4 w-4" />
                 Llamar ahora
@@ -281,7 +282,7 @@ export default function Sidebar() {
                       key={item.href}
                       href={item.href}
                       className={cn(
-                        'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                        'flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors',
                         active
                           ? 'bg-gray-100 text-gray-900'
                           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
@@ -292,7 +293,7 @@ export default function Sidebar() {
                     </Link>
                   )
                 })}
-              <p className="px-3 pt-4 pb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              <p className="px-3 pt-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                 Facturación
               </p>
               {navItems
@@ -307,7 +308,7 @@ export default function Sidebar() {
                         type="button"
                         onClick={() => handleParentNav(item)}
                         className={cn(
-                          'w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                          'w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors',
                           active
                             ? 'bg-gray-100 text-gray-900'
                             : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
@@ -322,7 +323,7 @@ export default function Sidebar() {
                         )}
                       </button>
                       {isOpen && item.children && (
-                        <div className="ml-3 mt-0.5 mb-1 border-l border-gray-100 pl-3 space-y-0.5">
+                        <div className="ml-2.5 mt-0.5 mb-1 border-l border-gray-100 pl-2.5 space-y-0.5">
                           {item.children.map((child) => {
                             const childActive =
                               router.pathname === child.href ||
@@ -332,7 +333,7 @@ export default function Sidebar() {
                                 key={child.href}
                                 href={child.href}
                                 className={cn(
-                                  'block rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
+                                  'block rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
                                   childActive
                                     ? 'bg-gray-100 text-gray-900'
                                     : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
@@ -360,7 +361,7 @@ export default function Sidebar() {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                    'flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors',
                     active
                       ? 'bg-gray-100 text-gray-900'
                       : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
@@ -378,7 +379,7 @@ export default function Sidebar() {
                   type="button"
                   onClick={() => handleParentNav(item)}
                   className={cn(
-                    'w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+                    'w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors',
                     active
                       ? 'bg-gray-100 text-gray-900'
                       : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
@@ -399,7 +400,7 @@ export default function Sidebar() {
                 </button>
 
                 {isOpen && (
-                  <div className="ml-3 mt-0.5 mb-1 border-l border-gray-100 pl-3 space-y-0.5">
+                  <div className="ml-2.5 mt-0.5 mb-1 border-l border-gray-100 pl-2.5 space-y-0.5">
                     {item.children
                       .filter((child) => !child.roles || (role && child.roles.includes(role)))
                       .map((child) => {
@@ -426,7 +427,7 @@ export default function Sidebar() {
                           key={`${child.href}-${child.tab || child.label}`}
                           href={childHref}
                           className={cn(
-                            'block rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors',
+                            'block rounded-md px-2 py-1.5 text-xs font-medium transition-colors',
                             childActive
                               ? 'bg-gray-100 text-gray-900'
                               : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
@@ -450,7 +451,7 @@ export default function Sidebar() {
           <Link
             href="/usuarios"
             className={cn(
-              'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
+              'flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors',
               router.pathname === '/usuarios' || router.pathname.startsWith('/usuarios/')
                 ? 'bg-gray-100 text-gray-900'
                 : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
@@ -463,10 +464,10 @@ export default function Sidebar() {
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start rounded-xl text-gray-500"
+          className="w-full justify-start rounded-lg px-2.5 py-2 h-auto text-sm text-gray-500"
           onClick={handleLogout}
         >
-          <LogOut className="mr-2.5 h-4 w-4" />
+          <LogOut className="mr-2 h-4 w-4" />
           Cerrar sesión
         </Button>
       </div>

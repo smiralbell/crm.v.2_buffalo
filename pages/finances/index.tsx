@@ -28,16 +28,17 @@ const NetTrendChart = dynamic(() => import('@/components/finances/NetTrendChart'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
   Receipt,
   ArrowRight,
   ArrowUp,
   ArrowDown,
   Loader2,
   Landmark,
+  FileText,
   RefreshCw,
   AlertCircle,
 } from 'lucide-react'
@@ -637,7 +638,20 @@ export default function FinancesDashboard({
               className="flex-1 min-w-0"
             />
 
-            <PaymentConceptGuide />
+            <div className="flex shrink-0 items-center gap-2">
+              <Link href="/invoices">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-2 border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Facturas</span>
+                </Button>
+              </Link>
+              <PaymentConceptGuide />
+            </div>
           </div>
 
           {(bankConnection.connected && bankConnection.days_remaining !== null) || syncMessage ? (

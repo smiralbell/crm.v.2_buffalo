@@ -4,7 +4,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const root = dirname(fileURLToPath(import.meta.url))
-const sql = readFileSync(join(root, '../prisma/ALTER_COLDCALL_COLUMN_MAPPING.sql'), 'utf8')
+const sql = readFileSync(join(root, '../prisma/history/ALTER_COLDCALL_COLUMN_MAPPING.sql'), 'utf8')
 
 const prisma = new PrismaClient()
 try {

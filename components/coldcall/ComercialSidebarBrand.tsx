@@ -7,9 +7,9 @@ export default function ComercialSidebarBrand({ href }: { href: string }) {
       <Image
         src="/buffalo-cool-calling-logo.png"
         alt="Buffalo Cool Calling"
-        width={260}
-        height={110}
-        className="w-full h-auto max-h-[110px] object-contain"
+        width={220}
+        height={95}
+        className="w-full h-auto max-h-[95px] object-contain"
         priority
         unoptimized
       />

@@ -50,26 +50,3 @@ CREATE INDEX idx_invoices_status ON invoices(status);
 CREATE INDEX idx_invoices_deleted ON invoices(deleted_at) WHERE deleted_at IS NULL;
 CREATE INDEX idx_invoices_issue_date ON invoices(issue_date);
 
--- ============================================
--- TABLA OPCIONAL: PLANTILLA HTML
--- ============================================
--- Solo si quieres guardar la plantilla en BD
--- Si prefieres archivo estático, omite esta tabla
-
-CREATE TABLE invoice_template (
-    id INTEGER PRIMARY KEY DEFAULT 1, -- Siempre ID 1
-    html_content TEXT NOT NULL,
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    
-    -- Solo una fila permitida
-    CONSTRAINT single_template CHECK (id = 1)
-);
-
--- Insertar plantilla inicial (se actualizará después)
-INSERT INTO invoice_template (id, html_content)
-VALUES (
-    1,
-    '<html><body><h1>Plantilla base - Se actualizará con HTML real</h1></body></html>'
-)
-ON CONFLICT (id) DO NOTHING;
-

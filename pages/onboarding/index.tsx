@@ -10,6 +10,7 @@ import {
 import { BUFFALO_STAGE_COLORS } from '@/components/PipelineCardDrawer'
 import Link from 'next/link'
 import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
+import OnboardingSectionTabs from '@/components/onboarding/OnboardingSectionTabs'
 
 // ── Types ──────────────────────────────────────────────────────────────
 interface Contact {
@@ -45,18 +46,13 @@ const STEPS = [
 // ── Tab definition (add more here in the future) ───────────────────────
 type Tab = 'configure' | 'projects'
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'projects',  label: 'Proyectos' },
-  { id: 'configure', label: 'Configurar nuevo proyecto' },
-]
-
 // ══════════════════════════════════════════════════════════════════════
 export default function OnboardingPage() {
   const router = useRouter()
 
   const urlPipeline = router.query.pipeline as string | undefined
   const urlCard     = router.query.card     as string | undefined
-  const urlTab      = router.query.tab      as Tab | undefined
+  const urlTab = typeof router.query.tab === 'string' ? router.query.tab : undefined
 
   const [activeTab, setActiveTab]     = useState<Tab>(urlTab === 'configure' ? 'configure' : 'projects')
   const [view, setView]               = useState<'hub' | 'select' | 'new_lead'>('hub')
@@ -74,6 +70,10 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (!router.isReady) return
     if (urlTab === 'configure') setActiveTab('configure')
+    else if (urlTab === 'demos') {
+      void router.replace('/demos')
+      return
+    }
     else setActiveTab('projects')
   }, [router.isReady, urlTab])
 
@@ -233,42 +233,10 @@ export default function OnboardingPage() {
       <div className="w-full max-w-7xl mx-auto space-y-6">
 
         {/* ── Tab bar ── */}
-        <div className="flex items-center justify-center gap-1 border-b border-gray-200">
-          {TABS.map(tab => {
-            const isActive = activeTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id)
-                  router.replace(
-                    tab.id === 'projects' ? '/onboarding?tab=projects' : '/onboarding?tab=configure',
-                    undefined,
-                    { shallow: true }
-                  )
-                }}
-                className={`
-                  flex items-center gap-2 px-4 py-2.5 text-sm font-medium
-                  border-b-2 -mb-px transition-colors rounded-t-lg
-                  ${isActive
-                    ? 'border-gray-900 text-gray-900'
-                    : 'border-transparent text-gray-400 hover:text-gray-700 hover:border-gray-300'
-                  }
-                `}
-              >
-                {tab.label}
-                {tab.id === 'projects' && !loadingProjects && projects.length > 0 && (
-                  <span className={`
-                    text-[10px] font-medium px-1.5 py-0.5 rounded-full
-                    ${isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500'}
-                  `}>
-                    {projects.length}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
+        <OnboardingSectionTabs
+          active={activeTab === 'configure' ? 'configure' : 'projects'}
+          projectsCount={!loadingProjects ? projects.length : undefined}
+        />
 
         {/* ══════════════════════════════════════════════════════════════
             TAB 1 — Configurar nuevo proyecto

@@ -161,15 +161,6 @@ model Invoice {
   @@map("invoices")
 }
 
-// Plantilla HTML (opcional - solo si quieres guardarla en BD)
-model InvoiceTemplate {
-  id          Int      @id @default(1)
-  html_content String  @db.Text
-  updated_at   DateTime @updatedAt
-
-  @@map("invoice_template")
-}
-
 // ============================================
 // SISTEMA DE PIPELINES KANBAN (MVP)
 // ============================================
@@ -326,57 +317,6 @@ model FinancialSettings {
 }
 
 // ============================================
-// EVALUACIÓN DE PROYECTOS (seguimiento + IA)
-// ============================================
-// Proyectos reales (activos o cerrados), bitácora periódica y análisis OpenRouter
-
-model EvaluationProject {
-  id          Int       @id @default(autoincrement())
-  name        String
-  client_name String?
-  is_active   Boolean   @default(true)
-  tags        String[]
-  opened_at   DateTime  @default(now())
-  closed_at   DateTime?
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
-  deleted_at  DateTime?
-
-  entries   ProjectJournalEntry[]
-  analyses  ProjectAiAnalysis[]
-
-  @@index([deleted_at])
-  @@index([is_active])
-  @@map("evaluation_projects")
-}
-
-model ProjectJournalEntry {
-  id         Int      @id @default(autoincrement())
-  project_id Int
-  body       String   @db.Text
-  rating     Int?     // 1–5 opcional (nota del periodo para media del proyecto)
-  created_at DateTime @default(now())
-
-  project EvaluationProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
-
-  @@index([project_id])
-  @@map("project_journal_entries")
-}
-
-model ProjectAiAnalysis {
-  id           Int      @id @default(autoincrement())
-  project_id   Int
-  summary_json Json     @db.JsonB
-  model        String?
-  created_at   DateTime @default(now())
-
-  project EvaluationProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
-
-  @@index([project_id])
-  @@map("project_ai_analyses")
-}
-
-// ============================================
 // COLD CALLING
 // ============================================
 
@@ -468,16 +408,6 @@ model MarketingMetric {
 
   @@unique([channel, period])
   @@map("marketing_metrics")
-}
-
-// Contactos únicos alcanzados por email outreach (para deduplicar email_sent)
-model MarketingOutreachContact {
-  id      Int    @id @default(autoincrement())
-  email   String
-  period  String  // 'YYYY-MM'
-
-  @@unique([email, period])
-  @@map("marketing_outreach_contacts")
 }
 
 // Webhooks de Instantly (Email Outreach)
