@@ -12,7 +12,7 @@
   display: none;
 }
 
-/* Sidebar nav — scroll sin barra visible */
+/* Sidebar nav — scroll sin barra visible + fade inferior */
 .sidebar-nav-scroll {
   overflow-y: auto;
   overflow-x: hidden;
@@ -24,6 +24,27 @@
   display: none;
   width: 0;
   height: 0;
+}
+
+.sidebar-nav-fade {
+  position: relative;
+}
+
+.sidebar-nav-fade::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56px;
+  pointer-events: none;
+  z-index: 2;
+  background: linear-gradient(
+    to top,
+    rgb(255 255 255) 0%,
+    rgb(255 255 255 / 0.92) 35%,
+    rgb(255 255 255 / 0) 100%
+  );
 }
 
 

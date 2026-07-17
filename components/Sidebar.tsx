@@ -226,15 +226,7 @@ export default function Sidebar() {
 
   return (
     <div className="flex h-screen w-60 shrink-0 flex-col border-r border-gray-100 bg-white">
-      <div className="border-b border-gray-100 px-4 py-4 shrink-0">
-        {user && (
-          <p
-            className="mb-2.5 text-center text-xs font-medium text-gray-700 truncate px-1"
-            title={user.email}
-          >
-            {user.name}
-          </p>
-        )}
+      <div className="border-b border-gray-100 px-4 pt-4 pb-3 shrink-0">
         {role === 'comercial' ? (
           <ComercialSidebarBrand href={homeHref} />
         ) : (
@@ -242,14 +234,28 @@ export default function Sidebar() {
             <img
               src="https://agenciabuffalo.es/wp-content/uploads/2025/08/a58a83c2-193d-4bea-b71e-9aa1ca8e9d02.png"
               alt="Buffalo IA"
-              className="h-12 w-auto max-w-full object-contain"
+              className="h-11 w-auto max-w-full object-contain"
             />
           </Link>
         )}
+        {(user || loading) && (
+          <div className="mt-3 text-center">
+            {loading && !user ? (
+              <div className="mx-auto h-4 w-24 rounded bg-gray-100 animate-pulse" />
+            ) : (
+              <p
+                className="text-sm font-semibold text-gray-900 truncate px-1"
+                title={user?.email}
+              >
+                {user?.name || 'Administrador'}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="flex-1 min-h-0 relative">
-        <nav className="sidebar-nav-scroll hide-scrollbar h-full py-3 px-2.5 space-y-0.5">
+      <div className="sidebar-nav-fade flex-1 min-h-0 relative">
+        <nav className="sidebar-nav-scroll hide-scrollbar h-full py-3 px-2.5 pb-8 space-y-0.5">
           {loading ? (
             <div className="px-1 py-2 space-y-2">
               {Array.from({ length: 5 }).map((_, i) => (
