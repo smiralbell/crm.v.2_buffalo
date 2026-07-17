@@ -226,7 +226,7 @@ export default function Sidebar() {
 
   return (
     <div className="flex h-screen w-60 shrink-0 flex-col border-r border-gray-100 bg-white">
-      <div className="border-b border-gray-100 px-4 pt-4 pb-3 shrink-0">
+      <div className="border-b border-gray-100 px-4 py-4 shrink-0">
         {role === 'comercial' ? (
           <ComercialSidebarBrand href={homeHref} />
         ) : (
@@ -237,20 +237,6 @@ export default function Sidebar() {
               className="h-11 w-auto max-w-full object-contain"
             />
           </Link>
-        )}
-        {(user || loading) && (
-          <div className="mt-3 text-center">
-            {loading && !user ? (
-              <div className="mx-auto h-4 w-24 rounded bg-gray-100 animate-pulse" />
-            ) : (
-              <p
-                className="text-sm font-semibold text-gray-900 truncate px-1"
-                title={user?.email}
-              >
-                {user?.name || 'Administrador'}
-              </p>
-            )}
-          </div>
         )}
       </div>
 

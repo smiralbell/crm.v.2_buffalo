@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
 import { DeveloperTags } from '@/components/gestion-proyecto/ProjectDevelopersPanel'
-import { AlertCircle, FolderKanban, RefreshCw } from 'lucide-react'
+import { AlertCircle, FolderKanban, RefreshCw, Ticket } from 'lucide-react'
 import type { ProjectListRow } from '@/lib/gestion-proyecto/types'
 
 const statusLabel: Record<string, string> = {
@@ -48,7 +48,14 @@ export default function GestionProyectoPage() {
   return (
     <Layout>
       <div className="w-full max-w-7xl mx-auto space-y-4 -mt-2 lg:-mt-3">
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Link
+            href="/tickets"
+            className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-colors"
+          >
+            <Ticket className="h-4 w-4" />
+            Tickets
+          </Link>
           <button
             type="button"
             onClick={load}
