@@ -98,6 +98,7 @@ const NAV: NavItem[] = [
   { href: '/comercial/llamar-mas-tarde', label: 'Llamar más tarde', icon: Clock, roles: ['comercial'] },
   { href: '/comercial/objeciones', label: 'Objeciones', icon: MessageSquare, roles: ['comercial'] },
   { href: '/comercial/duplicados', label: 'Duplicados', icon: Copy, roles: ['comercial'] },
+  { href: '/comercial/preparar-demos', label: 'Preparar demos', icon: Bot, roles: ['comercial'] },
   {
     href: '/developer/facturas',
     label: 'Facturas',
@@ -141,6 +142,7 @@ export default function Sidebar() {
         '/comercial/llamar-mas-tarde',
         '/comercial/objeciones',
         '/comercial/duplicados',
+        '/comercial/preparar-demos',
         '/developer/facturas',
       ]
       return [...items].sort((a, b) => order.indexOf(a.href) - order.indexOf(b.href))
@@ -179,6 +181,7 @@ export default function Sidebar() {
     else if (item.href === '/comercial/llamar-mas-tarde') router.push('/comercial/llamar-mas-tarde')
     else if (item.href === '/comercial/objeciones') router.push('/comercial/objeciones')
     else if (item.href === '/comercial/duplicados') router.push('/comercial/duplicados')
+    else if (item.href === '/comercial/preparar-demos') router.push('/comercial/preparar-demos')
     else if (item.href === '/developer/facturas') router.push('/developer/facturas')
     else if (item.href === '/developer') router.push('/developer')
     else router.push(item.href)
@@ -260,6 +263,7 @@ export default function Sidebar() {
                     '/comercial/llamar-mas-tarde',
                     '/comercial/objeciones',
                     '/comercial/duplicados',
+                    '/comercial/preparar-demos',
                   ].includes(item.href)
                 )
                 .map((item) => {
