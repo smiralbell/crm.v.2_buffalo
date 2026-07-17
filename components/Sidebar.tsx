@@ -232,9 +232,9 @@ export default function Sidebar() {
         ) : (
           <Link href={homeHref} className="flex items-center justify-center px-1">
             <img
-              src="https://agenciabuffalo.es/wp-content/uploads/2025/08/a58a83c2-193d-4bea-b71e-9aa1ca8e9d02.png"
-              alt="Buffalo IA"
-              className="h-11 w-auto max-w-full object-contain"
+              src="https://agenciabuffalo.es/wp-content/uploads/2025/10/Generated_Image_September_25__2025_-_11_16AM-removebg-preview.png"
+              alt="Buffalo AI"
+              className="h-12 w-auto max-w-full object-contain"
             />
           </Link>
         )}
