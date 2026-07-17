@@ -15,7 +15,7 @@ import {
   getColdCallPipelineId,
   getColdCallProspectDisplayMap,
   isColdCallPipeline,
-  syncColdCallPipelineForScope,
+  backfillMissingColdCallCards,
 } from '@/lib/pipelines/cold-calling'
 import { isWebPipeline, syncAllWebSourcesToPipeline } from '@/lib/pipelines/web'
 import {
@@ -99,7 +99,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
     let cardsRaw
     if (coldCall) {
-      await syncColdCallPipelineForScope(scope)
+      // Solo crea tarjetas faltantes (las actualizaciones van al guardar cada llamada).
+      // Evita re-sincronizar todos los leads en cada apertura del pipeline.
+      await backfillMissingColdCallCards(scope)
       cardsRaw = await getColdCallPipelineCards(scope, pipelineId)
     } else if (webPipeline) {
       await syncAllWebSourcesToPipeline()
