@@ -1,8 +1,12 @@
 import type { AppProps } from 'next/app'
+import { AuthProvider } from '@/components/AuthContext'
 import '@/styles/globals.css'
 import '@/styles/day-picker.css'
 
 export default function App({ Component, pageProps }: AppProps) {
-  return <Component {...pageProps} />
+  return (
+    <AuthProvider>
+      <Component {...pageProps} />
+    </AuthProvider>
+  )
 }
-

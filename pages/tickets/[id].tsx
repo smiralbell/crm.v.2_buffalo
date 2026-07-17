@@ -55,17 +55,18 @@ const statusClass: Record<string, string> = {
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
-    await requireAuth(context)
+    const user = await requireAuth(context)
+    return { props: { role: user.role } }
   } catch {
     return { redirect: { destination: '/login', permanent: false } }
   }
-  return { props: {} }
 }
 
-export default function TicketDetailPage() {
+export default function TicketDetailPage({ role: ssrRole }: { role: string }) {
   const router = useRouter()
   const { id } = router.query
   const { user } = useAuth()
+  const isAdmin = (user?.role || ssrRole) === 'admin'
   const [developers, setDevelopers] = useState<{ id: number; name: string; email: string }[]>([])
 
   const [ticket, setTicket] = useState<TicketDetail | null>(null)
@@ -97,12 +98,12 @@ export default function TicketDetailPage() {
   }, [id])
 
   useEffect(() => {
-    if (user?.role !== 'admin') return
+    if (!isAdmin) return
     fetch('/api/users/developers')
       .then((r) => r.json())
       .then((d) => setDevelopers(d.users || []))
       .catch(() => setDevelopers([]))
-  }, [user?.role])
+  }, [isAdmin])
 
   const assignDeveloper = async (assigneeUserId: string) => {
     if (!ticket) return
@@ -220,7 +221,7 @@ export default function TicketDetailPage() {
   return (
     <Layout>
       <div className="space-y-5 max-w-3xl mx-auto">
-        <div className="flex items-start gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           <Link
             href="/tickets"
             className="inline-flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 shrink-0 mt-1"
@@ -228,7 +229,7 @@ export default function TicketDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-semibold text-gray-900 leading-snug">
+            <h1 className="text-xl font-semibold text-gray-900 leading-snug break-words">
               {ticket?.title || 'Cargando…'}
             </h1>
             {ticket && (
@@ -240,7 +241,7 @@ export default function TicketDetailPage() {
                 <Badge className={statusClass[ticket.status] || statusClass.open}>
                   {STATUS_LABELS[ticket.status as TicketStatus] || ticket.status}
                 </Badge>
-                {user?.role === 'admin' && (
+                {isAdmin && (
                   <select
                     value={ticket.assignee_user_id ?? ''}
                     onChange={(e) => assignDeveloper(e.target.value)}
@@ -257,12 +258,12 @@ export default function TicketDetailPage() {
               </div>
             )}
           </div>
-          {ticket && user?.role === 'admin' && (
+          {ticket && isAdmin && (
             <Button
               type="button"
               variant="outline"
               size="sm"
-              disabled={deleting || sending}
+              disabled={deleting}
               onClick={deleteTicket}
               className="shrink-0 border-red-200 text-red-700 hover:bg-red-50"
             >
