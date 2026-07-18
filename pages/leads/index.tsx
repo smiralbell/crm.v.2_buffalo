@@ -26,6 +26,7 @@ import {
 import { Plus, Search, Edit, Trash2, Eye, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import NewLeadDialog from '@/components/NewLeadDialog'
+import EditLeadDialog from '@/components/EditLeadDialog'
 import { Badge } from '@/components/ui/badge'
 
 interface Lead {
@@ -171,6 +172,7 @@ export default function LeadsPage({
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [newLeadOpen, setNewLeadOpen] = useState(false)
+  const [editLeadId, setEditLeadId] = useState<number | null>(null)
   const [leadToDelete, setLeadToDelete] = useState<{ id: number; name: string } | null>(null)
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
 
@@ -267,6 +269,14 @@ export default function LeadsPage({
         </Card>
 
         <NewLeadDialog open={newLeadOpen} onOpenChange={setNewLeadOpen} />
+        <EditLeadDialog
+          open={editLeadId != null}
+          leadId={editLeadId}
+          onOpenChange={(open) => {
+            if (!open) setEditLeadId(null)
+          }}
+          onSaved={() => router.reload()}
+        />
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -379,11 +389,13 @@ export default function LeadsPage({
                                 <Eye className="h-4 w-4" />
                               </Button>
                             </Link>
-                            <Link href={`/leads/${lead.id}/edit`}>
-                              <Button variant="ghost" size="icon">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </Link>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setEditLeadId(lead.id)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"

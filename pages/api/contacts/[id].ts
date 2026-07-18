@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client'
 
 const contactUpdateSchema = z.object({
   nombre: z.string().min(1, 'El nombre es requerido').optional(),
-  email: z.string().email('Email inválido').optional(),
+  email: z.union([z.string().email('Email inválido'), z.literal('')]).optional(),
   telefono: z.string().optional(),
   empresa: z.string().optional(),
   instagram_user: z.string().optional(),

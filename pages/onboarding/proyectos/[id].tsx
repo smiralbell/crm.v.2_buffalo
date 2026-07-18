@@ -1,14 +1,17 @@
 import { GetServerSideProps } from 'next'
+import { useRouter } from 'next/router'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
 import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
+import DeleteOnboardingProjectDialog from '@/components/onboarding/DeleteOnboardingProjectDialog'
+import EditOnboardingProjectDialog from '@/components/onboarding/EditOnboardingProjectDialog'
 import { DeveloperTags } from '@/components/gestion-proyecto/ProjectDevelopersPanel'
 import {
   ArrowLeft, Edit, FileText, Settings, User, Building2,
-  Mail, Phone, MapPin, Receipt, Calendar,
+  Mail, Phone, MapPin, Receipt, Calendar, Trash2, CheckCircle2, Pencil,
 } from 'lucide-react'
 import { buildProjectViewData, fmt } from '@/lib/onboarding/project-view'
 
@@ -76,9 +79,20 @@ const estadoLabel: Record<string, string> = {
 }
 
 export default function ProyectoDetailPage({ lead }: Props) {
+  const router = useRouter()
   const [iframeHeight, setIframeHeight] = useState(820)
   const [iframeUrl, setIframeUrl] = useState('')
   const [developers, setDevelopers] = useState<{ id: number; name: string }[]>([])
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [esBuffalo, setEsBuffalo] = useState(false)
+  const [buffaloLoading, setBuffaloLoading] = useState(false)
+  const [buffaloError, setBuffaloError] = useState('')
+  const [timeline, setTimeline] = useState<{
+    tiempo_previsto: string | null
+    fecha_inicio_real: string | null
+    fecha_fin_real: string | null
+  }>({ tiempo_previsto: null, fecha_inicio_real: null, fecha_fin_real: null })
 
   const loadDevelopers = () => {
     fetch(`/api/gestion-proyecto/proyectos/by-lead/${lead.id}`)
@@ -90,6 +104,52 @@ export default function ProyectoDetailPage({ lead }: Props) {
   useEffect(() => {
     loadDevelopers()
   }, [lead.id])
+
+  const loadBuffaloFlag = () => {
+    fetch(`/api/onboarding/projects/${lead.id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setEsBuffalo(Boolean(d.proyecto?.es_buffalo))
+        setTimeline({
+          tiempo_previsto: d.proyecto?.tiempo_previsto ?? null,
+          fecha_inicio_real: d.proyecto?.fecha_inicio_real ?? null,
+          fecha_fin_real: d.proyecto?.fecha_fin_real ?? null,
+        })
+      })
+      .catch(() => setEsBuffalo(false))
+  }
+
+  useEffect(() => {
+    loadBuffaloFlag()
+  }, [lead.id])
+
+  const fmtDate = (ymd: string | null) => {
+    if (!ymd) return null
+    return new Date(`${ymd}T12:00:00`).toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    })
+  }
+
+  const toggleBuffalo = async () => {
+    setBuffaloLoading(true)
+    setBuffaloError('')
+    try {
+      const res = await fetch(`/api/onboarding/projects/${lead.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ es_buffalo: !esBuffalo }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'No se pudo actualizar')
+      setEsBuffalo(Boolean(data.proyecto?.es_buffalo ?? !esBuffalo))
+    } catch (e) {
+      setBuffaloError(e instanceof Error ? e.message : 'Error')
+    } finally {
+      setBuffaloLoading(false)
+    }
+  }
 
   const displayName = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
   const project = useMemo(
@@ -156,8 +216,48 @@ export default function ProyectoDetailPage({ lead }: Props) {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0 justify-end">
+            {esBuffalo && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Proyecto Buffalo
+              </span>
+            )}
             <AssignDevelopersButton leadId={lead.id} onAssigned={loadDevelopers} />
+            {!esBuffalo ? (
+              <button
+                type="button"
+                onClick={toggleBuffalo}
+                disabled={buffaloLoading || !lead.configuracion}
+                className="inline-flex items-center gap-2 px-4 h-10 text-sm font-semibold rounded-xl bg-gray-900 text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
+                title={
+                  lead.configuracion
+                    ? 'Poner en marcha como proyecto real de Buffalo'
+                    : 'Necesitas configuración primero'
+                }
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                {buffaloLoading ? '…' : 'Poner en marcha'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={toggleBuffalo}
+                disabled={buffaloLoading}
+                className="inline-flex items-center gap-2 px-3 h-10 text-sm font-medium rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                title="Quitar de Gestión de proyectos"
+              >
+                Quitar de Buffalo
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <Pencil className="h-4 w-4" />
+              Editar datos
+            </button>
             <Link
               href={configureUrl}
               className="inline-flex items-center gap-2 px-4 h-10 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition-colors"
@@ -165,8 +265,39 @@ export default function ProyectoDetailPage({ lead }: Props) {
               <Edit className="h-4 w-4" />
               Editar configuración
             </Link>
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(true)}
+              className="inline-flex items-center gap-2 px-4 h-10 border border-red-200 text-red-600 text-sm font-medium rounded-xl hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="h-4 w-4" />
+              Eliminar
+            </button>
           </div>
         </div>
+
+        {buffaloError && (
+          <p className="text-sm text-red-600">{buffaloError}</p>
+        )}
+
+        <DeleteOnboardingProjectDialog
+          open={deleteOpen}
+          leadId={lead.id}
+          projectName={displayName}
+          onOpenChange={setDeleteOpen}
+          onDeleted={() => {
+            void router.push('/onboarding?tab=projects')
+          }}
+        />
+        <EditOnboardingProjectDialog
+          open={editOpen}
+          leadId={lead.id}
+          onOpenChange={setEditOpen}
+          onSaved={() => {
+            loadBuffaloFlag()
+            void router.replace(router.asPath)
+          }}
+        />
 
         {/* KPI strip */}
         {project.setupTotal > 0 && (
@@ -274,6 +405,32 @@ export default function ProyectoDetailPage({ lead }: Props) {
                   <dd className="font-medium text-gray-900 capitalize text-right">{lead.prioridad}</dd>
                 </div>
               )}
+              <div className="flex justify-between gap-4 text-sm">
+                <dt className="text-gray-400">Tiempo previsto</dt>
+                <dd className="font-medium text-gray-900 text-right">
+                  {timeline.tiempo_previsto || '—'}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 text-sm">
+                <dt className="text-gray-400 flex items-center gap-1">
+                  <Calendar className="h-3.5 w-3.5" /> Inicio real
+                </dt>
+                <dd className="font-medium text-gray-900 text-right">
+                  {fmtDate(timeline.fecha_inicio_real) || '—'}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 text-sm">
+                <dt className="text-gray-400 flex items-center gap-1">
+                  <Calendar className="h-3.5 w-3.5" /> Fin real
+                </dt>
+                <dd className="font-medium text-gray-900 text-right">
+                  {timeline.fecha_fin_real
+                    ? fmtDate(timeline.fecha_fin_real)
+                    : (
+                      <span className="text-amber-700 font-medium">En curso</span>
+                    )}
+                </dd>
+              </div>
               <div className="flex justify-between gap-4 text-sm">
                 <dt className="text-gray-400 flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Actualizado</dt>
                 <dd className="text-gray-900 text-right">

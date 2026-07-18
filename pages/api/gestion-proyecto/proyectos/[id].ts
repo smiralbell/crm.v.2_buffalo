@@ -17,16 +17,24 @@ type DbProyecto = {
   dashboard_tier: string | null
   lead_id: number | null
   contact_id: number | null
+  es_buffalo: boolean
+  has_onboarding_cfg: boolean
 }
 
 async function fetchProyectoContext(id: string) {
   const rows = await prisma.$queryRaw<DbProyecto[]>`
     SELECT
-      id, name, service_type, status, config_ref,
-      retell_agent_id, twilio_number, whatsapp_number, dashboard_tier,
-      lead_id, contact_id
-    FROM proyectos
-    WHERE id = ${id}::uuid
+      p.id, p.name, p.service_type, p.status, p.config_ref,
+      p.retell_agent_id, p.twilio_number, p.whatsapp_number, p.dashboard_tier,
+      p.lead_id, p.contact_id, p.es_buffalo,
+      (
+        l.id IS NOT NULL
+        AND l.configuracion IS NOT NULL
+        AND l.configuracion <> ''
+      ) AS has_onboarding_cfg
+    FROM proyectos p
+    LEFT JOIN leads l ON l.id = p.lead_id
+    WHERE p.id = ${id}::uuid
     LIMIT 1
   `
   return rows[0] ?? null
@@ -41,6 +49,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const row = await fetchProyectoContext(id)
     if (!row) return res.status(404).json({ error: 'Proyecto no encontrado' })
+
+    // Gestión solo opera proyectos Buffalo en marcha con origen Onboarding
+    if (!row.es_buffalo || row.lead_id == null || !row.has_onboarding_cfg) {
+      return res.status(404).json({
+        error: 'Este proyecto no está en marcha. Actívalo desde Onboarding.',
+      })
+    }
 
     let configuracion: string | null = null
     let leadNotas: string | null = null

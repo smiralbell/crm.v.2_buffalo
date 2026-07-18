@@ -27,13 +27,7 @@ export default async function handler(
       const lead = await prisma.lead.findUnique({
         where: { id },
         include: {
-          contact: {
-            select: {
-              id: true,
-              nombre: true,
-              email: true,
-            },
-          },
+          contact: true,
         },
       })
 
@@ -41,7 +35,10 @@ export default async function handler(
         return res.status(404).json({ error: 'Lead no encontrado' })
       }
 
-      return res.status(200).json(lead)
+      return res.status(200).json({
+        ...lead,
+        valor: lead.valor != null ? Number(lead.valor) : null,
+      })
     }
 
     if (req.method === 'PUT') {

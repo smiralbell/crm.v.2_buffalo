@@ -5,12 +5,14 @@ import {
   Search, UserPlus, ChevronRight, ArrowRight,
   X, Check, Settings, FileText, Building2,
   Mail, Phone, User, Zap, Eye,
-  LayoutList, LayoutGrid, FolderOpen, Plus,
+  LayoutList, LayoutGrid, FolderOpen, Plus, Trash2, Pencil, CheckCircle2, Rocket,
 } from 'lucide-react'
 import { BUFFALO_STAGE_COLORS } from '@/components/PipelineCardDrawer'
 import Link from 'next/link'
 import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
 import OnboardingSectionTabs from '@/components/onboarding/OnboardingSectionTabs'
+import DeleteOnboardingProjectDialog from '@/components/onboarding/DeleteOnboardingProjectDialog'
+import EditOnboardingProjectDialog from '@/components/onboarding/EditOnboardingProjectDialog'
 
 // ── Types ──────────────────────────────────────────────────────────────
 interface Contact {
@@ -66,6 +68,10 @@ export default function OnboardingPage() {
   const [projects, setProjects]       = useState<Lead[]>([])
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [projectsView, setProjectsView] = useState<'list' | 'grid'>('list')
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null)
+  const [editLeadId, setEditLeadId] = useState<number | null>(null)
+  const [buffaloFlags, setBuffaloFlags] = useState<Record<number, boolean>>({})
+  const [launchingId, setLaunchingId] = useState<number | null>(null)
 
   useEffect(() => {
     if (!router.isReady) return
@@ -77,11 +83,47 @@ export default function OnboardingPage() {
     else setActiveTab('projects')
   }, [router.isReady, urlTab])
 
+  const togglePonerEnMarcha = async (leadId: number, currentlyBuffalo: boolean) => {
+    setLaunchingId(leadId)
+    try {
+      const res = await fetch(`/api/onboarding/projects/${leadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ es_buffalo: !currentlyBuffalo }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Error al actualizar')
+      setBuffaloFlags((prev) => ({
+        ...prev,
+        [leadId]: Boolean(data.proyecto?.es_buffalo ?? !currentlyBuffalo),
+      }))
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Error al poner en marcha')
+    } finally {
+      setLaunchingId(null)
+    }
+  }
+
   const loadProjects = () => {
     setLoadingProjects(true)
     fetch('/api/leads?configured=1&page=1&pageSize=50')
       .then(r => r.json())
-      .then(d => setProjects(d.leads || []))
+      .then(async (d) => {
+        const leads = (d.leads || []) as Lead[]
+        setProjects(leads)
+        if (leads.length) {
+          const ids = leads.map((l) => l.id).join(',')
+          const fr = await fetch(`/api/onboarding/projects/buffalo-status?ids=${ids}`)
+          const fd = await fr.json().catch(() => ({ flags: {} }))
+          const next: Record<number, boolean> = {}
+          for (const [k, v] of Object.entries(fd.flags || {})) {
+            next[Number(k)] = Boolean(v)
+          }
+          setBuffaloFlags(next)
+        } else {
+          setBuffaloFlags({})
+        }
+      })
       .catch(() => setProjects([]))
       .finally(() => setLoadingProjects(false))
   }
@@ -593,14 +635,47 @@ export default function OnboardingPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 pr-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        {buffaloFlags[lead.id] ? (
+                          <button
+                            type="button"
+                            onClick={() => togglePonerEnMarcha(lead.id, true)}
+                            disabled={launchingId === lead.id}
+                            className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                            title="Quitar de Proyectos abiertos"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            {launchingId === lead.id ? '…' : 'Proyecto Buffalo'}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => togglePonerEnMarcha(lead.id, false)}
+                            disabled={launchingId === lead.id || !lead.configuracion}
+                            className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
+                            title="Pasar a Proyectos abiertos"
+                          >
+                            <Rocket className="h-3.5 w-3.5" />
+                            {launchingId === lead.id ? '…' : 'Poner en marcha'}
+                          </button>
+                        )}
                         {lead.configuracion && (
                           <AssignDevelopersButton leadId={lead.id} variant="icon" />
                         )}
                         <button
                           onClick={async () => { const r = await fetch(`/api/contacts/${lead.contact.id}`); if (r.ok) void handleConfigure(await r.json(), undefined, undefined, lead.id) }}
-                          className="flex items-center gap-1.5 px-3 h-9 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-700 transition-colors"
+                          className="flex items-center gap-1.5 px-3 h-9 border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
+                          title="Abrir el configurador del producto"
                         >
-                          {lead.configuracion ? 'Editar' : 'Configurar'}
+                          <Settings className="h-3.5 w-3.5" />
+                          Configurador
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditLeadId(lead.id)}
+                          className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-300 hover:text-gray-900 transition-colors"
+                          title="Editar datos del cliente / proyecto"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <Link href={`/onboarding/proyectos/${lead.id}`} className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-300 hover:text-gray-900 transition-colors" title="Ver proyecto">
                           <Eye className="h-3.5 w-3.5" />
@@ -608,6 +683,14 @@ export default function OnboardingPage() {
                         <Link href={`/invoices?search=${encodeURIComponent(lead.contact?.nombre || '')}`} className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-400 rounded-lg hover:border-gray-300 hover:text-gray-700 transition-colors" title="Facturas">
                           <FileText className="h-3.5 w-3.5" />
                         </Link>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget({ id: lead.id, name })}
+                          className="flex items-center justify-center w-9 h-9 border border-red-100 text-red-500 rounded-lg hover:border-red-200 hover:bg-red-50 transition-colors"
+                          title="Eliminar proyecto"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
                   )
@@ -654,30 +737,73 @@ export default function OnboardingPage() {
 
                         <div className="text-[11px] text-gray-400">{dateStr}</div>
 
-                        <div className="flex items-center gap-1.5 pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
-                          {lead.configuracion && (
-                            <AssignDevelopersButton leadId={lead.id} variant="icon" />
+                        <div className="flex flex-col gap-1.5 pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+                          {buffaloFlags[lead.id] ? (
+                            <button
+                              type="button"
+                              onClick={() => togglePonerEnMarcha(lead.id, true)}
+                              disabled={launchingId === lead.id}
+                              className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                              title="Quitar de Proyectos abiertos"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              {launchingId === lead.id ? '…' : 'Proyecto Buffalo'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => togglePonerEnMarcha(lead.id, false)}
+                              disabled={launchingId === lead.id || !lead.configuracion}
+                              className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
+                              title="Pasar a Proyectos abiertos"
+                            >
+                              <Rocket className="h-3.5 w-3.5" />
+                              {launchingId === lead.id ? '…' : 'Poner en marcha'}
+                            </button>
                           )}
-                          <button
-                            onClick={async () => { const r = await fetch(`/api/contacts/${lead.contact.id}`); if (r.ok) void handleConfigure(await r.json(), undefined, undefined, lead.id) }}
-                            className="flex-1 flex items-center justify-center h-9 bg-gray-900 text-white text-xs font-medium rounded-lg hover:bg-gray-700 transition-colors"
-                          >
-                            {lead.configuracion ? 'Editar' : 'Configurar'}
-                          </button>
-                          <Link
-                            href={`/onboarding/proyectos/${lead.id}`}
-                            className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-400 rounded-lg hover:border-gray-300 hover:text-gray-700 transition-colors"
-                            title="Ver proyecto"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Link>
-                          <Link
-                            href={`/invoices?search=${encodeURIComponent(lead.contact?.nombre || '')}`}
-                            className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-400 rounded-lg hover:border-gray-300 hover:text-gray-700 transition-colors"
-                            title="Facturas"
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                          </Link>
+                          <div className="flex items-center gap-1.5">
+                            {lead.configuracion && (
+                              <AssignDevelopersButton leadId={lead.id} variant="icon" />
+                            )}
+                            <button
+                              onClick={async () => { const r = await fetch(`/api/contacts/${lead.contact.id}`); if (r.ok) void handleConfigure(await r.json(), undefined, undefined, lead.id) }}
+                              className="flex-1 flex items-center justify-center gap-1 h-9 border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
+                              title="Abrir el configurador del producto"
+                            >
+                              <Settings className="h-3.5 w-3.5" />
+                              Configurador
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditLeadId(lead.id)}
+                              className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-400 rounded-lg hover:border-gray-300 hover:text-gray-700 transition-colors"
+                              title="Editar datos del cliente / proyecto"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <Link
+                              href={`/onboarding/proyectos/${lead.id}`}
+                              className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-400 rounded-lg hover:border-gray-300 hover:text-gray-700 transition-colors"
+                              title="Ver proyecto"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </Link>
+                            <Link
+                              href={`/invoices?search=${encodeURIComponent(lead.contact?.nombre || '')}`}
+                              className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-400 rounded-lg hover:border-gray-300 hover:text-gray-700 transition-colors"
+                              title="Facturas"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget({ id: lead.id, name })}
+                              className="flex items-center justify-center w-9 h-9 border border-red-100 text-red-500 rounded-lg hover:border-red-200 hover:bg-red-50 transition-colors"
+                              title="Eliminar proyecto"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -688,6 +814,30 @@ export default function OnboardingPage() {
             )}
           </div>
         )}
+
+        <DeleteOnboardingProjectDialog
+          open={Boolean(deleteTarget)}
+          leadId={deleteTarget?.id ?? null}
+          projectName={deleteTarget?.name ?? ''}
+          onOpenChange={(open) => {
+            if (!open) setDeleteTarget(null)
+          }}
+          onDeleted={() => {
+            setDeleteTarget(null)
+            loadProjects()
+          }}
+        />
+        <EditOnboardingProjectDialog
+          open={editLeadId != null}
+          leadId={editLeadId}
+          onOpenChange={(open) => {
+            if (!open) setEditLeadId(null)
+          }}
+          onSaved={() => {
+            setEditLeadId(null)
+            loadProjects()
+          }}
+        />
 
       </div>
     </Layout>

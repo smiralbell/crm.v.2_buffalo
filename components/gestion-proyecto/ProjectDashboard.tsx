@@ -18,7 +18,7 @@ import {
 } from 'recharts'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Loader2 } from 'lucide-react'
+import { CheckCircle2, Loader2, Rocket, Sparkles } from 'lucide-react'
 import { formatDashboardDate } from '@/lib/gestion-proyecto/dashboard-metrics'
 import type { ProjectDashboardData } from '@/lib/gestion-proyecto/types'
 import ProjectAiPanel from '@/components/gestion-proyecto/ProjectAiPanel'
@@ -48,7 +48,7 @@ const serviceLabel: Record<string, string> = {
 
 const statusLabel: Record<string, string> = {
   development: 'En desarrollo',
-  active: 'Activo',
+  active: 'En producción',
   paused: 'Pausado',
 }
 
@@ -151,6 +151,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
   const [error, setError] = useState('')
   const [targetEnd, setTargetEnd] = useState('')
   const [savingEnd, setSavingEnd] = useState(false)
+  const [finalizing, setFinalizing] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -189,6 +190,31 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
       setSavingEnd(false)
     }
   }
+
+  const finalizarProyecto = async () => {
+    if (
+      !window.confirm(
+        '¿Finalizar este proyecto y pasarlo a producción? La tarjeta quedará marcada en verde.'
+      )
+    ) {
+      return
+    }
+    setFinalizing(true)
+    try {
+      const res = await fetch(`/api/gestion-proyecto/proyectos/${projectId}/finalizar`, {
+        method: 'POST',
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'No se pudo finalizar')
+      await load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al finalizar')
+    } finally {
+      setFinalizing(false)
+    }
+  }
+
+  const enProduccion = data?.proyecto.status === 'active'
 
   if (loading) {
     return (
@@ -229,41 +255,102 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
 
   return (
     <div className="space-y-4">
+      {/* CTA finalizar → producción */}
+      {enProduccion ? (
+        <div className="relative overflow-hidden rounded-2xl border border-emerald-300 bg-gradient-to-r from-emerald-50 via-white to-emerald-50 px-5 py-4 shadow-sm">
+          <div className="absolute inset-y-0 left-0 w-1.5 bg-emerald-500" />
+          <div className="flex flex-wrap items-center justify-between gap-3 pl-2">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-md shadow-emerald-500/30">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-emerald-900">En producción</p>
+                <p className="text-xs text-emerald-700/80">
+                  Proyecto finalizado y entregado al cliente.
+                </p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+              <Sparkles className="h-3.5 w-3.5" />
+              Live
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-emerald-100/60 blur-2xl" />
+          <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                Listo para entregar
+              </p>
+              <h3 className="text-base font-semibold text-gray-900 mt-0.5">
+                ¿El proyecto ya está en producción?
+              </h3>
+              <p className="text-sm text-gray-500 mt-1 max-w-xl">
+                Márcalo como finalizado. La tarjeta en Proyectos abiertos pasará a verde.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void finalizarProyecto()}
+              disabled={finalizing}
+              className="group relative inline-flex items-center justify-center gap-2.5 shrink-0 h-12 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-600/25 hover:from-emerald-500 hover:to-emerald-400 hover:shadow-emerald-500/35 hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-60 disabled:hover:translate-y-0"
+            >
+              {finalizing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Rocket className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+              )}
+              {finalizing ? 'Finalizando…' : 'Finalizar proyecto'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Hero oscuro */}
-      <div className="rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900 text-white p-5 shadow-lg">
+      <div
+        className={cn(
+          'rounded-2xl border text-white p-5 shadow-lg',
+          enProduccion
+            ? 'border-emerald-600 bg-gradient-to-br from-emerald-900 via-emerald-800 to-gray-900'
+            : 'border-gray-800 bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900'
+        )}
+      >
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
           <div className="min-w-0">
-            <p className="text-xs text-gray-400 uppercase tracking-wide">
+            <p className="text-xs text-white/50 uppercase tracking-wide">
               {serviceLabel[data.proyecto.service_type] || data.proyecto.service_type}
               {data.proyecto.config_ref && (
-                <span className="ml-2 font-mono text-[11px] text-gray-500">
+                <span className="ml-2 font-mono text-[11px] text-white/40">
                   {data.proyecto.config_ref}
                 </span>
               )}
             </p>
             <h2 className="text-xl font-semibold mt-1 break-words">{data.proyecto.name}</h2>
-            <p className="text-sm text-gray-400 mt-0.5">
+            <p className="text-sm text-white/60 mt-0.5">
               {statusLabel[data.proyecto.status] || data.proyecto.status}
             </p>
             <dl className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
               <div>
-                <dt className="text-xs text-gray-500">Inicio</dt>
+                <dt className="text-xs text-white/45">Inicio</dt>
                 <dd className="font-medium text-white mt-0.5">
                   {formatDashboardDate(data.timeline.start_date)}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Fin previsto</dt>
+                <dt className="text-xs text-white/45">Fin previsto</dt>
                 <dd className="font-medium text-white mt-0.5">
                   {formatDashboardDate(data.timeline.end_date)}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Tiempo transcurrido</dt>
+                <dt className="text-xs text-white/45">Tiempo transcurrido</dt>
                 <dd className="font-medium text-white mt-0.5">
                   {data.timeline.days_elapsed} días
                   {data.timeline.days_total != null && (
-                    <span className="text-gray-500 font-normal"> / {data.timeline.days_total}</span>
+                    <span className="text-white/45 font-normal"> / {data.timeline.days_total}</span>
                   )}
                 </dd>
               </div>

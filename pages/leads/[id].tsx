@@ -1,5 +1,6 @@
 import { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
+import { useState } from 'react'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
@@ -8,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { ArrowLeft, Edit, Euro, User, ClipboardList, StickyNote, FileText } from 'lucide-react'
+import EditLeadDialog from '@/components/EditLeadDialog'
 
 interface LeadDetailProps {
   lead: {
@@ -115,6 +117,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function LeadDetail({ lead }: LeadDetailProps) {
   const router = useRouter()
+  const [editOpen, setEditOpen] = useState(false)
   const displayName = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
 
   const configureUrl = `/onboarding/configure?lead=${lead.id}&nombre=${encodeURIComponent(lead.contact?.nombre || '')}&empresa=${encodeURIComponent(lead.contact?.empresa || '')}&email=${encodeURIComponent(lead.contact?.email || '')}&ciudad=${encodeURIComponent(lead.contact?.ciudad || '')}`
@@ -151,14 +154,19 @@ export default function LeadDetail({ lead }: LeadDetailProps) {
                 </Button>
               )}
             </Link>
-            <Link href={`/leads/${lead.id}/edit`}>
-              <Button variant="outline" size="sm">
-                <Edit className="mr-2 h-4 w-4" />
-                Editar
-              </Button>
-            </Link>
+            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+              <Edit className="mr-2 h-4 w-4" />
+              Editar
+            </Button>
           </div>
         </div>
+
+        <EditLeadDialog
+          open={editOpen}
+          leadId={lead.id}
+          onOpenChange={setEditOpen}
+          onSaved={() => router.reload()}
+        />
 
         {/* Valor highlight — only show if set */}
         {lead.valor != null && (

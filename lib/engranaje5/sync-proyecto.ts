@@ -119,7 +119,7 @@ export async function syncProyectoFromLead(input: SyncProyectoInput) {
       addon_form_trigger, addon_multimodal, addon_voice_in_chat,
       dashboard_tier, languages_count, setup_fee_eur, monthly_fee_eur,
       has_mensualidad, maint_plan, has_voz, has_chat, has_dash, has_pack,
-      webhook_secret, created_at, updated_at
+      es_buffalo, webhook_secret, created_at, updated_at
     ) VALUES (
       ${clientId}::uuid,
       ${lead.id},
@@ -149,6 +149,7 @@ export async function syncProyectoFromLead(input: SyncProyectoInput) {
       ${payload.has_chat},
       ${payload.has_dash},
       ${payload.has_pack},
+      FALSE,
       gen_random_uuid()::TEXT,
       NOW(),
       NOW()

@@ -501,7 +501,7 @@ export default function ConfigurePage() {
 
       {/* Mode picker */}
       {!effectiveMode && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 max-w-5xl">
           <button
             type="button"
             onClick={() => {
@@ -512,11 +512,11 @@ export default function ConfigurePage() {
                 { shallow: true }
               )
             }}
-            className="text-left rounded-2xl border border-gray-200 bg-white p-6 hover:border-gray-900 hover:shadow-sm transition-all"
+            className="text-left rounded-2xl border border-gray-200 bg-white px-8 py-10 min-h-[180px] hover:border-gray-900 hover:shadow-sm transition-all"
           >
-            <div className="flex items-center gap-2 mb-2">
-              <Package className="h-4 w-4 text-gray-800" />
-              <span className="text-sm font-semibold text-gray-900">Paquete Buffalo</span>
+            <div className="flex items-center gap-2 mb-3">
+              <Package className="h-5 w-5 text-gray-800" />
+              <span className="text-base font-semibold text-gray-900">Paquete Buffalo</span>
             </div>
             <p className="text-sm text-gray-500 leading-relaxed">
               Configurador de agentes (voz, chat, dashboard). Precios y add-ons empaquetados.
@@ -532,15 +532,14 @@ export default function ConfigurePage() {
                 { shallow: true }
               )
             }}
-            className="text-left rounded-2xl border border-gray-200 bg-white p-6 hover:border-gray-900 hover:shadow-sm transition-all"
+            className="text-left rounded-2xl border border-gray-200 bg-white px-8 py-10 min-h-[180px] hover:border-gray-900 hover:shadow-sm transition-all"
           >
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles className="h-4 w-4 text-gray-800" />
-              <span className="text-sm font-semibold text-gray-900">Proyecto a medida</span>
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-5 w-5 text-gray-800" />
+              <span className="text-base font-semibold text-gray-900">Proyecto a medida</span>
             </div>
             <p className="text-sm text-gray-500 leading-relaxed">
-              Brief + IA. Ideal cuando el servicio no encaja en los paquetes. Luego propuesta,
-              contrato, factura y onboarding igual.
+              Brief con IA cuando el servicio no encaja en los paquetes.
             </p>
           </button>
         </div>

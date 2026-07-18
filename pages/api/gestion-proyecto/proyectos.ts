@@ -13,8 +13,14 @@ type ProyectoRow = {
   lead_id: number | null
   contact_id: number | null
   updated_at: Date
+  setup_fee_eur: number | null
+  monthly_fee_eur: number | null
 }
 
+/**
+ * Solo proyectos Buffalo en marcha: vienen de Onboarding (lead_id)
+ * y marcados con es_buffalo = true.
+ */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -24,23 +30,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await requireAuthAPI(req, res)
     const accessibleIds = await getAccessibleProjectIds(user)
 
+    // Solo los que Onboarding tiene configurados y puestos en marcha
     let proyectos: ProyectoRow[]
     if (accessibleIds === null) {
       proyectos = await prisma.$queryRaw<ProyectoRow[]>`
-        SELECT id, name, status, service_type, config_ref, lead_id, contact_id, updated_at
-        FROM proyectos
-        WHERE status IN ('development', 'active', 'paused')
-        ORDER BY updated_at DESC
+        SELECT p.id, p.name, p.status, p.service_type, p.config_ref,
+               p.lead_id, p.contact_id, p.updated_at,
+               p.setup_fee_eur::float8 AS setup_fee_eur,
+               p.monthly_fee_eur::float8 AS monthly_fee_eur
+        FROM proyectos p
+        INNER JOIN leads l ON l.id = p.lead_id
+        WHERE p.es_buffalo = TRUE
+          AND p.status IN ('development', 'active', 'paused')
+          AND l.configuracion IS NOT NULL
+          AND l.configuracion <> ''
+        ORDER BY p.updated_at DESC
       `
     } else if (accessibleIds.length === 0) {
       proyectos = []
     } else {
       proyectos = await prisma.$queryRaw<ProyectoRow[]>`
-        SELECT id, name, status, service_type, config_ref, lead_id, contact_id, updated_at
-        FROM proyectos
-        WHERE status IN ('development', 'active', 'paused')
-          AND id = ANY(${accessibleIds}::uuid[])
-        ORDER BY updated_at DESC
+        SELECT p.id, p.name, p.status, p.service_type, p.config_ref,
+               p.lead_id, p.contact_id, p.updated_at,
+               p.setup_fee_eur::float8 AS setup_fee_eur,
+               p.monthly_fee_eur::float8 AS monthly_fee_eur
+        FROM proyectos p
+        INNER JOIN leads l ON l.id = p.lead_id
+        WHERE p.es_buffalo = TRUE
+          AND p.status IN ('development', 'active', 'paused')
+          AND l.configuracion IS NOT NULL
+          AND l.configuracion <> ''
+          AND p.id = ANY(${accessibleIds}::uuid[])
+        ORDER BY p.updated_at DESC
       `
     }
 
@@ -57,22 +78,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       : []
 
-    const contactIds = proyectos
-      .filter((p) => !p.lead_id && p.contact_id)
-      .map((p) => p.contact_id as number)
-
-    const contacts =
-      contactIds.length > 0
-        ? await prisma.contact.findMany({
-            where: { id: { in: contactIds } },
-            select: { id: true, nombre: true, email: true, empresa: true },
-          })
-        : []
-
     const leadMap = new Map(leads.map((l) => [l.id, l]))
-    const contactMap = new Map(contacts.map((c) => [c.id, c]))
 
-    const projectIds = proyectos.map((p) => p.id)
+    // Solo proyectos cuyo lead de onboarding sigue existiendo
+    const withOnboarding = proyectos.filter((p) => p.lead_id != null && leadMap.has(p.lead_id))
+
+    const projectIds = withOnboarding.map((p) => p.id)
     let taskCounts: Record<
       string,
       { pending: number; in_progress: number; buffalo_validation: number; done: number }
@@ -112,10 +123,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    const projectRows = proyectos.map((p) => {
-      const lead = p.lead_id ? leadMap.get(p.lead_id) : null
-      const contact =
-        lead?.contact ?? (p.contact_id ? contactMap.get(p.contact_id) ?? null : null)
+    const projectRows = withOnboarding.map((p) => {
+      const lead = leadMap.get(p.lead_id as number)!
 
       return {
         kind: 'project' as const,
@@ -127,7 +136,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         lead_id: p.lead_id,
         updated_at:
           p.updated_at instanceof Date ? p.updated_at.toISOString() : String(p.updated_at),
-        contact,
+        contact: lead.contact,
         task_counts: taskCounts[p.id] || {
           pending: 0,
           in_progress: 0,
@@ -166,7 +175,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     )
 
-    return res.status(200).json({ proyectos: merged, total: merged.length })
+    const setupTotal = withOnboarding.reduce(
+      (sum, p) => sum + (Number(p.setup_fee_eur) || 0),
+      0
+    )
+    const monthlyTotal = withOnboarding.reduce(
+      (sum, p) => sum + (Number(p.monthly_fee_eur) || 0),
+      0
+    )
+
+    return res.status(200).json({
+      proyectos: merged,
+      total: merged.length,
+      money: {
+        setup_total_eur: Math.round(setupTotal * 100) / 100,
+        monthly_total_eur: Math.round(monthlyTotal * 100) / 100,
+        projects_count: withOnboarding.length,
+      },
+    })
   } catch (error) {
     if (error instanceof Error && ['No session', 'Invalid session'].includes(error.message)) {
       return
