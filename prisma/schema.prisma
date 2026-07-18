@@ -439,10 +439,10 @@ model Proyecto {
   service_type          String
   status                String    @default("development")
   launched_at           DateTime? @db.Date
-  /** Duración estimada, ej. "4 semanas" */
+  /// Duración estimada, ej. "4 semanas"
   tiempo_previsto       String?
   fecha_inicio_real     DateTime? @db.Date
-  /** NULL = el proyecto aún no ha terminado */
+  /// NULL = el proyecto aún no ha terminado
   fecha_fin_real        DateTime? @db.Date
 
   addon_outbound        Boolean   @default(false)
@@ -481,7 +481,7 @@ model Proyecto {
   config_ref            String?
   ticket_callback_url   String?
   ticket_callback_token String?
-  /** true = proyecto real Buffalo (aparece en Gestión de proyectos) */
+  /// true = proyecto real Buffalo (aparece en Gestión de proyectos)
   es_buffalo            Boolean   @default(false)
 
   created_at            DateTime  @default(now()) @db.Timestamptz(6)
