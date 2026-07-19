@@ -5,7 +5,8 @@ export const INTERNAL_FIELDS = [
   { key: 'nombre', label: 'Nombre', required: true },
   { key: 'apellidos', label: 'Apellidos', required: false },
   { key: 'denominacion_social', label: 'Denominación social', required: false },
-  { key: 'telefono', label: 'Teléfono', required: true },
+  { key: 'telefono', label: 'Teléfono (móvil)', required: false },
+  { key: 'telefono_empresa', label: 'Teléfono empresa', required: false },
   { key: 'cif', label: 'CIF', required: false },
   { key: 'correo', label: 'Correo', required: false },
   { key: 'direccion', label: 'Dirección', required: false },
@@ -25,6 +26,8 @@ export interface MappedLeadFields {
   firstName: string | null
   lastName: string | null
   telefono: string | null
+  /** Número de empresa (si el mapping lo trae). El `telefono` final ya prioriza móvil. */
+  telefonoEmpresa: string | null
   email: string | null
   empresa: string | null
   cargo: string | null
@@ -49,13 +52,40 @@ function normHeader(h: string): string {
 }
 
 const GUESS_RULES: { field: InternalFieldKey; patterns: string[] }[] = [
-  { field: 'nombre', patterns: ['nombre', 'name', 'first name', 'firstname', 'contact name'] },
+  { field: 'nombre', patterns: ['nombre', 'first name', 'firstname', 'contact name'] },
   { field: 'apellidos', patterns: ['apellidos', 'apellido', 'last name', 'lastname', 'surname'] },
   {
     field: 'denominacion_social',
-    patterns: ['denominacion social', 'denominacion', 'razon social', 'empresa', 'company', 'company name'],
+    patterns: ['denominacion social', 'denominacion', 'razon social', 'empresa', 'company name', 'company'],
   },
-  { field: 'telefono', patterns: ['telefono', 'tel', 'phone', 'number', 'mobile', 'movil', 'work phone'] },
+  // Empresa antes que móvil genérico, para que "Company Phone" no se asigne a Teléfono
+  {
+    field: 'telefono_empresa',
+    patterns: [
+      'company phone',
+      'corporate phone',
+      'telefono empresa',
+      'tel empresa',
+      'office phone',
+      'telefono oficina',
+      'telefono de empresa',
+    ],
+  },
+  {
+    field: 'telefono',
+    patterns: [
+      'mobile phone',
+      'work direct phone',
+      'work phone',
+      'mobile',
+      'movil',
+      'celular',
+      'telefono',
+      'tel',
+      'phone',
+      'number',
+    ],
+  },
   { field: 'cif', patterns: ['cif', 'nif', 'tax id', 'vat', 'nif cif'] },
   { field: 'correo', patterns: ['correo', 'email', 'e mail', 'mail'] },
   { field: 'direccion', patterns: ['direccion', 'address', 'domicilio', 'calle'] },
@@ -70,17 +100,28 @@ const GUESS_RULES: { field: InternalFieldKey; patterns: string[] }[] = [
 export function guessColumnMapping(headers: string[]): ColumnMapping {
   const mapping: ColumnMapping = {}
   const usedFields = new Set<InternalFieldKey>()
+  const usedHeaders = new Set<string>()
 
+  // Preferir coincidencias exactas / patrones más largos primero
+  const scored: { header: string; field: InternalFieldKey; score: number }[] = []
   for (const header of headers) {
     const n = normHeader(header)
     for (const rule of GUESS_RULES) {
-      if (usedFields.has(rule.field)) continue
-      if (rule.patterns.some((p) => n === p || n.includes(p))) {
-        mapping[rule.field] = header
-        usedFields.add(rule.field)
-        break
+      let best = 0
+      for (const p of rule.patterns) {
+        if (n === p) best = Math.max(best, 100 + p.length)
+        else if (n.includes(p)) best = Math.max(best, 50 + p.length)
       }
+      if (best > 0) scored.push({ header, field: rule.field, score: best })
     }
+  }
+  scored.sort((a, b) => b.score - a.score)
+
+  for (const hit of scored) {
+    if (usedFields.has(hit.field) || usedHeaders.has(hit.header)) continue
+    mapping[hit.field] = hit.header
+    usedFields.add(hit.field)
+    usedHeaders.add(hit.header)
   }
 
   return mapping
@@ -107,6 +148,10 @@ export function applyColumnMapping(
   const empresa = cell(row, mapping.denominacion_social) || null
   const email = cell(row, mapping.correo)?.toLowerCase() || null
   const linkedin = cell(row, mapping.linkedin) || null
+  const mobile = cell(row, mapping.telefono) || null
+  const telefonoEmpresa = cell(row, mapping.telefono_empresa) || null
+  // Móvil primero; si no hay, teléfono de empresa (se puede llamar igual)
+  const telefono = mobile || telefonoEmpresa
 
   const nombre =
     [nombrePart, apellidosPart].filter(Boolean).join(' ').trim() || 'Sin nombre'
@@ -115,7 +160,8 @@ export function applyColumnMapping(
     nombre,
     firstName: nombrePart || null,
     lastName: apellidosPart || null,
-    telefono: cell(row, mapping.telefono) || null,
+    telefono,
+    telefonoEmpresa,
     email,
     empresa,
     cargo: cell(row, mapping.posicion) || null,
@@ -133,13 +179,15 @@ export function applyColumnMapping(
       lastName: apellidosPart || null,
       nombre,
       empresa,
-      telefono: cell(row, mapping.telefono) || null,
+      telefono,
     }),
   }
 }
 
 export function validateMapping(mapping: ColumnMapping): string | null {
-  if (!mapping.telefono) return 'Relaciona la variable Teléfono con una columna del CSV'
+  if (!mapping.telefono && !mapping.telefono_empresa) {
+    return 'Relaciona Teléfono (móvil) o Teléfono empresa con una columna del CSV'
+  }
   if (!mapping.nombre && !mapping.apellidos) {
     return 'Relaciona al menos Nombre o Apellidos con una columna del CSV'
   }
@@ -155,6 +203,7 @@ export function normalizeStoredMapping(raw: Record<string, string> | null): Colu
     cargo: 'posicion',
     first_name: 'nombre',
     last_name: 'apellidos',
+    company_phone: 'telefono_empresa',
   }
   const out: ColumnMapping = {}
   for (const [k, v] of Object.entries(raw)) {

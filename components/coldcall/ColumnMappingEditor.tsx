@@ -96,9 +96,11 @@ export function ColumnMappingEditor({ headers, mapping, onChange }: ColumnMappin
       </div>
 
       <p className="text-sm text-gray-600">
-        Relaciona cada variable que necesitamos con la columna correspondiente del archivo.
-        <strong className="text-gray-800"> Nombre</strong> (o Apellidos) y{' '}
-        <strong className="text-gray-800">Teléfono</strong> son obligatorios.
+        Relaciona cada variable con la columna del CSV.{' '}
+        <strong className="text-gray-800">Nombre</strong> (o Apellidos) y al menos un teléfono (
+        <strong className="text-gray-800">móvil</strong> o{' '}
+        <strong className="text-gray-800">empresa</strong>) son obligatorios. Si no hay móvil, se
+        usa el de empresa para llamar.
       </p>
 
       <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -116,9 +118,23 @@ export function ColumnMappingEditor({ headers, mapping, onChange }: ColumnMappin
               <div className="min-w-0">
                 <p className="text-sm font-medium text-gray-900">
                   {field.label}
-                  {field.required ? <span className="text-red-500"> *</span> : null}
+                  {field.key === 'nombre' || field.key === 'apellidos' ? (
+                    field.key === 'nombre' ? (
+                      <span className="text-red-500"> *</span>
+                    ) : null
+                  ) : field.key === 'telefono' || field.key === 'telefono_empresa' ? (
+                    <span className="text-amber-600 text-xs font-normal"> (uno de los dos)</span>
+                  ) : field.required ? (
+                    <span className="text-red-500"> *</span>
+                  ) : null}
                 </p>
-                <p className="text-xs text-gray-400">Variable del sistema</p>
+                <p className="text-xs text-gray-400">
+                  {field.key === 'telefono_empresa'
+                    ? 'Si no hay móvil, se usa este para llamar'
+                    : field.key === 'telefono'
+                      ? 'Prioridad frente al de empresa'
+                      : 'Variable del sistema'}
+                </p>
               </div>
               <div className="space-y-1 min-w-0">
                 <Label className="sr-only">Columna CSV para {field.label}</Label>
