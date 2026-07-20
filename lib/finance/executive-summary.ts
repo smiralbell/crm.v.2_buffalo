@@ -9,9 +9,16 @@ import {
   loadExpenseTransactionsForPeriod,
 } from './expense-sources'
 import { computeBankMrr } from './mrr-from-bank'
+import { computePlatformMonthlyBurn } from './platform-burn'
 import { buildAnnualGoalDetail, buildRichKpiCards } from './kpi-details'
 import { detectRecurringExpenses, recurringExpensesSummary } from './recurring-expenses'
-import { formatPeriodLabel, getDefaultPeriodRange, clampPeriodStart, periodDays, type PeriodRange } from './period-presets'
+import {
+  formatPeriodLabel,
+  getDefaultPeriodRange,
+  clampPeriodStart,
+  periodDays,
+  type PeriodRange,
+} from './period-presets'
 import type {
   ExecutiveSummary,
   MonthlyCashFlow,
@@ -44,6 +51,37 @@ function endOfDay(d: Date): Date {
   return x
 }
 
+function shiftMonth(d: Date, delta: number): Date {
+  return new Date(d.getFullYear(), d.getMonth() + delta, 1)
+}
+
+/** Facturado: por fecha de emisión. Cobrado: por fecha del movimiento bancario vinculado. */
+async function sumInvoiced(start: Date, end: Date): Promise<number> {
+  const r = await prisma.invoice.aggregate({
+    where: {
+      deleted_at: null,
+      status: 'sent',
+      issue_date: { gte: start, lte: end },
+    },
+    _sum: { total: true },
+  })
+  return Number(r._sum.total ?? 0)
+}
+
+async function sumCollectedByBankDate(startStr: string, endStr: string): Promise<number> {
+  const r = await query<{ total: string }>(
+    `SELECT COALESCE(SUM(i.total), 0)::text AS total
+     FROM invoices i
+     INNER JOIN bank_transactions bt ON bt.id = i.bank_transaction_id
+     WHERE i.deleted_at IS NULL
+       AND i.status = 'sent'
+       AND i.bank_transaction_id IS NOT NULL
+       AND bt.date >= $1 AND bt.date <= $2`,
+    [startStr, endStr]
+  ).catch(() => ({ rows: [{ total: '0' }] }))
+  return Number(r.rows[0]?.total ?? 0)
+}
+
 export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<ExecutiveSummary> {
   const now = new Date()
   const period = periodInput ?? getDefaultPeriodRange(now)
@@ -58,27 +96,32 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   const m = now.getMonth()
   const startThisMonth = startOfMonth(now)
   const endThisMonth = endOfMonth(now)
+  const startThisMonthStr = startThisMonth.toISOString().slice(0, 10)
+  const endThisMonthStr = endThisMonth.toISOString().slice(0, 10)
 
-  const startLastMonth = startOfMonth(new Date(y, m - 1, 1))
-  const endLastMonth = endOfMonth(new Date(y, m - 1, 1))
+  const startLastMonth = startOfMonth(shiftMonth(now, -1))
+  const endLastMonth = endOfMonth(shiftMonth(now, -1))
+  const startLastMonthStr = startLastMonth.toISOString().slice(0, 10)
+  const endLastMonthStr = endLastMonth.toISOString().slice(0, 10)
 
   const [
     bankMrr,
     balanceResult,
     cashFlowRaw,
-    burnRaw,
-    profitMonthRaw,
-    invoicedMonth,
-    collectedMonth,
+    platformBurn,
+    profitPeriodRaw,
+    invoicedPeriod,
+    collectedPeriod,
     invoicedLastMonth,
     collectedLastMonth,
-    invoicesCountMonth,
+    invoicesCountPeriod,
     balanceLastMonthResult,
     pipelineCards,
     pendingInvoicesRaw,
     bankConnection,
   ] = await Promise.all([
     computeBankMrr(),
+    // Saldo vivo: último movimiento con balance (no depende del filtro)
     query<{ balance: number }>(
       `SELECT balance FROM bank_transactions
        WHERE balance IS NOT NULL
@@ -105,70 +148,30 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
            ORDER BY 1, 2`,
       [periodStartStr, periodEndStr]
     ).catch(() => ({ rows: [] })),
-    query<{ avg_burn: string }>(
-      `SELECT COALESCE(AVG(monthly_burn), 0) AS avg_burn FROM (
-         SELECT
-           EXTRACT(YEAR FROM date) AS y,
-           EXTRACT(MONTH FROM date) AS mo,
-           SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) AS monthly_burn
-         FROM bank_transactions
-         WHERE date >= $1
-         GROUP BY 1, 2
-       ) sub`,
-      [new Date(y, m - 2, 1).toISOString().slice(0, 10)]
-    ).catch(() => ({ rows: [{ avg_burn: '0' }] })),
+    computePlatformMonthlyBurn(3),
+    // Neto del período filtrado (movimientos)
     query<{ net: string }>(
       `SELECT COALESCE(SUM(amount), 0) AS net
        FROM bank_transactions
        WHERE date >= $1 AND date <= $2`,
-      [startThisMonth.toISOString().slice(0, 10), endThisMonth.toISOString().slice(0, 10)]
+      [periodStartStr, periodEndStr]
     ).catch(() => ({ rows: [{ net: '0' }] })),
-    prisma.invoice.aggregate({
-      where: {
-        deleted_at: null,
-        status: 'sent',
-        issue_date: { gte: startThisMonth, lte: endThisMonth },
-      },
-      _sum: { total: true },
-    }),
-    prisma.invoice.aggregate({
-      where: {
-        deleted_at: null,
-        status: 'sent',
-        bank_transaction_id: { not: null },
-        issue_date: { gte: startThisMonth, lte: endThisMonth },
-      },
-      _sum: { total: true },
-    }),
-    prisma.invoice.aggregate({
-      where: {
-        deleted_at: null,
-        status: 'sent',
-        issue_date: { gte: startLastMonth, lte: endLastMonth },
-      },
-      _sum: { total: true },
-    }),
-    prisma.invoice.aggregate({
-      where: {
-        deleted_at: null,
-        status: 'sent',
-        bank_transaction_id: { not: null },
-        issue_date: { gte: startLastMonth, lte: endLastMonth },
-      },
-      _sum: { total: true },
-    }),
+    sumInvoiced(periodStart, periodEnd),
+    sumCollectedByBankDate(periodStartStr, periodEndStr),
+    sumInvoiced(startLastMonth, endLastMonth),
+    sumCollectedByBankDate(startLastMonthStr, endLastMonthStr),
     prisma.invoice.count({
       where: {
         deleted_at: null,
         status: 'sent',
-        issue_date: { gte: startThisMonth, lte: endThisMonth },
+        issue_date: { gte: periodStart, lte: periodEnd },
       },
     }),
     query<{ balance: number }>(
       `SELECT balance FROM bank_transactions
        WHERE balance IS NOT NULL AND date < $1
        ORDER BY date DESC, created_at DESC LIMIT 1`,
-      [startThisMonth.toISOString().slice(0, 10)]
+      [startThisMonthStr]
     ).catch(() => ({ rows: [] as { balance: number }[] })),
     prisma.pipelineCard.findMany({
       where: {
@@ -206,34 +209,33 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   const mrr = bankMrr.mrr
   const activeClients = bankMrr.active_clients
   const cashBalance = balanceResult.rows[0]?.balance ? Number(balanceResult.rows[0].balance) : 0
-  const avgMonthlyBurn = Number(burnRaw.rows[0]?.avg_burn ?? 0)
+  const avgMonthlyBurn = platformBurn.avg_monthly
   const runwayMonths =
-    avgMonthlyBurn > 0 && cashBalance > 0 ? Math.round((cashBalance / avgMonthlyBurn) * 10) / 10 : null
+    avgMonthlyBurn > 0 && cashBalance > 0
+      ? Math.round((cashBalance / avgMonthlyBurn) * 10) / 10
+      : null
 
-  const invoicedThisMonth = Number(invoicedMonth._sum.total ?? 0)
-  const collectedThisMonth = Number(collectedMonth._sum.total ?? 0)
-  const invoicedLastMonthVal = Number(invoicedLastMonth._sum.total ?? 0)
-  const collectedLastMonthVal = Number(collectedLastMonth._sum.total ?? 0)
-  const collectionGap = invoicedThisMonth - collectedThisMonth
+  const invoicedThisPeriod = invoicedPeriod
+  const collectedThisPeriod = collectedPeriod
+  const invoicedLastMonthVal = invoicedLastMonth
+  const collectedLastMonthVal = collectedLastMonth
+  const collectionGap = invoicedThisPeriod - collectedThisPeriod
   const collectionRatePct =
-    invoicedThisMonth > 0
-      ? Math.round((collectedThisMonth / invoicedThisMonth) * 1000) / 10
+    invoicedThisPeriod > 0
+      ? Math.round((collectedThisPeriod / invoicedThisPeriod) * 1000) / 10
       : null
   const pipelineValue = pipelineCards.reduce((s, c) => s + Number(c.amount ?? 0), 0)
   const pipelineDeals = pipelineCards.length
-  const profitThisMonth = Number(profitMonthRaw.rows[0]?.net ?? 0)
+  const profitThisPeriod = Number(profitPeriodRaw.rows[0]?.net ?? 0)
   const balanceLastMonth = balanceLastMonthResult.rows[0]?.balance
     ? Number(balanceLastMonthResult.rows[0].balance)
     : null
-  const cashChangeMom =
-    balanceLastMonth != null ? cashBalance - balanceLastMonth : null
+  const cashChangeMom = balanceLastMonth != null ? cashBalance - balanceLastMonth : null
 
   const cashFlow: MonthlyCashFlow[] = cashFlowRaw.rows.map((r) => {
     const income = Number(r.income)
     const expenses = Number(r.expenses)
-    const month = chartDaily
-      ? dayLabel(r.day!)
-      : monthLabel(r.year!, r.month!)
+    const month = chartDaily ? dayLabel(r.day!) : monthLabel(r.year!, r.month!)
     return {
       month,
       income,
@@ -242,14 +244,37 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
     }
   })
 
-  const invoicesForChart = await prisma.invoice.findMany({
-    where: {
-      deleted_at: null,
-      status: 'sent',
-      issue_date: { gte: periodStart, lte: periodEnd },
-    },
-    select: { issue_date: true, total: true, bank_transaction_id: true },
-  })
+  // Facturado por issue_date; cobrado por fecha de banco
+  const [invoicesForChart, collectedForChart] = await Promise.all([
+    prisma.invoice.findMany({
+      where: {
+        deleted_at: null,
+        status: 'sent',
+        issue_date: { gte: periodStart, lte: periodEnd },
+      },
+      select: { issue_date: true, total: true },
+    }),
+    query<{ day?: string; year?: number; month?: number; total: string }>(
+      chartDaily
+        ? `SELECT bt.date::text AS day, COALESCE(SUM(i.total), 0)::text AS total
+           FROM invoices i
+           INNER JOIN bank_transactions bt ON bt.id = i.bank_transaction_id
+           WHERE i.deleted_at IS NULL AND i.status = 'sent'
+             AND bt.date >= $1 AND bt.date <= $2
+           GROUP BY bt.date
+           ORDER BY bt.date`
+        : `SELECT EXTRACT(YEAR FROM bt.date)::int AS year,
+                  EXTRACT(MONTH FROM bt.date)::int AS month,
+                  COALESCE(SUM(i.total), 0)::text AS total
+           FROM invoices i
+           INNER JOIN bank_transactions bt ON bt.id = i.bank_transaction_id
+           WHERE i.deleted_at IS NULL AND i.status = 'sent'
+             AND bt.date >= $1 AND bt.date <= $2
+           GROUP BY 1, 2
+           ORDER BY 1, 2`,
+      [periodStartStr, periodEndStr]
+    ).catch(() => ({ rows: [] as { day?: string; year?: number; month?: number; total: string }[] })),
+  ])
 
   const invoicedMap = new Map<string, { invoiced: number; collected: number; label: string }>()
 
@@ -277,11 +302,34 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
     const key = chartDaily
       ? d.toISOString().slice(0, 10)
       : `${d.getFullYear()}-${d.getMonth()}`
-    const bucket = invoicedMap.get(key)
-    if (!bucket) continue
-    const total = Number(inv.total)
-    bucket.invoiced += total
-    if (inv.bank_transaction_id) bucket.collected += total
+    let bucket = invoicedMap.get(key)
+    if (!bucket) {
+      bucket = {
+        invoiced: 0,
+        collected: 0,
+        label: chartDaily ? dayLabel(key) : monthLabel(d.getFullYear(), d.getMonth() + 1),
+      }
+      invoicedMap.set(key, bucket)
+    }
+    bucket.invoiced += Number(inv.total)
+  }
+
+  for (const row of collectedForChart.rows) {
+    const key = chartDaily
+      ? row.day!
+      : `${row.year!}-${(row.month! as number) - 1}`
+    let bucket = invoicedMap.get(key)
+    if (!bucket) {
+      bucket = {
+        invoiced: 0,
+        collected: 0,
+        label: chartDaily
+          ? dayLabel(row.day!)
+          : monthLabel(row.year!, row.month!),
+      }
+      invoicedMap.set(key, bucket)
+    }
+    bucket.collected += Number(row.total)
   }
 
   const invoicedVsCollected: MonthlyInvoicedCollected[] = Array.from(invoicedMap.values()).map(
@@ -316,7 +364,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   const pendingCollectionTotal = pendingInvoices.reduce((s, i) => s + i.total, 0)
 
   const [expenseLoad, unclassified] = await Promise.all([
-    loadExpenseTransactionsForPeriod(periodStart, periodEnd),
+    loadExpenseTransactionsForPeriod(periodStart, periodEnd, 'bank_only'),
     countUnclassifiedExpenses(periodStart, periodEnd),
   ])
 
@@ -373,6 +421,9 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   })
   const ytdInvoiced = Number(invoicedYTD._sum.total ?? 0)
 
+  // Facturado del mes calendario (para ritmo del objetivo anual)
+  const invoicedThisMonth = await sumInvoiced(startThisMonth, endThisMonth)
+
   const annual_goal = buildAnnualGoalDetail({
     ytdInvoiced,
     invoiced_this_month: invoicedThisMonth,
@@ -387,18 +438,19 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
     cash_change_mom: cashChangeMom,
     runway_months: runwayMonths,
     avg_monthly_burn: avgMonthlyBurn,
-    invoiced_this_month: invoicedThisMonth,
+    platform_burn_months: platformBurn.months_with_data,
+    invoiced_this_month: invoicedThisPeriod,
     invoiced_last_month: invoicedLastMonthVal,
-    collected_this_month: collectedThisMonth,
+    collected_this_month: collectedThisPeriod,
     collected_last_month: collectedLastMonthVal,
     collection_gap: collectionGap,
     collection_rate_pct: collectionRatePct,
     pending_collection_total: pendingCollectionTotal,
     pending_invoices_count: pendingInvoices.length,
-    invoices_this_month_count: invoicesCountMonth,
+    invoices_this_month_count: invoicesCountPeriod,
     pipeline_value: pipelineValue,
     pipeline_deals: pipelineDeals,
-    profit_this_month: profitThisMonth,
+    profit_this_month: profitThisPeriod,
     ytdInvoiced,
     mrr_source: bankMrr.source,
     mrr_tagged_count: bankMrr.tagged_count,
@@ -412,12 +464,12 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
       active_clients: activeClients,
       cash_balance: cashBalance,
       runway_months: runwayMonths,
-      invoiced_this_month: invoicedThisMonth,
-      collected_this_month: collectedThisMonth,
+      invoiced_this_month: invoicedThisPeriod,
+      collected_this_month: collectedThisPeriod,
       collection_gap: collectionGap,
       pipeline_value: pipelineValue,
       avg_monthly_burn: avgMonthlyBurn,
-      profit_this_month: profitThisMonth,
+      profit_this_month: profitThisPeriod,
       annual_target: ANNUAL_TARGET,
       annual_progress_pct: annual_goal.achieved_pct,
     },

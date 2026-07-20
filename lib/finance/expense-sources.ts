@@ -10,9 +10,17 @@ export interface ExpenseLoadResult {
   source_label: string
 }
 
+export type ExpenseLoadMode = 'bank_only' | 'crm_extras'
+
+/**
+ * Gastos para analítica del dashboard.
+ * Por defecto SOLO banco: evita doble conteo (mismo pago en extracto + CRM).
+ * `crm_extras` añade manuales/nóminas/fijos sin dedupe (solo para pantallas CRM dedicadas).
+ */
 export async function loadExpenseTransactionsForPeriod(
   start: Date,
-  end: Date
+  end: Date,
+  mode: ExpenseLoadMode = 'bank_only'
 ): Promise<ExpenseLoadResult> {
   const startStr = clampPeriodStart(start).toISOString().slice(0, 10)
   const endStr = end.toISOString().slice(0, 10)
@@ -40,75 +48,81 @@ export async function loadExpenseTransactionsForPeriod(
     // tabla bank_transactions puede no existir
   }
 
-  try {
-    const [manualExpenses, salaries, fixedActive] = await Promise.all([
-      prisma.expense.findMany({
-        where: {
-          deleted_at: null,
-          OR: [
-            { date_start: { gte: start, lte: end } },
-            { date_end: { gte: start, lte: end } },
-            {
-              AND: [{ date_start: { lte: start } }, { date_end: { gte: end } }],
-            },
-          ],
-        },
-        select: { name: true, total_amount: true, person_name: true, date_start: true },
-      }),
-      prisma.salary.findMany({
-        where: { deleted_at: null, date: { gte: start, lte: end } },
-        select: { person_name: true, amount: true, date: true },
-      }),
-      prisma.fixedExpense.findMany({
-        where: { deleted_at: null, is_active: true },
-        select: { name: true, amount: true },
-      }),
-    ])
+  if (mode === 'crm_extras') {
+    try {
+      const [manualExpenses, salaries, fixedActive] = await Promise.all([
+        prisma.expense.findMany({
+          where: {
+            deleted_at: null,
+            OR: [
+              { date_start: { gte: start, lte: end } },
+              { date_end: { gte: start, lte: end } },
+              {
+                AND: [{ date_start: { lte: start } }, { date_end: { gte: end } }],
+              },
+            ],
+          },
+          select: { name: true, total_amount: true, person_name: true, date_start: true },
+        }),
+        prisma.salary.findMany({
+          where: { deleted_at: null, date: { gte: start, lte: end } },
+          select: { person_name: true, amount: true, date: true },
+        }),
+        prisma.fixedExpense.findMany({
+          where: { deleted_at: null, is_active: true },
+          select: { name: true, amount: true },
+        }),
+      ])
 
-    for (const e of manualExpenses) {
-      manual_count++
-      const desc = [e.name, e.person_name].filter(Boolean).join(' — ')
-      transactions.push({
-        description: desc || e.name,
-        amount: -Math.abs(Number(e.total_amount)),
-        date: e.date_start.toISOString().slice(0, 10),
-      })
-    }
+      for (const e of manualExpenses) {
+        manual_count++
+        const desc = [e.name, e.person_name].filter(Boolean).join(' — ')
+        transactions.push({
+          description: desc || e.name,
+          amount: -Math.abs(Number(e.total_amount)),
+          date: e.date_start.toISOString().slice(0, 10),
+        })
+      }
 
-    for (const s of salaries) {
-      manual_count++
-      transactions.push({
-        description: `Nómina ${s.person_name}`,
-        amount: -Math.abs(Number(s.amount)),
-        date: s.date.toISOString().slice(0, 10),
-      })
-    }
+      for (const s of salaries) {
+        manual_count++
+        transactions.push({
+          description: `Nómina ${s.person_name}`,
+          amount: -Math.abs(Number(s.amount)),
+          date: s.date.toISOString().slice(0, 10),
+        })
+      }
 
-    const monthsInRange = Math.max(
-      1,
-      (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
-    )
-    for (const f of fixedActive) {
-      manual_count++
-      const total = Math.abs(Number(f.amount)) * monthsInRange
-      transactions.push({
-        description: `${f.name} (fijo mensual)`,
-        amount: -total,
-        date: startStr,
-      })
+      const monthsInRange = Math.max(
+        1,
+        (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+      )
+      for (const f of fixedActive) {
+        manual_count++
+        const total = Math.abs(Number(f.amount)) * monthsInRange
+        transactions.push({
+          description: `${f.name} (fijo mensual)`,
+          amount: -total,
+          date: startStr,
+        })
+      }
+    } catch {
+      // tablas financieras pueden no existir
     }
-  } catch {
-    // tablas financieras pueden no existir
   }
 
   const source_label =
-    bank_count > 0 && manual_count > 0
-      ? 'Banco + gastos registrados en CRM'
-      : bank_count > 0
-        ? 'Movimientos bancarios'
-        : manual_count > 0
-          ? 'Gastos manuales, nóminas y fijos del CRM'
-          : 'Sin datos — conecta el banco o registra gastos'
+    mode === 'bank_only'
+      ? bank_count > 0
+        ? 'Solo movimientos bancarios (sin doble conteo CRM)'
+        : 'Sin salidas en banco en este período'
+      : bank_count > 0 && manual_count > 0
+        ? 'Banco + gastos registrados en CRM'
+        : bank_count > 0
+          ? 'Movimientos bancarios'
+          : manual_count > 0
+            ? 'Gastos manuales, nóminas y fijos del CRM'
+            : 'Sin datos — conecta el banco o registra gastos'
 
   return { transactions, bank_count, manual_count, source_label }
 }
@@ -118,7 +132,7 @@ export async function loadExpenseTransactionsYtd(
   startYTD: Date
 ): Promise<ExpenseLoadResult> {
   const end = new Date()
-  return loadExpenseTransactionsForPeriod(startYTD, end)
+  return loadExpenseTransactionsForPeriod(startYTD, end, 'bank_only')
 }
 
 export async function loadMrrByClient(): Promise<
@@ -147,8 +161,7 @@ export async function countUnclassifiedExpenses(
       where: {
         deleted_at: null,
         date_start: { gte: start, lte: end ?? new Date() },
-        project: null,
-        client_name: null,
+        AND: [{ OR: [{ project: null }, { project: '' }] }, { OR: [{ client_name: null }, { client_name: '' }] }],
       },
       select: { total_amount: true },
     })
@@ -158,24 +171,8 @@ export async function countUnclassifiedExpenses(
     // ignore
   }
 
-  try {
-    const bankNeg = await query<{ cnt: string }>(
-      `SELECT COUNT(*)::text AS cnt FROM bank_transactions
-       WHERE date >= $1 AND date <= $2 AND amount < 0`,
-      [startStr, endStr]
-    )
-    const bankCount = Number(bankNeg.rows[0]?.cnt ?? 0)
-    const manualCount = await prisma.expense.count({
-      where: { deleted_at: null, date_start: { gte: start, lte: end ?? new Date() } },
-    })
-    if (bankCount > 0 && manualCount === 0) {
-      bank_without_manual = bankCount
-    } else if (bankCount > manualCount * 2) {
-      bank_without_manual = bankCount - manualCount
-    }
-  } catch {
-    // ignore
-  }
+  // Sin columna bank_transaction_id en expenses: no estimamos huérfanos banco↔CRM
+  bank_without_manual = 0
 
   return { unlinked_manual, unlinked_manual_total, bank_without_manual }
 }

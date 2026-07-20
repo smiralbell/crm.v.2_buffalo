@@ -4,22 +4,22 @@ export const KPI_HELP: Record<string, string> = {
   mrr: 'Monthly Recurring Revenue: ingreso mensual recurrente. Solo cuenta cobros que marques manualmente en Ingresos con «Marcar MRR». Sin etiquetas, MRR = 0 €.',
   arr: 'Annual Recurring Revenue: MRR × 12. Proyección anual si se mantuvieran las mismas mensualidades. El objetivo de la empresa es 250.000 €/año.',
   cash: 'Saldo disponible en cuenta según el último movimiento sincronizado del banco. Incluye variación respecto al mes anterior.',
-  runway: 'Meses que puedes operar con la caja actual si el gasto medio mensual se mantiene. Caja ÷ gasto medio (últimos 3 meses).',
-  invoiced: 'Total facturado este mes: suma de facturas emitidas con estado «enviada» en el CRM, por fecha de emisión. No implica que ya hayas cobrado.',
-  collected: 'Total cobrado este mes: facturas enviadas que ya vinculaste a un ingreso del extracto bancario en Ingresos.',
-  gap: 'Brecha de cobro = Facturado − Cobrado (mes actual). Si es alto, has emitido facturas que aún no han entrado en el banco.',
+  runway: 'Meses de caja si solo mantienes el gasto medio en plataformas/SaaS (Twilio, Cursor, PLT…). Saldo ÷ media mensual de plataformas (últimos meses con datos). No incluye nóminas ni developers.',
+  invoiced: 'Total facturado en el período: facturas «enviadas» por fecha de emisión. No implica cobro.',
+  collected: 'Total cobrado en el período: facturas vinculadas a un movimiento bancario, por fecha del extracto (no por emisión).',
+  gap: 'Brecha = Facturado (emisión) − Cobrado (fecha banco) en el período filtrado. Si es alta, hay facturas emitidas sin cobro en banco o cobros fuera de fechas.',
   pipeline: 'Valor de oportunidades abiertas en el CRM (negociando, propuesta, reunión, contrato). Potencial futuro, no ingreso real aún.',
 }
 
 export const PERIOD_INSIGHT_HELP: Record<string, string> = {
-  'Dinero en cuenta': 'Saldo al cierre del período seleccionado en el filtro de fechas, según el último movimiento del extracto.',
+  'Dinero en cuenta': 'Saldo vivo según el último movimiento sincronizado (no depende del filtro de fechas).',
   Ingresos: 'Suma de movimientos positivos del banco en el período filtrado.',
   Gastos: 'Suma de movimientos negativos del banco en el período filtrado (valor absoluto).',
-  'Beneficio bruto': 'Ingresos menos gastos del período, antes de impuestos.',
-  'IVA a deber': 'IVA repercutido (facturas emitidas) menos IVA soportado (gastos con factura), estimado del período.',
-  'Beneficio neto': 'Beneficio bruto menos IVA a deber.',
-  'Imp. sociedades': 'Estimación del 15% sobre el beneficio neto (simplificado).',
-  'Beneficio final': 'Lo que quedaría tras IVA e impuesto de sociedades estimados.',
+  'Beneficio bruto': 'Ingresos menos gastos del período (caja), antes de impuestos.',
+  'IVA a deber': 'IVA repercutido menos soportado del período, solo con facturas/gastos vinculados. Estimación.',
+  'Beneficio neto': 'Resultado fiscal estimado tras IVA.',
+  'Imp. sociedades': 'Estimación del % de IS configurado en ajustes sobre el resultado fiscal del período.',
+  'Beneficio final': 'Estimación tras IVA e impuesto de sociedades. No sustituye a gestoría.',
 }
 
 export const ANNUAL_GOAL_HELP =

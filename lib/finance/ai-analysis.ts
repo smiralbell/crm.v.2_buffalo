@@ -29,12 +29,15 @@ Reglas:
 - Tono profesional, sin relleno motivacional vacío.
 - Prioriza cash, cobros, MRR, margen por cliente y pipeline.`
 
-export async function generateFinanceAiAnalysis(): Promise<{
+export async function generateFinanceAiAnalysis(period?: {
+  start: Date
+  end: Date
+}): Promise<{
   summary: FinanceAiSummary
   model: string
   context: ExecutiveSummary
 }> {
-  const context = await buildExecutiveSummary()
+  const context = await buildExecutiveSummary(period)
 
   const payload = {
     objetivo_anual_eur: 250_000,

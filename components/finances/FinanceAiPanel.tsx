@@ -12,9 +12,11 @@ interface Props {
     model: string
     created_at: string
   } | null
+  periodStart?: string
+  periodEnd?: string
 }
 
-export default function FinanceAiPanel({ initialAnalysis }: Props) {
+export default function FinanceAiPanel({ initialAnalysis, periodStart, periodEnd }: Props) {
   const [analysis, setAnalysis] = useState(initialAnalysis)
   const [loading, setLoading] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
@@ -25,7 +27,11 @@ export default function FinanceAiPanel({ initialAnalysis }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/finance/ai-analysis', { method: 'POST' })
+      const res = await fetch('/api/finance/ai-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start: periodStart, end: periodEnd }),
+      })
       const data = await res.json()
       if (!res.ok) {
         setError(data.error || 'Error al generar análisis')

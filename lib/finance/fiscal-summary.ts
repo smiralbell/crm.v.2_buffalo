@@ -223,6 +223,8 @@ function aggregateMonth(
     if (inv && inv.iva > 0) {
       base_income += inv.subtotal
       iva_repercutido += inv.iva
+    } else {
+      base_income += row.amount
     }
   }
 
@@ -231,6 +233,8 @@ function aggregateMonth(
     if (m) {
       base_expenses += m.base
       iva_soportado += m.iva
+    } else {
+      base_expenses += Math.abs(row.amount)
     }
   }
 
@@ -290,6 +294,7 @@ export async function buildFiscalPeriodSummary(
   let linked_incomes = 0
   let incomes_with_iva = 0
 
+  // Base imponible: factura vinculada con IVA → subtotal; si no, el cobro bancario íntegro
   for (const row of incomeRows) {
     const inv = linked.get(row.id)
     if (inv) {
@@ -298,15 +303,26 @@ export async function buildFiscalPeriodSummary(
         incomes_with_iva++
         base_income += inv.subtotal
         iva_repercutido += inv.iva
+      } else {
+        base_income += row.amount
       }
+    } else {
+      base_income += row.amount
     }
   }
 
   let base_expenses = 0
   let iva_soportado = 0
+  const matchedExpenseIds = new Set(expenseMatchesList.map((m) => m.bankId))
   for (const m of expenseMatchesList) {
     base_expenses += m.base
     iva_soportado += m.iva
+  }
+  // Gastos sin match IVA: cuentan el importe bancario (evita que fiscal ignore salidas reales)
+  for (const row of expenseRows) {
+    if (!matchedExpenseIds.has(row.id)) {
+      base_expenses += Math.abs(row.amount)
+    }
   }
 
   base_income = round2(base_income)
@@ -316,6 +332,7 @@ export async function buildFiscalPeriodSummary(
 
   const has_iva_data = incomes_with_iva > 0 || iva_soportado > 0
   const iva_liquidacion = has_iva_data ? round2(iva_repercutido - iva_soportado) : 0
+  // Con IVA: bases (factura + no vinculados). Sin IVA: bruto de caja = ingresos − gastos banco
   const fiscal_gross = has_iva_data ? round2(base_income - base_expenses) : gross_cash
 
   const corporate_tax_percent = await getCorporateTaxPercent()

@@ -19,21 +19,16 @@ import {
   buildFiscalPeriodSummary,
   fiscalToOverviewKpis,
 } from '@/lib/finance/fiscal-summary'
+import { computePlatformMonthlyBurn } from '@/lib/finance/platform-burn'
 
 const CashFlowChart = dynamic(() => import('@/components/finances/CashFlowChart'), { ssr: false })
 const InvoicedVsCollectedChart = dynamic(() => import('@/components/finances/InvoicedVsCollectedChart'), { ssr: false })
 const FinanceCategoryDonut = dynamic(() => import('@/components/finances/FinanceCategoryDonut'), { ssr: false })
 const MrrByClientChart = dynamic(() => import('@/components/finances/MrrByClientChart'), { ssr: false })
-const NetTrendChart = dynamic(() => import('@/components/finances/NetTrendChart'), { ssr: false })
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  Receipt,
-  ArrowRight,
   ArrowUp,
   ArrowDown,
   Loader2,
@@ -75,6 +70,14 @@ interface DashboardProps {
     gross_cash: number
     has_iva_data: boolean
   }
+  fiscalMeta: {
+    corporate_tax_percent: number
+    fiscal_gross: number
+  }
+  runway: {
+    months: number | null
+    platform_burn_monthly: number
+  }
   bankConnection: BankConnectionStatus
   initialAiAnalysis: {
     summary: FinanceAiSummary
@@ -111,6 +114,14 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           gross_cash: 0,
           has_iva_data: false,
         },
+        fiscalMeta: {
+          corporate_tax_percent: 25,
+          fiscal_gross: 0,
+        },
+        runway: {
+          months: null,
+          platform_burn_monthly: 0,
+        },
         bankConnection: {
           connected: false,
           account_uid: null,
@@ -140,19 +151,13 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     const endParam = context.query.end as string
     const { start: startDate, end: endDate } = parsePeriodFromQuery(startParam, endParam)
 
-    // Calcular desde bank_transactions (datos reales) con filtro de fechas
-    const startStr = format(startDate, 'yyyy-MM-dd')
-    const endStr = format(endDate, 'yyyy-MM-dd')
-
-    // Dinero actual en cuenta: saldo del último movimiento dentro del período (más reciente)
+    // Saldo vivo (último movimiento con balance) — no depende del filtro
     const balanceResult = await query<{ balance: number }>(
       `SELECT balance
        FROM bank_transactions
        WHERE balance IS NOT NULL
-         AND date >= $1 AND date <= $2
        ORDER BY date DESC, created_at DESC
-       LIMIT 1`,
-      [startStr, endStr]
+       LIMIT 1`
     )
     const currentBalance = balanceResult.rows[0]?.balance
       ? Number(balanceResult.rows[0].balance)
@@ -160,6 +165,11 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
     const fiscal = await buildFiscalPeriodSummary(startDate, endDate)
     const overviewKpis = fiscalToOverviewKpis(fiscal)
+    const platformBurn = await computePlatformMonthlyBurn(3)
+    const runwayMonths =
+      platformBurn.avg_monthly > 0 && currentBalance > 0
+        ? Math.round((currentBalance / platformBurn.avg_monthly) * 10) / 10
+        : null
 
     const income = fiscal.income_cash
     const expenses = fiscal.expenses_cash
@@ -215,6 +225,14 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           netProfitAfterCorporateTax,
         },
         overviewKpis,
+        fiscalMeta: {
+          corporate_tax_percent: fiscal.corporate_tax_percent,
+          fiscal_gross: fiscal.fiscal_gross,
+        },
+        runway: {
+          months: runwayMonths,
+          platform_burn_monthly: platformBurn.avg_monthly,
+        },
         bankConnection,
         initialAiAnalysis,
       },
@@ -248,6 +266,14 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           gross_cash: 0,
           has_iva_data: false,
         },
+        fiscalMeta: {
+          corporate_tax_percent: 25,
+          fiscal_gross: 0,
+        },
+        runway: {
+          months: null,
+          platform_burn_monthly: 0,
+        },
         bankConnection: {
           connected: false,
           account_uid: null,
@@ -265,6 +291,8 @@ export default function FinancesDashboard({
   dateRange: initialDateRange,
   stats,
   overviewKpis,
+  fiscalMeta,
+  runway,
   bankConnection: initialBankConnection,
   initialAiAnalysis,
 }: DashboardProps) {
@@ -553,48 +581,69 @@ export default function FinancesDashboard({
       1,
       Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24)) + 1
     )
-    return buildPeriodInsights({ ...stats, periodDays: periodDaysCount })
-  }, [stats, dateRange])
+    return buildPeriodInsights({
+      ...stats,
+      periodDays: periodDaysCount,
+      corporateTaxPercent: fiscalMeta.corporate_tax_percent,
+      hasIvaData: overviewKpis.has_iva_data,
+      fiscalGross: fiscalMeta.fiscal_gross,
+    })
+  }, [stats, dateRange, fiscalMeta, overviewKpis.has_iva_data])
 
   const periodQuery = periodToQuery(dateRange)
   const periodQs = `start=${periodQuery.start}&end=${periodQuery.end}`
 
-  const overviewCards = [
+  // Prioridad 1: caja del período + runway plataformas + impuestos
+  const cashCards = [
     {
-      href: `/finances/expenses?${periodQs}`,
-      label: 'Gastos',
-      value: overviewKpis.expenses,
-      sub: 'Pagos en banco',
-      valueClass: 'text-rose-800',
+      key: 'balance',
+      href: `/finances?${periodQs}`,
+      label: 'Saldo hoy',
+      value: stats.currentBalance,
+      sub: 'Último movimiento sincronizado',
+      valueClass: 'text-slate-900',
+      display: formatCurrency(stats.currentBalance),
     },
     {
+      key: 'income',
       href: `/finances/incomes?${periodQs}`,
-      label: 'Ingresos',
+      label: 'Cobros',
       value: overviewKpis.income,
-      sub: 'Cobros en banco',
+      sub: 'Entradas banco · período',
       valueClass: 'text-emerald-800',
+      display: formatCurrency(overviewKpis.income),
     },
     {
+      key: 'expenses',
+      href: `/finances/expenses?${periodQs}`,
+      label: 'Pagos',
+      value: overviewKpis.expenses,
+      sub: 'Salidas banco · período',
+      valueClass: 'text-rose-800',
+      display: formatCurrency(overviewKpis.expenses),
+    },
+    {
+      key: 'runway',
+      href: `/finances/expenses?${periodQs}`,
+      label: 'Runway',
+      value: runway.months ?? 0,
+      sub:
+        runway.platform_burn_monthly > 0
+          ? `Burn PLT ${formatCurrency(runway.platform_burn_monthly)}/mes`
+          : 'Sin gastos plataformas detectados',
+      valueClass:
+        runway.months != null && runway.months < 3 ? 'text-red-600' : 'text-slate-900',
+      display: runway.months != null ? `${runway.months}m` : '—',
+    },
+    {
+      key: 'taxes',
       href: `/finances/taxes?${periodQs}`,
       label: 'Impuestos',
       value: overviewKpis.taxes,
       sub: overviewKpis.has_iva_data ? 'IVA + sociedades est.' : 'Solo IS est. (sin IVA vinc.)',
       valueClass: 'text-slate-900',
+      display: formatCurrency(overviewKpis.taxes),
     },
-    {
-      href: `/finances/results?${periodQs}`,
-      label: 'Resultado',
-      value: overviewKpis.net_result,
-      sub: `Bruto ${formatCurrency(overviewKpis.gross_cash)}`,
-      valueClass: overviewKpis.net_result >= 0 ? 'text-slate-900' : 'text-red-600',
-    },
-  ]
-
-  const quickLinks = [
-    { href: '/finances/expenses', label: 'Gastos', icon: TrendingDown, color: 'text-red-600' },
-    { href: '/finances/incomes', label: 'Ingresos', icon: TrendingUp, color: 'text-green-600' },
-    { href: '/finances/taxes', label: 'Impuestos', icon: Receipt, color: 'text-blue-600' },
-    { href: '/finances/results', label: 'Resultados', icon: DollarSign, color: 'text-purple-600' },
   ]
 
   return (
@@ -692,16 +741,16 @@ export default function FinancesDashboard({
           ) : null}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {overviewCards.map((card) => (
-            <Link key={card.href} href={card.href}>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {cashCards.map((card) => (
+            <Link key={card.key} href={card.href}>
               <Card className="border-slate-200/80 shadow-sm bg-white hover:border-slate-300 transition-colors h-full">
                 <CardContent className="pt-5 pb-4">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                     {card.label}
                   </p>
                   <p className={`text-2xl font-semibold tabular-nums ${card.valueClass}`}>
-                    {formatCurrency(card.value)}
+                    {card.display}
                   </p>
                   <p className="text-[11px] text-slate-400 mt-1">{card.sub}</p>
                 </CardContent>
@@ -710,177 +759,79 @@ export default function FinancesDashboard({
           ))}
         </div>
 
-        {/* Centro de inteligencia financiera */}
         {loadingExecutive && !executive ? (
           <div className="flex items-center justify-center py-12 text-gray-400 gap-2">
             <Loader2 className="h-5 w-5 animate-spin" />
-            Cargando métricas ejecutivas…
+            Cargando métricas…
           </div>
         ) : executive ? (
           <>
-            {/* KPIs ejecutivos */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {executive.kpi_cards.map((card) => (
-                <FinanceKpiCard key={card.id} card={card} />
-              ))}
-            </div>
+            {/* 2. Flujo de caja */}
+            <Card className="border border-gray-200 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-semibold text-gray-900">Flujo de caja</CardTitle>
+                <p className="text-xs text-gray-400 font-normal">
+                  Entradas y salidas bancarias · {executive.period_label}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <CashFlowChart data={executive.cash_flow} />
+              </CardContent>
+            </Card>
 
-            <AnnualGoalCard goal={executive.annual_goal} />
-
-            {/* Gráficos */}
-            <div className="space-y-4">
-              <div className="grid gap-4 lg:grid-cols-2">
-                <Card className="border border-gray-200 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold text-gray-900">Flujo de caja</CardTitle>
-                    <p className="text-xs text-gray-400 font-normal">{executive.period_label}</p>
-                  </CardHeader>
-                  <CardContent>
-                    <CashFlowChart data={executive.cash_flow} />
-                  </CardContent>
-                </Card>
-                <Card className="border border-gray-200 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold text-gray-900">Facturado vs cobrado</CardTitle>
-                    <p className="text-xs text-gray-400 font-normal">{executive.period_label}</p>
-                  </CardHeader>
-                  <CardContent>
-                    <InvoicedVsCollectedChart data={executive.invoiced_vs_collected} />
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-3">
-                <Card className="border border-gray-200 shadow-sm lg:col-span-2">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold text-gray-900">
-                      Distribución de gastos
-                    </CardTitle>
-                    <p className="text-xs text-gray-400 font-normal">
-                      {executive.period_label} · {executive.expense_source_label}
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <FinanceCategoryDonut
-                      data={executive.expense_breakdown}
-                      emptyMessage="Sin gastos en este período — sincroniza el banco o registra gastos en el CRM"
-                    />
-                  </CardContent>
-                </Card>
-                <Card className="border border-gray-200 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-1.5">
-                      Gastos recurrentes
-                    </CardTitle>
-                    <p className="text-xs text-gray-400 font-normal">
-                      Nóminas, SaaS, developers y marketing · ahorro potencial si cortas
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <RecurringExpensesPanel data={executive.recurring_expenses} compact />
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-2">
-                <Card className="border border-gray-200 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold text-gray-900">Origen de ingresos</CardTitle>
-                    <p className="text-xs text-gray-400 font-normal">{executive.period_label}</p>
-                  </CardHeader>
-                  <CardContent>
-                    <FinanceCategoryDonut
-                      data={executive.income_breakdown}
-                      emptyMessage="Sin ingresos en este período — sincroniza el banco"
-                    />
-                  </CardContent>
-                </Card>
-                <Card className="border border-gray-200 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base font-semibold text-gray-900">Beneficio neto mensual</CardTitle>
-                    <p className="text-xs text-gray-400 font-normal">Entradas − salidas por mes</p>
-                  </CardHeader>
-                  <CardContent>
-                    <NetTrendChart data={executive.net_trend} />
-                  </CardContent>
-                </Card>
-              </div>
-
-              <Card className="border border-gray-200 shadow-sm">
+            {/* 3. Donuts gastos / ingresos */}
+            <div className="grid gap-4 lg:grid-cols-3">
+              <Card className="border border-gray-200 shadow-sm lg:col-span-2">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-semibold text-gray-900">MRR por cliente</CardTitle>
+                  <CardTitle className="text-base font-semibold text-gray-900">
+                    Distribución de pagos
+                  </CardTitle>
                   <p className="text-xs text-gray-400 font-normal">
-                    Solo cobros marcados como mensualidad en Ingresos
+                    {executive.period_label} · {executive.expense_source_label}
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <MrrByClientChart data={executive.mrr_by_client} />
+                  <FinanceCategoryDonut
+                    data={executive.expense_breakdown}
+                    emptyMessage="Sin salidas en este período — sincroniza el banco"
+                  />
+                </CardContent>
+              </Card>
+              <Card className="border border-gray-200 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-semibold text-gray-900">
+                    Gastos recurrentes
+                  </CardTitle>
+                  <p className="text-xs text-gray-400 font-normal">
+                    Detectados en el extracto · ahorro potencial
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <RecurringExpensesPanel data={executive.recurring_expenses} compact />
                 </CardContent>
               </Card>
             </div>
 
-            {/* Alertas + IA */}
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card className="border border-gray-200 shadow-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2 text-gray-900">
-                    <AlertCircle className="h-4 w-4 text-gray-400" />
-                    Alertas ({executive.alerts.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <FinanceAlertsPanel alerts={executive.alerts} />
-                </CardContent>
-              </Card>
-              <Card className="border border-gray-200 shadow-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-semibold">CFO virtual · IA</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <FinanceAiPanel initialAnalysis={initialAiAnalysis} />
-                </CardContent>
-              </Card>
-            </div>
+            <Card className="border border-gray-200 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-semibold text-gray-900">Origen de cobros</CardTitle>
+                <p className="text-xs text-gray-400 font-normal">{executive.period_label}</p>
+              </CardHeader>
+              <CardContent>
+                <FinanceCategoryDonut
+                  data={executive.income_breakdown}
+                  emptyMessage="Sin cobros en este período — sincroniza el banco"
+                />
+              </CardContent>
+            </Card>
           </>
         ) : null}
 
-        <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Período seleccionado</p>
-
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {periodInsights.map((insight) => (
-            <PeriodInsightCard key={insight.label} insight={insight} />
-          ))}
-        </div>
-
-        {/* Quick Links - Estilo minimalista */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {quickLinks.map((link) => {
-            const Icon = link.icon
-            return (
-              <Link key={link.href} href={link.href}>
-                <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer h-full">
-                  <CardContent className="pt-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 mb-2">
-                          {link.label}
-                        </p>
-                        <Icon className="h-6 w-6 text-gray-400" />
-                      </div>
-                      <ArrowRight className="h-4 w-4 text-gray-400" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            )
-          })}
-        </div>
-
-        {/* Historial de Movimientos */}
+        {/* 4. Historial de movimientos */}
         <Card className="border border-gray-200 shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg font-semibold">
-              Historial de Movimientos
+              Historial de movimientos
               {transactionTotal > 0 && (
                 <span className="text-sm font-normal text-gray-500 ml-2">
                   ({transactionTotal} en el período · scroll para ver más)
@@ -896,7 +847,6 @@ export default function FinancesDashboard({
             ) : (
               <div className="overflow-x-auto -mx-2 sm:mx-0">
               <div className="space-y-2 min-w-[520px] px-2 sm:px-0">
-                {/* Headers */}
                 <div className="flex items-center justify-between pb-2 border-b border-gray-200 font-semibold text-sm text-gray-600">
                   <div className="flex-1">Movimiento</div>
                   <div className="flex items-center gap-4">
@@ -948,15 +898,13 @@ export default function FinancesDashboard({
                         {formatCurrency(transaction.amount)}
                       </div>
                       <div className="text-right font-medium text-gray-700 min-w-[100px]">
-                        {transaction.balance !== null && transaction.balance !== undefined 
-                          ? formatCurrency(transaction.balance) 
+                        {transaction.balance !== null && transaction.balance !== undefined
+                          ? formatCurrency(transaction.balance)
                           : '-'}
                       </div>
                     </div>
                   </div>
                 ))}
-                
-                {/* Target para infinite scroll */}
                 <div ref={observerTarget} className="h-10 flex items-center justify-center py-4">
                   {loadingTransactions && (
                     <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
@@ -967,6 +915,85 @@ export default function FinancesDashboard({
             )}
           </CardContent>
         </Card>
+
+        {executive ? (
+          <>
+            {/* 5. Conciliación facturado vs cobrado */}
+            <Card className="border border-gray-200 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-semibold text-gray-900">
+                  Facturado vs cobrado
+                </CardTitle>
+                <p className="text-xs text-gray-400 font-normal">
+                  Emisión vs fecha de banco · {executive.period_label}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <InvoicedVsCollectedChart data={executive.invoiced_vs_collected} />
+              </CardContent>
+            </Card>
+
+            {/* 6. MRR (una sola vez) + KPIs no duplicados */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {executive.kpi_cards.map((card) => (
+                <FinanceKpiCard key={card.id} card={card} />
+              ))}
+            </div>
+
+            <Card className="border border-gray-200 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-semibold text-gray-900">MRR por cliente</CardTitle>
+                <p className="text-xs text-gray-400 font-normal">
+                  Solo cobros marcados como mensualidad en Ingresos
+                </p>
+              </CardHeader>
+              <CardContent>
+                <MrrByClientChart data={executive.mrr_by_client} />
+              </CardContent>
+            </Card>
+
+            {/* 7. Estimaciones fiscales (no caja) */}
+            <div>
+              <p className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-3">
+                Estimaciones fiscales · período
+              </p>
+              <div className="grid gap-4 md:grid-cols-3">
+                {periodInsights.map((insight) => (
+                  <PeriodInsightCard key={insight.label} insight={insight} />
+                ))}
+              </div>
+            </div>
+
+            {/* 8. Objetivo / alertas / IA */}
+            <AnnualGoalCard goal={executive.annual_goal} />
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card className="border border-gray-200 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2 text-gray-900">
+                    <AlertCircle className="h-4 w-4 text-gray-400" />
+                    Alertas ({executive.alerts.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <FinanceAlertsPanel alerts={executive.alerts} />
+                </CardContent>
+              </Card>
+              <Card className="border border-gray-200 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-semibold">CFO virtual · IA</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <FinanceAiPanel
+                    initialAnalysis={initialAiAnalysis}
+                    periodStart={periodQuery.start}
+                    periodEnd={periodQuery.end}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        ) : null}
       </div>
     </Layout>
   )

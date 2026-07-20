@@ -25,6 +25,7 @@ import {
   Sparkles,
   Moon,
   Sun,
+  BookOpen,
 } from 'lucide-react'
 import { getLastCampaignId, lastCampaignCallHref } from '@/lib/coldcall/last-campaign'
 import ComercialSidebarBrand from '@/components/coldcall/ComercialSidebarBrand'
@@ -116,6 +117,7 @@ const NAV: NavItem[] = [
     ],
   },
   { href: '/developer', label: 'Dashboard', icon: LayoutDashboard, roles: ['developer'] },
+  { href: '/developer/onboarding', label: 'Cómo funciona', icon: BookOpen, roles: ['developer'] },
   { href: '/comercial', label: 'Inicio', icon: LayoutDashboard, roles: ['comercial'] },
   { href: '/comercial/campanas', label: 'Campañas', icon: Megaphone, roles: ['comercial'] },
   { href: '/comercial/pipeline', label: 'Pipeline', icon: Workflow, roles: ['comercial'] },

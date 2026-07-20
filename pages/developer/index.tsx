@@ -13,6 +13,7 @@ import {
   Clock,
   Loader2,
   ArrowRight,
+  BookOpen,
 } from 'lucide-react'
 
 const DeveloperWorkTimelineChart = dynamic(
@@ -90,11 +91,22 @@ export default function DeveloperDashboardPage() {
     <Layout>
       <div className="w-full space-y-6 -mt-2">
         <div className="rounded-2xl bg-gray-900 text-white px-6 py-8">
-          <p className="text-xs font-medium uppercase tracking-wider text-white/60">Tu panel</p>
-          <div className="mt-1 flex items-center gap-1.5">
-            <h1 className="text-2xl font-bold">
-              Hola{greetingName ? `, ${greetingName}` : ''}
-            </h1>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-white/60">Tu panel</p>
+              <div className="mt-1 flex items-center gap-1.5">
+                <h1 className="text-2xl font-bold">
+                  Hola{greetingName ? `, ${greetingName}` : ''}
+                </h1>
+              </div>
+            </div>
+            <Link
+              href="/developer/onboarding"
+              className="inline-flex items-center gap-2 self-start rounded-xl border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white hover:bg-white/15 transition-colors"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              Cómo funciona el panel
+            </Link>
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import {
   getLatestFinanceAiAnalysis,
   saveFinanceAiAnalysis,
 } from '@/lib/finance/ai-analysis'
+import { parsePeriodFromQuery } from '@/lib/finance/period-presets'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -25,7 +26,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'POST') {
     try {
-      const { summary, model } = await generateFinanceAiAnalysis()
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {}
+      const period = parsePeriodFromQuery(
+        (body.start as string) || (req.query.start as string),
+        (body.end as string) || (req.query.end as string)
+      )
+      const { summary, model } = await generateFinanceAiAnalysis(period)
       let id: string | null = null
       try {
         id = await saveFinanceAiAnalysis(summary, model)

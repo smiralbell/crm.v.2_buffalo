@@ -12,6 +12,7 @@ export interface BuildKpiInput {
   cash_change_mom: number | null
   runway_months: number | null
   avg_monthly_burn: number
+  platform_burn_months?: number
   invoiced_this_month: number
   invoiced_last_month: number
   collected_this_month: number
@@ -113,19 +114,11 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
   const pipelinePctTarget = Math.round((input.pipeline_value / ANNUAL_TARGET) * 1000) / 10
 
   const invMom = pctChange(input.invoiced_this_month, input.invoiced_last_month)
-  const collMom = pctChange(input.collected_this_month, input.collected_last_month)
-
-  let runwayDate: string | null = null
-  if (input.runway_months != null && input.runway_months > 0) {
-    const d = new Date()
-    d.setMonth(d.getMonth() + Math.floor(input.runway_months))
-    runwayDate = d.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
-  }
 
   const mrrFooter =
     input.mrr_source === 'tagged'
-      ? `ARR implícito: ${fmtEur(input.arr)} · ${input.mrr_tagged_count ?? 0} cobros marcados como mensualidad`
-      : `Marca ingresos recurrentes en Ingresos → botón «Marcar MRR»`
+      ? `${input.mrr_tagged_count ?? 0} cobros marcados como mensualidad`
+      : `Marca ingresos recurrentes en Ingresos → «Marcar MRR»`
 
   return [
     {
@@ -136,10 +129,16 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
       rows: [
         { label: 'Clientes activos', value: String(input.active_clients) },
         { label: 'Ticket medio', value: fmtEur(mrrPerClient) },
-        { label: 'ARR vs objetivo', value: `${arrPctOfTarget}%` },
         {
-          label: 'Cubre gasto fijo',
+          label: 'Cubre plataformas',
           value: mrrCoversBurn == null ? '—' : mrrCoversBurn ? 'Sí' : 'No',
+        },
+        {
+          label: 'Gap vs burn PLT',
+          value:
+            input.avg_monthly_burn > 0
+              ? fmtEur(input.mrr - input.avg_monthly_burn)
+              : '—',
         },
       ],
       footer: mrrFooter,
@@ -164,104 +163,27 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
       footer: 'Ingreso recurrente anualizado',
     },
     {
-      id: 'cash',
-      title: 'Caja',
-      primary: fmtEur(input.cash_balance),
-      help: KPI_HELP.cash,
-      rows: [
-        {
-          label: 'vs mes anterior',
-          value:
-            input.cash_change_mom != null
-              ? `${input.cash_change_mom >= 0 ? '+' : ''}${fmtEur(input.cash_change_mom)}`
-              : '—',
-        },
-        { label: 'Gasto medio/mes', value: fmtEur(input.avg_monthly_burn) },
-        {
-          label: 'Runway',
-          value: input.runway_months != null ? `${input.runway_months} meses` : '—',
-        },
-        { label: 'Beneficio mes', value: fmtEur(input.profit_this_month) },
-      ],
-      footer: runwayDate ? `Agotamiento est.: ${runwayDate}` : undefined,
-      accent:
-        input.runway_months != null && input.runway_months < 3 ? 'critical' : null,
-    },
-    {
-      id: 'runway',
-      title: 'Runway',
-      primary: input.runway_months != null ? `${input.runway_months}m` : '—',
-      help: KPI_HELP.runway,
-      rows: [
-        { label: 'Caja actual', value: fmtEur(input.cash_balance) },
-        { label: 'Burn rate', value: fmtEur(input.avg_monthly_burn) },
-        {
-          label: 'Cubre con MRR',
-          value: mrrCoversBurn == null ? '—' : mrrCoversBurn ? 'Sí' : 'No',
-        },
-        {
-          label: 'Déficit mensual',
-          value:
-            input.avg_monthly_burn > 0
-              ? fmtEur(Math.max(0, input.avg_monthly_burn - input.mrr))
-              : '—',
-        },
-      ],
-      footer: runwayDate ? `Hasta ~${runwayDate}` : 'Sin datos de gasto',
-      accent:
-        input.runway_months != null && input.runway_months < 3 ? 'critical' : null,
-    },
-    {
-      id: 'invoiced',
-      title: 'Facturado',
-      primary: fmtEur(input.invoiced_this_month),
-      help: KPI_HELP.invoiced,
-      rows: [
-        { label: 'Mes anterior', value: fmtEur(input.invoiced_last_month) },
-        { label: 'Variación', value: invMom ?? '—' },
-        { label: 'Facturas emitidas', value: String(input.invoices_this_month_count) },
-        {
-          label: 'Objetivo mes',
-          value: `${Math.round((input.invoiced_this_month / (ANNUAL_TARGET / 12)) * 100)}% de ${fmtEur(ANNUAL_TARGET / 12)}`,
-        },
-      ],
-      footer: 'Facturas con estado enviada',
-    },
-    {
-      id: 'collected',
-      title: 'Cobrado',
-      primary: fmtEur(input.collected_this_month),
-      help: KPI_HELP.collected,
-      rows: [
-        { label: 'Mes anterior', value: fmtEur(input.collected_last_month) },
-        { label: 'Variación', value: collMom ?? '—' },
-        {
-          label: 'Tasa de cobro',
-          value:
-            input.collection_rate_pct != null ? `${input.collection_rate_pct}%` : '—',
-        },
-        { label: 'Pendiente histórico', value: fmtEur(input.pending_collection_total) },
-      ],
-      footer: `${input.pending_invoices_count} facturas sin vincular a banco`,
-    },
-    {
       id: 'gap',
       title: 'Brecha cobro',
       primary: fmtEur(input.collection_gap),
       help: KPI_HELP.gap,
       rows: [
-        { label: 'Facturado mes', value: fmtEur(input.invoiced_this_month) },
-        { label: 'Cobrado mes', value: fmtEur(input.collected_this_month) },
+        { label: 'Facturado (emisión)', value: fmtEur(input.invoiced_this_month) },
+        { label: 'Cobrado (banco)', value: fmtEur(input.collected_this_month) },
         {
-          label: '% sin cobrar',
+          label: 'Tasa de cobro',
           value:
-            input.invoiced_this_month > 0
-              ? `${Math.round((input.collection_gap / input.invoiced_this_month) * 100)}%`
-              : '0%',
+            input.collection_rate_pct != null ? `${input.collection_rate_pct}%` : '—',
         },
-        { label: 'Facturas pendientes', value: String(input.pending_invoices_count) },
+        {
+          label: 'Variación facturado',
+          value: invMom ?? '—',
+        },
       ],
-      footer: input.collection_gap > 0 ? 'Concilia en Ingresos' : 'Cobro al día este mes',
+      footer:
+        input.collection_gap > 0
+          ? `${input.pending_invoices_count} facturas sin vincular · concilia en Ingresos`
+          : 'Cobro al día en el período',
       accent: input.collection_gap > 500 ? 'warning' : null,
     },
     {
@@ -280,6 +202,7 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
   ]
 }
 
+/** Solo estimaciones fiscales — no repite cobros/pagos/saldo de caja. */
 export function buildPeriodInsights(stats: {
   currentBalance: number
   income: number
@@ -290,98 +213,52 @@ export function buildPeriodInsights(stats: {
   estimatedCorporateTax: number
   netProfitAfterCorporateTax: number
   periodDays: number
+  corporateTaxPercent?: number
+  hasIvaData?: boolean
+  fiscalGross?: number
 }): PeriodInsight[] {
-  const marginPct =
-    stats.income > 0 ? Math.round((stats.profit / stats.income) * 1000) / 10 : 0
   const netMarginPct =
     stats.income > 0
       ? Math.round((stats.netProfitAfterCorporateTax / stats.income) * 1000) / 10
       : 0
-  const days = Math.max(1, stats.periodDays)
-  const taxTotal = stats.ivaToPay + stats.estimatedCorporateTax
+  const taxTotal = Math.max(0, stats.ivaToPay) + stats.estimatedCorporateTax
+  const taxPct = stats.corporateTaxPercent ?? 25
+  const fiscalBase = stats.fiscalGross ?? stats.profit
 
   return [
     {
-      label: 'Dinero en cuenta',
-      primary: fmtEur(stats.currentBalance),
-      help: PERIOD_INSIGHT_HELP['Dinero en cuenta'],
-      rows: [
-        { label: 'Saldo al cierre del período', value: 'Último movimiento' },
-        { label: 'Días en rango', value: String(stats.periodDays) },
-      ],
-      footer: 'Según extracto bancario sincronizado',
-    },
-    {
-      label: 'Ingresos',
-      primary: fmtEur(stats.income),
-      help: PERIOD_INSIGHT_HELP.Ingresos,
-      rows: [
-        { label: 'Media diaria', value: fmtEur(stats.income / days) },
-        { label: '% del volumen', value: stats.income + stats.expenses > 0 ? `${Math.round((stats.income / (stats.income + stats.expenses)) * 100)}%` : '—' },
-        { label: 'Margen bruto', value: `${marginPct}%` },
-      ],
-      footer: 'Movimientos positivos en banco',
-    },
-    {
-      label: 'Gastos',
-      primary: fmtEur(stats.expenses),
-      help: PERIOD_INSIGHT_HELP.Gastos,
-      rows: [
-        { label: 'Media diaria', value: fmtEur(stats.expenses / days) },
-        { label: '% del volumen', value: stats.income + stats.expenses > 0 ? `${Math.round((stats.expenses / (stats.income + stats.expenses)) * 100)}%` : '—' },
-        { label: 'Ratio ing/gasto', value: stats.expenses > 0 ? `${(stats.income / stats.expenses).toFixed(1)}×` : '—' },
-      ],
-      footer: 'Movimientos negativos en banco',
-    },
-    {
-      label: 'Beneficio bruto',
-      primary: fmtEur(stats.profit),
-      help: PERIOD_INSIGHT_HELP['Beneficio bruto'],
-      rows: [
-        { label: 'Ingresos − gastos', value: fmtEur(stats.income - stats.expenses) },
-        { label: 'Margen', value: `${marginPct}%` },
-        { label: 'Media diaria', value: fmtEur(stats.profit / days) },
-      ],
-    },
-    {
-      label: 'IVA a deber',
+      label: 'IVA a liquidar',
       primary: fmtEur(stats.ivaToPay),
       help: PERIOD_INSIGHT_HELP['IVA a deber'],
       rows: [
-        { label: 'Sobre beneficio', value: stats.profit > 0 ? `${Math.round((stats.ivaToPay / stats.profit) * 100)}%` : '—' },
-        { label: 'Carga fiscal total', value: fmtEur(taxTotal) },
+        {
+          label: 'Datos IVA',
+          value: stats.hasIvaData ? 'Facturas/gastos vinculados' : 'Sin vínculos IVA',
+        },
+        { label: 'Carga fiscal est.', value: fmtEur(taxTotal) },
       ],
-      footer: 'IVA repercutido − soportado',
-    },
-    {
-      label: 'Beneficio neto',
-      primary: fmtEur(stats.netProfit),
-      help: PERIOD_INSIGHT_HELP['Beneficio neto'],
-      rows: [
-        { label: 'Tras IVA', value: fmtEur(stats.profit - stats.ivaToPay) },
-        { label: 'Margen neto', value: stats.income > 0 ? `${Math.round((stats.netProfit / stats.income) * 100)}%` : '—' },
-      ],
+      footer: 'IVA repercutido − soportado (estimación)',
     },
     {
       label: 'Imp. sociedades',
       primary: fmtEur(stats.estimatedCorporateTax),
       help: PERIOD_INSIGHT_HELP['Imp. sociedades'],
       rows: [
-        { label: 'Tipo aplicado', value: '15%' },
-        { label: 'Base', value: fmtEur(stats.netProfit) },
+        { label: 'Tipo aplicado', value: `${taxPct}%` },
+        { label: 'Base fiscal est.', value: fmtEur(fiscalBase) },
       ],
-      footer: 'Estimación sobre beneficio neto',
+      footer: `Estimación ${taxPct}% sobre resultado fiscal`,
     },
     {
-      label: 'Beneficio final',
+      label: 'Resultado tras impuestos',
       primary: fmtEur(stats.netProfitAfterCorporateTax),
       help: PERIOD_INSIGHT_HELP['Beneficio final'],
       rows: [
+        { label: 'Bruto caja', value: fmtEur(stats.profit) },
         { label: 'Margen final', value: `${netMarginPct}%` },
-        { label: 'Media diaria', value: fmtEur(stats.netProfitAfterCorporateTax / days) },
-        { label: 'Retención fiscal', value: fmtEur(taxTotal) },
+        { label: 'Retención fiscal est.', value: fmtEur(taxTotal) },
       ],
-      footer: 'Después de IVA e imp. sociedades',
+      footer: 'Estimación — no sustituye a tu gestoría',
     },
   ]
 }

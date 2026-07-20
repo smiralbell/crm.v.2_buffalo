@@ -19,7 +19,26 @@ export async function getAuthorizedCalendarClient(ownerKey: string) {
   if (!row) throw new GoogleReauthRequiredError('Google Calendar no está conectado')
   if (row.needs_reauth) throw new GoogleReauthRequiredError('Reconexión necesaria')
 
-  const { accessToken, refreshToken } = decryptConnectionTokens(row)
+  let accessToken: string
+  let refreshToken: string | null
+  try {
+    ;({ accessToken, refreshToken } = decryptConnectionTokens(row))
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    // Clave de cifrado distinta → tokens inútiles: forzar reconexión limpia
+    if (
+      msg.includes('ilegibles') ||
+      msg.includes('Unsupported state') ||
+      msg.includes('unable to authenticate') ||
+      msg.includes('Token cifrado')
+    ) {
+      await markNeedsReauth(ownerKey)
+      throw new GoogleReauthRequiredError(
+        'Hay que volver a conectar Google (la clave de cifrado cambió o los tokens están corruptos)'
+      )
+    }
+    throw e
+  }
   if (!refreshToken) throw new GoogleReauthRequiredError('Reconexión necesaria')
 
   const auth = getGoogleOAuth2Client()
