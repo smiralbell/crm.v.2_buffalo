@@ -20,9 +20,10 @@ build
 .gitignore
 .gitattributes
 
-# Documentación
+# Documentación (mantener guía de Análisis IA en la imagen)
 *.md
 !README.md
+!docs/CRM_GUIA_ANALISIS_IA.md
 
 # IDE
 .vscode

@@ -5,7 +5,7 @@ import {
   LayoutDashboard, TrendingUp, FileText, LogOut, Workflow,
   DollarSign, Megaphone,
   ChevronDown, ChevronRight, PackageCheck, HeartHandshake, Bot, FolderKanban,
-  Users, Calendar, Phone, Clock, MessageSquare, Copy, ListChecks,
+  Users, Calendar, Phone, Clock, MessageSquare, Copy, ListChecks, Sparkles,
 } from 'lucide-react'
 import { getLastCampaignId, lastCampaignCallHref } from '@/lib/coldcall/last-campaign'
 import ComercialSidebarBrand from '@/components/coldcall/ComercialSidebarBrand'
@@ -112,6 +112,8 @@ const NAV: NavItem[] = [
       { href: '/developer/facturas/nueva', label: 'Nueva factura' },
     ],
   },
+  { href: '/calendario', label: 'Calendario', icon: Calendar, roles: ['admin'] },
+  { href: '/analisis', label: 'Análisis IA', icon: Sparkles, roles: ['admin'] },
   { href: '/checklist', label: 'Checklist', icon: ListChecks, roles: ['admin'] },
 ]
 
