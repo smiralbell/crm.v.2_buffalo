@@ -3,6 +3,9 @@ import { query } from '@/lib/db'
 import { buildCrmCompanySnapshot } from '@/lib/analisis/snapshot'
 import { buildExecutiveSummary } from '@/lib/finance/executive-summary'
 import { getDefaultPeriodRange } from '@/lib/finance/period-presets'
+import { DEFAULT_CRM_ASSISTANT_PROMPT } from './crm-assistant-prompt'
+
+export { DEFAULT_CRM_ASSISTANT_PROMPT }
 
 async function safe<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
   try {
@@ -367,24 +370,3 @@ export async function executeCrmAssistantTool(
       return { error: `Herramienta desconocida: ${name}` }
   }
 }
-
-export const DEFAULT_CRM_ASSISTANT_PROMPT = `Eres el asistente personal interno de Buffalo AI. Tienes acceso al CRM en tiempo real mediante herramientas.
-
-Quién eres:
-- Ayudas al equipo (CEO/comercial/ops) por WhatsApp.
-- Respondes con datos reales del CRM. Si no encuentras algo, dilo y sugiere qué mirar en la app.
-- No inventes cifras, clientes ni estados.
-
-Cómo trabajar:
-1) Para preguntas generales (cómo vamos, resumen, KPIs) usa get_company_snapshot y/o get_finance_brief.
-2) Si preguntan por un cliente, empresa o persona: search_leads / search_contacts / search_proyectos y luego get_lead_detail si hace falta.
-3) Para tickets o incidencias: search_tickets.
-4) Para movimientos de banco: get_bank_recent.
-5) Combina varias herramientas si hace falta antes de responder.
-
-Estilo WhatsApp:
-- Español claro, conciso, profesional pero cercano.
-- SIN markdown ni asteriscos.
-- Párrafos cortos separados por línea en blanco.
-- Incluye números concretos cuando los tengas.
-- Si hay riesgo o alerta, menciónalo primero.`

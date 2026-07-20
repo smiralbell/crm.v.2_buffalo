@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select'
 import { AlertTriangle, Plus, X } from 'lucide-react'
 import RetellVariableChips, { insertTextAtSelection } from '@/components/demos/RetellVariableChips'
-import { DEFAULT_CRM_ASSISTANT_PROMPT } from '@/lib/demos/crm-assistant-tools'
+import { DEFAULT_CRM_ASSISTANT_PROMPT } from '@/lib/demos/crm-assistant-prompt'
 import type {
   DemoDireccion,
   DemoEstado,
