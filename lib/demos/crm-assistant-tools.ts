@@ -7,6 +7,15 @@ import { DEFAULT_CRM_ASSISTANT_PROMPT } from './crm-assistant-prompt'
 
 export { DEFAULT_CRM_ASSISTANT_PROMPT }
 
+export type CrmDomain =
+  | 'overview'
+  | 'finance'
+  | 'comercial'
+  | 'proyectos'
+  | 'ops'
+  | 'marketing'
+  | 'cliente'
+
 async function safe<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await fn()
@@ -33,13 +42,7 @@ export async function searchLeads(q: string, limit = 8) {
           valor: number | null
         }[]
       >`
-        SELECT l.id,
-               c.nombre,
-               c.empresa,
-               c.email,
-               c.telefono,
-               l.estado,
-               l.valor::float8 AS valor
+        SELECT l.id, c.nombre, c.empresa, c.email, c.telefono, l.estado, l.valor::float8 AS valor
         FROM leads l
         INNER JOIN contacts c ON c.id = l.contact_id
         WHERE c.nombre ILIKE ${term}
@@ -76,8 +79,7 @@ export async function searchProyectos(q: string, limit = 8) {
         SELECT p.id::text, p.name, p.status, p.service_type,
                p.setup_fee_eur::float8 AS setup_fee_eur,
                p.monthly_fee_eur::float8 AS monthly_fee_eur,
-               p.lead_id,
-               p.es_buffalo
+               p.lead_id, p.es_buffalo
         FROM proyectos p
         WHERE p.name ILIKE ${term}
            OR p.service_type ILIKE ${term}
@@ -168,8 +170,7 @@ export async function getLeadDetail(leadId: number) {
         }[]
       >`
         SELECT l.id, l.estado, l.valor::float8 AS valor, l.origen_principal, l.notas, l.configuracion,
-               c.nombre, c.empresa, c.email, c.telefono,
-               l.created_at, l.updated_at
+               c.nombre, c.empresa, c.email, c.telefono, l.created_at, l.updated_at
         FROM leads l
         INNER JOIN contacts c ON c.id = l.contact_id
         WHERE l.id = ${leadId}
@@ -184,7 +185,13 @@ export async function getLeadDetail(leadId: number) {
         FROM proyectos WHERE lead_id = ${leadId}
         ORDER BY created_at DESC LIMIT 10
       `
-      return { ...lead, proyectos }
+      return {
+        ...lead,
+        // No volcar configuracion completa (base64 enorme)
+        configuracion_presente: Boolean(lead.configuracion && lead.configuracion.length > 0),
+        configuracion: undefined,
+        proyectos,
+      }
     },
     null
   )
@@ -239,69 +246,86 @@ export async function getBankRecent(limit = 12) {
   )
 }
 
-export type CrmAssistantToolName =
-  | 'get_company_snapshot'
-  | 'search_leads'
-  | 'search_proyectos'
-  | 'search_contacts'
-  | 'search_tickets'
-  | 'get_lead_detail'
-  | 'get_finance_brief'
-  | 'get_bank_recent'
-
 export const CRM_ASSISTANT_TOOLS = [
   {
     type: 'function' as const,
     function: {
-      name: 'get_company_snapshot',
+      name: 'run_domain_agent',
       description:
-        'Snapshot cuantitativo del CRM: leads, proyectos Buffalo, tickets, finanzas del mes, marketing. Úsalo para preguntas generales o de overview.',
-      parameters: { type: 'object', properties: {}, additionalProperties: false },
+        'SUBAGENTE preferido. Ejecuta en paralelo uno o varios dominios y devuelve datos listos. domains: overview|finance|comercial|proyectos|ops|marketing|cliente. Si domains incluye cliente, pasa entity_query con el nombre/empresa.',
+      parameters: {
+        type: 'object',
+        properties: {
+          domains: {
+            type: 'array',
+            items: {
+              type: 'string',
+              enum: [
+                'overview',
+                'finance',
+                'comercial',
+                'proyectos',
+                'ops',
+                'marketing',
+                'cliente',
+              ],
+            },
+            description: 'Dominios a consultar en paralelo',
+          },
+          entity_query: {
+            type: 'string',
+            description: 'Nombre/empresa/email para domain cliente',
+          },
+        },
+        required: ['domains'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'lookup_entity',
+      description:
+        'Búsqueda cruzada rápida de un cliente/empresa/persona en leads, contacts, proyectos, tickets y facturas a la vez.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_company_snapshot',
+      description: 'Snapshot cuantitativo global (alternativa a run_domain_agent overview).',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_finance_brief',
+      description: 'Solo finanzas ejecutivas (MRR, caja, alertas, pendientes).',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_bank_recent',
+      description: 'Últimos movimientos bank_transactions.',
+      parameters: {
+        type: 'object',
+        properties: { limit: { type: 'number' } },
+      },
     },
   },
   {
     type: 'function' as const,
     function: {
       name: 'search_leads',
-      description: 'Busca leads por nombre, empresa, email o teléfono.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'Texto a buscar' },
-        },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'search_proyectos',
-      description: 'Busca proyectos por nombre, tipo de servicio o estado.',
-      parameters: {
-        type: 'object',
-        properties: { query: { type: 'string' } },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'search_contacts',
-      description: 'Busca contactos del CRM.',
-      parameters: {
-        type: 'object',
-        properties: { query: { type: 'string' } },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'search_tickets',
-      description: 'Busca tickets de soporte/operaciones.',
+      description: 'Busca en leads JOIN contacts (nombre, empresa, email, teléfono, notas).',
       parameters: {
         type: 'object',
         properties: { query: { type: 'string' } },
@@ -313,7 +337,7 @@ export const CRM_ASSISTANT_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'get_lead_detail',
-      description: 'Detalle de un lead por id (tras search_leads).',
+      description: 'Detalle lead por id + proyectos ligados.',
       parameters: {
         type: 'object',
         properties: { lead_id: { type: 'number' } },
@@ -324,23 +348,69 @@ export const CRM_ASSISTANT_TOOLS = [
   {
     type: 'function' as const,
     function: {
-      name: 'get_finance_brief',
-      description:
-        'Resumen ejecutivo de finanzas: MRR, caja, facturado/cobrado, alertas, pendientes.',
-      parameters: { type: 'object', properties: {}, additionalProperties: false },
+      name: 'search_proyectos',
+      description: 'Busca proyectos por nombre/tipo/status.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+      },
     },
   },
   {
     type: 'function' as const,
     function: {
-      name: 'get_bank_recent',
-      description: 'Últimos movimientos bancarios del extracto.',
+      name: 'get_proyecto_detail',
+      description: 'Detalle proyecto uuid + tickets + tareas por status.',
       parameters: {
         type: 'object',
-        properties: {
-          limit: { type: 'number', description: 'Máx 20, default 12' },
-        },
+        properties: { proyecto_id: { type: 'string' } },
+        required: ['proyecto_id'],
       },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'search_contacts',
+      description: 'Busca contacts.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'search_tickets',
+      description: 'Busca tickets por título/descripcion/status/reporter.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'search_invoices',
+      description: 'Busca facturas por client_name o invoice_number (BUF-…).',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'get_pipeline_brief',
+      description: 'Valor y conteo de pipeline_cards por stage (Kanban, deleted_at null).',
+      parameters: { type: 'object', properties: {} },
     },
   },
 ]
@@ -349,23 +419,43 @@ export async function executeCrmAssistantTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<unknown> {
-  switch (name as CrmAssistantToolName) {
+  const {
+    runDomainAgents,
+    lookupEntity,
+    getProyectoDetail,
+    searchInvoices,
+    getPipelineBrief,
+  } = await import('./crm-assistant-subagents')
+
+  switch (name) {
+    case 'run_domain_agent': {
+      const domains = (Array.isArray(args.domains) ? args.domains : ['overview']) as CrmDomain[]
+      return runDomainAgents(domains, String(args.entity_query || ''))
+    }
+    case 'lookup_entity':
+      return lookupEntity(String(args.query || ''))
     case 'get_company_snapshot':
       return buildCrmCompanySnapshot()
-    case 'search_leads':
-      return searchLeads(String(args.query || ''))
-    case 'search_proyectos':
-      return searchProyectos(String(args.query || ''))
-    case 'search_contacts':
-      return searchContacts(String(args.query || ''))
-    case 'search_tickets':
-      return searchTickets(String(args.query || ''))
-    case 'get_lead_detail':
-      return getLeadDetail(Number(args.lead_id))
     case 'get_finance_brief':
       return getFinanceBrief()
     case 'get_bank_recent':
       return getBankRecent(Math.min(20, Number(args.limit) || 12))
+    case 'search_leads':
+      return searchLeads(String(args.query || ''))
+    case 'get_lead_detail':
+      return getLeadDetail(Number(args.lead_id))
+    case 'search_proyectos':
+      return searchProyectos(String(args.query || ''))
+    case 'get_proyecto_detail':
+      return getProyectoDetail(String(args.proyecto_id || ''))
+    case 'search_contacts':
+      return searchContacts(String(args.query || ''))
+    case 'search_tickets':
+      return searchTickets(String(args.query || ''))
+    case 'search_invoices':
+      return searchInvoices(String(args.query || ''))
+    case 'get_pipeline_brief':
+      return getPipelineBrief()
     default:
       return { error: `Herramienta desconocida: ${name}` }
   }

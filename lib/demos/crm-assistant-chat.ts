@@ -3,6 +3,7 @@ import {
   CRM_ASSISTANT_TOOLS,
   executeCrmAssistantTool,
 } from './crm-assistant-tools'
+import { CRM_ASSISTANT_ONTOLOGY } from './crm-assistant-ontology'
 
 const DEMO_MODEL_PRIMARY =
   process.env.DEMO_OPENROUTER_MODEL ||
@@ -10,7 +11,7 @@ const DEMO_MODEL_PRIMARY =
   'openai/gpt-4o-mini'
 
 const DEMO_MODEL_FALLBACK = 'openai/gpt-4o-mini'
-const MAX_TOOL_ROUNDS = 4
+const MAX_TOOL_ROUNDS = 6
 
 type ChatMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -51,7 +52,7 @@ async function chatWithTools(
       messages,
       tools: CRM_ASSISTANT_TOOLS,
       tool_choice: 'auto',
-      temperature: 0.25,
+      temperature: 0.15,
     }),
   })
 
@@ -86,7 +87,7 @@ function parseToolArgs(raw: string): Record<string, unknown> {
 }
 
 /**
- * Respuesta del asistente personal CRM por WhatsApp (con tools sobre el CRM).
+ * Orquestador: ontología + tools + subagentes de dominio.
  */
 export async function generateCrmAssistantReply(
   systemPrompt: string,
@@ -96,13 +97,19 @@ export async function generateCrmAssistantReply(
 ): Promise<string> {
   const system = `${systemPrompt.trim()}
 
-${extraKnowledge.trim() ? `---\nNOTAS FIJAS / BASE DE CONOCIMIENTO:\n${extraKnowledge.trim()}\n---` : ''}
+${CRM_ASSISTANT_ONTOLOGY}
 
-Recuerda: usa herramientas antes de dar cifras. Respuesta final al usuario en formato WhatsApp (sin markdown ni asteriscos; párrafos separados por línea en blanco).`
+${extraKnowledge.trim() ? `---\nNOTAS DEL USUARIO / BASE EXTRA:\n${extraKnowledge.trim()}\n---` : ''}
+
+PROTOCOLO RÁPIDO
+1) Clasifica la pregunta → elige domains.
+2) Prefiere run_domain_agent o lookup_entity (una llamada, datos ricos).
+3) Solo usa tools finas (search_*, get_*_detail) si falta precisión.
+4) Responde en WhatsApp: sin markdown ni asteriscos; párrafos con línea en blanco; cifras concretas; alertas primero.`
 
   const messages: ChatMessage[] = [{ role: 'system', content: system }]
 
-  for (const msg of history.slice(-16)) {
+  for (const msg of history.slice(-20)) {
     messages.push({
       role: msg.role === 'user' ? 'user' : 'assistant',
       content: msg.content,
@@ -149,12 +156,11 @@ Recuerda: usa herramientas antes de dar cifras. Respuesta final al usuario en fo
         role: 'tool',
         tool_call_id: call.id,
         name: call.function.name,
-        content: JSON.stringify(toolResult).slice(0, 24000),
+        content: JSON.stringify(toolResult).slice(0, 28000),
       })
     }
   }
 
-  // Última pasada sin tools forzando respuesta
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: openRouterHeaders(),
@@ -165,10 +171,10 @@ Recuerda: usa herramientas antes de dar cifras. Respuesta final al usuario en fo
         {
           role: 'user',
           content:
-            'Con la información ya obtenida, responde ahora al usuario de forma definitiva (sin pedir más tools).',
+            'Con los datos de los subagentes/tools, responde ya al usuario de forma definitiva, precisa y en formato WhatsApp (sin más tools).',
         },
       ],
-      temperature: 0.25,
+      temperature: 0.15,
     }),
   })
   if (!res.ok) {
