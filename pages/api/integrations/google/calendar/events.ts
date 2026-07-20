@@ -6,6 +6,7 @@ import {
   GoogleReauthRequiredError,
   listPrimaryCalendarEvents,
 } from '@/lib/integrations/google/calendar-client'
+import { attachCrmMeetingsToEvents } from '@/lib/integrations/google/match-crm-meetings'
 import { ensureGoogleConnectionsTable } from '@/lib/integrations/google/store'
 
 const querySchema = z.object({
@@ -15,6 +16,7 @@ const querySchema = z.object({
 
 /**
  * GET /api/integrations/google/calendar/events?timeMin=&timeMax=
+ * Incluye cruce con reuniones CRM (cold call, Cal.com, leads).
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -34,11 +36,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const ownerKey = googleOwnerKey(user)
-    const events = await listPrimaryCalendarEvents({
+    const raw = await listPrimaryCalendarEvents({
       ownerKey,
       timeMin: parsed.data.timeMin,
       timeMax: parsed.data.timeMax,
     })
+
+    let events
+    try {
+      events = await attachCrmMeetingsToEvents(raw, {
+        timeMin: parsed.data.timeMin,
+        timeMax: parsed.data.timeMax,
+      })
+    } catch (matchErr) {
+      console.warn('[google/calendar/events] CRM match skipped', matchErr)
+      events = raw.map((ev) => ({ ...ev, crm: null }))
+    }
 
     return res.status(200).json({
       timeZone: 'Europe/Madrid',

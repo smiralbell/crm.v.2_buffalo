@@ -10,8 +10,18 @@ const GoogleCalendarBoard = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="rounded-2xl border border-gray-200 bg-white py-20 text-center text-sm text-gray-400">
-        Cargando calendario…
+      <div className="overflow-hidden rounded-[1.75rem] border border-gray-200/80 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <div className="h-8 w-40 animate-pulse rounded-2xl bg-gray-100" />
+          <div className="h-8 w-44 animate-pulse rounded-2xl bg-gray-100" />
+        </div>
+        <div className="grid grid-cols-7 gap-px bg-gray-100 p-px">
+          {Array.from({ length: 35 }).map((_, i) => (
+            <div key={i} className="min-h-[72px] bg-white p-2">
+              <div className="h-5 w-5 animate-pulse rounded-full bg-gray-100" />
+            </div>
+          ))}
+        </div>
       </div>
     ),
   }
@@ -57,7 +67,7 @@ export default function CalendarioPage() {
   useEffect(() => {
     if (!router.isReady) return
     if (router.query.connected === '1') {
-      setBanner('Google Calendar conectado correctamente.')
+      setBanner('Conectado correctamente')
       void router.replace('/calendario', undefined, { shallow: true })
       void loadStatus()
     }
@@ -67,15 +77,21 @@ export default function CalendarioPage() {
     }
   }, [router.isReady, router.query.connected, router.query.error, router, loadStatus])
 
+  useEffect(() => {
+    if (!banner) return
+    const t = window.setTimeout(() => setBanner(''), 3200)
+    return () => window.clearTimeout(t)
+  }, [banner])
+
   const disconnect = async () => {
-    if (!window.confirm('¿Desconectar Google Calendar de este usuario?')) return
+    if (!window.confirm('¿Desconectar Google Calendar?')) return
     setDisconnecting(true)
     setError('')
     try {
       const res = await fetch('/api/integrations/google/disconnect', { method: 'POST' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al desconectar')
-      setBanner('Google Calendar desconectado.')
+      setBanner('Desconectado')
       await loadStatus()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
@@ -88,88 +104,80 @@ export default function CalendarioPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-6xl mx-auto space-y-5 pb-12 -mt-1">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-              <Calendar className="h-3.5 w-3.5" />
-              Integraciones
+      <div className="w-full max-w-6xl mx-auto space-y-4 pb-10 -mt-1">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gray-900 text-white shadow-sm">
+              <Calendar className="h-[18px] w-[18px]" />
             </div>
-            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Calendario</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Eventos del calendario principal de Google (zona Europe/Madrid).
-            </p>
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">
+                Calendario
+              </h1>
+              {showCalendar && status?.email ? (
+                <p className="truncate text-xs text-gray-500 mt-0.5">{status.email}</p>
+              ) : null}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {loading ? (
-              <span className="inline-flex items-center gap-2 text-sm text-gray-400">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Comprobando…
+              <span className="inline-flex items-center gap-2 rounded-2xl border border-gray-100 bg-white px-3 py-2 text-xs text-gray-400">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                …
               </span>
             ) : showCalendar ? (
-              <>
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
-                  Conectado como{' '}
-                  <span className="font-semibold">{status?.email || 'cuenta Google'}</span>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void disconnect()}
-                  disabled={disconnecting}
-                  className="gap-2"
-                >
-                  {disconnecting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Link2Off className="h-4 w-4" />
-                  )}
-                  Desconectar Google
-                </Button>
-              </>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void disconnect()}
+                disabled={disconnecting}
+                className="h-9 gap-2 rounded-2xl border-gray-200 text-xs font-semibold"
+              >
+                {disconnecting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Link2Off className="h-3.5 w-3.5" />
+                )}
+                Desconectar
+              </Button>
             ) : (
               <Button
                 type="button"
                 onClick={() => {
                   window.location.href = '/api/integrations/google/connect'
                 }}
-                className="gap-2 bg-gray-900 hover:bg-gray-800"
+                className="h-9 gap-2 rounded-2xl bg-gray-900 px-4 text-xs font-semibold hover:bg-gray-800"
               >
-                <Calendar className="h-4 w-4" />
-                Conectar Google Calendar
+                <Calendar className="h-3.5 w-3.5" />
+                Conectar Google
               </Button>
             )}
           </div>
         </div>
 
         {banner && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900">
             {banner}
           </div>
         )}
 
         {(error || status?.needs_reauth) && (
-          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium">
-                {status?.needs_reauth ? 'Reconexión necesaria' : error}
+          <div className="flex items-start gap-3 rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <AlertTriangle className="h-[18px] w-[18px] shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-medium text-sm">
+                {status?.needs_reauth ? 'Hay que volver a conectar Google' : error}
               </p>
-              {status?.needs_reauth && (
-                <p className="text-xs mt-1 text-amber-800/80">
-                  El refresh token ya no es válido. Vuelve a conectar Google Calendar.
-                </p>
-              )}
               {status?.needs_reauth && (
                 <button
                   type="button"
                   onClick={() => {
                     window.location.href = '/api/integrations/google/connect'
                   }}
-                  className="inline-flex mt-3 text-xs font-semibold underline"
+                  className="mt-2 inline-flex rounded-xl bg-amber-900/90 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-900"
                 >
-                  Reconectar Google Calendar
+                  Reconectar
                 </button>
               )}
             </div>
@@ -177,13 +185,23 @@ export default function CalendarioPage() {
         )}
 
         {!loading && !showCalendar && !status?.needs_reauth && (
-          <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-white py-16 text-center px-6">
-            <Calendar className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm font-medium text-gray-900">Google Calendar no conectado</p>
-            <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
-              Conecta tu cuenta para ver mes, semana y día con eventos reales (incluidos
-              recurrentes y de día completo).
+          <div className="relative overflow-hidden rounded-[1.75rem] border border-dashed border-gray-200 bg-gradient-to-b from-white to-gray-50 px-6 py-20 text-center">
+            <div className="mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-gray-900 text-white shadow-lg shadow-gray-900/15">
+              <Calendar className="h-6 w-6" />
+            </div>
+            <p className="text-base font-semibold text-gray-900">Conecta Google Calendar</p>
+            <p className="mx-auto mt-1.5 max-w-sm text-sm text-gray-500">
+              Mes, semana y día con tus eventos reales.
             </p>
+            <Button
+              type="button"
+              onClick={() => {
+                window.location.href = '/api/integrations/google/connect'
+              }}
+              className="mt-6 h-10 gap-2 rounded-2xl bg-gray-900 px-5 text-sm font-semibold hover:bg-gray-800"
+            >
+              Continuar con Google
+            </Button>
           </div>
         )}
 

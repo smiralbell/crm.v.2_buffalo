@@ -1,0 +1,257 @@
+/* Buffalo Calendar — FullCalendar skin */
+
+.buffalo-cal {
+  --bc-ink: #111827;
+  --bc-muted: #6b7280;
+  --bc-line: #eef0f3;
+  --bc-soft: #f7f8fa;
+  --bc-accent: #111827;
+  --bc-event: #e8f0fe;
+  --bc-event-text: #1e3a8a;
+  --bc-today: #111827;
+  font-family: inherit;
+}
+
+.buffalo-cal .fc {
+  --fc-border-color: var(--bc-line);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: var(--bc-soft);
+  --fc-list-event-hover-bg-color: #f3f4f6;
+  --fc-today-bg-color: rgba(17, 24, 39, 0.03);
+  --fc-now-indicator-color: #ef4444;
+  --fc-event-border-color: transparent;
+  --fc-event-bg-color: var(--bc-event);
+  --fc-event-text-color: var(--bc-event-text);
+  --fc-button-bg-color: transparent;
+  --fc-button-border-color: transparent;
+  --fc-button-hover-bg-color: transparent;
+  --fc-button-hover-border-color: transparent;
+  --fc-button-active-bg-color: transparent;
+  --fc-button-active-border-color: transparent;
+  font-family: inherit;
+}
+
+.buffalo-cal .fc-theme-standard td,
+.buffalo-cal .fc-theme-standard th,
+.buffalo-cal .fc-theme-standard .fc-scrollgrid {
+  border-color: var(--bc-line);
+}
+
+.buffalo-cal .fc-scrollgrid {
+  border-radius: 1.25rem;
+  overflow: hidden;
+  border: 1px solid var(--bc-line) !important;
+}
+
+.buffalo-cal .fc-scrollgrid-section > * {
+  border-left: none !important;
+  border-right: none !important;
+}
+
+.buffalo-cal .fc-col-header-cell {
+  background: var(--bc-soft);
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--bc-line) !important;
+}
+
+.buffalo-cal .fc-col-header-cell-cushion {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bc-muted);
+  text-decoration: none !important;
+  padding: 0.35rem 0.5rem;
+}
+
+.buffalo-cal .fc-daygrid-day-number {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #374151;
+  text-decoration: none !important;
+  padding: 0.55rem 0.65rem 0.25rem;
+}
+
+.buffalo-cal .fc-daygrid-day.fc-day-today {
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.045) 0%, transparent 70%);
+}
+
+.buffalo-cal .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+  background: var(--bc-today);
+  color: #fff;
+  border-radius: 999px;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.4rem 0.45rem 0.15rem;
+  padding: 0;
+  font-weight: 600;
+}
+
+.buffalo-cal .fc-daygrid-day-frame {
+  min-height: 6.5rem;
+}
+
+.buffalo-cal .fc-daygrid-day:hover {
+  background-color: rgba(17, 24, 39, 0.02);
+}
+
+.buffalo-cal .fc-daygrid-event,
+.buffalo-cal .fc-timegrid-event {
+  border: none !important;
+  border-radius: 0.65rem !important;
+  box-shadow: none;
+  margin: 1px 3px !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.buffalo-cal .fc-daygrid-event:hover,
+.buffalo-cal .fc-timegrid-event:hover {
+  filter: brightness(0.97);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(17, 24, 39, 0.08);
+}
+
+.buffalo-cal .fc-daygrid-event-dot {
+  display: none;
+}
+
+.buffalo-cal .fc-event-main {
+  padding: 0.15rem 0.35rem;
+}
+
+.buffalo-cal .fc-event-title {
+  font-weight: 550;
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.buffalo-cal .fc-event-time {
+  font-weight: 600;
+  font-size: 0.65rem;
+  opacity: 0.75;
+}
+
+.buffalo-cal .fc-daygrid-more-link {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--bc-muted);
+  margin: 2px 4px;
+  border-radius: 999px;
+  padding: 0.1rem 0.4rem;
+}
+
+.buffalo-cal .fc-daygrid-more-link:hover {
+  background: #e5e7eb;
+  color: var(--bc-ink);
+}
+
+.buffalo-cal .fc-timegrid-slot {
+  height: 2.65rem !important;
+}
+
+.buffalo-cal .fc-timegrid-slot-label-cushion {
+  font-size: 0.68rem;
+  color: var(--bc-muted);
+  font-weight: 500;
+}
+
+.buffalo-cal .fc-timegrid-now-indicator-line {
+  border-width: 2px;
+  border-radius: 2px;
+}
+
+.buffalo-cal .fc-timegrid-now-indicator-arrow {
+  border-width: 5px;
+}
+
+.buffalo-cal .fc-timegrid-event .fc-event-main {
+  padding: 0.25rem 0.4rem;
+}
+
+.buffalo-cal .fc-timegrid-event {
+  border-radius: 0.75rem !important;
+  border-left: 3px solid #3b82f6 !important;
+  background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%) !important;
+  color: #1e3a8a !important;
+}
+
+.buffalo-cal .fc-daygrid-block-event .fc-event-main,
+.buffalo-cal .fc-daygrid-dot-event {
+  background: linear-gradient(135deg, #eff6ff 0%, #e8eefc 100%);
+  color: #1e3a8a;
+  border-radius: 0.65rem;
+}
+
+.buffalo-cal .fc-daygrid-dot-event {
+  padding: 0.15rem 0.4rem;
+}
+
+.buffalo-cal .buffalo-cal-event--crm .fc-event-main,
+.buffalo-cal .fc-daygrid-event.buffalo-cal-event--crm,
+.buffalo-cal .fc-timegrid-event.buffalo-cal-event--crm {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%) !important;
+  color: #065f46 !important;
+  border-left: 3px solid #10b981 !important;
+}
+
+.buffalo-cal .fc-popover {
+  border-radius: 1rem !important;
+  border: 1px solid var(--bc-line) !important;
+  box-shadow: 0 16px 40px rgba(17, 24, 39, 0.12) !important;
+  overflow: hidden;
+}
+
+.buffalo-cal .fc-popover-header {
+  background: var(--bc-soft) !important;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.55rem 0.75rem !important;
+}
+
+.buffalo-cal .fc-toolbar {
+  display: none !important;
+}
+
+.buffalo-cal-shell {
+  animation: buffalo-cal-in 0.35s ease-out;
+}
+
+@keyframes buffalo-cal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.buffalo-cal-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  z-index: 20;
+}
+
+.buffalo-cal-progress::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, #111827, transparent);
+  animation: buffalo-cal-shimmer 1s ease-in-out infinite;
+  transform: translateX(-100%);
+}
+
+@keyframes buffalo-cal-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

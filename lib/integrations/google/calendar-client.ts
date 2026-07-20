@@ -78,6 +78,9 @@ export type CalendarEventDTO = {
   timeZone: string
   status: string | null
   recurringEventId: string | null
+  organizerEmail: string | null
+  organizerSelf: boolean
+  attendees: { email: string; displayName: string | null; self: boolean }[]
 }
 
 function meetFromEvent(ev: calendar_v3.Schema$Event): string | null {
@@ -129,6 +132,15 @@ export async function listPrimaryCalendarEvents(params: {
           timeZone,
           status: ev.status || null,
           recurringEventId: ev.recurringEventId || null,
+          organizerEmail: ev.organizer?.email || null,
+          organizerSelf: Boolean(ev.organizer?.self),
+          attendees: (ev.attendees || [])
+            .filter((a) => a.email)
+            .map((a) => ({
+              email: String(a.email),
+              displayName: a.displayName || null,
+              self: Boolean(a.self),
+            })),
         })
       }
       pageToken = res.data.nextPageToken || undefined
