@@ -167,21 +167,13 @@ export default function RecurringInvoicesPage({
     <Layout>
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Link href="/invoices">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Facturas recurrentes</h1>
-              <p className="text-sm text-gray-600">
-                Plantillas mensuales para generar facturas nuevas con número y fecha actualizados.
-              </p>
-            </div>
-          </div>
+          <Link href="/invoices">
+            <Button variant="ghost" size="icon" className="shrink-0">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
           <Link href="/invoices/recurring/new">
-            <Button>
+            <Button className="rounded-xl">
               <Plus className="mr-2 h-4 w-4" />
               Nueva recurrente
             </Button>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
+import { useAuth } from '@/components/AuthContext'
 import { DeveloperTags } from '@/components/gestion-proyecto/ProjectDevelopersPanel'
 import { AlertCircle, CheckCircle2, FolderKanban, RefreshCw, Ticket, Wallet } from 'lucide-react'
 import type { ProjectListRow } from '@/lib/gestion-proyecto/types'
@@ -28,6 +29,8 @@ const serviceLabel: Record<string, string> = {
 }
 
 export default function GestionProyectoPage() {
+  const { user } = useAuth()
+  const isDeveloper = user?.role === 'developer'
   const [rows, setRows] = useState<ProjectListRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -65,34 +68,36 @@ export default function GestionProyectoPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-7xl mx-auto space-y-4 -mt-2 lg:-mt-3">
+      <div className="w-full space-y-4 -mt-2 lg:-mt-3">
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="inline-flex items-stretch h-10 rounded-xl border border-gray-200 bg-white overflow-hidden">
-            <div className="flex items-center gap-2 px-3.5 border-r border-gray-100">
-              <Wallet className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-              <div className="leading-tight">
-                <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">
-                  Proyectos
-                </p>
-                <p className="text-xs font-semibold text-gray-900 tabular-nums">
-                  {loading ? '…' : fmtEur(money.setup_total_eur)}
-                </p>
+          {!isDeveloper && (
+            <div className="inline-flex w-full sm:w-auto items-stretch h-10 rounded-xl border border-gray-200 bg-white overflow-hidden">
+              <div className="flex flex-1 sm:flex-initial items-center gap-2 px-3.5 border-r border-gray-100">
+                <Wallet className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                <div className="leading-tight min-w-0">
+                  <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">
+                    Proyectos
+                  </p>
+                  <p className="text-xs font-semibold text-gray-900 tabular-nums truncate">
+                    {loading ? '…' : fmtEur(money.setup_total_eur)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-1 sm:flex-initial items-center px-3.5">
+                <div className="leading-tight min-w-0">
+                  <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">
+                    Mensualidades
+                  </p>
+                  <p className="text-xs font-semibold text-gray-900 tabular-nums truncate">
+                    {loading ? '…' : `${fmtEur(money.monthly_total_eur)}/mes`}
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center px-3.5">
-              <div className="leading-tight">
-                <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">
-                  Mensualidades
-                </p>
-                <p className="text-xs font-semibold text-gray-900 tabular-nums">
-                  {loading ? '…' : `${fmtEur(money.monthly_total_eur)}/mes`}
-                </p>
-              </div>
-            </div>
-          </div>
+          )}
           <Link
             href="/tickets"
-            className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-colors"
+            className="inline-flex items-center justify-center gap-2 px-4 h-10 flex-1 sm:flex-initial border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-colors"
           >
             <Ticket className="h-4 w-4" />
             Tickets
@@ -101,7 +106,7 @@ export default function GestionProyectoPage() {
             type="button"
             onClick={load}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 px-4 h-10 flex-1 sm:flex-initial border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Actualizar

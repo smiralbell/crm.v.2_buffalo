@@ -192,7 +192,7 @@ export default function ProyectoDetailPage({ lead }: Props) {
 
   return (
     <Layout>
-      <div className="w-full max-w-7xl mx-auto space-y-6">
+      <div className="w-full space-y-6">
 
         {/* Header */}
         <div className="rounded-xl bg-gray-900 text-white px-5 py-3 flex items-center justify-between gap-3">

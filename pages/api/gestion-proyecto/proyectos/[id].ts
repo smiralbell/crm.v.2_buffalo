@@ -45,7 +45,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!id) return res.status(400).json({ error: 'ID requerido' })
 
   try {
-    await requireProjectAccessAPI(req, res, id)
+    const user = await requireProjectAccessAPI(req, res, id)
+    const isDeveloper = user.role === 'developer'
 
     const row = await fetchProyectoContext(id)
     if (!row) return res.status(404).json({ error: 'Proyecto no encontrado' })
@@ -128,17 +129,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           SELECT * FROM project_dev_onboarding WHERE project_id = ${id}::uuid LIMIT 1
         `
         onboarding = onboardingRows[0]
-          ? sanitizeOnboardingForDeveloper({
-              project_id: onboardingRows[0].project_id,
-              summary: onboardingRows[0].summary || '',
-              client_context: '',
-              scope_text: onboardingRows[0].scope_text || '',
-              stack_text: onboardingRows[0].stack_text || '',
-              deliverables: onboardingRows[0].deliverables || '',
-              contacts: onboardingRows[0].contacts || '',
-              internal_notes: onboardingRows[0].internal_notes || '',
-              updated_at: onboardingRows[0].updated_at.toISOString(),
-            })
+          ? (() => {
+              const raw = {
+                project_id: onboardingRows[0].project_id,
+                summary: onboardingRows[0].summary || '',
+                client_context: isDeveloper ? '' : onboardingRows[0].client_context || '',
+                scope_text: onboardingRows[0].scope_text || '',
+                stack_text: onboardingRows[0].stack_text || '',
+                deliverables: onboardingRows[0].deliverables || '',
+                contacts: onboardingRows[0].contacts || '',
+                internal_notes: onboardingRows[0].internal_notes || '',
+                updated_at: onboardingRows[0].updated_at.toISOString(),
+              }
+              return isDeveloper ? sanitizeOnboardingForDeveloper(raw) : raw
+            })()
           : null
 
         const docRows = await prisma.$queryRaw<
@@ -273,10 +277,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ON CONFLICT (project_id) DO NOTHING
         `
 
-        onboarding = sanitizeOnboardingForDeveloper({
-          ...defaults,
-          updated_at: new Date().toISOString(),
-        })
+        onboarding = isDeveloper
+          ? sanitizeOnboardingForDeveloper({
+              ...defaults,
+              updated_at: new Date().toISOString(),
+            })
+          : {
+              ...defaults,
+              updated_at: new Date().toISOString(),
+            }
       }
 
       const safeOnboarding = onboarding!

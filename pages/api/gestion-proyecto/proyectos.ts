@@ -184,14 +184,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       0
     )
 
+    const isDeveloper = user.role === 'developer'
+
     return res.status(200).json({
       proyectos: merged,
       total: merged.length,
-      money: {
-        setup_total_eur: Math.round(setupTotal * 100) / 100,
-        monthly_total_eur: Math.round(monthlyTotal * 100) / 100,
-        projects_count: withOnboarding.length,
-      },
+      // Precios de cliente: solo admin. Nunca exponer a developers.
+      money: isDeveloper
+        ? null
+        : {
+            setup_total_eur: Math.round(setupTotal * 100) / 100,
+            monthly_total_eur: Math.round(monthlyTotal * 100) / 100,
+            projects_count: withOnboarding.length,
+          },
     })
   } catch (error) {
     if (error instanceof Error && ['No session', 'Invalid session'].includes(error.message)) {

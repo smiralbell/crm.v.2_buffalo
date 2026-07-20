@@ -160,8 +160,7 @@ export default function FinancePeriodFilter({ value, onChange, className }: Prop
     <>
       <div
         className={cn(
-          'flex flex-nowrap items-center gap-1 min-w-0',
-          '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          'flex flex-wrap items-center gap-1 min-w-0',
           className
         )}
       >
@@ -184,7 +183,7 @@ export default function FinancePeriodFilter({ value, onChange, className }: Prop
           type="button"
           onClick={() => (calendarOpen ? setCalendarOpen(false) : openCalendar())}
           className={cn(
-            'shrink-0 inline-flex items-center gap-1.5 h-8 px-2.5 text-xs rounded-lg border transition-colors whitespace-nowrap max-w-[200px]',
+            'shrink-0 inline-flex items-center gap-1.5 h-8 px-2.5 text-xs rounded-lg border transition-colors whitespace-nowrap max-w-full sm:max-w-[200px]',
             activePreset === 'custom' ? activeBtn : inactiveBtn
           )}
         >

@@ -77,7 +77,7 @@ export default function GestionProyectoDetailPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-7xl mx-auto space-y-3 pb-8 -mt-4 lg:-mt-5">
+      <div className="w-full space-y-3 pb-8 -mt-4 lg:-mt-5">
         {proyecto && (
           <div className="sticky top-0 z-10 -mx-1 relative flex items-center justify-center border-b border-gray-200 bg-[#f7f8fa] pb-0 pt-0 min-h-[40px]">
             <Link

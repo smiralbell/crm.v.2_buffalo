@@ -208,7 +208,7 @@ export default function NewLeadDialog({ open, onOpenChange }: NewLeadDialogProps
 
           <div className="space-y-3">
             <p className="text-xs font-medium text-gray-500">Lead</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label>Estado</Label>
                 <Select value={form.estado} onValueChange={(v) => set('estado', v)}>

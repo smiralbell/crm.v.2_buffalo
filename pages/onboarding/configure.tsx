@@ -435,7 +435,7 @@ export default function ConfigurePage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-7xl mx-auto">
+      <div className="w-full">
       {/* Toast */}
       {notification && (
         <div className={`fixed top-6 right-6 z-[100] flex items-center gap-2.5 text-sm font-medium px-4 py-3 rounded-xl shadow-xl ${
@@ -447,25 +447,27 @@ export default function ConfigurePage() {
       )}
 
       {/* Breadcrumb */}
-      <div className="mb-5 flex items-center gap-4">
-        <button
-          onClick={() => router.push('/onboarding')}
-          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 transition-colors"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Onboarding
-        </button>
-        <span className="text-gray-200">/</span>
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-gray-900 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            {(displayName || '?').charAt(0).toUpperCase()}
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <button
+            onClick={() => router.push('/onboarding')}
+            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 transition-colors shrink-0"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Onboarding
+          </button>
+          <span className="text-gray-200">/</span>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-gray-900 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+              {(displayName || '?').charAt(0).toUpperCase()}
+            </div>
+            <span className="text-sm font-semibold text-gray-900 truncate">{displayName}</span>
+            {empresa && empresa !== nombre && (
+              <span className="text-sm text-gray-400 truncate hidden sm:inline">· {empresa}</span>
+            )}
           </div>
-          <span className="text-sm font-semibold text-gray-900 truncate">{displayName}</span>
-          {empresa && empresa !== nombre && (
-            <span className="text-sm text-gray-400">· {empresa}</span>
-          )}
         </div>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 sm:ml-auto">
           {draftSaved && (
             <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium animate-fade-in">
               <Save className="h-3.5 w-3.5" />
@@ -480,7 +482,7 @@ export default function ConfigurePage() {
               type="button"
               onClick={requestSave}
               disabled={saving || ensuringLead}
-              className="inline-flex items-center gap-2 px-4 h-9 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 disabled:opacity-60 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-4 h-9 w-full sm:w-auto bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 disabled:opacity-60 transition-colors"
             >
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

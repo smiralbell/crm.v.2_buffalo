@@ -291,20 +291,14 @@ export default function DemosPage() {
       <div className="space-y-6">
         <OnboardingSectionTabs active="demos" />
 
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Demos</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Agentes de demo y checklist para llegar listo a las reuniones.
-            </p>
-          </div>
-          <div className="inline-flex rounded-xl border border-gray-200 bg-white p-0.5 self-start">
+        <div className="flex justify-end">
+          <div className="inline-flex rounded-xl border border-border bg-card p-0.5">
             <Button
               type="button"
               size="sm"
               variant={tab === 'agentes' ? 'default' : 'ghost'}
               className={`rounded-lg gap-1.5 h-8 ${
-                tab === 'agentes' ? 'bg-gray-900 hover:bg-gray-800' : 'text-gray-600'
+                tab === 'agentes' ? '' : 'text-muted-foreground'
               }`}
               onClick={() => setTab('agentes')}
             >
@@ -316,7 +310,7 @@ export default function DemosPage() {
               size="sm"
               variant={tab === 'preparar' ? 'default' : 'ghost'}
               className={`rounded-lg gap-1.5 h-8 ${
-                tab === 'preparar' ? 'bg-gray-900 hover:bg-gray-800' : 'text-gray-600'
+                tab === 'preparar' ? '' : 'text-muted-foreground'
               }`}
               onClick={() => setTab('preparar')}
             >

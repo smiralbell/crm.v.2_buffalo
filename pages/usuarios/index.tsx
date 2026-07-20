@@ -102,23 +102,20 @@ export default function UsuariosPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-6xl mx-auto space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold text-gray-900">Usuarios</h1>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={load}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-3 h-9 border border-gray-200 text-sm rounded-xl hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            <Button className="gap-2 rounded-xl" onClick={() => setCreateOpen(true)}>
-              <UserPlus className="h-4 w-4" />
-              Nuevo usuario
-            </Button>
-          </div>
+      <div className="w-full space-y-4">
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-3 h-9 border border-border text-sm rounded-xl hover:bg-muted disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <Button className="gap-2 rounded-xl" onClick={() => setCreateOpen(true)}>
+            <UserPlus className="h-4 w-4" />
+            Nuevo usuario
+          </Button>
         </div>
 
         {error && (

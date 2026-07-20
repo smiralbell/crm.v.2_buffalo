@@ -88,15 +88,14 @@ export default function DeveloperDashboardPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-7xl mx-auto space-y-6 -mt-2">
+      <div className="w-full space-y-6 -mt-2">
         <div className="rounded-2xl bg-gray-900 text-white px-6 py-8">
           <p className="text-xs font-medium uppercase tracking-wider text-white/60">Tu panel</p>
-          <h1 className="text-2xl font-bold mt-1">
-            Hola{greetingName ? `, ${greetingName}` : ''}
-          </h1>
-          <p className="text-sm text-white/70 mt-2 max-w-xl">
-            Resumen de proyectos, tareas, tickets, retención y facturación.
-          </p>
+          <div className="mt-1 flex items-center gap-1.5">
+            <h1 className="text-2xl font-bold">
+              Hola{greetingName ? `, ${greetingName}` : ''}
+            </h1>
+          </div>
         </div>
 
         {loading ? (

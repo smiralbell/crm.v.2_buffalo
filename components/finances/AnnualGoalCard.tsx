@@ -37,7 +37,7 @@ export default function AnnualGoalCard({ goal }: { goal: AnnualGoalDetail }) {
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="grid grid-cols-1 gap-3 mb-5 sm:grid-cols-3">
           <div className="rounded-lg bg-gray-50 px-3 py-2.5">
             <p className="text-[10px] text-gray-500 uppercase tracking-wide">Llevamos</p>
             <p className="text-lg font-bold text-gray-900 tabular-nums mt-0.5">

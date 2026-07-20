@@ -127,34 +127,34 @@ export default function LeadDetail({ lead }: LeadDetailProps) {
     <Layout>
       <div className="space-y-5 max-w-4xl">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
             <Link href="/leads">
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" className="shrink-0">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{displayName}</h1>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{displayName}</h1>
               {lead.contact?.empresa && (
-                <p className="text-sm text-gray-500">{lead.contact.empresa}</p>
+                <p className="text-sm text-gray-500 truncate">{lead.contact.empresa}</p>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href={configureUrl}>
+          <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
+            <Link href={configureUrl} className="flex-1 sm:flex-initial">
               {hasConfig ? (
-                <Button variant="default" size="sm" className="bg-gray-900 hover:bg-gray-700 text-white">
+                <Button variant="default" size="sm" className="w-full bg-gray-900 hover:bg-gray-700 text-white">
                   <FileText className="mr-2 h-4 w-4" />
                   Ver propuesta · contrato
                 </Button>
               ) : (
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="w-full">
                   Configurar proyecto
                 </Button>
               )}
             </Link>
-            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} className="flex-1 sm:flex-initial">
               <Edit className="mr-2 h-4 w-4" />
               Editar
             </Button>

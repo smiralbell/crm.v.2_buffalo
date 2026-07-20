@@ -104,56 +104,40 @@ export default function CalendarioPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-6xl mx-auto space-y-4 pb-10 -mt-1">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gray-900 text-white shadow-sm">
-              <Calendar className="h-[18px] w-[18px]" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-2xl">
-                Calendario
-              </h1>
-              {showCalendar && status?.email ? (
-                <p className="truncate text-xs text-gray-500 mt-0.5">{status.email}</p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {loading ? (
-              <span className="inline-flex items-center gap-2 rounded-2xl border border-gray-100 bg-white px-3 py-2 text-xs text-gray-400">
+      <div className="w-full space-y-4 pb-10 -mt-1">
+        <div className="flex justify-end">
+          {loading ? (
+            <span className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              …
+            </span>
+          ) : showCalendar ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void disconnect()}
+              disabled={disconnecting}
+              className="h-9 gap-2 rounded-xl text-xs font-semibold"
+            >
+              {disconnecting ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                …
-              </span>
-            ) : showCalendar ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void disconnect()}
-                disabled={disconnecting}
-                className="h-9 gap-2 rounded-2xl border-gray-200 text-xs font-semibold"
-              >
-                {disconnecting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Link2Off className="h-3.5 w-3.5" />
-                )}
-                Desconectar
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                onClick={() => {
-                  window.location.href = '/api/integrations/google/connect'
-                }}
-                className="h-9 gap-2 rounded-2xl bg-gray-900 px-4 text-xs font-semibold hover:bg-gray-800"
-              >
-                <Calendar className="h-3.5 w-3.5" />
-                Conectar Google
-              </Button>
-            )}
-          </div>
+              ) : (
+                <Link2Off className="h-3.5 w-3.5" />
+              )}
+              Desconectar
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={() => {
+                window.location.href = '/api/integrations/google/connect'
+              }}
+              className="h-9 gap-2 rounded-xl px-4 text-xs font-semibold"
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              Conectar Google
+            </Button>
+          )}
         </div>
 
         {banner && (

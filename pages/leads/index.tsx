@@ -28,6 +28,7 @@ import Link from 'next/link'
 import NewLeadDialog from '@/components/NewLeadDialog'
 import EditLeadDialog from '@/components/EditLeadDialog'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 
 interface Lead {
   id: number
@@ -219,34 +220,33 @@ export default function LeadsPage({
   }
 
   const estadoColors: { [key: string]: string } = {
-    frio: 'bg-gray-100 text-gray-800',
-    caliente: 'bg-red-100 text-red-800',
-    cerrado: 'bg-green-100 text-green-800',
-    perdido: 'bg-red-100 text-red-800',
-    nuevo: 'bg-blue-100 text-blue-800',
-    en_proceso: 'bg-yellow-100 text-yellow-800',
+    frio: 'bg-muted text-muted-foreground',
+    caliente: 'bg-red-500/15 text-red-700 dark:text-red-300',
+    cerrado: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+    perdido: 'bg-red-500/15 text-red-700 dark:text-red-300',
+    nuevo: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
+    en_proceso: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
   }
 
   return (
     <Layout>
-      <div className="space-y-6">
-        {/* Filters and New Button */}
-        <Card className="border border-gray-200 shadow-sm">
-          <CardContent className="pt-6">
-            <form onSubmit={handleSearch} className="flex gap-3">
-              <div className="flex-1">
+      <div className="space-y-5">
+        <Card>
+          <CardContent className="pt-5">
+            <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex-1 min-w-0">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar por nombre de contacto..."
+                    placeholder="Buscar por nombre o email…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 rounded-xl"
                   />
                 </div>
               </div>
-              <Select value={estado || "all"} onValueChange={handleEstadoChange}>
-                <SelectTrigger className="w-[180px]">
+              <Select value={estado || 'all'} onValueChange={handleEstadoChange}>
+                <SelectTrigger className="w-full sm:w-[180px] rounded-xl">
                   <SelectValue placeholder="Todos los estados" />
                 </SelectTrigger>
                 <SelectContent>
@@ -257,13 +257,15 @@ export default function LeadsPage({
                   <SelectItem value="perdido">Perdido</SelectItem>
                 </SelectContent>
               </Select>
-              <Button type="submit" disabled={loading} variant="outline">
-                Buscar
-              </Button>
-              <Button type="button" onClick={() => setNewLeadOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Nuevo Lead
-              </Button>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={loading} variant="outline" className="rounded-xl flex-1 sm:flex-initial">
+                  Buscar
+                </Button>
+                <Button type="button" onClick={() => setNewLeadOpen(true)} className="rounded-xl flex-1 sm:flex-initial shrink-0">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nuevo Lead
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>
@@ -278,22 +280,21 @@ export default function LeadsPage({
           onSaved={() => router.reload()}
         />
 
-        {/* Delete Confirmation Dialog */}
         <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-          <DialogContent>
+          <DialogContent className="rounded-2xl">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-red-500" />
-                Confirmar Eliminación
+                Confirmar eliminación
               </DialogTitle>
               <DialogDescription>
-                Esta acción no se puede deshacer. Para confirmar, escribe el nombre del lead:
-                <span className="font-semibold text-gray-900 block mt-2">
+                Esta acción no se puede deshacer. Escribe el nombre del lead:
+                <span className="font-semibold text-foreground block mt-2">
                   {leadToDelete?.name}
                 </span>
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-2 py-4">
+            <div className="space-y-2 py-2">
               <Label htmlFor="confirm-name">Nombre del lead</Label>
               <Input
                 id="confirm-name"
@@ -301,11 +302,13 @@ export default function LeadsPage({
                 onChange={(e) => setDeleteConfirmName(e.target.value)}
                 placeholder="Escribe el nombre exacto"
                 autoFocus
+                className="rounded-xl"
               />
             </div>
             <DialogFooter>
               <Button
                 variant="outline"
+                className="rounded-xl"
                 onClick={() => {
                   setDeleteDialogOpen(false)
                   setLeadToDelete(null)
@@ -316,6 +319,7 @@ export default function LeadsPage({
               </Button>
               <Button
                 variant="destructive"
+                className="rounded-xl"
                 onClick={handleDeleteConfirm}
                 disabled={deleteConfirmName !== leadToDelete?.name}
               >
@@ -325,73 +329,77 @@ export default function LeadsPage({
           </DialogContent>
         </Dialog>
 
-        {/* Table */}
-        <Card className="border border-gray-200 shadow-sm">
-          <CardContent className="pt-6">
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
             {safeLeads.length === 0 ? (
-              <p className="text-center text-gray-500 py-8">
+              <p className="text-center text-muted-foreground py-16 text-sm">
                 No hay leads registrados
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-4 font-medium">Contacto</th>
-                      <th className="text-left p-4 font-medium">Estado</th>
-                      <th className="text-left p-4 font-medium">Valor</th>
-                      <th className="text-left p-4 font-medium">Fecha</th>
-                      <th className="text-right p-4 font-medium">Acciones</th>
+                    <tr className="border-b border-border bg-muted/40">
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Contacto</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Estado</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Valor</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Fecha</th>
+                      <th className="text-right px-4 py-3 font-medium text-muted-foreground">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {safeLeads.map((lead) => (
-                      <tr key={lead.id} className="border-b hover:bg-gray-50">
-                        <td className="p-4">
-                          {lead.contact ? (
-                            <Link
-                              href={`/leads/${lead.id}`}
-                              className="font-medium hover:underline"
-                            >
-                              {lead.contact.nombre || lead.contact.email || `Lead #${lead.id}`}
-                            </Link>
-                          ) : (
-                            <Link href={`/leads/${lead.id}`} className="text-gray-400 hover:underline">
-                              Lead #{lead.id}
-                            </Link>
+                      <tr
+                        key={lead.id}
+                        className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
+                      >
+                        <td className="px-4 py-3.5">
+                          <Link
+                            href={`/leads/${lead.id}`}
+                            className="font-medium text-foreground hover:underline"
+                          >
+                            {lead.contact?.nombre ||
+                              lead.contact?.email ||
+                              `Lead #${lead.id}`}
+                          </Link>
+                          {lead.contact?.email && lead.contact?.nombre && (
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[220px]">
+                              {lead.contact.email}
+                            </p>
                           )}
                         </td>
-                        <td className="p-4">
+                        <td className="px-4 py-3.5">
                           <Badge
-                            className={
-                              estadoColors[lead.estado] ||
-                              'bg-gray-100 text-gray-800'
-                            }
+                            className={cn(
+                              'rounded-full font-medium border-0',
+                              estadoColors[lead.estado] || 'bg-muted text-muted-foreground'
+                            )}
                           >
                             {estadoLabels[lead.estado] || lead.estado}
                           </Badge>
                         </td>
-                        <td className="p-4">
+                        <td className="px-4 py-3.5 tabular-nums text-foreground/80 hidden sm:table-cell">
                           {lead.valor
                             ? `€${lead.valor.toLocaleString('es-ES', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 0,
                               })}`
-                            : '-'}
+                            : '—'}
                         </td>
-                        <td className="p-4">
+                        <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">
                           {new Date(lead.created_at).toLocaleDateString('es-ES')}
                         </td>
-                        <td className="p-4">
-                          <div className="flex justify-end gap-2">
+                        <td className="px-4 py-3.5">
+                          <div className="flex justify-end gap-0.5">
                             <Link href={`/leads/${lead.id}`}>
-                              <Button variant="ghost" size="icon">
+                              <Button variant="ghost" size="icon" className="rounded-xl h-8 w-8">
                                 <Eye className="h-4 w-4" />
                               </Button>
                             </Link>
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="rounded-xl h-8 w-8"
                               onClick={() => setEditLeadId(lead.id)}
                             >
                               <Edit className="h-4 w-4" />
@@ -399,6 +407,7 @@ export default function LeadsPage({
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="rounded-xl h-8 w-8"
                               onClick={() => handleDeleteClick(lead)}
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
@@ -412,15 +421,15 @@ export default function LeadsPage({
               </div>
             )}
 
-            {/* Pagination */}
             {safeTotalPages > 1 && (
-              <div className="flex items-center justify-between mt-4">
-                <p className="text-sm text-gray-600">
+              <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                <p className="text-sm text-muted-foreground">
                   Página {safePage} de {safeTotalPages}
                 </p>
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
+                    className="rounded-xl"
                     disabled={safePage === 1}
                     onClick={() =>
                       router.push({
@@ -433,6 +442,7 @@ export default function LeadsPage({
                   </Button>
                   <Button
                     variant="outline"
+                    className="rounded-xl"
                     disabled={safePage === safeTotalPages}
                     onClick={() =>
                       router.push({

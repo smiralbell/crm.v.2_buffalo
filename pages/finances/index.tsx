@@ -602,10 +602,10 @@ export default function FinancesDashboard({
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-2">
-          <div className="flex flex-nowrap items-center gap-3 min-w-0">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center min-w-0">
             <div className="flex shrink-0 items-center gap-2">
               <Button
-                className="flex items-center gap-2 h-9 whitespace-nowrap"
+                className="flex items-center gap-2 h-9 whitespace-nowrap flex-1 sm:flex-initial"
                 onClick={handleConnect}
                 disabled={connecting || syncing}
               >
@@ -630,24 +630,22 @@ export default function FinancesDashboard({
               )}
             </div>
 
-            <div className="hidden sm:block h-6 w-px bg-gray-200 shrink-0" />
-
             <FinancePeriodFilter
               value={dateRange}
               onChange={handlePeriodChange}
-              className="flex-1 min-w-0"
+              className="w-full sm:flex-1 min-w-0"
             />
 
             <div className="flex shrink-0 items-center gap-2">
-              <Link href="/invoices">
+              <Link href="/invoices" className="flex-1 sm:flex-initial">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-9 gap-2 border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                  className="h-9 w-full gap-2 border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                 >
                   <FileText className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Facturas</span>
+                  Facturas
                 </Button>
               </Link>
               <PaymentConceptGuide />
@@ -896,7 +894,8 @@ export default function FinancesDashboard({
                 No hay movimientos disponibles
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="overflow-x-auto -mx-2 sm:mx-0">
+              <div className="space-y-2 min-w-[520px] px-2 sm:px-0">
                 {/* Headers */}
                 <div className="flex items-center justify-between pb-2 border-b border-gray-200 font-semibold text-sm text-gray-600">
                   <div className="flex-1">Movimiento</div>
@@ -939,9 +938,9 @@ export default function FinancesDashboard({
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 shrink-0">
                       <div
-                        className={`text-right font-semibold tabular-nums ${
+                        className={`text-right font-semibold tabular-nums min-w-[100px] ${
                           transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'
                         }`}
                       >
@@ -963,6 +962,7 @@ export default function FinancesDashboard({
                     <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
                   )}
                 </div>
+              </div>
               </div>
             )}
           </CardContent>

@@ -5,7 +5,7 @@ import { requireAuth } from '@/lib/auth'
 import ChecklistBoard from '@/components/checklist/ChecklistBoard'
 import type { ChecklistColumnId, ChecklistItem } from '@/lib/checklist/types'
 import { Button } from '@/components/ui/button'
-import { Loader2, ListChecks, RefreshCw } from 'lucide-react'
+import { Loader2, RefreshCw } from 'lucide-react'
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
@@ -124,24 +124,10 @@ export default function ChecklistPage() {
     }
   }
 
-  const openTotal = items.filter((i) => !i.done).length
-
   return (
     <Layout>
       <div className="space-y-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-              <ListChecks className="h-6 w-6 text-gray-700" />
-              Checklist
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Apunta tareas, asígnalas a Santi o Sergi arrastrando, y táchalas al terminar.
-              {openTotal > 0 && (
-                <span className="text-gray-700 font-medium"> · {openTotal} abiertas</span>
-              )}
-            </p>
-          </div>
+        <div className="flex justify-end">
           <Button
             variant="outline"
             size="sm"

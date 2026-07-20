@@ -109,7 +109,7 @@ export default function RetencionProyectoDetailPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-7xl mx-auto space-y-6 pb-12">
+      <div className="w-full space-y-6 pb-12">
         <div className="flex items-center gap-3">
           <Link
             href="/retencion"

@@ -112,14 +112,14 @@ export default function PipelineLayout({
   return (
     <div className="h-screen w-screen overflow-hidden bg-white flex flex-col">
       <div className="flex-shrink-0 bg-white border-b border-gray-200 z-10">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        <div className="px-3 sm:px-6 py-3 sm:py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 hover:bg-gray-100"
+                className="h-9 w-9 hover:bg-gray-100 shrink-0"
                 onClick={handleBack}
                 title="Volver"
               >
@@ -127,8 +127,8 @@ export default function PipelineLayout({
               </Button>
 
               {lockedToCurrent ? (
-                <div className="min-w-[200px] rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
-                  <p className="text-sm font-semibold text-gray-900">
+                <div className="w-full sm:w-auto sm:min-w-[200px] rounded-md border border-gray-200 bg-gray-50 px-3 py-2 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">
                     {currentPipelineName || 'Mi pipeline'}
                   </p>
                   <p className="text-[11px] text-gray-500">Solo tus leads</p>
@@ -136,9 +136,9 @@ export default function PipelineLayout({
               ) : (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="min-w-[200px] justify-between">
-                      <span className="font-medium">{currentPipelineName}</span>
-                      <ChevronDown className="h-4 w-4 ml-2" />
+                    <Button variant="outline" className="w-full sm:w-auto sm:min-w-[200px] justify-between min-w-0">
+                      <span className="font-medium truncate">{currentPipelineName}</span>
+                      <ChevronDown className="h-4 w-4 ml-2 shrink-0" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="min-w-[200px]">
@@ -170,14 +170,12 @@ export default function PipelineLayout({
               )}
             </div>
 
-            <div className="flex items-center gap-4 text-sm text-gray-700">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-gray-900">{formatCurrency(totalValue)}</span>
-                <span className="text-gray-400">·</span>
-                <span>
-                  <span className="font-semibold text-gray-900">{totalCards}</span> Oportunidades
-                </span>
-              </div>
+            <div className="flex items-center gap-2 text-sm text-gray-700 px-1 sm:px-0">
+              <span className="font-semibold text-gray-900">{formatCurrency(totalValue)}</span>
+              <span className="text-gray-400">·</span>
+              <span>
+                <span className="font-semibold text-gray-900">{totalCards}</span> Oportunidades
+              </span>
             </div>
           </div>
         </div>

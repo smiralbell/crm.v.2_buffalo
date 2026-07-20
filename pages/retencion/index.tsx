@@ -76,14 +76,13 @@ export default function RetencionPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-7xl mx-auto space-y-6">
-
+      <div className="w-full space-y-6">
         <div className="flex justify-end">
           <button
             type="button"
             onClick={load}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 h-10 border border-border text-sm font-medium rounded-xl hover:bg-muted transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Actualizar

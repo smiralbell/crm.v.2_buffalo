@@ -71,10 +71,10 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-md rounded-3xl border-gray-200 shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <Card className="w-full max-w-md rounded-3xl border-border shadow-sm bg-card">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold tracking-tight">CRM Buffalo</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight text-foreground">CRM Buffalo</CardTitle>
           <CardDescription>Accede con Google (admin) o con tu cuenta de equipo</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">

@@ -13,12 +13,10 @@ export interface AuthUser {
 
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
-function getAdminCredentials(): { email: string; password: string; name: string } {
-  const email = process.env.CRM_ADMIN_EMAIL
+function getAdminCredentials(): { email: string; password: string; name: string } | null {
+  const email = process.env.CRM_ADMIN_EMAIL?.trim()
   const password = process.env.CRM_ADMIN_PASSWORD
-  if (!email || !password) {
-    throw new Error('CRM_ADMIN_EMAIL y CRM_ADMIN_PASSWORD deben estar configurados en .env')
-  }
+  if (!email || !password) return null
   return { email, password, name: 'Administrador' }
 }
 
@@ -95,16 +93,16 @@ export async function authenticateCredentials(
   password: string
 ): Promise<AuthUser | null> {
   const admin = getAdminCredentials()
-  if (email === admin.email && password === admin.password) {
+  if (admin && email === admin.email && password === admin.password) {
     return { id: 0, email: admin.email, name: admin.name, role: 'admin' }
   }
-  const dev = await verifyCrmUserPassword(email, password)
-  if (!dev) return null
+  const crmUser = await verifyCrmUserPassword(email, password)
+  if (!crmUser) return null
   return {
-    id: dev.id,
-    email: dev.email,
-    name: dev.name,
-    role: dev.role as CrmRole,
+    id: crmUser.id,
+    email: crmUser.email,
+    name: crmUser.name,
+    role: crmUser.role as CrmRole,
   }
 }
 

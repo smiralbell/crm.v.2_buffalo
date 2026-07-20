@@ -228,7 +228,7 @@ export default function UsuarioDetailPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-5xl mx-auto space-y-6">
+      <div className="w-full space-y-6">
         <Link
           href="/usuarios"
           className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800"

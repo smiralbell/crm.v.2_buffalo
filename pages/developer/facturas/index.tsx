@@ -90,30 +90,22 @@ export default function DeveloperFacturasPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-5xl mx-auto space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">Mis facturas</h1>
-            <p className="text-sm text-gray-500">
-              Importes + PDF adjunto. Visibles en el panel admin de facturas.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={load}
-              disabled={loading}
-              className="inline-flex items-center gap-2 px-3 h-9 border border-gray-200 text-sm rounded-xl hover:bg-gray-50 disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            <Link href="/developer/facturas/nueva">
-              <Button className="gap-2 rounded-xl">
-                <Plus className="h-4 w-4" />
-                Nueva factura
-              </Button>
-            </Link>
-          </div>
+      <div className="w-full space-y-4">
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="inline-flex items-center gap-2 px-3 h-9 border border-border text-sm rounded-xl hover:bg-muted disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <Link href="/developer/facturas/nueva">
+            <Button className="gap-2 rounded-xl">
+              <Plus className="h-4 w-4" />
+              Nueva factura
+            </Button>
+          </Link>
         </div>
 
         {error && (

@@ -261,9 +261,6 @@ export default function DemoDetailPage() {
                   </>
                 )}
               </div>
-              {detail?.tipo !== 'voz' && (
-                <p className="mt-1 text-sm text-gray-500">Métricas y pruebas del agente WhatsApp</p>
-              )}
             </div>
           </div>
           <div className="flex gap-2">

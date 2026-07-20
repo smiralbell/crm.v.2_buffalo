@@ -66,10 +66,10 @@ const STAGE_COLORS: Record<string, string> = {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  draft:     { label: 'Borrador',  cls: 'bg-gray-100 text-gray-600' },
-  sent:      { label: 'Enviada',   cls: 'bg-blue-100 text-blue-700' },
-  paid:      { label: 'Cobrada',   cls: 'bg-green-100 text-green-700' },
-  cancelled: { label: 'Cancelada', cls: 'bg-red-100 text-red-600' },
+  draft:     { label: 'Borrador',  cls: 'bg-muted text-muted-foreground' },
+  sent:      { label: 'Enviada',   cls: 'bg-blue-500/15 text-blue-700 dark:text-blue-300' },
+  paid:      { label: 'Cobrada',   cls: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' },
+  cancelled: { label: 'Cancelada', cls: 'bg-red-500/15 text-red-600 dark:text-red-300' },
 }
 
 // ── Server-side data ───────────────────────────────────────────────────
@@ -258,12 +258,12 @@ function KpiCard({
 
   const inner = (
     <div className={cn(
-      'rounded-2xl border border-gray-200/80 bg-white p-5 flex flex-col gap-2',
-      'hover:shadow-sm hover:border-gray-300/80 transition-all h-full',
+      'rounded-2xl border border-border bg-card p-4 sm:p-5 flex flex-col gap-2',
+      'hover:shadow-sm hover:border-foreground/15 transition-all h-full',
       href && 'cursor-pointer'
     )}>
       <div className="flex items-start justify-between gap-2">
-        <div className="text-xs text-gray-500 font-medium">{title}</div>
+        <div className="text-xs text-muted-foreground font-medium leading-snug">{title}</div>
         {TrendIcon && trend != null && (
           <div className={cn('flex items-center gap-1 text-xs font-medium shrink-0', trendCls)}>
             <TrendIcon className="h-3.5 w-3.5" />
@@ -271,8 +271,8 @@ function KpiCard({
           </div>
         )}
       </div>
-      <div className="text-2xl font-semibold text-gray-900 leading-none tracking-tight">{value}</div>
-      {sub && <div className="text-xs text-gray-400">{sub}</div>}
+      <div className="text-xl sm:text-2xl font-semibold text-foreground leading-none tracking-tight break-words">{value}</div>
+      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
     </div>
   )
   return href ? <Link href={href} className="block">{inner}</Link> : inner
@@ -303,38 +303,37 @@ function ObjetivoCard({ invoicedYTD, mrrAmount }: { invoicedYTD: number; mrrAmou
   const exceeded  = totalProjected > ANNUAL_TARGET
 
   return (
-    <div className="rounded-2xl border border-gray-200/80 bg-white p-5">
+    <div className="rounded-2xl border border-border bg-card p-5">
 
       {/* ── Cabecera ── */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <div className="text-sm font-semibold text-gray-900">Objetivo anual {year}</div>
-          <div className="text-xs text-gray-400 mt-0.5">Meta: {fmt(ANNUAL_TARGET)}</div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-foreground">Objetivo anual {year}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Meta: {fmt(ANNUAL_TARGET)}</div>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-semibold text-gray-900 leading-none tracking-tight">{fmt(totalProjected)}</div>
-          <div className="text-xs text-gray-400 mt-1">{totalPct.toFixed(1)}% del objetivo</div>
+        <div className="sm:text-right">
+          <div className="text-2xl font-semibold text-foreground leading-none tracking-tight">{fmt(totalProjected)}</div>
+          <div className="text-xs text-muted-foreground mt-1">{totalPct.toFixed(1)}% del objetivo</div>
         </div>
       </div>
 
-      {/* ── Barra segmentada: facturado YTD (negro) + MRR futuro (gris) ── */}
-      <div className="w-full bg-gray-100 rounded-full h-2.5 mb-1.5 overflow-hidden flex">
+      {/* ── Barra segmentada: facturado YTD + MRR futuro ── */}
+      <div className="w-full bg-muted rounded-full h-2.5 mb-1.5 overflow-hidden flex">
         {billedPct > 0 && (
           <div
-            className="h-full flex-shrink-0 transition-all duration-700"
+            className="h-full flex-shrink-0 transition-all duration-700 bg-foreground dark:bg-white"
             style={{
               width: `${billedPct}%`,
-              background: exceeded ? '#22C55E' : '#111827',
+              background: exceeded ? '#22C55E' : undefined,
               borderRadius: billedPct >= 100 ? '9999px' : '9999px 0 0 9999px',
             }}
           />
         )}
         {mrrPct > 0 && (
           <div
-            className="h-full flex-shrink-0 transition-all duration-700"
+            className="h-full flex-shrink-0 transition-all duration-700 bg-muted-foreground/40"
             style={{
               width: `${mrrPct}%`,
-              background: '#9CA3AF',
               borderRadius: billedPct + mrrPct >= 100 ? '0 9999px 9999px 0' : '0',
             }}
           />
@@ -342,38 +341,36 @@ function ObjetivoCard({ invoicedYTD, mrrAmount }: { invoicedYTD: number; mrrAmou
       </div>
 
       {/* ── Leyenda ── */}
-      <div className="flex items-center gap-5 mb-4 text-[10px] text-gray-400">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mb-4 text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-gray-900 inline-block flex-shrink-0" />
+          <span className="w-2.5 h-2.5 rounded-sm bg-foreground inline-block flex-shrink-0" />
           Facturado hasta {currentMonthName}
         </span>
         {mrrAmount > 0 && futureMonths > 0 && (
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-gray-400 inline-block flex-shrink-0" />
+            <span className="w-2.5 h-2.5 rounded-sm bg-muted-foreground/50 inline-block flex-shrink-0" />
             MRR ×{futureMonths} meses futuros
           </span>
         )}
       </div>
 
-      {/* ── Desglose 3 columnas ── */}
-      <div className="grid grid-cols-3 gap-4 border-t border-gray-100 pt-3.5">
+      {/* ── Desglose ── */}
+      <div className="grid grid-cols-1 gap-3 border-t border-border pt-3.5 sm:grid-cols-3 sm:gap-4">
 
-        {/* Facturado YTD */}
         <div>
-          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">YTD facturado</div>
-          <div className="text-sm font-bold text-gray-900">{fmt(invoicedYTD)}</div>
-          <div className="text-[10px] text-gray-400 mt-0.5">setup + mant. emitido</div>
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">YTD facturado</div>
+          <div className="text-sm font-bold text-foreground">{fmt(invoicedYTD)}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">setup + mant. emitido</div>
         </div>
 
-        {/* MRR meses futuros */}
         <div>
-          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
             MRR {futureMonths > 0 ? `×${futureMonths} meses` : '(dic cerrado)'}
           </div>
-          <div className="text-sm font-bold text-gray-700">
+          <div className="text-sm font-bold text-foreground/80">
             {mrrAmount > 0 && futureMonths > 0 ? fmt(mrrProjected) : '—'}
           </div>
-          <div className="text-[10px] text-gray-400 mt-0.5">
+          <div className="text-[10px] text-muted-foreground mt-0.5">
             {mrrAmount > 0
               ? futureMonths > 0
                 ? `${fmt(mrrAmount)}/mes + IVA`
@@ -382,15 +379,14 @@ function ObjetivoCard({ invoicedYTD, mrrAmount }: { invoicedYTD: number; mrrAmou
           </div>
         </div>
 
-        {/* Falta / Superado */}
-        <div className="text-right">
-          <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
+        <div className="sm:text-right">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
             {exceeded ? 'Superado' : 'Falta'}
           </div>
-          <div className={`text-sm font-bold ${exceeded ? 'text-green-600' : 'text-gray-900'}`}>
+          <div className={`text-sm font-bold ${exceeded ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
             {exceeded ? `+${fmt(totalProjected - ANNUAL_TARGET)}` : fmt(remaining)}
           </div>
-          <div className="text-[10px] text-gray-400 mt-0.5">
+          <div className="text-[10px] text-muted-foreground mt-0.5">
             {exceeded ? '¡objetivo alcanzado!' : 'para llegar al objetivo'}
           </div>
         </div>
@@ -412,13 +408,12 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
 
   return (
     <Layout>
-      <div className="space-y-6 max-w-6xl mx-auto">
-
+      <div className="space-y-6">
         {/* ── Objetivo anual ── */}
         <ObjetivoCard invoicedYTD={kpis.invoicedYTD} mrrAmount={kpis.mrrAmount} />
 
         {/* ── KPIs fila 1: facturación ── */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           <KpiCard
             title="Facturado este mes"
             value={fmt(kpis.invoicedThisMonth)}
@@ -451,7 +446,7 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
         </div>
 
         {/* ── KPIs fila 2: pipeline / leads ── */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           <KpiCard
             title="Pipeline activo"
             value={fmt(kpis.pipelineValue)}
@@ -464,31 +459,29 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
         </div>
 
         {/* ── Gráfico + Embudo ── */}
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
 
-          {/* Revenue chart */}
-          <div className="rounded-2xl border border-gray-200/80 bg-white p-5">
+          <div className="rounded-2xl border border-border bg-card p-5">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-sm font-bold text-gray-900">Facturación mensual (6 meses)</h2>
-              <Link href="/invoices" className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 transition-colors">
+              <h2 className="text-sm font-semibold text-foreground">Facturación mensual (6 meses)</h2>
+              <Link href="/invoices" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
                 Ver facturas <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
             <RevenueChart data={monthlyRevenue} />
           </div>
 
-          {/* Pipeline funnel — count-based */}
-          <div className="rounded-2xl border border-gray-200/80 bg-white p-5">
+          <div className="rounded-2xl border border-border bg-card p-5">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-sm font-bold text-gray-900">Embudo de ventas</h2>
-              <Link href="/pipelines" className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 transition-colors">
+              <h2 className="text-sm font-semibold text-foreground">Embudo de ventas</h2>
+              <Link href="/pipelines" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
                 Abrir pipeline <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
             {pipelineStages.length === 0 ? (
               <div className="h-48 flex flex-col items-center justify-center gap-2">
-                <p className="text-sm text-gray-300">Sin datos de pipeline todavía</p>
-                <Link href="/pipelines" className="text-xs text-gray-400 hover:text-gray-600 underline transition-colors">Ir al pipeline →</Link>
+                <p className="text-sm text-muted-foreground">Sin datos de pipeline todavía</p>
+                <Link href="/pipelines" className="text-xs text-muted-foreground hover:text-foreground underline transition-colors">Ir al pipeline →</Link>
               </div>
             ) : (
               <div className="space-y-2">
@@ -497,10 +490,8 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
                   const widthPct = Math.max(4, Math.round((s.count / maxCount) * 100))
                   return (
                     <div key={s.stage} className="flex items-center gap-3">
-                      {/* Stage name */}
-                      <div className="w-36 flex-shrink-0 text-[11px] font-semibold text-gray-500 truncate">{s.stage}</div>
-                      {/* Bar */}
-                      <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                      <div className="w-28 sm:w-36 flex-shrink-0 text-[11px] font-semibold text-muted-foreground truncate">{s.stage}</div>
+                      <div className="flex-1 bg-muted rounded-full h-4 overflow-hidden">
                         <div
                           className="h-full rounded-full flex items-center justify-end pr-2 transition-all"
                           style={{ width: `${widthPct}%`, backgroundColor: color }}
@@ -510,19 +501,16 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
                           )}
                         </div>
                       </div>
-                      {/* Count badge */}
                       <div className="w-6 flex-shrink-0 text-center">
-                        <span className="text-xs font-bold text-gray-700">{s.count}</span>
+                        <span className="text-xs font-bold text-foreground">{s.count}</span>
                       </div>
-                      {/* Amount */}
-                      <div className="w-20 flex-shrink-0 text-right text-[11px] font-medium text-gray-400 tabular-nums">
+                      <div className="w-16 sm:w-20 flex-shrink-0 text-right text-[11px] font-medium text-muted-foreground tabular-nums">
                         {s.amount > 0 ? fmt(s.amount) : ''}
                       </div>
                     </div>
                   )
                 })}
-                {/* Legend */}
-                <div className="flex items-center justify-end gap-1 pt-1 text-[10px] text-gray-300">
+                <div className="flex items-center justify-end gap-1 pt-1 text-[10px] text-muted-foreground/70">
                   <span>nº tarjetas · importe estimado</span>
                 </div>
               </div>
@@ -531,20 +519,19 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
         </div>
 
         {/* ── Facturas + Leads activos ── */}
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
 
-          {/* Últimas facturas */}
-          <div className="rounded-2xl border border-gray-200/80 bg-white p-5">
+          <div className="rounded-2xl border border-border bg-card p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold text-gray-900">Últimas facturas</h2>
-              <Link href="/invoices" className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 transition-colors">
+              <h2 className="text-sm font-semibold text-foreground">Últimas facturas</h2>
+              <Link href="/invoices" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
                 Ver todas <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
             {recentInvoices.length === 0 ? (
               <div className="h-32 flex flex-col items-center justify-center gap-2">
-                <p className="text-sm text-gray-300">Sin facturas todavía</p>
-                <Link href="/invoices/new" className="text-xs text-gray-400 hover:text-gray-600 underline">Nueva factura →</Link>
+                <p className="text-sm text-muted-foreground">Sin facturas todavía</p>
+                <Link href="/invoices/new" className="text-xs text-muted-foreground hover:text-foreground underline">Nueva factura →</Link>
               </div>
             ) : (
               <div className="space-y-0.5">
@@ -554,20 +541,20 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
                     <Link
                       key={inv.id}
                       href={`/invoices/${inv.id}`}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/70 transition-colors"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-mono font-semibold text-gray-400">{inv.invoice_number}</span>
+                          <span className="text-[11px] font-mono font-semibold text-muted-foreground">{inv.invoice_number}</span>
                           <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none', cfg.cls)}>
                             {cfg.label}
                           </span>
                         </div>
-                        <div className="text-sm font-semibold text-gray-900 truncate mt-0.5">{inv.client_name}</div>
+                        <div className="text-sm font-semibold text-foreground truncate mt-0.5">{inv.client_name}</div>
                       </div>
                       <div className="flex-shrink-0 text-right">
-                        <div className="text-sm font-bold text-gray-900">{fmt(inv.total)}</div>
-                        <div className="text-[10px] text-gray-400">
+                        <div className="text-sm font-bold text-foreground">{fmt(inv.total)}</div>
+                        <div className="text-[10px] text-muted-foreground">
                           {new Date(inv.issue_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                         </div>
                       </div>
@@ -578,18 +565,17 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
             )}
           </div>
 
-          {/* Leads activos */}
-          <div className="rounded-2xl border border-gray-200/80 bg-white p-5">
+          <div className="rounded-2xl border border-border bg-card p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold text-gray-900">Leads en pipeline</h2>
-              <Link href="/leads" className="text-xs text-gray-400 hover:text-gray-700 flex items-center gap-1 transition-colors">
+              <h2 className="text-sm font-semibold text-foreground">Leads en pipeline</h2>
+              <Link href="/leads" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors">
                 Ver todos <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
             {hotLeads.length === 0 ? (
               <div className="h-32 flex flex-col items-center justify-center gap-2">
-                <p className="text-sm text-gray-300">Sin leads activos</p>
-                <Link href="/leads/new" className="text-xs text-gray-400 hover:text-gray-600 underline">Añadir lead →</Link>
+                <p className="text-sm text-muted-foreground">Sin leads activos</p>
+                <Link href="/leads/new" className="text-xs text-muted-foreground hover:text-foreground underline">Añadir lead →</Link>
               </div>
             ) : (
               <div className="space-y-0.5">
@@ -597,19 +583,19 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
                   <Link
                     key={lead.id}
                     href={`/leads/${lead.id}`}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/70 transition-colors"
                   >
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-600">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
                       {(lead.name || '?').charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-gray-900 truncate">{lead.name}</div>
-                      <div className="text-xs text-gray-400 truncate">
+                      <div className="text-sm font-semibold text-foreground truncate">{lead.name}</div>
+                      <div className="text-xs text-muted-foreground truncate">
                         {lead.empresa || estadoLabel[lead.estado || ''] || 'Lead'}
                       </div>
                     </div>
                     <div className="flex-shrink-0 flex items-center gap-2">
-                      {lead.valor && <span className="text-sm font-bold text-gray-700">{fmt(lead.valor)}</span>}
+                      {lead.valor && <span className="text-sm font-bold text-foreground/80">{fmt(lead.valor)}</span>}
                       <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
                     </div>
                   </Link>
@@ -620,8 +606,8 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
         </div>
 
         {/* ── Acciones rápidas ── */}
-        <div className="rounded-2xl border border-gray-100 bg-white/80 px-5 py-5 text-center">
-          <p className="text-xs font-medium text-gray-400 mb-4">Acciones rápidas</p>
+        <div className="rounded-2xl border border-border bg-card/80 px-5 py-5 text-center">
+          <p className="text-xs font-medium text-muted-foreground mb-4">Acciones rápidas</p>
           <div className="flex flex-wrap justify-center gap-2">
             {[
               { label: 'Nueva factura',       href: '/invoices/new' },
@@ -633,7 +619,7 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
               <Link
                 key={a.href}
                 href={a.href}
-                className="flex items-center gap-1.5 px-4 h-9 rounded-xl bg-white border border-gray-200/80 text-xs font-medium text-gray-700 hover:border-gray-300 hover:shadow-sm transition-all"
+                className="flex items-center gap-1.5 px-4 h-9 rounded-xl bg-card border border-border text-xs font-medium text-foreground/80 hover:border-foreground/20 hover:shadow-sm transition-all"
               >
                 {a.label}
               </Link>

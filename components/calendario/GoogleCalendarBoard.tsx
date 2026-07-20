@@ -255,7 +255,7 @@ export default function GoogleCalendarBoard({ onNeedsReauth }: Props) {
               type="button"
               onClick={() => changeView(v.id)}
               className={cn(
-                'rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all',
+                'rounded-xl px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold transition-all',
                 view === v.id
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-500 hover:text-gray-800'

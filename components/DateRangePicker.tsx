@@ -79,15 +79,15 @@ export default function DateRangePicker({ onRangeChange, defaultRange, className
           variant="outline"
           onClick={() => setIsOpen(!isOpen)}
           className={cn(
-            'h-9 px-3 justify-start text-left font-normal text-sm border border-gray-200 hover:bg-gray-50',
+            'h-9 px-3 flex-1 sm:flex-initial justify-start text-left font-normal text-sm border border-gray-200 hover:bg-gray-50',
             !range?.from && 'text-gray-400'
           )}
         >
-          <Calendar className="mr-2 h-4 w-4 text-gray-400" />
-          {range?.from ? format(range.from, 'dd MMM yyyy') : 'Desde'}
+          <Calendar className="mr-2 h-4 w-4 text-gray-400 shrink-0" />
+          <span className="truncate">{range?.from ? format(range.from, 'dd MMM yyyy') : 'Desde'}</span>
         </Button>
 
-        <span className="text-gray-300">-</span>
+        <span className="text-gray-300 shrink-0">-</span>
 
         {/* Input Hasta */}
         <Button
@@ -95,12 +95,12 @@ export default function DateRangePicker({ onRangeChange, defaultRange, className
           variant="outline"
           onClick={() => setIsOpen(!isOpen)}
           className={cn(
-            'h-9 px-3 justify-start text-left font-normal text-sm border border-gray-200 hover:bg-gray-50',
+            'h-9 px-3 flex-1 sm:flex-initial justify-start text-left font-normal text-sm border border-gray-200 hover:bg-gray-50',
             !range?.to && 'text-gray-400'
           )}
         >
-          <Calendar className="mr-2 h-4 w-4 text-gray-400" />
-          {range?.to ? format(range.to, 'dd MMM yyyy') : 'Hasta'}
+          <Calendar className="mr-2 h-4 w-4 text-gray-400 shrink-0" />
+          <span className="truncate">{range?.to ? format(range.to, 'dd MMM yyyy') : 'Hasta'}</span>
         </Button>
 
         {/* Botón limpiar */}
@@ -110,7 +110,7 @@ export default function DateRangePicker({ onRangeChange, defaultRange, className
             variant="ghost"
             size="icon"
             onClick={handleClear}
-            className="h-9 w-9 text-gray-400 hover:text-gray-600"
+            className="h-9 w-9 shrink-0 text-gray-400 hover:text-gray-600"
           >
             <X className="h-4 w-4" />
           </Button>

@@ -28,22 +28,14 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 export default function MarketingWebFormulariosPage({ period }: { period: string }) {
   return (
     <Layout>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
-        <div className="space-y-2">
-          <Link
-            href="/marketing?tab=web"
-            className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Volver a Web
-          </Link>
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">Formulario rellenado</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Envíos del formulario web · período {period}
-            </p>
-          </div>
-        </div>
+      <div className="w-full space-y-5">
+        <Link
+          href="/marketing?tab=web"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Volver a Web
+        </Link>
         <WebFormSubmissionsPanel period={period} />
       </div>
     </Layout>

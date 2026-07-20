@@ -343,12 +343,12 @@ export default function MarketingPage() {
 
   return (
     <Layout>
-      <div className="space-y-6 max-w-6xl mx-auto">
+      <div className="space-y-6">
 
         {/* Toolbar: tabs centered + period controls */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-1 justify-center border-b border-gray-200 lg:border-b-0 lg:pb-0">
-            <div className="flex gap-0 flex-wrap justify-center">
+          <div className="flex flex-1 justify-center border-b border-gray-200 lg:border-b-0 lg:pb-0 overflow-x-auto">
+            <div className="flex gap-0 flex-nowrap sm:flex-wrap justify-start sm:justify-center min-w-0">
               {TABS.map(t => {
                 const isActive = tab === t.id
 
@@ -365,7 +365,7 @@ export default function MarketingPage() {
                         type="button"
                         onClick={() => goToColdCalling('dashboard')}
                         className={cn(
-                          'whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg inline-flex items-center gap-1',
+                          'whitespace-nowrap px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg inline-flex items-center gap-1',
                           isActive
                             ? 'border-gray-900 text-gray-900'
                             : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -382,7 +382,7 @@ export default function MarketingPage() {
                   <button
                     key={t.id}
                     onClick={() => goToTab(t.id)}
-                    className={`whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg ${
+                    className={`whitespace-nowrap px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg ${
                       isActive
                         ? 'border-gray-900 text-gray-900'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'

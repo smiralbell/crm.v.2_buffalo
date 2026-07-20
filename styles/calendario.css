@@ -215,6 +215,25 @@
   display: none !important;
 }
 
+@media (max-width: 640px) {
+  .buffalo-cal .fc-col-header-cell-cushion {
+    font-size: 0.65rem !important;
+    padding: 0.35rem 0.15rem !important;
+  }
+
+  .buffalo-cal .fc-daygrid-day-number {
+    font-size: 0.7rem !important;
+  }
+
+  .buffalo-cal .fc-daygrid-event {
+    font-size: 0.65rem !important;
+  }
+
+  .buffalo-cal .fc-daygrid-day-frame {
+    min-height: 4.25rem !important;
+  }
+}
+
 .buffalo-cal-shell {
   animation: buffalo-cal-in 0.35s ease-out;
 }

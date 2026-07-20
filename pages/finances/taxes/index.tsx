@@ -175,27 +175,21 @@ export default function TaxesPage({ dateRange: initialDateRange, fiscal }: Taxes
   return (
     <Layout>
       <div className="space-y-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Link href="/finances">
-              <Button variant="ghost" size="icon" className="text-slate-500 hover:text-slate-900">
+              <Button variant="ghost" size="icon" className="text-slate-500 hover:text-slate-900 shrink-0">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight text-slate-900">Impuestos</h1>
-              <p className="text-xs text-slate-500 mt-0.5">
-                IVA y sociedades · solo con facturas y gastos vinculados con IVA
-              </p>
-            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <PaymentConceptGuide />
-            <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={currentDateRange} />
+            <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={currentDateRange} className="w-full sm:w-auto" />
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           <Card className="border-slate-200/80 shadow-sm bg-white">
             <CardContent className="pt-5 pb-4">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">

@@ -102,46 +102,31 @@ export default function AnalisisIaPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-6xl mx-auto space-y-6 pb-16 -mt-1">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-              <Sparkles className="h-3.5 w-3.5" />
-              Inteligencia Buffalo
-            </div>
-            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
-              Análisis de IA
-            </h1>
-            <p className="mt-1 text-sm text-gray-500 max-w-xl">
-              Lee la guía del CRM y los datos reales de PostgreSQL para darte un informe
-              ejecutivo de comercial, proyectos, retención, finanzas, marketing y operaciones.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void loadLatest()}
-              disabled={loading || running}
-              className="gap-2"
-            >
-              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-              Actualizar
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void run()}
-              disabled={running}
-              className="gap-2 bg-gray-900 hover:bg-gray-800"
-            >
-              {running ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              {running ? 'Analizando…' : analysis ? 'Regenerar análisis' : 'Generar análisis'}
-            </Button>
-          </div>
+      <div className="w-full space-y-6 pb-16 -mt-1">
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadLatest()}
+            disabled={loading || running}
+            className="gap-2 rounded-xl"
+          >
+            <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+            Actualizar
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void run()}
+            disabled={running}
+            className="gap-2 rounded-xl"
+          >
+            {running ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {running ? 'Analizando…' : analysis ? 'Regenerar' : 'Generar análisis'}
+          </Button>
         </div>
 
         {error && (

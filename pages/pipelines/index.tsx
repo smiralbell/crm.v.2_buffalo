@@ -110,19 +110,33 @@ export default function PipelinesPage({ pipelines }: PipelinesPageProps) {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="flex min-h-[140px] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-muted-foreground hover:border-foreground/25 hover:bg-card hover:text-foreground transition-all"
+          >
+            <Plus className="h-5 w-5" />
+            <span className="text-sm font-medium">Nuevo pipeline</span>
+          </button>
           {pipelines.map((pipeline) => (
             <Link key={pipeline.id} href={`/pipelines/${pipeline.id}`}>
-              <Card className="border border-gray-200/80 hover:shadow-sm transition-shadow cursor-pointer h-full">
+              <Card className="hover:shadow-sm hover:border-foreground/15 transition-all cursor-pointer h-full">
                 <CardContent className="pt-6">
-                  <h3 className="text-base font-semibold text-gray-900 mb-3">{pipeline.name}</h3>
+                  <h3 className="text-base font-semibold text-foreground mb-3">{pipeline.name}</h3>
                   <div className="space-y-1">
-                    <p className="text-sm text-gray-500">
-                      Tipo: <span className="font-medium text-gray-700">{pipeline.entity_type === 'contact' ? 'Contactos' : 'Clientes'}</span>
+                    <p className="text-sm text-muted-foreground">
+                      Tipo:{' '}
+                      <span className="font-medium text-foreground/80">
+                        {pipeline.entity_type === 'contact' ? 'Contactos' : 'Clientes'}
+                      </span>
                     </p>
-                    <p className="text-sm text-gray-500">
-                      Tarjetas: <span className="font-medium text-gray-700">{pipeline._count?.cards || 0}</span>
+                    <p className="text-sm text-muted-foreground">
+                      Tarjetas:{' '}
+                      <span className="font-medium text-foreground/80">
+                        {pipeline._count?.cards || 0}
+                      </span>
                     </p>
                   </div>
                 </CardContent>
@@ -133,16 +147,16 @@ export default function PipelinesPage({ pipelines }: PipelinesPageProps) {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-white p-6 text-center transition-all hover:border-gray-400 hover:bg-gray-50/50"
+            className="flex min-h-[140px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card/50 p-6 text-center transition-all hover:border-foreground/30 hover:bg-muted/40"
           >
-            <Plus className="mb-2 h-6 w-6 text-gray-400" />
-            <span className="text-sm font-medium text-gray-600">Nuevo pipeline</span>
-            <span className="mt-1 text-xs text-gray-400">Clic para crear</span>
+            <Plus className="mb-2 h-6 w-6 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground/80">Nuevo pipeline</span>
+            <span className="mt-1 text-xs text-muted-foreground">Clic para crear</span>
           </button>
         </div>
 
         {pipelines.length === 0 && (
-          <p className="text-center text-sm text-gray-400">
+          <p className="text-center text-sm text-muted-foreground">
             Aún no hay pipelines. Crea el primero con la caja de arriba.
           </p>
         )}
@@ -154,7 +168,7 @@ export default function PipelinesPage({ pipelines }: PipelinesPageProps) {
             </DialogHeader>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label htmlFor="p-name" className="mb-2 block text-sm font-medium text-gray-700">
+                <label htmlFor="p-name" className="mb-2 block text-sm font-medium text-foreground">
                   Nombre
                 </label>
                 <Input
@@ -163,12 +177,13 @@ export default function PipelinesPage({ pipelines }: PipelinesPageProps) {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ej. Ventas Q2"
                   autoFocus
+                  className="rounded-xl"
                 />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">Tipo de entidad</label>
+                <label className="mb-2 block text-sm font-medium text-foreground">Tipo de entidad</label>
                 <Select value={entityType} onValueChange={(v: 'client' | 'contact') => setEntityType(v)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -178,11 +193,11 @@ export default function PipelinesPage({ pipelines }: PipelinesPageProps) {
                 </Select>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+                <Button type="button" variant="outline" className="rounded-xl" onClick={() => setCreateOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={loading || !name.trim()}>
-                  {loading ? 'Creando...' : 'Crear pipeline'}
+                <Button type="submit" className="rounded-xl" disabled={loading || !name.trim()}>
+                  {loading ? 'Creando…' : 'Crear pipeline'}
                 </Button>
               </DialogFooter>
             </form>

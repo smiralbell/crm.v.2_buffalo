@@ -272,7 +272,7 @@ export default function OnboardingPage() {
   // ══════════════════════════════════════════════════════════════════
   return (
     <Layout>
-      <div className="w-full max-w-7xl mx-auto space-y-6">
+      <div className="w-full space-y-6">
 
         {/* ── Tab bar ── */}
         <OnboardingSectionTabs
@@ -287,17 +287,17 @@ export default function OnboardingPage() {
           <div className="space-y-6">
 
             {/* Steps strip */}
-            <div className="flex items-center justify-center gap-0">
+            <div className="flex flex-wrap items-center justify-center gap-2">
               {STEPS.map((s, i) => (
                 <div key={s.n} className="flex items-center">
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-50 border border-gray-100">
+                  <div className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-full bg-gray-50 border border-gray-100">
                     <span className="w-5 h-5 rounded-full bg-gray-900 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                       {s.n}
                     </span>
                     <span className="text-[11px] font-medium text-gray-600 whitespace-nowrap">{s.label}</span>
                   </div>
                   {i < STEPS.length - 1 && (
-                    <ArrowRight className="h-3 w-3 text-gray-300 mx-1 flex-shrink-0" />
+                    <ArrowRight className="hidden sm:block h-3 w-3 text-gray-300 mx-1 flex-shrink-0" />
                   )}
                 </div>
               ))}

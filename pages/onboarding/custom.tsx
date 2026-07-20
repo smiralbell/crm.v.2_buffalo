@@ -204,7 +204,7 @@ export default function CustomProjectBriefPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-5xl mx-auto space-y-5 pb-16">
+      <div className="w-full space-y-5 pb-16">
         <div className="flex items-center gap-4">
           <button
             type="button"

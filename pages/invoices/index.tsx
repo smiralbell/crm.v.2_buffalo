@@ -704,18 +704,18 @@ export default function InvoicesPage({
         )}
 
         {/* Stats Cards - Estilo minimalista */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Total Facturas</p>
-              <div className="text-2xl font-semibold text-gray-900 mb-1">{stats.total}</div>
+            <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
+              <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Total Facturas</p>
+              <div className="text-xl sm:text-2xl font-semibold text-gray-900 mb-1">{stats.total}</div>
               <p className="text-xs text-gray-400">Todas las facturas</p>
             </CardContent>
           </Card>
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Total Sin IVA</p>
-              <div className="text-2xl font-semibold text-gray-900 mb-1">
+            <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
+              <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Total Sin IVA</p>
+              <div className="text-lg sm:text-2xl font-semibold text-gray-900 mb-1 break-words">
                 {new Intl.NumberFormat('es-ES', {
                   style: 'currency',
                   currency: 'EUR',
@@ -726,9 +726,9 @@ export default function InvoicesPage({
             </CardContent>
           </Card>
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">Total Con IVA</p>
-              <div className="text-2xl font-semibold text-gray-900 mb-1">
+            <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
+              <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Total Con IVA</p>
+              <div className="text-lg sm:text-2xl font-semibold text-gray-900 mb-1 break-words">
                 {new Intl.NumberFormat('es-ES', {
                   style: 'currency',
                   currency: 'EUR',
@@ -739,9 +739,9 @@ export default function InvoicesPage({
             </CardContent>
           </Card>
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="pt-6">
-              <p className="text-sm font-medium text-gray-500 mb-2">IVA a Pagar</p>
-              <div className="text-2xl font-semibold text-gray-900 mb-1">
+            <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
+              <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">IVA a Pagar</p>
+              <div className="text-lg sm:text-2xl font-semibold text-gray-900 mb-1 break-words">
                 {new Intl.NumberFormat('es-ES', {
                   style: 'currency',
                   currency: 'EUR',
@@ -756,20 +756,20 @@ export default function InvoicesPage({
         {/* Filters and New Button - Estilo minimalista */}
         <Card className="border border-gray-200 shadow-sm">
           <CardContent className="pt-6">
-            <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-3">
-              <div className="flex-1 min-w-[200px]">
+            <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="w-full sm:flex-1 sm:min-w-[200px] min-w-0">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input
                     placeholder="Buscar por número, cliente, email..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 rounded-xl"
                   />
                 </div>
               </div>
               <Select value={status || 'all'} onValueChange={handleStatusChange}>
-                <SelectTrigger className="w-[160px] shrink-0">
+                <SelectTrigger className="w-full sm:w-[160px] rounded-xl">
                   <SelectValue placeholder="Todos los estados" />
                 </SelectTrigger>
                 <SelectContent>
@@ -780,7 +780,7 @@ export default function InvoicesPage({
                 </SelectContent>
               </Select>
               <Select value={source || 'all'} onValueChange={handleSourceChange}>
-                <SelectTrigger className="w-[180px] shrink-0">
+                <SelectTrigger className="w-full sm:w-[180px] rounded-xl">
                   <SelectValue placeholder="Origen" />
                 </SelectTrigger>
                 <SelectContent>
@@ -792,28 +792,28 @@ export default function InvoicesPage({
               <DateRangePicker
                 onRangeChange={handleDateRangeChange}
                 defaultRange={dateRange}
-                className="shrink-0"
+                className="w-full sm:w-auto"
               />
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <Button type="submit" disabled={loading} variant="outline">
+              <div className="flex w-full sm:w-auto flex-wrap items-center gap-2">
+                <Button type="submit" disabled={loading} variant="outline" className="rounded-xl flex-1 sm:flex-initial">
                   <Search className="mr-2 h-4 w-4" />
                   Buscar
                 </Button>
-                <Link href="/invoices/new">
-                  <Button type="button">
+                <Link href="/invoices/new" className="flex-1 sm:flex-initial">
+                  <Button type="button" className="rounded-xl w-full">
                     <Plus className="mr-2 h-4 w-4" />
                     Nueva Factura
                   </Button>
                 </Link>
-                <Link href="/invoices/recurring">
-                  <Button type="button" variant="outline">
+                <Link href="/invoices/recurring" className="flex-1 sm:flex-initial">
+                  <Button type="button" variant="outline" className="rounded-xl w-full">
                     <FileText className="mr-2 h-4 w-4" />
                     Recurrentes
                   </Button>
                 </Link>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" disabled={exporting}>
+                    <Button type="button" variant="outline" disabled={exporting} className="rounded-xl flex-1 sm:flex-initial">
                       <FileDown className="mr-2 h-4 w-4" />
                       Exportar
                       <ChevronDown className="ml-2 h-4 w-4" />
