@@ -96,12 +96,9 @@ export async function generateCrmAssistantReply(
 ): Promise<string> {
   const system = `${systemPrompt.trim()}
 
-${extraKnowledge.trim() ? `Notas adicionales del usuario:\n${extraKnowledge.trim()}\n` : ''}
-FORMATO DE RESPUESTA (obligatorio en el mensaje final al usuario):
-- NO uses markdown, negritas ni asteriscos (*).
-- Párrafos separados por una línea en blanco.
-- Habla como en WhatsApp: claro y útil.
-- Usa las herramientas antes de afirmar datos del CRM.`
+${extraKnowledge.trim() ? `---\nNOTAS FIJAS / BASE DE CONOCIMIENTO:\n${extraKnowledge.trim()}\n---` : ''}
+
+Recuerda: usa herramientas antes de dar cifras. Respuesta final al usuario en formato WhatsApp (sin markdown ni asteriscos; párrafos separados por línea en blanco).`
 
   const messages: ChatMessage[] = [{ role: 'system', content: system }]
 

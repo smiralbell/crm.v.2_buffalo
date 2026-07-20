@@ -20,7 +20,12 @@ import {
 } from '@/components/ui/select'
 import { AlertTriangle, Plus, X } from 'lucide-react'
 import RetellVariableChips, { insertTextAtSelection } from '@/components/demos/RetellVariableChips'
-import { DEFAULT_CRM_ASSISTANT_PROMPT } from '@/lib/demos/crm-assistant-prompt'
+import {
+  DEFAULT_CRM_ASSISTANT_GREETING,
+  DEFAULT_CRM_ASSISTANT_KNOWLEDGE,
+  DEFAULT_CRM_ASSISTANT_NAME,
+  DEFAULT_CRM_ASSISTANT_PROMPT,
+} from '@/lib/demos/crm-assistant-prompt'
 import type {
   DemoDireccion,
   DemoEstado,
@@ -472,16 +477,19 @@ export default function DemoFormDialog({
                     ...p,
                     es_asistente_crm: checked,
                     es_principal: checked ? false : p.es_principal,
-                    prompt:
-                      checked && (!p.prompt.trim() || p.prompt === emptyForm.prompt)
-                        ? DEFAULT_CRM_ASSISTANT_PROMPT
-                        : checked && p.prompt.length < 80
-                          ? DEFAULT_CRM_ASSISTANT_PROMPT
-                          : p.prompt,
-                    nombre_cliente:
-                      checked && !p.nombre_cliente.trim()
-                        ? 'Asistente personal CRM'
-                        : p.nombre_cliente,
+                    prompt: checked ? DEFAULT_CRM_ASSISTANT_PROMPT : p.prompt,
+                    base_conocimiento: checked
+                      ? p.base_conocimiento.trim() || DEFAULT_CRM_ASSISTANT_KNOWLEDGE
+                      : p.base_conocimiento,
+                    frase_inicial: checked
+                      ? p.frase_inicial.trim() || DEFAULT_CRM_ASSISTANT_GREETING
+                      : p.frase_inicial,
+                    nombre_cliente: checked
+                      ? p.nombre_cliente.trim() &&
+                        p.nombre_cliente !== 'Asistente personal CRM'
+                        ? p.nombre_cliente
+                        : DEFAULT_CRM_ASSISTANT_NAME
+                      : p.nombre_cliente,
                   }))
                 }}
                 className="mt-1 h-4 w-4 rounded border-gray-300"
@@ -499,8 +507,9 @@ export default function DemoFormDialog({
             </label>
             {form.es_asistente_crm && !isVoz && (
               <p className="text-xs text-emerald-900">
-                Al guardar se usará el prompt de asistente CRM si el tuyo estaba vacío. La base de
-                conocimiento es opcional (notas extras). No marques «Agente principal».
+                Al activarlo se rellenan nombre, prompt, base de conocimiento y frase inicial
+                optimizados para el CRM. Puedes editarlos. Añade tu WhatsApp abajo. No marques
+                «Agente principal».
               </p>
             )}
           </div>
