@@ -18,6 +18,7 @@ const updateSchema = z.object({
   voz_id: z.string().optional(),
   direccion: z.enum(['inbound', 'outbound', 'ambos']).optional(),
   es_principal: z.boolean().optional(),
+  es_asistente_crm: z.boolean().optional(),
 })
 
 function retellErrorMessage(err: unknown): string {
@@ -76,6 +77,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (parsed.voz_id !== undefined) payload.voz_id = parsed.voz_id.trim()
       if (parsed.direccion !== undefined) payload.direccion = parsed.direccion
       if (parsed.es_principal !== undefined) payload.es_principal = parsed.es_principal
+      if (parsed.es_asistente_crm !== undefined) {
+        payload.es_asistente_crm = parsed.es_asistente_crm
+      }
 
       const willBePrincipal =
         parsed.es_principal !== undefined ? parsed.es_principal : existing.es_principal

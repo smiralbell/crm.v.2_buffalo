@@ -28,6 +28,7 @@ function mapDemoRow(row: {
   voz_id?: string | null
   direccion?: string | null
   es_principal?: boolean | null
+  es_asistente_crm?: boolean | null
   created_at: Date | string
 }): DemoRow {
   return {
@@ -44,6 +45,7 @@ function mapDemoRow(row: {
     voz_id: row.voz_id ?? null,
     direccion: (row.direccion as DemoDireccion | null) ?? null,
     es_principal: row.es_principal === true,
+    es_asistente_crm: row.es_asistente_crm === true,
     created_at:
       row.created_at instanceof Date
         ? row.created_at.toISOString()
@@ -53,7 +55,8 @@ function mapDemoRow(row: {
 
 const DEMO_SELECT = `id, nombre_cliente, prompt, base_conocimiento, frase_inicial, estado,
   tipo, retell_agent_id, retell_llm_id, retell_kb_id, voz_id, direccion,
-  COALESCE(es_principal, false) AS es_principal, created_at`
+  COALESCE(es_principal, false) AS es_principal,
+  COALESCE(es_asistente_crm, false) AS es_asistente_crm, created_at`
 
 async function clearPrincipalFlag(tipo: DemoTipo, exceptDemoId?: number): Promise<void> {
   await query(
@@ -90,14 +93,23 @@ export async function listDemos(): Promise<DemoListItem[]> {
     )
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''
-    // Prod sin migración ALTER_DEMOS_PRINCIPAL.sql
-    if (msg.includes('es_principal')) {
+    // Prod sin migración ALTER_DEMOS_PRINCIPAL / ASISTENTE_CRM
+    if (msg.includes('es_asistente_crm') || msg.includes('es_principal')) {
       demos = await query(
         `SELECT id, nombre_cliente, prompt, base_conocimiento, frase_inicial, estado,
                 tipo, retell_agent_id, retell_llm_id, retell_kb_id, voz_id, direccion,
-                FALSE AS es_principal, created_at
+                COALESCE(es_principal, false) AS es_principal,
+                FALSE AS es_asistente_crm, created_at
          FROM demos
          ORDER BY created_at DESC`
+      ).catch(async () =>
+        query(
+          `SELECT id, nombre_cliente, prompt, base_conocimiento, frase_inicial, estado,
+                  tipo, retell_agent_id, retell_llm_id, retell_kb_id, voz_id, direccion,
+                  FALSE AS es_principal, FALSE AS es_asistente_crm, created_at
+           FROM demos
+           ORDER BY created_at DESC`
+        )
       )
     } else {
       throw err
@@ -265,40 +277,77 @@ export async function createDemo(
 ): Promise<DemoListItem> {
   const tipo: DemoTipo = input.tipo === 'voz' ? 'voz' : 'whatsapp'
   const esPrincipal = input.es_principal === true
+  // Asistente CRM solo WhatsApp; nunca como captura global de desconocidos
+  const esAsistenteCrm = tipo === 'whatsapp' && input.es_asistente_crm === true && !esPrincipal
 
   const preConflicts = await findPhoneConflicts(input.numeros, undefined, tipo)
   if (preConflicts.length > 0 && !options?.mover_numeros) {
     throw new PhoneNumberConflictError(preConflicts)
   }
 
+  if (esAsistenteCrm && input.numeros.length === 0) {
+    throw new Error('El asistente CRM requiere al menos un número autorizado (tu WhatsApp)')
+  }
+
   if (esPrincipal) {
     await clearPrincipalFlag(tipo)
   }
 
-  const result = await query<{ id: number; created_at: Date }>(
-    `INSERT INTO demos (
-       nombre_cliente, prompt, base_conocimiento, frase_inicial, estado,
-       tipo, voz_id, direccion, es_principal,
-       retell_agent_id, retell_llm_id, retell_kb_id
-     )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-     RETURNING id, created_at`,
-    [
-      input.nombre_cliente,
-      input.prompt,
-      input.base_conocimiento,
-      input.frase_inicial?.trim() ?? '',
-      input.estado,
-      tipo,
-      tipo === 'voz' ? input.voz_id?.trim() || null : null,
-      tipo === 'voz' ? input.direccion || 'inbound' : null,
-      esPrincipal,
-      null,
-      null,
-      null,
-    ]
-  )
-  const row = result.rows[0]
+  let row: { id: number; created_at: Date }
+  try {
+    const result = await query<{ id: number; created_at: Date }>(
+      `INSERT INTO demos (
+         nombre_cliente, prompt, base_conocimiento, frase_inicial, estado,
+         tipo, voz_id, direccion, es_principal, es_asistente_crm,
+         retell_agent_id, retell_llm_id, retell_kb_id
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       RETURNING id, created_at`,
+      [
+        input.nombre_cliente,
+        input.prompt,
+        input.base_conocimiento,
+        input.frase_inicial?.trim() ?? '',
+        input.estado,
+        tipo,
+        tipo === 'voz' ? input.voz_id?.trim() || null : null,
+        tipo === 'voz' ? input.direccion || 'inbound' : null,
+        esPrincipal,
+        esAsistenteCrm,
+        null,
+        null,
+        null,
+      ]
+    )
+    row = result.rows[0]
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (!msg.includes('es_asistente_crm')) throw err
+    const result = await query<{ id: number; created_at: Date }>(
+      `INSERT INTO demos (
+         nombre_cliente, prompt, base_conocimiento, frase_inicial, estado,
+         tipo, voz_id, direccion, es_principal,
+         retell_agent_id, retell_llm_id, retell_kb_id
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING id, created_at`,
+      [
+        input.nombre_cliente,
+        input.prompt,
+        input.base_conocimiento,
+        input.frase_inicial?.trim() ?? '',
+        input.estado,
+        tipo,
+        tipo === 'voz' ? input.voz_id?.trim() || null : null,
+        tipo === 'voz' ? input.direccion || 'inbound' : null,
+        esPrincipal,
+        null,
+        null,
+        null,
+      ]
+    )
+    row = result.rows[0]
+  }
   if (!row) throw new Error('No se pudo crear la demo')
 
   try {
@@ -332,18 +381,54 @@ export async function updateDemo(
     input.direccion !== undefined ? input.direccion : existing.direccion
   const esPrincipal =
     input.es_principal !== undefined ? input.es_principal === true : existing.es_principal
+  const esAsistenteCrm =
+    existing.tipo === 'whatsapp' &&
+    (input.es_asistente_crm !== undefined
+      ? input.es_asistente_crm === true
+      : existing.es_asistente_crm) &&
+    !esPrincipal
+
+  if (esAsistenteCrm) {
+    const nums = input.numeros ?? existing.numeros
+    if (nums.length === 0) {
+      throw new Error('El asistente CRM requiere al menos un número autorizado (tu WhatsApp)')
+    }
+  }
 
   if (esPrincipal) {
     await clearPrincipalFlag(existing.tipo, id)
   }
 
-  await query(
-    `UPDATE demos
-     SET nombre_cliente = $1, prompt = $2, base_conocimiento = $3, frase_inicial = $4, estado = $5,
-         voz_id = $6, direccion = $7, es_principal = $8
-     WHERE id = $9`,
-    [nombre, prompt, base, fraseInicial, estado, vozId, direccion, esPrincipal, id]
-  )
+  try {
+    await query(
+      `UPDATE demos
+       SET nombre_cliente = $1, prompt = $2, base_conocimiento = $3, frase_inicial = $4, estado = $5,
+           voz_id = $6, direccion = $7, es_principal = $8, es_asistente_crm = $9
+       WHERE id = $10`,
+      [
+        nombre,
+        prompt,
+        base,
+        fraseInicial,
+        estado,
+        vozId,
+        direccion,
+        esPrincipal,
+        esAsistenteCrm,
+        id,
+      ]
+    )
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (!msg.includes('es_asistente_crm')) throw err
+    await query(
+      `UPDATE demos
+       SET nombre_cliente = $1, prompt = $2, base_conocimiento = $3, frase_inicial = $4, estado = $5,
+           voz_id = $6, direccion = $7, es_principal = $8
+       WHERE id = $9`,
+      [nombre, prompt, base, fraseInicial, estado, vozId, direccion, esPrincipal, id]
+    )
+  }
 
   if (input.numeros) {
     await assignDemoNumeros(id, input.numeros, options)
@@ -387,25 +472,49 @@ export interface ActiveDemoMatch {
   nombre_cliente: string
   prompt: string
   base_conocimiento: string
+  es_asistente_crm: boolean
 }
 
 /** Un número solo puede estar en una demo activa (garantizado por BD + lógica de asignación) */
 export async function findActiveDemoByPhone(phone: string): Promise<ActiveDemoMatch | null> {
-  const result = await query<{
-    demo_id: number
-    nombre_cliente: string
-    prompt: string
-    base_conocimiento: string
-  }>(
-    `SELECT d.id AS demo_id, d.nombre_cliente, d.prompt, d.base_conocimiento
-     FROM demo_numeros n
-     JOIN demos d ON d.id = n.demo_id
-     WHERE n.numero_telefono = $1 AND d.estado = 'activa'
-       AND (d.tipo = 'whatsapp' OR d.tipo IS NULL)
-     LIMIT 1`,
-    [phone]
-  )
-  return result.rows[0] ?? null
+  try {
+    const result = await query<{
+      demo_id: number
+      nombre_cliente: string
+      prompt: string
+      base_conocimiento: string
+      es_asistente_crm: boolean
+    }>(
+      `SELECT d.id AS demo_id, d.nombre_cliente, d.prompt, d.base_conocimiento,
+              COALESCE(d.es_asistente_crm, false) AS es_asistente_crm
+       FROM demo_numeros n
+       JOIN demos d ON d.id = n.demo_id
+       WHERE n.numero_telefono = $1 AND d.estado = 'activa'
+         AND (d.tipo = 'whatsapp' OR d.tipo IS NULL)
+       LIMIT 1`,
+      [phone]
+    )
+    return result.rows[0] ?? null
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (!msg.includes('es_asistente_crm')) throw err
+    const result = await query<{
+      demo_id: number
+      nombre_cliente: string
+      prompt: string
+      base_conocimiento: string
+    }>(
+      `SELECT d.id AS demo_id, d.nombre_cliente, d.prompt, d.base_conocimiento
+       FROM demo_numeros n
+       JOIN demos d ON d.id = n.demo_id
+       WHERE n.numero_telefono = $1 AND d.estado = 'activa'
+         AND (d.tipo = 'whatsapp' OR d.tipo IS NULL)
+       LIMIT 1`,
+      [phone]
+    )
+    const row = result.rows[0]
+    return row ? { ...row, es_asistente_crm: false } : null
+  }
 }
 
 /** Demo de voz activa para llamadas inbound desde un número autorizado */
@@ -439,22 +548,46 @@ export async function findActiveVoiceDemoByPhone(
   }
 }
 
-/** Demo principal Buffalo (WhatsApp): captura números no asociados a ninguna demo de cliente */
+/** Demo principal Buffalo (WhatsApp): captura números no asociados a ninguna demo de cliente.
+ *  Nunca usa un asistente CRM (datos internos) como fallback de desconocidos. */
 export async function findPrincipalActiveDemo(): Promise<ActiveDemoMatch | null> {
-  const result = await query<{
-    demo_id: number
-    nombre_cliente: string
-    prompt: string
-    base_conocimiento: string
-  }>(
-    `SELECT d.id AS demo_id, d.nombre_cliente, d.prompt, d.base_conocimiento
-     FROM demos d
-     WHERE d.estado = 'activa'
-       AND COALESCE(d.es_principal, false) = TRUE
-       AND (d.tipo = 'whatsapp' OR d.tipo IS NULL)
-     LIMIT 1`
-  )
-  return result.rows[0] ?? null
+  try {
+    const result = await query<{
+      demo_id: number
+      nombre_cliente: string
+      prompt: string
+      base_conocimiento: string
+      es_asistente_crm: boolean
+    }>(
+      `SELECT d.id AS demo_id, d.nombre_cliente, d.prompt, d.base_conocimiento,
+              COALESCE(d.es_asistente_crm, false) AS es_asistente_crm
+       FROM demos d
+       WHERE d.estado = 'activa'
+         AND COALESCE(d.es_principal, false) = TRUE
+         AND COALESCE(d.es_asistente_crm, false) = FALSE
+         AND (d.tipo = 'whatsapp' OR d.tipo IS NULL)
+       LIMIT 1`
+    )
+    return result.rows[0] ?? null
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (!msg.includes('es_asistente_crm') && !msg.includes('es_principal')) throw err
+    const result = await query<{
+      demo_id: number
+      nombre_cliente: string
+      prompt: string
+      base_conocimiento: string
+    }>(
+      `SELECT d.id AS demo_id, d.nombre_cliente, d.prompt, d.base_conocimiento
+       FROM demos d
+       WHERE d.estado = 'activa'
+         AND COALESCE(d.es_principal, false) = TRUE
+         AND (d.tipo = 'whatsapp' OR d.tipo IS NULL)
+       LIMIT 1`
+    )
+    const row = result.rows[0]
+    return row ? { ...row, es_asistente_crm: false } : null
+  }
 }
 
 /** Demo principal Buffalo (voz inbound): captura llamadas de números no autorizados */

@@ -120,6 +120,7 @@ export function demoRowToListItem(row: PublicFormDemoRow): DemoListItem {
     voz_id: null,
     direccion: row.direccion as DemoListItem['direccion'],
     es_principal: false,
+    es_asistente_crm: false,
     created_at: new Date().toISOString(),
     numeros: row.numeros,
     numeros_count: row.numeros.length,

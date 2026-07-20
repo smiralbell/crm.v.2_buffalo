@@ -18,6 +18,7 @@ const createSchema = z.object({
   voz_id: z.string().optional(),
   direccion: z.enum(['inbound', 'outbound', 'ambos']).optional(),
   es_principal: z.boolean().optional(),
+  es_asistente_crm: z.boolean().optional(),
 })
 
 function retellErrorMessage(err: unknown): string {
@@ -93,6 +94,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           numeros,
           tipo: 'whatsapp',
           es_principal: parsed.es_principal === true,
+          es_asistente_crm: parsed.es_asistente_crm === true,
         },
         { mover_numeros: parsed.mover_numeros }
       )

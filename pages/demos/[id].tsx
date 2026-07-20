@@ -249,6 +249,11 @@ export default function DemoDetailPage() {
                     >
                       {detail.tipo === 'voz' ? 'Voz' : 'WhatsApp'}
                     </Badge>
+                    {detail.es_asistente_crm && (
+                      <Badge className="border-emerald-200 bg-emerald-100 text-emerald-900">
+                        Asistente CRM
+                      </Badge>
+                    )}
                     {detail.tipo === 'voz' && detail.direccion && (
                       <Badge variant="outline" className="border-gray-200 text-gray-600">
                         {detail.direccion === 'inbound'

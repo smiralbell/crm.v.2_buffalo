@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select'
 import { AlertTriangle, Plus, X } from 'lucide-react'
 import RetellVariableChips, { insertTextAtSelection } from '@/components/demos/RetellVariableChips'
+import { DEFAULT_CRM_ASSISTANT_PROMPT } from '@/lib/demos/crm-assistant-tools'
 import type {
   DemoDireccion,
   DemoEstado,
@@ -47,6 +48,7 @@ export interface DemoFormValues {
   voz_id: string
   direccion: DemoDireccion
   es_principal: boolean
+  es_asistente_crm: boolean
 }
 
 interface DemoFormDialogProps {
@@ -69,6 +71,7 @@ const emptyForm: DemoFormValues = {
   voz_id: '',
   direccion: 'inbound',
   es_principal: false,
+  es_asistente_crm: false,
 }
 
 const direccionLabel: Record<DemoDireccion, string> = {
@@ -127,6 +130,7 @@ export default function DemoFormDialog({
         voz_id: demo.voz_id || '',
         direccion: demo.direccion || 'inbound',
         es_principal: demo.es_principal ?? false,
+        es_asistente_crm: demo.es_asistente_crm ?? false,
       })
     } else {
       setForm(emptyForm)
@@ -258,6 +262,17 @@ export default function DemoFormDialog({
     if (isVoz && form.es_principal && form.direccion === 'outbound') {
       setError('La demo principal de voz debe ser inbound o ambos')
       return
+    }
+    if (!isVoz && form.es_asistente_crm && form.es_principal) {
+      setError('El asistente CRM no puede ser agente principal (evitar filtrar datos a desconocidos)')
+      return
+    }
+    if (!isVoz && form.es_asistente_crm) {
+      const nums = form.numeros.map((n) => n.trim()).filter(Boolean)
+      if (nums.length === 0) {
+        setError('Añade tu número de WhatsApp como autorizado para el asistente CRM')
+        return
+      }
     }
 
     const numeros = form.numeros.map((n) => n.trim()).filter(Boolean)
@@ -445,11 +460,57 @@ export default function DemoFormDialog({
             )}
           </div>
 
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.es_asistente_crm}
+                disabled={isVoz}
+                onChange={(e) => {
+                  const checked = e.target.checked
+                  setForm((p) => ({
+                    ...p,
+                    es_asistente_crm: checked,
+                    es_principal: checked ? false : p.es_principal,
+                    prompt:
+                      checked && (!p.prompt.trim() || p.prompt === emptyForm.prompt)
+                        ? DEFAULT_CRM_ASSISTANT_PROMPT
+                        : checked && p.prompt.length < 80
+                          ? DEFAULT_CRM_ASSISTANT_PROMPT
+                          : p.prompt,
+                    nombre_cliente:
+                      checked && !p.nombre_cliente.trim()
+                        ? 'Asistente personal CRM'
+                        : p.nombre_cliente,
+                  }))
+                }}
+                className="mt-1 h-4 w-4 rounded border-gray-300"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900">
+                  Asistente personal CRM
+                </span>
+                <span className="block text-xs text-gray-600 mt-1">
+                  {isVoz
+                    ? 'Solo disponible en demos WhatsApp (no voz).'
+                    : 'Consulta el CRM en vivo (leads, proyectos, finanzas, tickets…). Solo responde a los números autorizados — añade el tuyo abajo.'}
+                </span>
+              </span>
+            </label>
+            {form.es_asistente_crm && !isVoz && (
+              <p className="text-xs text-emerald-900">
+                Al guardar se usará el prompt de asistente CRM si el tuyo estaba vacío. La base de
+                conocimiento es opcional (notas extras). No marques «Agente principal».
+              </p>
+            )}
+          </div>
+
           <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-4 space-y-3">
             <label className="flex items-start gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={form.es_principal}
+                disabled={form.es_asistente_crm}
                 onChange={(e) => {
                   const checked = e.target.checked
                   setForm((p) => ({
@@ -492,7 +553,9 @@ export default function DemoFormDialog({
           {!form.es_principal && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>{numerosLabel(form.tipo, form.direccion)}</Label>
+              <Label>
+                {form.es_asistente_crm ? 'Tu WhatsApp (autorizado)' : numerosLabel(form.tipo, form.direccion)}
+              </Label>
               <Button type="button" variant="outline" size="sm" onClick={addNumero} className="rounded-lg">
                 <Plus className="mr-1 h-3.5 w-3.5" />
                 Añadir

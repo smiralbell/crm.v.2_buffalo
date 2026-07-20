@@ -448,6 +448,11 @@ export default function DemosPage() {
                                 >
                                   {demo.tipo === 'voz' ? 'Voz' : 'WhatsApp'}
                                 </Badge>
+                                {demo.es_asistente_crm && (
+                                  <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+                                    CRM
+                                  </span>
+                                )}
                                 {demo.es_principal && (
                                   <Badge className="bg-blue-50 text-blue-800 border border-blue-200">
                                     Principal Buffalo

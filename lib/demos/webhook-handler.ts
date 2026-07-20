@@ -7,6 +7,7 @@ import {
 } from './store'
 import { normalizeWasenderPhone, phoneToWasenderJid, phoneToWasenderRecipient } from './phone'
 import { generateDemoReply } from './chat'
+import { generateCrmAssistantReply } from './crm-assistant-chat'
 import {
   joinWhatsAppMessages,
   splitReplyIntoWhatsAppMessages,
@@ -227,18 +228,27 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
     await logDemoWebhook({
       step: 'openrouter',
       level: 'info',
-      message: `Generando respuesta (${process.env.DEMO_OPENROUTER_MODEL || '~anthropic/claude-sonnet-latest'})…`,
+      message: `Generando respuesta (${
+        demo.es_asistente_crm ? 'asistente CRM · ' : ''
+      }${process.env.DEMO_OPENROUTER_MODEL || '~anthropic/claude-sonnet-latest'})…`,
       phone,
       demo_id: demo.demo_id,
-      details: { history_messages: history.length },
+      details: { history_messages: history.length, es_asistente_crm: demo.es_asistente_crm },
     })
 
-    const replyRaw = await generateDemoReply(
-      demo.prompt,
-      demo.base_conocimiento,
-      history,
-      userText
-    )
+    const replyRaw = demo.es_asistente_crm
+      ? await generateCrmAssistantReply(
+          demo.prompt,
+          demo.base_conocimiento,
+          history,
+          userText
+        )
+      : await generateDemoReply(
+          demo.prompt,
+          demo.base_conocimiento,
+          history,
+          userText
+        )
 
     const replyParts = splitReplyIntoWhatsAppMessages(replyRaw)
     const replyStored = joinWhatsAppMessages(replyParts)

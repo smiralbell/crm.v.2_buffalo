@@ -22,6 +22,8 @@ export interface DemoRow {
   voz_id: string | null
   direccion: DemoDireccion | null
   es_principal: boolean
+  /** Asistente personal con contexto CRM en vivo (solo WhatsApp + números autorizados) */
+  es_asistente_crm: boolean
   created_at: string
 }
 
@@ -41,6 +43,7 @@ export interface DemoInput {
   voz_id?: string
   direccion?: DemoDireccion
   es_principal?: boolean
+  es_asistente_crm?: boolean
 }
 
 export interface PhoneConflict {
