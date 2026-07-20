@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import FullCalendar from '@fullcalendar/react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
+import FullCalendarImport from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
@@ -12,6 +12,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ExternalLink, MapPin, Video } from 'lucide-react'
+
+// Webpack / CJS interop: a veces el default llega envuelto en `{ default: Component }`.
+const FullCalendar =
+  typeof FullCalendarImport === 'function'
+    ? FullCalendarImport
+    : ((FullCalendarImport as { default?: typeof FullCalendarImport }).default as typeof FullCalendarImport)
 
 type ApiEvent = {
   id: string
@@ -64,7 +70,7 @@ function fmtRange(start: string, end: string, allDay: boolean) {
 }
 
 export default function GoogleCalendarBoard({ onNeedsReauth }: Props) {
-  const calendarRef = useRef<FullCalendar | null>(null)
+  const calendarRef = useRef<ComponentRef<typeof FullCalendar> | null>(null)
   const [events, setEvents] = useState<EventInput[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -141,7 +147,12 @@ export default function GoogleCalendarBoard({ onNeedsReauth }: Props) {
 
   return (
     <div className="relative rounded-2xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm">
-      {loading && (
+      {typeof FullCalendar !== 'function' ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+          No se pudo cargar el componente de calendario. Recarga la página o vuelve a desplegar.
+        </div>
+      ) : null}
+      {loading && typeof FullCalendar === 'function' && (
         <div className="absolute right-4 top-4 z-10 text-[11px] font-medium text-gray-400">
           Cargando…
         </div>
@@ -152,37 +163,39 @@ export default function GoogleCalendarBoard({ onNeedsReauth }: Props) {
         </div>
       )}
 
-      <FullCalendar
-        ref={calendarRef}
-        plugins={plugins}
-        locale={esLocale}
-        timeZone="Europe/Madrid"
-        initialView="dayGridMonth"
-        headerToolbar={{
-          left: 'prev,next today',
-          center: 'title',
-          right: 'dayGridMonth,timeGridWeek,timeGridDay',
-        }}
-        buttonText={{
-          today: 'Hoy',
-          month: 'Mes',
-          week: 'Semana',
-          day: 'Día',
-        }}
-        height="auto"
-        events={events}
-        datesSet={onDatesSet}
-        eventClick={onEventClick}
-        nowIndicator
-        dayMaxEvents={4}
-        slotMinTime="07:00:00"
-        slotMaxTime="22:00:00"
-        eventTimeFormat={{
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        }}
-      />
+      {typeof FullCalendar === 'function' ? (
+        <FullCalendar
+          ref={calendarRef}
+          plugins={plugins}
+          locale={esLocale}
+          timeZone="Europe/Madrid"
+          initialView="dayGridMonth"
+          headerToolbar={{
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay',
+          }}
+          buttonText={{
+            today: 'Hoy',
+            month: 'Mes',
+            week: 'Semana',
+            day: 'Día',
+          }}
+          height="auto"
+          events={events}
+          datesSet={onDatesSet}
+          eventClick={onEventClick}
+          nowIndicator
+          dayMaxEvents={4}
+          slotMinTime="07:00:00"
+          slotMaxTime="22:00:00"
+          eventTimeFormat={{
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }}
+        />
+      ) : null}
 
       <Dialog open={Boolean(selected)} onOpenChange={(o) => !o && setSelected(null)}>
         <DialogContent className="max-w-md rounded-2xl">

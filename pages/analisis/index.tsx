@@ -15,6 +15,36 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+function asStringList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+}
+
+function normalizeSummary(raw: CrmCompanyAiSummary | null | undefined): CrmCompanyAiSummary | null {
+  if (!raw || typeof raw !== 'object') return null
+  return {
+    resumen_ejecutivo: typeof raw.resumen_ejecutivo === 'string' ? raw.resumen_ejecutivo : '',
+    salud_empresa_0_100:
+      typeof raw.salud_empresa_0_100 === 'number' && Number.isFinite(raw.salud_empresa_0_100)
+        ? raw.salud_empresa_0_100
+        : 0,
+    wins: asStringList(raw.wins),
+    riesgos: asStringList(raw.riesgos),
+    alertas: Array.isArray(raw.alertas) ? raw.alertas : [],
+    acciones_esta_semana: asStringList(raw.acciones_esta_semana),
+    oportunidades: asStringList(raw.oportunidades),
+    secciones: Array.isArray(raw.secciones)
+      ? raw.secciones.map((sec) => ({
+          titulo: typeof sec?.titulo === 'string' ? sec.titulo : '',
+          hallazgos: asStringList(sec?.hallazgos),
+          metricas: Array.isArray(sec?.metricas) ? sec.metricas : [],
+        }))
+      : [],
+    metricas_clave: Array.isArray(raw.metricas_clave) ? raw.metricas_clave : [],
+    path_crecimiento: typeof raw.path_crecimiento === 'string' ? raw.path_crecimiento : '',
+    huecos_dato: asStringList(raw.huecos_dato),
+  }
+}
+
 function healthTone(score: number) {
   if (score >= 75) return 'text-emerald-700 bg-emerald-50 border-emerald-200'
   if (score >= 50) return 'text-amber-800 bg-amber-50 border-amber-200'
@@ -68,7 +98,7 @@ export default function AnalisisIaPage() {
     }
   }
 
-  const s: CrmCompanyAiSummary | null = analysis?.summary ?? null
+  const s: CrmCompanyAiSummary | null = normalizeSummary(analysis?.summary)
 
   return (
     <Layout>

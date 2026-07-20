@@ -16,11 +16,13 @@ const nextConfig = {
     '@fullcalendar/interaction',
   ],
   webpack: (config) => {
+    // Apuntar al ESM (export default), no al CJS: el alias a index.cjs
+    // rompe el import default en el bundle de producción → "Application error".
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@fullcalendar/react': path.resolve(
+      '@fullcalendar/react$': path.resolve(
         __dirname,
-        'node_modules/@fullcalendar/react/dist/index.cjs'
+        'node_modules/@fullcalendar/react/dist/index.js'
       ),
     }
     return config
