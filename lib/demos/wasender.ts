@@ -247,6 +247,46 @@ export async function sendWasenderTextMessage(to: string, text: string): Promise
   }
 }
 
+export async function sendWasenderDocument(
+  to: string,
+  documentUrl: string,
+  caption?: string
+): Promise<void> {
+  const body: Record<string, unknown> = { to, documentUrl }
+  if (caption?.trim()) body.text = caption.trim()
+
+  const res = await fetch(`${WASENDER_API_BASE}/api/send-message`, {
+    method: 'POST',
+    headers: wasenderHeaders(),
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`Wasender document ${res.status}: ${errText.slice(0, 500)}`)
+  }
+}
+
+export async function sendWasenderImage(
+  to: string,
+  imageUrl: string,
+  caption?: string
+): Promise<void> {
+  const body: Record<string, unknown> = { to, imageUrl }
+  if (caption?.trim()) body.text = caption.trim()
+
+  const res = await fetch(`${WASENDER_API_BASE}/api/send-message`, {
+    method: 'POST',
+    headers: wasenderHeaders(),
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`Wasender image ${res.status}: ${errText.slice(0, 500)}`)
+  }
+}
+
 /**
  * Envía varios mensajes con indicador "escribiendo…" natural entre ellos.
  */

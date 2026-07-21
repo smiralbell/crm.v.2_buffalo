@@ -13,9 +13,15 @@ import {
   splitReplyIntoWhatsAppMessages,
 } from './format-output'
 import { buildMessageDedupKey, claimIncomingDemoMessage, pruneOldProcessedMessages } from './dedup'
-import { parseWasenderWebhook, sendWasenderMessageSequence } from './wasender'
+import {
+  parseWasenderWebhook,
+  sendWasenderDocument,
+  sendWasenderImage,
+  sendWasenderMessageSequence,
+} from './wasender'
 import { resolveUserMessageFromWebhook } from './resolve-user-message'
 import { logDemoWebhook } from './webhook-log'
+import { ensureAttachmentPublicUrl } from './assistant-attachments'
 
 export async function handleDemoWasenderWebhook(body: unknown): Promise<{
   handled: boolean
@@ -241,16 +247,23 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
           demo.prompt,
           demo.base_conocimiento,
           history,
-          userText
+          userText,
+          phone
         )
-      : await generateDemoReply(
-          demo.prompt,
-          demo.base_conocimiento,
-          history,
-          userText
-        )
+      : {
+          text: await generateDemoReply(
+            demo.prompt,
+            demo.base_conocimiento,
+            history,
+            userText
+          ),
+          attachments: [] as Awaited<
+            ReturnType<typeof generateCrmAssistantReply>
+          >['attachments'],
+          actions_log: [] as string[],
+        }
 
-    const replyParts = splitReplyIntoWhatsAppMessages(replyRaw)
+    const replyParts = splitReplyIntoWhatsAppMessages(replyRaw.text)
     const replyStored = joinWhatsAppMessages(replyParts)
 
     const now = new Date().toISOString()
@@ -271,10 +284,42 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
       message: `Enviando ${replyParts.length} mensaje(s) a ${recipient}…`,
       phone,
       demo_id: demo.demo_id,
-      details: { parts: replyParts, reply_preview: replyStored.slice(0, 120) },
+      details: {
+        parts: replyParts,
+        reply_preview: replyStored.slice(0, 120),
+        attachments: replyRaw.attachments.length,
+        actions_log: replyRaw.actions_log,
+      },
     })
 
     await sendWasenderMessageSequence(recipient, jid, replyParts)
+
+    for (const att of replyRaw.attachments) {
+      try {
+        const published = await ensureAttachmentPublicUrl(att)
+        if (!published.publicUrl) continue
+        if (published.kind === 'image') {
+          await sendWasenderImage(recipient, published.publicUrl, published.caption)
+        } else {
+          await sendWasenderDocument(recipient, published.publicUrl, published.caption)
+        }
+        await logDemoWebhook({
+          step: 'wasender_attachment',
+          level: 'success',
+          message: `Adjunto enviado: ${published.filename}`,
+          phone,
+          demo_id: demo.demo_id,
+        })
+      } catch (attErr) {
+        await logDemoWebhook({
+          step: 'wasender_attachment',
+          level: 'error',
+          message: attErr instanceof Error ? attErr.message : 'Error adjunto',
+          phone,
+          demo_id: demo.demo_id,
+        })
+      }
+    }
 
     await logDemoWebhook({
       step: 'done',

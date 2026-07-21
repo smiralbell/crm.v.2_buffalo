@@ -4,6 +4,12 @@ import {
   executeCrmAssistantTool,
 } from './crm-assistant-tools'
 import { CRM_ASSISTANT_ONTOLOGY } from './crm-assistant-ontology'
+import {
+  createAssistantContext,
+  ensureAttachmentPublicUrl,
+  type AssistantAttachment,
+  type AssistantRequestContext,
+} from './assistant-attachments'
 import type { CrmDomain } from './crm-assistant-tools'
 
 const DEMO_MODEL_PRIMARY =
@@ -12,7 +18,13 @@ const DEMO_MODEL_PRIMARY =
   'openai/gpt-4o-mini'
 
 const DEMO_MODEL_FALLBACK = 'openai/gpt-4o-mini'
-const MAX_TOOL_ROUNDS = 6
+const MAX_TOOL_ROUNDS = 8
+
+export type CrmAssistantReply = {
+  text: string
+  attachments: AssistantAttachment[]
+  actions_log: string[]
+}
 
 type ChatMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -36,7 +48,7 @@ function openRouterHeaders(): Record<string, string> {
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json',
     ...(siteUrl ? { 'HTTP-Referer': siteUrl } : {}),
-    'X-OpenRouter-Title': 'Buffalo CRM - asistente personal WhatsApp',
+    'X-OpenRouter-Title': 'Buffalo CRM - secretaria WhatsApp',
   }
 }
 
@@ -54,9 +66,7 @@ async function chatWithTools(
     temperature: 0.15,
   }
 
-  if (toolChoice === 'none') {
-    // Pasada final: solo texto
-  } else {
+  if (toolChoice !== 'none') {
     body.tools = CRM_ASSISTANT_TOOLS
     body.tool_choice = toolChoice
   }
@@ -97,80 +107,75 @@ function parseToolArgs(raw: string): Record<string, unknown> {
   }
 }
 
-/** Respuestas que prometen consultar y no dan el dato — NO enviar a WhatsApp */
 function isDeferredOrEmptyAnswer(text: string): boolean {
   const t = text.trim()
   if (!t) return true
   if (t.length < 12) return true
-
   const defer =
     /\b(voy a (consultar|revisar|mirar|buscar|comprobar)|déjame (consultar|revisar|mirar|buscar)|un momento|en seguida|ahora mismo (consulto|reviso|miro)|estoy (consultando|revisando|buscando)|te (digo|respondo|cuento) en (un momento|seguida)|consultar[eé] (en )?el crm|revisar[eé] (en )?el crm)\b/i.test(
       t
     )
-
-  // Promete acción futura sin cifra
   const noNumber = !/\d/.test(t)
   if (defer && noNumber) return true
   if (defer && t.length < 180) return true
-
   return false
 }
 
-/** Heurística: qué subagentes precargar según el mensaje */
 function inferDomains(userMessage: string): { domains: CrmDomain[]; entityQuery?: string } {
   const m = userMessage.toLowerCase()
-
   if (
-    /\b(dinero|caja|saldo|cuenta|euros?|€|mrr|arr|factur|cobr|ingreso|gasto|banco|runway|impuesto|iva|beneficio|neto)\b/i.test(
+    /\b(dinero|caja|saldo|cuenta|euros?|€|mrr|arr|factur|cobr|ingreso|gasto|banco|runway|impuesto|iva|beneficio|neto|informe financiero)\b/i.test(
       m
     )
   ) {
     return { domains: ['finance'] }
   }
-  if (/\b(ticket|incidencia|soporte|bug|critical|crítico)\b/i.test(m)) {
-    return { domains: ['ops'] }
-  }
-  if (/\b(proyecto|cartera|producción|desarrollo|retenci[oó]n|mensualidad|churn)\b/i.test(m)) {
+  if (/\b(ticket|incidencia|soporte)\b/i.test(m)) return { domains: ['ops'] }
+  if (/\b(proyecto|cartera|producción|retenci[oó]n|mensualidad)\b/i.test(m)) {
     return { domains: ['proyectos'] }
   }
-  if (/\b(pipeline|lead|comercial|negoci|propuesta|embudo|deal)\b/i.test(m)) {
+  if (/\b(pipeline|lead|comercial|negoci|propuesta)\b/i.test(m)) {
     return { domains: ['comercial'] }
   }
-  if (/\b(cold.?call|marketing|ads|meta|google ads|reuniones? agend)\b/i.test(m)) {
-    return { domains: ['marketing'] }
-  }
-  if (/\b(c[oó]mo vamos|resumen|estado del negocio|overview|dashboard)\b/i.test(m)) {
-    return { domains: ['overview'] }
-  }
+  if (/\b(cold.?call|marketing|ads)\b/i.test(m)) return { domains: ['marketing'] }
+  if (/\b(c[oó]mo vamos|resumen|overview)\b/i.test(m)) return { domains: ['overview'] }
 
-  // "qué hay de X" / "cliente X"
   const entity =
-    m.match(/(?:cliente|empresa|lead|de)\s+([a-záéíóúñ0-9][\wáéíóúñ &.-]{1,40})/i)?.[1] ||
-    m.match(/qué hay (?:de|del|de la)\s+([a-záéíóúñ0-9][\wáéíóúñ &.-]{1,40})/i)?.[1]
+    m.match(/(?:cliente|empresa|lead|de)\s+([a-záéíóúñ0-9][\wáéíóúñ &.-]{1,40})/i)?.[1]
   if (entity && entity.trim().length >= 2) {
     return { domains: ['cliente'], entityQuery: entity.trim() }
   }
-
   return { domains: ['overview'] }
 }
 
-async function prefetchDomainData(userMessage: string): Promise<string | null> {
+function looksLikeWriteIntent(userMessage: string): boolean {
+  return /\b(crea|añade|agrega|apunta|anota|marca|cambia|actualiza|agenda|programa|env[ií]ame|manda(me)?|checklist|tarea|nota|reuni[oó]n|confirma|email|correo|pausa|churn|activa)\b/i.test(
+    userMessage
+  )
+}
+
+async function prefetchDomainData(
+  userMessage: string,
+  ctx: AssistantRequestContext
+): Promise<string | null> {
+  if (looksLikeWriteIntent(userMessage)) return null
   try {
     const inferred = inferDomains(userMessage)
-    const data = await executeCrmAssistantTool('run_domain_agent', {
-      domains: inferred.domains,
-      entity_query: inferred.entityQuery || '',
-    })
+    const data = await executeCrmAssistantTool(
+      'run_domain_agent',
+      {
+        domains: inferred.domains,
+        entity_query: inferred.entityQuery || '',
+      },
+      ctx
+    )
     return JSON.stringify({
       prefetched_domains: inferred.domains,
       entity_query: inferred.entityQuery || null,
       data,
     }).slice(0, 28000)
   } catch (e) {
-    console.warn(
-      '[crm-assistant] prefetch falló',
-      e instanceof Error ? e.message : e
-    )
+    console.warn('[crm-assistant] prefetch', e instanceof Error ? e.message : e)
     return null
   }
 }
@@ -185,7 +190,7 @@ async function synthesizeFinalAnswer(
       {
         role: 'user',
         content:
-          'IMPORTANTE: Ya tienes los datos del CRM arriba. Responde AHORA al usuario con cifras concretas en formato WhatsApp. PROHIBIDO decir que vas a consultar, revisar o mirar el CRM. Si falta un dato, dilo explícitamente («no lo veo»). Sin markdown ni asteriscos.',
+          'Ya tienes datos/acciones. Responde AHORA en WhatsApp con el resultado. PROHIBIDO decir que vas a consultar. Sin markdown ni asteriscos. Si encolaste un documento, dilo.',
       },
     ],
     model,
@@ -195,30 +200,32 @@ async function synthesizeFinalAnswer(
 }
 
 /**
- * Orquestador: precarga datos → tools si hace falta → respuesta final única a WhatsApp.
- * Nunca envía mensajes intermedios del tipo «voy a consultar…».
+ * Secretaria CRM: lectura + escritura + documentos.
+ * Devuelve texto + adjuntos (el webhook los envía por Wasender).
  */
 export async function generateCrmAssistantReply(
   systemPrompt: string,
   extraKnowledge: string,
   history: DemoMessage[],
-  userMessage: string
-): Promise<string> {
+  userMessage: string,
+  phone = 'unknown'
+): Promise<CrmAssistantReply> {
+  const ctx = createAssistantContext(phone)
+
   const system = `${systemPrompt.trim()}
 
 ${CRM_ASSISTANT_ONTOLOGY}
 
-${extraKnowledge.trim() ? `---\nNOTAS DEL USUARIO / BASE EXTRA:\n${extraKnowledge.trim()}\n---` : ''}
+${extraKnowledge.trim() ? `---\nNOTAS EXTRA:\n${extraKnowledge.trim()}\n---` : ''}
 
-PROTOCOLO OBLIGATORIO
-1) Usa tools/subagentes ANTES de afirmar cifras (o usa DATOS PRECARGADOS si ya están).
-2) NUNCA digas «voy a consultar», «un momento», «déjame revisar». WhatsApp solo recibe UNA respuesta final con datos.
-3) Prefiere run_domain_agent / lookup_entity.
-4) Formato WhatsApp: sin markdown ni asteriscos; párrafos con línea en blanco; alertas → cifra → acción.`
+PROTOCOLO SECRETARIA
+1) Consultas → tools/subagentes (o DATOS PRECARGADOS). Nunca «voy a consultar».
+2) Acciones (crear/cambiar/anotar/agendar) → tool con confirm=false primero; si el usuario ya dijo sí/confirma/adelante, usa confirm=true.
+3) Documentos/informes → send_crm_report_document o send_text_document (se envían solos por WhatsApp).
+4) WhatsApp: sin markdown/asteriscos; párrafos con línea en blanco; alertas → cifra/acción.`
 
   const messages: ChatMessage[] = [{ role: 'system', content: system }]
-
-  for (const msg of history.slice(-12)) {
+  for (const msg of history.slice(-16)) {
     messages.push({
       role: msg.role === 'user' ? 'user' : 'assistant',
       content: msg.content,
@@ -226,61 +233,57 @@ PROTOCOLO OBLIGATORIO
   }
   messages.push({ role: 'user', content: userMessage })
 
-  // Precarga paralela: evita el «voy a consultar» y acelera dinero/caja/etc.
-  const prefetched = await prefetchDomainData(userMessage)
+  const prefetched = await prefetchDomainData(userMessage, ctx)
   let toolsUsed = false
   if (prefetched) {
     toolsUsed = true
     messages.push({
       role: 'system',
-      content: `DATOS PRECARGADOS DEL CRM (ya consultados; úsalos para responder ya):\n${prefetched}`,
+      content: `DATOS PRECARGADOS DEL CRM:\n${prefetched}`,
     })
   }
+
+  // Si el usuario confirma, forzar tools de acción
+  const userConfirms =
+    /\b(s[ií]|dale|ok|okay|adelante|confirma|confirmado|hazlo|procede|vale)\b/i.test(
+      userMessage.trim()
+    )
 
   let model = DEMO_MODEL_PRIMARY
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    // Si aún no hay datos, forzar tool call. Si ya hay prefetch, dejar auto/none path.
-    const toolChoice: ToolChoice = !toolsUsed ? 'required' : round === 0 ? 'auto' : 'auto'
+    const toolChoice: ToolChoice =
+      !toolsUsed || userConfirms || looksLikeWriteIntent(userMessage)
+        ? round === 0 && !prefetched
+          ? 'required'
+          : 'auto'
+        : 'auto'
 
     let result: Awaited<ReturnType<typeof chatWithTools>>
     try {
       result = await chatWithTools(messages, model, toolChoice)
     } catch (err) {
       const msg = err instanceof Error ? err.message : ''
-      const isModelError =
-        msg.includes('404') ||
-        msg.includes('No endpoints found') ||
-        msg.includes('not a valid model') ||
-        msg.includes('tool') ||
-        msg.includes('tool_choice')
-      if (!isModelError || model === DEMO_MODEL_FALLBACK) {
-        // Algunos modelos no soportan tool_choice=required → reintentar auto
-        if (toolChoice === 'required' && (msg.includes('tool_choice') || msg.includes('400'))) {
-          result = await chatWithTools(messages, model, 'auto')
-        } else {
-          throw err
-        }
-      } else {
-        console.warn(`[crm-assistant] Modelo ${model} falló, usando ${DEMO_MODEL_FALLBACK}`)
+      if (toolChoice === 'required' && (msg.includes('tool_choice') || msg.includes('400'))) {
+        result = await chatWithTools(messages, model, 'auto')
+      } else if (
+        (msg.includes('404') || msg.includes('No endpoints') || msg.includes('not a valid model')) &&
+        model !== DEMO_MODEL_FALLBACK
+      ) {
         model = DEMO_MODEL_FALLBACK
-        result = await chatWithTools(messages, model, toolChoice === 'required' ? 'auto' : toolChoice)
+        result = await chatWithTools(messages, model, 'auto')
+      } else {
+        throw err
       }
     }
 
     const toolCalls = result.tool_calls
     if (toolCalls?.length) {
       toolsUsed = true
-      // Ignorar content intermedio («voy a consultar…»): no se envía a WhatsApp
-      messages.push({
-        role: 'assistant',
-        content: null,
-        tool_calls: toolCalls,
-      })
-
+      messages.push({ role: 'assistant', content: null, tool_calls: toolCalls })
       for (const call of toolCalls) {
         const args = parseToolArgs(call.function.arguments)
-        const toolResult = await executeCrmAssistantTool(call.function.name, args)
+        const toolResult = await executeCrmAssistantTool(call.function.name, args, ctx)
         messages.push({
           role: 'tool',
           tool_call_id: call.id,
@@ -292,61 +295,53 @@ PROTOCOLO OBLIGATORIO
     }
 
     const text = (result.content || '').trim()
-    if (text && !isDeferredOrEmptyAnswer(text) && toolsUsed) {
-      return text
+    if (text && !isDeferredOrEmptyAnswer(text) && (toolsUsed || looksLikeWriteIntent(userMessage))) {
+      return await finalizeReply(text, ctx)
     }
 
-    // Respuesta vacía / «voy a consultar» → forzar más tools o síntesis
     if (!toolsUsed) {
       messages.push({
         role: 'user',
         content:
-          'Debes llamar ahora a run_domain_agent (o lookup_entity). No respondas al usuario todavía.',
+          'Debes usar tools ahora (run_domain_agent, checklist_*, append_lead_note, etc.). No respondas todavía al usuario.',
       })
       continue
     }
 
-    // Ya hay datos pero el modelo dilata → síntesis forzada sin tools
     const finalText = await synthesizeFinalAnswer(messages, model)
     if (finalText && !isDeferredOrEmptyAnswer(finalText)) {
-      return finalText
+      return await finalizeReply(finalText, ctx)
     }
 
     messages.push({
       role: 'user',
-      content:
-        'Responde ya con los datos precargados/tools. Prohibido posponer. Incluye números si existen en el JSON.',
+      content: 'Responde ya con el resultado de las tools. Prohibido posponer.',
     })
   }
 
-  const lastChance = await synthesizeFinalAnswer(messages, model)
-  if (lastChance && !isDeferredOrEmptyAnswer(lastChance)) {
-    return lastChance
+  const last = await synthesizeFinalAnswer(messages, model)
+  if (last && !isDeferredOrEmptyAnswer(last)) {
+    return await finalizeReply(last, ctx)
   }
 
-  // Fallback determinista si el LLM sigue dilatando
-  if (prefetched) {
-    try {
-      const parsed = JSON.parse(prefetched) as {
-        data?: { finance?: { kpis?: { cash_balance?: number; mrr?: number } } }
-      }
-      const cash = parsed.data?.finance?.kpis?.cash_balance
-      const mrr = parsed.data?.finance?.kpis?.mrr
-      if (typeof cash === 'number') {
-        const parts = [`Saldo en cuenta (último extracto): ${cash.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}.`]
-        if (typeof mrr === 'number') {
-          parts.push(
-            `MRR marcado en banco: ${mrr.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}/mes.`
-          )
-        }
-        return parts.join('\n\n')
-      }
-    } catch {
-      // ignore
-    }
+  if (ctx.attachments.length > 0) {
+    return finalizeReply('Te envío el documento adjunto.', ctx)
   }
 
-  throw new Error(
-    'El asistente obtuvo datos del CRM pero no generó una respuesta útil. Reintenta la pregunta.'
-  )
+  throw new Error('El asistente no generó una respuesta útil. Reintenta.')
+}
+
+async function finalizeReply(
+  text: string,
+  ctx: AssistantRequestContext
+): Promise<CrmAssistantReply> {
+  const attachments: AssistantAttachment[] = []
+  for (const att of ctx.attachments) {
+    attachments.push(await ensureAttachmentPublicUrl(att))
+  }
+  return {
+    text,
+    attachments,
+    actions_log: ctx.actionsLog,
+  }
 }

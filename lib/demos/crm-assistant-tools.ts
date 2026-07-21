@@ -4,6 +4,7 @@ import { buildCrmCompanySnapshot } from '@/lib/analisis/snapshot'
 import { buildExecutiveSummary } from '@/lib/finance/executive-summary'
 import { getDefaultPeriodRange } from '@/lib/finance/period-presets'
 import { DEFAULT_CRM_ASSISTANT_PROMPT } from './crm-assistant-prompt'
+import type { AssistantRequestContext } from './assistant-attachments'
 
 export { DEFAULT_CRM_ASSISTANT_PROMPT }
 
@@ -413,11 +414,248 @@ export const CRM_ASSISTANT_TOOLS = [
       parameters: { type: 'object', properties: {} },
     },
   },
+  // ── Escritura / secretaria ──
+  {
+    type: 'function' as const,
+    function: {
+      name: 'checklist_list',
+      description: 'Lista checklist interna (inbox/santi/sergi).',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'checklist_add',
+      description:
+        'Crea tarea en checklist. column_key: inbox|santi|sergi. Requiere confirm=true tras preview.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          column_key: { type: 'string' },
+          confirm: { type: 'boolean' },
+        },
+        required: ['title'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'checklist_complete',
+      description: 'Marca item checklist como hecho. Requiere confirm=true.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'number' },
+          confirm: { type: 'boolean' },
+        },
+        required: ['id'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'append_lead_note',
+      description: 'Añade nota a un lead. Requiere confirm=true.',
+      parameters: {
+        type: 'object',
+        properties: {
+          lead_id: { type: 'number' },
+          note: { type: 'string' },
+          confirm: { type: 'boolean' },
+        },
+        required: ['lead_id', 'note'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'update_lead_estado',
+      description:
+        'Cambia leads.estado (frio|caliente|reunion|propuesta|negociando|cerrado|activo|perdido). confirm=true.',
+      parameters: {
+        type: 'object',
+        properties: {
+          lead_id: { type: 'number' },
+          estado: { type: 'string' },
+          confirm: { type: 'boolean' },
+        },
+        required: ['lead_id', 'estado'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'create_contact_and_lead',
+      description: 'Alta rápida contact+lead. confirm=true.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nombre: { type: 'string' },
+          email: { type: 'string' },
+          telefono: { type: 'string' },
+          empresa: { type: 'string' },
+          estado: { type: 'string' },
+          notas: { type: 'string' },
+          confirm: { type: 'boolean' },
+        },
+        required: ['nombre'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'ticket_reply',
+      description: 'Respuesta interna en ticket (+ status opcional). confirm=true.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ticket_id: { type: 'string' },
+          message: { type: 'string' },
+          status: { type: 'string' },
+          confirm: { type: 'boolean' },
+        },
+        required: ['ticket_id', 'message'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'ticket_set_status',
+      description: 'Cambia status ticket open|in_progress|resolved|closed. confirm=true.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ticket_id: { type: 'string' },
+          status: { type: 'string' },
+          confirm: { type: 'boolean' },
+        },
+        required: ['ticket_id', 'status'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'create_project_task',
+      description: 'Crea tarea en project_dev_tasks. confirm=true.',
+      parameters: {
+        type: 'object',
+        properties: {
+          proyecto_id: { type: 'string' },
+          title: { type: 'string' },
+          priority: { type: 'string' },
+          confirm: { type: 'boolean' },
+        },
+        required: ['proyecto_id', 'title'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'update_proyecto_status',
+      description:
+        'Cambia proyectos.status: development|active|paused|churned. confirm=true.',
+      parameters: {
+        type: 'object',
+        properties: {
+          proyecto_id: { type: 'string' },
+          status: { type: 'string' },
+          confirm: { type: 'boolean' },
+        },
+        required: ['proyecto_id', 'status'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'send_email',
+      description:
+        'Envía email por SMTP del CRM (requiere SMTP_*). confirm=true tras preview.',
+      parameters: {
+        type: 'object',
+        properties: {
+          to: { type: 'string' },
+          subject: { type: 'string' },
+          body: { type: 'string' },
+          confirm: { type: 'boolean' },
+        },
+        required: ['to', 'subject', 'body'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'create_calendar_meeting',
+      description:
+        'Crea reunión Google Calendar + Meet (requiere GOOGLE_REFRESH_TOKEN). fecha_iso ISO8601. confirm=true.',
+      parameters: {
+        type: 'object',
+        properties: {
+          titulo: { type: 'string' },
+          descripcion: { type: 'string' },
+          fecha_iso: { type: 'string' },
+          duracion_min: { type: 'number' },
+          email_prospecto: { type: 'string' },
+          email_organizador: { type: 'string' },
+          confirm: { type: 'boolean' },
+        },
+        required: ['titulo', 'fecha_iso', 'email_prospecto'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'send_crm_report_document',
+      description:
+        'Genera informe TXT con datos de dominios y lo encola para enviar por WhatsApp como documento.',
+      parameters: {
+        type: 'object',
+        properties: {
+          domains: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'overview|finance|comercial|proyectos|ops|marketing',
+          },
+          title: { type: 'string' },
+        },
+        required: ['domains'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'send_text_document',
+      description: 'Encola un documento de texto personalizado (notas, listados) por WhatsApp.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string' },
+          content: { type: 'string' },
+          caption: { type: 'string' },
+        },
+        required: ['filename', 'content'],
+      },
+    },
+  },
 ]
 
 export async function executeCrmAssistantTool(
   name: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  ctx?: AssistantRequestContext
 ): Promise<unknown> {
   const {
     runDomainAgents,
@@ -426,6 +664,7 @@ export async function executeCrmAssistantTool(
     searchInvoices,
     getPipelineBrief,
   } = await import('./crm-assistant-subagents')
+  const actions = await import('./crm-assistant-actions')
 
   switch (name) {
     case 'run_domain_agent': {
@@ -456,6 +695,101 @@ export async function executeCrmAssistantTool(
       return searchInvoices(String(args.query || ''))
     case 'get_pipeline_brief':
       return getPipelineBrief()
+    case 'checklist_list':
+      return actions.checklistList()
+    case 'checklist_add':
+      return actions.checklistAdd(
+        String(args.title || ''),
+        args.column_key ? String(args.column_key) : undefined,
+        args.confirm === true
+      )
+    case 'checklist_complete':
+      return actions.checklistComplete(Number(args.id), args.confirm === true)
+    case 'append_lead_note':
+      return actions.appendLeadNote(
+        Number(args.lead_id),
+        String(args.note || ''),
+        args.confirm === true
+      )
+    case 'update_lead_estado':
+      return actions.updateLeadEstado(
+        Number(args.lead_id),
+        String(args.estado || ''),
+        args.confirm === true
+      )
+    case 'create_contact_and_lead':
+      return actions.createContactAndLead({
+        nombre: String(args.nombre || ''),
+        email: args.email ? String(args.email) : undefined,
+        telefono: args.telefono ? String(args.telefono) : undefined,
+        empresa: args.empresa ? String(args.empresa) : undefined,
+        estado: args.estado ? String(args.estado) : undefined,
+        notas: args.notas ? String(args.notas) : undefined,
+        confirm: args.confirm === true,
+      })
+    case 'ticket_reply':
+      return actions.ticketReply(
+        String(args.ticket_id || ''),
+        String(args.message || ''),
+        args.status ? String(args.status) : undefined,
+        args.confirm === true
+      )
+    case 'ticket_set_status':
+      return actions.ticketSetStatus(
+        String(args.ticket_id || ''),
+        String(args.status || ''),
+        args.confirm === true
+      )
+    case 'create_project_task':
+      return actions.createProjectTask({
+        proyecto_id: String(args.proyecto_id || ''),
+        title: String(args.title || ''),
+        priority: args.priority ? String(args.priority) : undefined,
+        confirm: args.confirm === true,
+      })
+    case 'update_proyecto_status':
+      return actions.updateProyectoStatus({
+        proyecto_id: String(args.proyecto_id || ''),
+        status: String(args.status || ''),
+        confirm: args.confirm === true,
+      })
+    case 'send_email':
+      return actions.sendCrmEmail({
+        to: String(args.to || ''),
+        subject: String(args.subject || ''),
+        body: String(args.body || ''),
+        confirm: args.confirm === true,
+      })
+    case 'create_calendar_meeting':
+      return actions.createMeeting({
+        titulo: String(args.titulo || ''),
+        descripcion: args.descripcion ? String(args.descripcion) : undefined,
+        fecha_iso: String(args.fecha_iso || ''),
+        duracion_min: args.duracion_min ? Number(args.duracion_min) : undefined,
+        email_prospecto: String(args.email_prospecto || ''),
+        email_organizador: args.email_organizador
+          ? String(args.email_organizador)
+          : undefined,
+        confirm: args.confirm === true,
+      })
+    case 'send_crm_report_document': {
+      if (!ctx) return { error: 'Contexto de adjuntos no disponible' }
+      const domains = Array.isArray(args.domains) ? args.domains.map(String) : ['overview']
+      return actions.queueDomainReport(
+        ctx,
+        domains,
+        args.title ? String(args.title) : undefined
+      )
+    }
+    case 'send_text_document': {
+      if (!ctx) return { error: 'Contexto de adjuntos no disponible' }
+      return actions.queueTextDocument(
+        ctx,
+        String(args.filename || 'nota.txt'),
+        String(args.content || ''),
+        args.caption ? String(args.caption) : undefined
+      )
+    }
     default:
       return { error: `Herramienta desconocida: ${name}` }
   }
