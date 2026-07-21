@@ -81,7 +81,7 @@ export function groupEventsByDay(events: CalendarApiEvent[]): AgendaSection[] {
     byDay.set(key, list)
   }
 
-  const keys = [...byDay.keys()].sort()
+  const keys = Array.from(byDay.keys()).sort()
   return keys.map((key) => {
     let label: string
     if (key === today) label = 'Hoy'
