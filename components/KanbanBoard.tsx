@@ -40,6 +40,8 @@ interface KanbanBoardProps {
   getEntityName: (entityId: string) => Promise<string>
   getEntityDetails: (entityId: string) => Promise<{ email?: string; telefono?: string }>
   availableEntities: Array<{ id: string; name: string }>
+  allowQuickCreate?: boolean
+  onEntityCreated?: (entity: { id: string; name: string }) => void
 }
 
 const COLUMN_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316']
@@ -142,6 +144,8 @@ export default function KanbanBoard({
   getEntityName,
   getEntityDetails,
   availableEntities,
+  allowQuickCreate = false,
+  onEntityCreated,
 }: KanbanBoardProps) {
   const [cards, setCards] = useState<Record<string, PipelineCard[]>>({})
   const [entityNames, setEntityNames] = useState<Record<string, string>>({})
@@ -302,6 +306,8 @@ export default function KanbanBoard({
       onCardCreate,
       onCardUpdate,
       onCardDelete,
+      allowQuickCreate,
+      onEntityCreated,
     }
 
     return (
@@ -416,6 +422,8 @@ export default function KanbanBoard({
                       onCardCreate={onCardCreate}
                       onCardUpdate={onCardUpdate}
                       onCardDelete={onCardDelete}
+                      allowQuickCreate={allowQuickCreate}
+                      onEntityCreated={onEntityCreated}
                       headerOnly={false}
                     />
                   </div>

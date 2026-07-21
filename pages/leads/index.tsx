@@ -42,8 +42,21 @@ interface Lead {
   created_at: string
 }
 
+/** Contacto sin lead — aparece marcado en la lista de Leads */
+interface ContactOnlyRow {
+  id: number
+  nombre: string | null
+  email: string | null
+  created_at: string
+}
+
+type ListRow =
+  | { kind: 'lead'; lead: Lead }
+  | { kind: 'contact'; contact: ContactOnlyRow }
+
 interface LeadsPageProps {
   leads: Lead[]
+  contactsOnly: ContactOnlyRow[]
   page: number
   totalPages: number
   search: string
@@ -75,26 +88,53 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       }
     }
 
-    const [leads, total] = await Promise.all([
-      prisma.lead.findMany({
-        where,
-        skip,
-        take: pageSize,
-        orderBy: { created_at: 'desc' },
-        include: {
-          contact: {
+    const showContactsOnly = !estado || estado === 'all' || estado === 'contacto'
+
+    const contactWhere: Record<string, unknown> = {
+      leads: { none: {} },
+    }
+    if (search) {
+      contactWhere.OR = [
+        { nombre: { contains: search, mode: 'insensitive' as const } },
+        { email: { contains: search, mode: 'insensitive' as const } },
+      ]
+    }
+
+    const [leads, totalLeads, contactsOnly] = await Promise.all([
+      estado === 'contacto'
+        ? Promise.resolve([])
+        : prisma.lead.findMany({
+            where,
+            skip,
+            take: pageSize,
+            orderBy: { created_at: 'desc' },
+            include: {
+              contact: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  email: true,
+                },
+              },
+            },
+          }),
+      estado === 'contacto' ? Promise.resolve(0) : prisma.lead.count({ where }),
+      showContactsOnly
+        ? prisma.contact.findMany({
+            where: contactWhere,
+            take: 50,
+            orderBy: { created_at: 'desc' },
             select: {
               id: true,
               nombre: true,
               email: true,
+              created_at: true,
             },
-          },
-        },
-      }),
-      prisma.lead.count({ where }),
+          })
+        : Promise.resolve([]),
     ])
 
-    const totalPages = Math.ceil(total / pageSize)
+    const totalPages = Math.max(1, Math.ceil(totalLeads / pageSize))
 
     return {
       props: {
@@ -104,6 +144,12 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           valor: lead.valor ? Number(lead.valor) : null,
           contact: lead.contact,
           created_at: lead.created_at.toISOString(),
+        })),
+        contactsOnly: contactsOnly.map((c) => ({
+          id: c.id,
+          nombre: c.nombre,
+          email: c.email,
+          created_at: c.created_at.toISOString(),
         })),
         page,
         totalPages,
@@ -128,6 +174,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         leads: [],
+        contactsOnly: [],
         page: 1,
         totalPages: 1,
         search: '',
@@ -139,6 +186,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
 export default function LeadsPage({
   leads,
+  contactsOnly,
   page,
   totalPages,
   search: initialSearch,
@@ -148,11 +196,20 @@ export default function LeadsPage({
   const [search, setSearch] = useState(initialSearch)
   const [estado, setEstado] = useState(initialEstado)
   const [loading, setLoading] = useState(false)
+  const [newDialogMode, setNewDialogMode] = useState<'lead' | 'contact'>('lead')
 
   // Validación defensiva
   const safeLeads = leads || []
+  const safeContactsOnly = contactsOnly || []
   const safePage = page || 1
   const safeTotalPages = totalPages || 1
+
+  const listRows: ListRow[] = [
+    ...safeLeads.map((lead) => ({ kind: 'lead' as const, lead })),
+    ...((!estado || estado === 'all' || estado === 'contacto')
+      ? safeContactsOnly.map((contact) => ({ kind: 'contact' as const, contact }))
+      : []),
+  ]
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -174,6 +231,11 @@ export default function LeadsPage({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [newLeadOpen, setNewLeadOpen] = useState(false)
   const [editLeadId, setEditLeadId] = useState<number | null>(null)
+
+  const openCreate = (mode: 'lead' | 'contact') => {
+    setNewDialogMode(mode)
+    setNewLeadOpen(true)
+  }
   const [leadToDelete, setLeadToDelete] = useState<{ id: number; name: string } | null>(null)
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
 
@@ -250,18 +312,32 @@ export default function LeadsPage({
                   <SelectValue placeholder="Todos los estados" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos los estados</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="contacto">Solo contactos</SelectItem>
                   <SelectItem value="frio">Frío</SelectItem>
                   <SelectItem value="caliente">Caliente</SelectItem>
                   <SelectItem value="cerrado">Cerrado</SelectItem>
                   <SelectItem value="perdido">Perdido</SelectItem>
                 </SelectContent>
               </Select>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button type="submit" disabled={loading} variant="outline" className="rounded-xl flex-1 sm:flex-initial">
                   Buscar
                 </Button>
-                <Button type="button" onClick={() => setNewLeadOpen(true)} className="rounded-xl flex-1 sm:flex-initial shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => openCreate('contact')}
+                  className="rounded-xl flex-1 sm:flex-initial shrink-0"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nuevo contacto
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => openCreate('lead')}
+                  className="rounded-xl flex-1 sm:flex-initial shrink-0"
+                >
                   <Plus className="mr-2 h-4 w-4" />
                   Nuevo Lead
                 </Button>
@@ -270,7 +346,12 @@ export default function LeadsPage({
           </CardContent>
         </Card>
 
-        <NewLeadDialog open={newLeadOpen} onOpenChange={setNewLeadOpen} />
+        <NewLeadDialog
+          open={newLeadOpen}
+          onOpenChange={setNewLeadOpen}
+          defaultMode={newDialogMode}
+          lockMode
+        />
         <EditLeadDialog
           open={editLeadId != null}
           leadId={editLeadId}
@@ -331,9 +412,9 @@ export default function LeadsPage({
 
         <Card className="overflow-hidden">
           <CardContent className="p-0">
-            {safeLeads.length === 0 ? (
+            {listRows.length === 0 ? (
               <p className="text-center text-muted-foreground py-16 text-sm">
-                No hay leads registrados
+                No hay leads ni contactos registrados
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -341,16 +422,60 @@ export default function LeadsPage({
                   <thead>
                     <tr className="border-b border-border bg-muted/40">
                       <th className="text-left px-4 py-3 font-medium text-muted-foreground">Contacto</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Estado</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tipo / Estado</th>
                       <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Valor</th>
                       <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Fecha</th>
                       <th className="text-right px-4 py-3 font-medium text-muted-foreground">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {safeLeads.map((lead) => (
+                    {listRows.map((row) => {
+                      if (row.kind === 'contact') {
+                        const c = row.contact
+                        return (
+                          <tr
+                            key={`contact-${c.id}`}
+                            className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
+                          >
+                            <td className="px-4 py-3.5">
+                              <Link
+                                href={`/contacts/${c.id}`}
+                                className="font-medium text-foreground hover:underline"
+                              >
+                                {c.nombre || c.email || `Contacto #${c.id}`}
+                              </Link>
+                              {c.email && c.nombre && (
+                                <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[220px]">
+                                  {c.email}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <Badge className="rounded-full font-medium border-0 bg-sky-500/15 text-sky-800 dark:text-sky-300">
+                                Solo contacto
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3.5 text-muted-foreground hidden sm:table-cell">—</td>
+                            <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">
+                              {new Date(c.created_at).toLocaleDateString('es-ES')}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <div className="flex justify-end gap-0.5">
+                                <Link href={`/contacts/${c.id}`}>
+                                  <Button variant="ghost" size="icon" className="rounded-xl h-8 w-8">
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </Link>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      }
+
+                      const lead = row.lead
+                      return (
                       <tr
-                        key={lead.id}
+                        key={`lead-${lead.id}`}
                         className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
                       >
                         <td className="px-4 py-3.5">
@@ -369,14 +494,19 @@ export default function LeadsPage({
                           )}
                         </td>
                         <td className="px-4 py-3.5">
-                          <Badge
-                            className={cn(
-                              'rounded-full font-medium border-0',
-                              estadoColors[lead.estado] || 'bg-muted text-muted-foreground'
-                            )}
-                          >
-                            {estadoLabels[lead.estado] || lead.estado}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge className="rounded-full font-medium border-0 bg-violet-500/15 text-violet-800 dark:text-violet-300">
+                              Lead
+                            </Badge>
+                            <Badge
+                              className={cn(
+                                'rounded-full font-medium border-0',
+                                estadoColors[lead.estado] || 'bg-muted text-muted-foreground'
+                              )}
+                            >
+                              {estadoLabels[lead.estado] || lead.estado}
+                            </Badge>
+                          </div>
                         </td>
                         <td className="px-4 py-3.5 tabular-nums text-foreground/80 hidden sm:table-cell">
                           {lead.valor
@@ -415,7 +545,8 @@ export default function LeadsPage({
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

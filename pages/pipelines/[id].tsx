@@ -197,6 +197,11 @@ export default function PipelineDetail({
   const [loading, setLoading] = useState(false)
   const [drawerCard, setDrawerCard] = useState<PipelineCard | null>(null)
   const [scopeFilter, setScopeFilter] = useState<ColdCallFilter>('team')
+  const [entities, setEntities] = useState(availableEntities)
+
+  useEffect(() => {
+    setEntities(availableEntities)
+  }, [availableEntities])
 
   useEffect(() => {
     if (isComercialViewer && user?.id) {
@@ -565,7 +570,13 @@ export default function PipelineDetail({
         onCardClick={setDrawerCard}
         getEntityName={getEntityName}
         getEntityDetails={getEntityDetails}
-        availableEntities={availableEntities}
+        availableEntities={entities}
+        allowQuickCreate={!isColdCall}
+        onEntityCreated={(entity) => {
+          setEntities((prev) =>
+            prev.some((e) => e.id === entity.id) ? prev : [entity, ...prev]
+          )
+        }}
       />
     </PipelineLayout>
   )

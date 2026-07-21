@@ -23,6 +23,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import CardFormModal from './CardFormModal'
+import NewLeadDialog, { type NewLeadDialogMode } from './NewLeadDialog'
 
 interface PipelineCard {
   id: string
@@ -70,6 +71,9 @@ interface KanbanColumnProps {
   onCardCreate?: (data: Omit<PipelineCard, 'id' | 'position' | 'created_at' | 'updated_at'> & { stage_color?: string }) => Promise<void>
   onCardUpdate?: (cardId: string, data: Partial<PipelineCard>) => Promise<void>
   onCardDelete?: (cardId: string) => Promise<void>
+  /** Permitir crear contacto/lead si no hay resultados (pipelines normales) */
+  allowQuickCreate?: boolean
+  onEntityCreated?: (entity: { id: string; name: string }) => void
   headerOnly?: boolean
 }
 
@@ -101,6 +105,8 @@ export default function KanbanColumn({
   onCardCreate,
   onCardUpdate,
   onCardDelete,
+  allowQuickCreate = false,
+  onEntityCreated,
   headerOnly = false,
 }: KanbanColumnProps) {
   const [isEditing, setIsEditing] = useState(false)
@@ -112,6 +118,8 @@ export default function KanbanColumn({
   const [showCardModal, setShowCardModal] = useState(false)
   const [editingCard, setEditingCard] = useState<PipelineCard | null>(null)
   const [selectedEntityForNewCard, setSelectedEntityForNewCard] = useState<{ id: string; name: string } | null>(null)
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+  const [quickCreateMode, setQuickCreateMode] = useState<NewLeadDialogMode>('contact')
 
   useEffect(() => {
     setEditName(stage.name)
@@ -472,8 +480,37 @@ export default function KanbanColumn({
                 </div>
                 <div className="max-h-44 overflow-y-auto space-y-0.5 mb-2.5">
                   {filteredEntities.length === 0 ? (
-                    <div className="text-xs text-gray-400 text-center py-3">
-                      Sin resultados
+                    <div className="text-xs text-gray-400 text-center py-3 space-y-2">
+                      <p>Sin resultados</p>
+                      {allowQuickCreate && (
+                        <div className="flex flex-col gap-1.5 px-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs w-full"
+                            onClick={() => {
+                              setQuickCreateMode('contact')
+                              setQuickCreateOpen(true)
+                            }}
+                          >
+                            <Plus className="h-3.5 w-3.5 mr-1" />
+                            Nuevo contacto
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 text-xs w-full"
+                            onClick={() => {
+                              setQuickCreateMode('lead')
+                              setQuickCreateOpen(true)
+                            }}
+                          >
+                            <Plus className="h-3.5 w-3.5 mr-1" />
+                            Nuevo lead
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     filteredEntities.slice(0, 8).map((entity) => (
@@ -497,6 +534,34 @@ export default function KanbanColumn({
                     ))
                   )}
                 </div>
+                {allowQuickCreate && filteredEntities.length > 0 && (
+                  <div className="flex gap-1.5 mb-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-[11px] flex-1 text-gray-600"
+                      onClick={() => {
+                        setQuickCreateMode('contact')
+                        setQuickCreateOpen(true)
+                      }}
+                    >
+                      + Contacto
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-[11px] flex-1 text-gray-600"
+                      onClick={() => {
+                        setQuickCreateMode('lead')
+                        setQuickCreateOpen(true)
+                      }}
+                    >
+                      + Lead
+                    </Button>
+                  </div>
+                )}
                 <Button
                   size="sm"
                   variant="ghost"
@@ -521,6 +586,21 @@ export default function KanbanColumn({
           </div>
         </div>
       </div>
+
+      <NewLeadDialog
+        open={quickCreateOpen}
+        onOpenChange={setQuickCreateOpen}
+        defaultMode={quickCreateMode}
+        lockMode
+        initialNombre={searchEntity.trim()}
+        onCreated={(result) => {
+          const entity = { id: String(result.contactId), name: result.contactName }
+          onEntityCreated?.(entity)
+          setSelectedEntityForNewCard(entity)
+          setShowCardModal(true)
+          setSearchEntity('')
+        }}
+      />
 
       {/* Dialog para editar columna */}
       <Dialog open={isEditing} onOpenChange={setIsEditing}>
@@ -602,6 +682,8 @@ export default function KanbanColumn({
           entityType={entityType}
           stage={stage.name}
           stageColor={stage.color}
+          allowQuickCreate={allowQuickCreate}
+          onEntityCreated={onEntityCreated}
         />
       )}
     </>

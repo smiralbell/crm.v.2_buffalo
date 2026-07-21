@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Calendar, DollarSign, FileText, Tag, User } from 'lucide-react'
+import { X, Calendar, DollarSign, FileText, Tag, User, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import NewLeadDialog, { type NewLeadDialogMode } from './NewLeadDialog'
 
 interface PipelineCard {
   id?: string
@@ -37,6 +38,8 @@ interface CardFormModalProps {
   entityType: 'client' | 'contact'
   stage: string
   stageColor?: string
+  allowQuickCreate?: boolean
+  onEntityCreated?: (entity: { id: string; name: string }) => void
 }
 
 export default function CardFormModal({
@@ -50,6 +53,8 @@ export default function CardFormModal({
   entityType,
   stage,
   stageColor = '#3B82F6',
+  allowQuickCreate = false,
+  onEntityCreated,
 }: CardFormModalProps) {
   const [entityId, setEntityId] = useState(card?.entity_id || propEntityId || '')
   const [selectedEntityName, setSelectedEntityName] = useState(entityName || '')
@@ -62,6 +67,8 @@ export default function CardFormModal({
   const [newTag, setNewTag] = useState('')
   const [searchEntity, setSearchEntity] = useState('')
   const [showEntitySearch, setShowEntitySearch] = useState(!card && !entityName && !propEntityId)
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+  const [quickCreateMode, setQuickCreateMode] = useState<NewLeadDialogMode>('contact')
 
   useEffect(() => {
     if (card) {
@@ -117,15 +124,9 @@ export default function CardFormModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validación mejorada
+    // Validación: entidad seleccionada
     if (!entityId || entityId.trim().length === 0) {
       alert('Por favor, selecciona un ' + (entityType === 'contact' ? 'contacto' : 'cliente'))
-      return
-    }
-
-    // Validar que el entityId existe en availableEntities si está disponible
-    if (availableEntities.length > 0 && !availableEntities.find(e => e.id === entityId)) {
-      alert('El ' + (entityType === 'contact' ? 'contacto' : 'cliente') + ' seleccionado no es válido')
       return
     }
 
@@ -161,6 +162,7 @@ export default function CardFormModal({
   }
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -192,8 +194,35 @@ export default function CardFormModal({
                 </div>
                 <div className="max-h-40 overflow-y-auto border rounded-md">
                   {filteredEntities.length === 0 ? (
-                    <div className="p-3 text-sm text-gray-400 text-center">
-                      Sin resultados
+                    <div className="p-3 text-sm text-gray-400 text-center space-y-2">
+                      <p>Sin resultados</p>
+                      {allowQuickCreate && (
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setQuickCreateMode('contact')
+                              setQuickCreateOpen(true)
+                            }}
+                          >
+                            <Plus className="h-3.5 w-3.5 mr-1" />
+                            Nuevo contacto
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setQuickCreateMode('lead')
+                              setQuickCreateOpen(true)
+                            }}
+                          >
+                            <Plus className="h-3.5 w-3.5 mr-1" />
+                            Nuevo lead
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     filteredEntities.map((entity) => (
@@ -208,6 +237,34 @@ export default function CardFormModal({
                     ))
                   )}
                 </div>
+                {allowQuickCreate && filteredEntities.length > 0 && (
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs"
+                      onClick={() => {
+                        setQuickCreateMode('contact')
+                        setQuickCreateOpen(true)
+                      }}
+                    >
+                      + Contacto
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs"
+                      onClick={() => {
+                        setQuickCreateMode('lead')
+                        setQuickCreateOpen(true)
+                      }}
+                    >
+                      + Lead
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
@@ -341,6 +398,20 @@ export default function CardFormModal({
         </form>
       </DialogContent>
     </Dialog>
+
+    <NewLeadDialog
+      open={quickCreateOpen}
+      onOpenChange={setQuickCreateOpen}
+      defaultMode={quickCreateMode}
+      lockMode
+      initialNombre={searchEntity.trim()}
+      onCreated={(result) => {
+        const entity = { id: String(result.contactId), name: result.contactName }
+        onEntityCreated?.(entity)
+        handleSelectEntity(entity)
+      }}
+    />
+    </>
   )
 }
 

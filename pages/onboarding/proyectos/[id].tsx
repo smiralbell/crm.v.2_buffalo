@@ -93,6 +93,10 @@ export default function ProyectoDetailPage({ lead }: Props) {
     fecha_inicio_real: string | null
     fecha_fin_real: string | null
   }>({ tiempo_previsto: null, fecha_inicio_real: null, fecha_fin_real: null })
+  const [dbFees, setDbFees] = useState<{ setup: number | null; monthly: number | null }>({
+    setup: null,
+    monthly: null,
+  })
 
   const loadDevelopers = () => {
     fetch(`/api/gestion-proyecto/proyectos/by-lead/${lead.id}`)
@@ -114,6 +118,12 @@ export default function ProyectoDetailPage({ lead }: Props) {
           tiempo_previsto: d.proyecto?.tiempo_previsto ?? null,
           fecha_inicio_real: d.proyecto?.fecha_inicio_real ?? null,
           fecha_fin_real: d.proyecto?.fecha_fin_real ?? null,
+        })
+        setDbFees({
+          setup:
+            d.proyecto?.setup_fee_eur != null ? Number(d.proyecto.setup_fee_eur) : null,
+          monthly:
+            d.proyecto?.monthly_fee_eur != null ? Number(d.proyecto.monthly_fee_eur) : null,
         })
       })
       .catch(() => setEsBuffalo(false))
@@ -152,10 +162,31 @@ export default function ProyectoDetailPage({ lead }: Props) {
   }
 
   const displayName = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
-  const project = useMemo(
+  const projectBase = useMemo(
     () => buildProjectViewData(lead.configuracion, lead.valor, lead.notas),
     [lead.configuracion, lead.valor, lead.notas]
   )
+  const project = useMemo(() => {
+    const setupTotal =
+      dbFees.setup != null && dbFees.setup > 0 ? dbFees.setup : projectBase.setupTotal
+    const maintMonthly =
+      dbFees.monthly != null && dbFees.monthly > 0
+        ? dbFees.monthly
+        : projectBase.maintMonthly
+    const pay1 = Math.ceil(setupTotal / 2)
+    const pay2 = setupTotal - pay1
+    return {
+      ...projectBase,
+      setupTotal,
+      maintMonthly,
+      maintLabel:
+        maintMonthly != null
+          ? projectBase.maintLabel || 'Mensualidad'
+          : null,
+      pay1,
+      pay2,
+    }
+  }, [projectBase, dbFees])
 
   const configureUrl = useMemo(() => {
     const p = new URLSearchParams()
@@ -300,26 +331,32 @@ export default function ProyectoDetailPage({ lead }: Props) {
         />
 
         {/* KPI strip */}
-        {project.setupTotal > 0 && (
+        {(project.setupTotal > 0 || (project.maintMonthly != null && project.maintMonthly > 0)) && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="rounded-2xl border border-gray-200 bg-white p-5">
               <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Setup total</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{fmt(project.setupTotal)}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {project.setupTotal > 0 ? fmt(project.setupTotal) : '—'}
+              </p>
               <p className="text-xs text-gray-400 mt-0.5">sin IVA</p>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-5">
               <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">1er pago · inicio</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{fmt(project.pay1)}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {project.setupTotal > 0 ? fmt(project.pay1) : '—'}
+              </p>
               <p className="text-xs text-gray-400 mt-0.5">50%</p>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-5">
               <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">2do pago · producción</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{fmt(project.pay2)}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {project.setupTotal > 0 ? fmt(project.pay2) : '—'}
+              </p>
               <p className="text-xs text-gray-400 mt-0.5">50%</p>
             </div>
             <div className="rounded-2xl border border-gray-200 bg-white p-5">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Mantenimiento</p>
-              {project.maintMonthly != null ? (
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Mensualidad</p>
+              {project.maintMonthly != null && project.maintMonthly > 0 ? (
                 <>
                   <p className="text-2xl font-bold text-gray-900 mt-1">{fmt(project.maintMonthly)}<span className="text-sm font-medium text-gray-400">/mes</span></p>
                   <p className="text-xs text-gray-400 mt-0.5">{project.maintLabel}</p>
@@ -327,7 +364,7 @@ export default function ProyectoDetailPage({ lead }: Props) {
               ) : (
                 <>
                   <p className="text-2xl font-bold text-gray-400 mt-1">—</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Sin mantenimiento</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Sin mensualidad</p>
                 </>
               )}
             </div>

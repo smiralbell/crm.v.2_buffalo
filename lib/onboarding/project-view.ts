@@ -33,7 +33,10 @@ export function buildProjectViewData(
 
   let maintMonthly: number | null = null
   let maintLabel: string | null = null
-  if (cfg?.maint && setupTotal > 0) {
+  if (cfg?.monthly_fee_eur != null && Number(cfg.monthly_fee_eur) > 0) {
+    maintMonthly = Math.round(Number(cfg.monthly_fee_eur))
+    maintLabel = 'Mensualidad'
+  } else if (cfg?.maint && setupTotal > 0) {
     const pct = cfg.maint === 'connect' ? 0.1 : 0.15
     maintMonthly = Math.round(setupTotal * pct)
     maintLabel = cfg.maint === 'connect' ? 'Buffalo Connect (10%)' : 'Buffalo Cloud (15%)'

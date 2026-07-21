@@ -6,6 +6,7 @@ import {
   X, Check, Settings, FileText, Building2,
   Mail, Phone, User, Zap, Eye,
   LayoutList, LayoutGrid, FolderOpen, Plus, Trash2, Pencil, CheckCircle2, Rocket,
+  Wallet,
 } from 'lucide-react'
 import { BUFFALO_STAGE_COLORS } from '@/components/PipelineCardDrawer'
 import Link from 'next/link'
@@ -13,6 +14,7 @@ import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButt
 import OnboardingSectionTabs from '@/components/onboarding/OnboardingSectionTabs'
 import DeleteOnboardingProjectDialog from '@/components/onboarding/DeleteOnboardingProjectDialog'
 import EditOnboardingProjectDialog from '@/components/onboarding/EditOnboardingProjectDialog'
+import { buildProjectViewData } from '@/lib/onboarding/project-view'
 
 // ── Types ──────────────────────────────────────────────────────────────
 interface Contact {
@@ -37,6 +39,34 @@ const stageLabel = (estado: string | null) => {
 }
 const fmt = (v: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
+
+type ProjectFee = { setup: number | null; monthly: number | null }
+
+function resolveProjectFees(
+  lead: Lead,
+  fromDb?: { setup: number | null; monthly: number | null } | null
+): ProjectFee {
+  const view = buildProjectViewData(
+    lead.configuracion || null,
+    lead.valor != null ? Number(lead.valor) : null,
+    null
+  )
+  const setup =
+    fromDb?.setup != null && fromDb.setup > 0
+      ? fromDb.setup
+      : view.setupTotal > 0
+        ? view.setupTotal
+        : lead.valor
+          ? Number(lead.valor)
+          : null
+  const monthly =
+    fromDb?.monthly != null && fromDb.monthly > 0
+      ? fromDb.monthly
+      : view.maintMonthly != null && view.maintMonthly > 0
+        ? view.maintMonthly
+        : null
+  return { setup, monthly }
+}
 
 // ── Step indicator ─────────────────────────────────────────────────────
 const STEPS = [
@@ -71,6 +101,7 @@ export default function OnboardingPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null)
   const [editLeadId, setEditLeadId] = useState<number | null>(null)
   const [buffaloFlags, setBuffaloFlags] = useState<Record<number, boolean>>({})
+  const [projectFees, setProjectFees] = useState<Record<number, ProjectFee>>({})
   const [launchingId, setLaunchingId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -114,17 +145,31 @@ export default function OnboardingPage() {
         if (leads.length) {
           const ids = leads.map((l) => l.id).join(',')
           const fr = await fetch(`/api/onboarding/projects/buffalo-status?ids=${ids}`)
-          const fd = await fr.json().catch(() => ({ flags: {} }))
-          const next: Record<number, boolean> = {}
+          const fd = await fr.json().catch(() => ({ flags: {}, fees: {} }))
+          const nextFlags: Record<number, boolean> = {}
           for (const [k, v] of Object.entries(fd.flags || {})) {
-            next[Number(k)] = Boolean(v)
+            nextFlags[Number(k)] = Boolean(v)
           }
-          setBuffaloFlags(next)
+          setBuffaloFlags(nextFlags)
+
+          const feesDb = (fd.fees || {}) as Record<
+            string,
+            { setup: number | null; monthly: number | null }
+          >
+          const nextFees: Record<number, ProjectFee> = {}
+          for (const lead of leads) {
+            nextFees[lead.id] = resolveProjectFees(lead, feesDb[String(lead.id)] || null)
+          }
+          setProjectFees(nextFees)
         } else {
           setBuffaloFlags({})
+          setProjectFees({})
         }
       })
-      .catch(() => setProjects([]))
+      .catch(() => {
+        setProjects([])
+        setProjectFees({})
+      })
       .finally(() => setLoadingProjects(false))
   }
 
@@ -268,6 +313,16 @@ export default function OnboardingPage() {
     params.set('mode', 'packaged')
     router.push(`/onboarding/configure?${params.toString()}`)
   }
+
+  const totals = projects.reduce(
+    (acc, lead) => {
+      const fee = projectFees[lead.id] || resolveProjectFees(lead, null)
+      if (fee.setup) acc.setup += fee.setup
+      if (fee.monthly) acc.monthly += fee.monthly
+      return acc
+    },
+    { setup: 0, monthly: 0 }
+  )
 
   // ══════════════════════════════════════════════════════════════════
   return (
@@ -535,14 +590,39 @@ export default function OnboardingPage() {
         ══════════════════════════════════════════════════════════════ */}
         {activeTab === 'projects' && (
           <div>
-            {/* Header with toggle */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
+            {/* Header with totals + toggle */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-sm font-bold text-gray-900">Proyectos configurados</h2>
                 {!loadingProjects && projects.length > 0 && (
                   <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2.5 py-0.5 rounded-full">
                     {projects.length}
                   </span>
+                )}
+                {!loadingProjects && projects.length > 0 && (
+                  <div className="inline-flex items-stretch h-10 rounded-xl border border-gray-200 bg-white overflow-hidden">
+                    <div className="flex items-center gap-2 px-3.5 border-r border-gray-100">
+                      <Wallet className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                      <div className="leading-tight min-w-0">
+                        <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">
+                          Setup
+                        </p>
+                        <p className="text-xs font-semibold text-gray-900 tabular-nums truncate">
+                          {fmt(totals.setup)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center px-3.5">
+                      <div className="leading-tight min-w-0">
+                        <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">
+                          Mensualidades
+                        </p>
+                        <p className="text-xs font-semibold text-gray-900 tabular-nums truncate">
+                          {fmt(totals.monthly)}/mes
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -605,7 +685,9 @@ export default function OnboardingPage() {
                   const stageName  = stageLabel(lead.estado)
                   const name       = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
                   const company    = lead.contact?.empresa
-                  const amount     = lead.valor ? Number(lead.valor) : null
+                  const fees       = projectFees[lead.id] || resolveProjectFees(lead, null)
+                  const amount     = fees.setup
+                  const monthly    = fees.monthly
                   const dateStr    = new Date(lead.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })
                   return (
                     <div
@@ -625,7 +707,14 @@ export default function OnboardingPage() {
                           {company && company !== name && (
                             <span className="text-xs text-gray-400 truncate">{company}</span>
                           )}
-                          {amount && <span className="text-xs font-medium text-gray-500">{fmt(amount)}</span>}
+                          {amount != null && amount > 0 && (
+                            <span className="text-xs font-medium text-gray-500">{fmt(amount)}</span>
+                          )}
+                          {monthly != null && monthly > 0 && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-100">
+                              {fmt(monthly)}/mes
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wide bg-gray-100 text-gray-700">
@@ -705,7 +794,9 @@ export default function OnboardingPage() {
                   const stageName  = stageLabel(lead.estado)
                   const name       = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
                   const company    = lead.contact?.empresa
-                  const amount     = lead.valor ? Number(lead.valor) : null
+                  const fees       = projectFees[lead.id] || resolveProjectFees(lead, null)
+                  const amount     = fees.setup
+                  const monthly    = fees.monthly
                   const dateStr    = new Date(lead.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
                   return (
                     <div
@@ -728,10 +819,18 @@ export default function OnboardingPage() {
 
                         <div className="flex-1">
                           <div className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2">{name}</div>
-                          {amount ? (
+                          {company && company !== name && (
+                            <div className="text-xs text-gray-400 mt-0.5 truncate">{company}</div>
+                          )}
+                          {amount != null && amount > 0 ? (
                             <div className="text-base font-semibold text-gray-700 mt-1">{fmt(amount)}</div>
                           ) : (
                             <div className="text-xs text-gray-400 mt-1">Sin valorar</div>
+                          )}
+                          {monthly != null && monthly > 0 && (
+                            <div className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-100">
+                              {fmt(monthly)}/mes
+                            </div>
                           )}
                         </div>
 
