@@ -11,17 +11,19 @@ import type { ProyectoRow } from '@/lib/engranaje5/project-services'
 import type { ProjectServiceFlags } from '@/lib/engranaje5/data-column-guide'
 import type { KpiItem } from '@/lib/engranaje5/kpi-layout'
 import type { ContractSummary } from '@/lib/engranaje5/contract-summary'
+import RetentionConfigureAgent from '@/components/retencion/RetentionConfigureAgent'
 
-type Tab = 'proyecto' | 'guia' | 'kpis'
+type Tab = 'proyecto' | 'configurar' | 'guia' | 'kpis'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'proyecto', label: 'Proyecto' },
+  { id: 'configurar', label: 'Configurar' },
   { id: 'guia', label: 'Guía de desarrollo' },
   { id: 'kpis', label: 'KPIs' },
 ]
 
 function isValidTab(v: unknown): v is Tab {
-  return v === 'proyecto' || v === 'guia' || v === 'kpis'
+  return v === 'proyecto' || v === 'configurar' || v === 'guia' || v === 'kpis'
 }
 
 export default function RetencionProyectoDetailPage() {
@@ -31,7 +33,10 @@ export default function RetencionProyectoDetailPage() {
   const { id, tab: urlTab } = router.query
 
   const visibleTabs = useMemo(
-    () => (isAdmin ? TABS : TABS.filter((t) => t.id !== 'proyecto')),
+    () =>
+      isAdmin
+        ? TABS
+        : TABS.filter((t) => t.id === 'guia' || t.id === 'kpis'),
     [isAdmin]
   )
 
@@ -109,24 +114,16 @@ export default function RetencionProyectoDetailPage() {
 
   return (
     <Layout>
-      <div className="w-full space-y-6 pb-12">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/retencion"
-            className="inline-flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-300 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-              Retención{isAdmin ? ' · Engranaje 3' : ''}
-            </p>
-            <h1 className="text-xl font-semibold text-gray-900">{proyecto?.name || 'Proyecto'}</h1>
-          </div>
-        </div>
-
+      <div className="w-full space-y-4 pb-12">
         {proyecto && services && (
-          <div className="flex items-center justify-center gap-1 border-b border-gray-200">
+          <div className="relative flex items-center justify-center gap-1 border-b border-gray-200">
+            <Link
+              href="/retencion"
+              className="absolute left-0 top-1/2 -translate-y-1/2 mb-px inline-flex items-center justify-center w-8 h-8 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-900 transition-colors"
+              aria-label="Volver a retención"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
             {visibleTabs.map((tab) => {
               const isActive = activeTab === tab.id
               return (
@@ -175,6 +172,14 @@ export default function RetencionProyectoDetailPage() {
             contact={contact}
             services={services}
             contract={contract}
+          />
+        )}
+
+        {isAdmin && proyecto && activeTab === 'configurar' && (
+          <RetentionConfigureAgent
+            proyectoId={proyecto.id}
+            clientName={contact?.nombre || proyecto.name}
+            clientCompany={contact?.empresa || proyecto.name}
           />
         )}
 

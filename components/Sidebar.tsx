@@ -113,7 +113,7 @@ const NAV: NavItem[] = [
     icon: HeartHandshake,
     roles: ['admin', 'developer'],
     children: [
-      { href: '/retencion', label: 'Clientes con mensualidad', developerLabel: 'Proyectos' },
+      { href: '/retencion', label: 'Buffalo con mensualidad', developerLabel: 'Proyectos' },
     ],
   },
   { href: '/developer', label: 'Dashboard', icon: LayoutDashboard, roles: ['developer'] },

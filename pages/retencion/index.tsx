@@ -72,7 +72,7 @@ export default function RetencionPage() {
 
   useEffect(() => { load() }, [])
 
-  const pageTitle = isAdmin ? 'Clientes con mensualidad' : 'Proyectos'
+  const pageTitle = isAdmin ? 'Retención · Buffalo con mensualidad' : 'Proyectos'
 
   return (
     <Layout>
@@ -112,12 +112,12 @@ export default function RetencionPage() {
             <div className="py-16 text-center">
               <p className="text-sm text-gray-400">
                 {isAdmin
-                  ? 'No hay proyectos con mantenimiento mensual.'
+                  ? 'No hay proyectos Buffalo en marcha con mensualidad.'
                   : 'No tienes proyectos asignados en retención.'}
               </p>
               {isAdmin && (
                 <p className="text-xs text-gray-300 mt-1">
-                  Solo aparecen leads que hayan seleccionado Connect o Cloud al configurar el proyecto.
+                  Criterio: es_buffalo + has_mensualidad + status development/active/paused.
                 </p>
               )}
             </div>

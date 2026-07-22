@@ -102,7 +102,7 @@ export async function openRouterDescribeImage(
 
 export async function openRouterChatCompletion(
   messages: ChatMessage[],
-  options?: { model?: string; temperature?: number }
+  options?: { model?: string; temperature?: number; maxTokens?: number }
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
@@ -124,6 +124,7 @@ export async function openRouterChatCompletion(
       model,
       messages,
       temperature: options?.temperature ?? 0.3,
+      ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {}),
     }),
   })
 
