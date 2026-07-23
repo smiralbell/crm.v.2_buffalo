@@ -5,6 +5,7 @@ export const DEVELOPER_PAGE_PREFIXES = [
   '/gestion-proyecto',
   '/retencion',
   '/tickets',
+  '/ayuda',
   '/login',
 ] as const
 
@@ -13,6 +14,7 @@ export const COMERCIAL_PAGE_PREFIXES = [
   '/coldcalling',
   '/pipelines',
   '/developer/facturas',
+  '/ayuda',
   '/login',
 ] as const
 

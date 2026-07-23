@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "buffalo-crm": {
+      "command": "node",
+      "args": [
+        "${workspaceFolder}/node_modules/tsx/dist/cli.mjs",
+        "${workspaceFolder}/mcp/buffalo-crm/src/index.ts"
+      ],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}

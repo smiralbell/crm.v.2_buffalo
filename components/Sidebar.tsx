@@ -26,6 +26,7 @@ import {
   Moon,
   Sun,
   BookOpen,
+  HelpCircle,
 } from 'lucide-react'
 import { getLastCampaignId, lastCampaignCallHref } from '@/lib/coldcall/last-campaign'
 import ComercialSidebarBrand from '@/components/coldcall/ComercialSidebarBrand'
@@ -542,6 +543,18 @@ export default function Sidebar({
       </div>
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-2 shrink-0 space-y-0.5">
+        <Link
+          href="/ayuda"
+          title="Ayuda y documentación"
+          onClick={() => onNavigate?.()}
+          className={itemClass(
+            router.pathname === '/ayuda' || router.pathname.startsWith('/ayuda/')
+          )}
+        >
+          <HelpCircle className="h-4 w-4 shrink-0" />
+          {showLabels && <span className="flex-1 truncate">Ayuda</span>}
+        </Link>
+
         <button
           type="button"
           title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
