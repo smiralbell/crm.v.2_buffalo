@@ -24,6 +24,7 @@ export const COMERCIAL_ONLY_ROUTES = [
   '/comercial/campanas',
   '/comercial/pipeline',
   '/comercial/reuniones',
+  '/comercial/fireflies',
   '/comercial/llamar-mas-tarde',
   '/comercial/objeciones',
   '/comercial/duplicados',

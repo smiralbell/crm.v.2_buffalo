@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { ArrowLeft, Edit, Euro, User, ClipboardList, StickyNote, FileText } from 'lucide-react'
 import EditLeadDialog from '@/components/EditLeadDialog'
+import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
 
 interface LeadDetailProps {
   lead: {
@@ -263,6 +264,8 @@ export default function LeadDetail({ lead }: LeadDetailProps) {
             </CardContent>
           </Card>
         </div>
+
+        <LeadMeetingsPanel leadId={lead.id} />
 
         {/* Notes — project summary from configurator */}
         {lead.notas && (

@@ -14,6 +14,7 @@ import {
   Mail, Phone, MapPin, Receipt, Calendar, Trash2, CheckCircle2, Pencil,
 } from 'lucide-react'
 import { buildProjectViewData, fmt } from '@/lib/onboarding/project-view'
+import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
 
 interface Props {
   lead: {
@@ -499,6 +500,8 @@ export default function ProyectoDetailPage({ lead }: Props) {
             )}
           </div>
         </div>
+
+        <LeadMeetingsPanel leadId={lead.id} />
 
         {/* Resumen detallado */}
         {lead.notas && (

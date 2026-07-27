@@ -27,6 +27,7 @@ import {
   Sun,
   BookOpen,
   HelpCircle,
+  Video,
 } from 'lucide-react'
 import { getLastCampaignId, lastCampaignCallHref } from '@/lib/coldcall/last-campaign'
 import ComercialSidebarBrand from '@/components/coldcall/ComercialSidebarBrand'
@@ -123,6 +124,7 @@ const NAV: NavItem[] = [
   { href: '/comercial/campanas', label: 'Campañas', icon: Megaphone, roles: ['comercial'] },
   { href: '/comercial/pipeline', label: 'Pipeline', icon: Workflow, roles: ['comercial'] },
   { href: '/comercial/reuniones', label: 'Reuniones', icon: Calendar, roles: ['comercial'] },
+  { href: '/comercial/fireflies', label: 'Fireflies', icon: Video, roles: ['comercial', 'admin'] },
   { href: '/comercial/llamar-mas-tarde', label: 'Llamar más tarde', icon: Clock, roles: ['comercial'] },
   { href: '/comercial/objeciones', label: 'Objeciones', icon: MessageSquare, roles: ['comercial'] },
   { href: '/comercial/duplicados', label: 'Duplicados', icon: Copy, roles: ['comercial'] },
@@ -185,6 +187,7 @@ export default function Sidebar({
         '/comercial/campanas',
         '/comercial/pipeline',
         '/comercial/reuniones',
+        '/comercial/fireflies',
         '/comercial/llamar-mas-tarde',
         '/comercial/objeciones',
         '/comercial/duplicados',
@@ -238,6 +241,7 @@ export default function Sidebar({
     else if (item.href === '/comercial/campanas') go('/comercial/campanas')
     else if (item.href === '/comercial/pipeline') go('/comercial/pipeline')
     else if (item.href === '/comercial/reuniones') go('/comercial/reuniones')
+    else if (item.href === '/comercial/fireflies') go('/comercial/fireflies')
     else if (item.href === '/comercial/llamar-mas-tarde') go('/comercial/llamar-mas-tarde')
     else if (item.href === '/comercial/objeciones') go('/comercial/objeciones')
     else if (item.href === '/comercial/duplicados') go('/comercial/duplicados')
@@ -365,6 +369,7 @@ export default function Sidebar({
                     '/comercial/campanas',
                     '/comercial/pipeline',
                     '/comercial/reuniones',
+                    '/comercial/fireflies',
                     '/comercial/llamar-mas-tarde',
                     '/comercial/objeciones',
                     '/comercial/duplicados',
@@ -543,18 +548,6 @@ export default function Sidebar({
       </div>
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-2 shrink-0 space-y-0.5">
-        <Link
-          href="/ayuda"
-          title="Ayuda y documentación"
-          onClick={() => onNavigate?.()}
-          className={itemClass(
-            router.pathname === '/ayuda' || router.pathname.startsWith('/ayuda/')
-          )}
-        >
-          <HelpCircle className="h-4 w-4 shrink-0" />
-          {showLabels && <span className="flex-1 truncate">Ayuda</span>}
-        </Link>
-
         <button
           type="button"
           title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
@@ -584,19 +577,42 @@ export default function Sidebar({
             {showLabels && <span className="flex-1 truncate">Usuarios</span>}
           </Link>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          title="Cerrar sesión"
+
+        <div
           className={cn(
-            'w-full h-auto rounded-xl px-2.5 py-2 text-sm text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))]',
-            showLabels ? 'justify-start' : 'justify-center'
+            'flex gap-1',
+            showLabels ? 'w-full flex-row items-center' : 'flex-col items-center'
           )}
-          onClick={handleLogout}
         >
-          <LogOut className={cn('h-4 w-4', showLabels && 'mr-2')} />
-          {showLabels && 'Cerrar sesión'}
-        </Button>
+          <button
+            type="button"
+            title="Documentación (abre en pestaña nueva)"
+            aria-label="Abrir documentación"
+            onClick={() => {
+              window.open('/ayuda', '_blank', 'noopener,noreferrer')
+              onNavigate?.()
+            }}
+            className={cn(
+              'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[hsl(var(--sidebar-muted))] transition-colors hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-foreground))]',
+              showLabels && 'order-2'
+            )}
+          >
+            <HelpCircle className="h-4 w-4" />
+          </button>
+          <Button
+            variant="ghost"
+            size="sm"
+            title="Cerrar sesión"
+            className={cn(
+              'h-auto rounded-xl px-2.5 py-2 text-sm text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))]',
+              showLabels ? 'order-1 min-w-0 flex-1 justify-start' : 'justify-center'
+            )}
+            onClick={handleLogout}
+          >
+            <LogOut className={cn('h-4 w-4', showLabels && 'mr-2')} />
+            {showLabels && <span className="truncate">Cerrar sesión</span>}
+          </Button>
+        </div>
       </div>
     </aside>
   )
