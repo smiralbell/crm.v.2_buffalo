@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { softDeletePipelineCard } from '@/lib/pipelines/global-funnel'
 import { z } from 'zod'
 
 const updateCardSchema = z.object({
@@ -78,22 +79,10 @@ export default async function handler(
     }
 
     if (req.method === 'DELETE') {
-      // Soft delete
-      const card = await prisma.pipelineCard.findUnique({
-        where: { id: cardId },
-      })
-
-      if (!card || card.deleted_at) {
+      const deleted = await softDeletePipelineCard(cardId)
+      if (!deleted) {
         return res.status(404).json({ error: 'Tarjeta no encontrada' })
       }
-
-      const deleted = await prisma.pipelineCard.update({
-        where: { id: cardId },
-        data: {
-          deleted_at: new Date(),
-        },
-      })
-
       return res.status(200).json(deleted)
     }
 

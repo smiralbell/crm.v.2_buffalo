@@ -38,6 +38,7 @@ interface PipelineCard {
   notes?: string | null
   created_at: string
   updated_at: string
+  meeting_alert?: boolean
 }
 
 interface KanbanColumnProps {
@@ -333,6 +334,14 @@ export default function KanbanColumn({
                   )}
                   style={isWhiteCard ? { boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' } : { backgroundColor: cardColor, boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.1)' }}
                 >
+                  {card.meeting_alert && (
+                    <span
+                      className="absolute -top-1.5 -left-1.5 z-20 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow ring-2 ring-white"
+                      title="Reunión agendada · revisar"
+                    >
+                      1
+                    </span>
+                  )}
                   {/* Menú 3 puntos - arriba a la derecha */}
                   <div className="absolute top-2 right-2 z-10" onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>

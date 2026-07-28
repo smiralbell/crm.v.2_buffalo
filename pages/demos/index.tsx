@@ -291,8 +291,8 @@ export default function DemosPage() {
       <div className="space-y-6">
         <OnboardingSectionTabs active="demos" />
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="inline-flex rounded-xl border border-border bg-card p-0.5 self-start">
+        <div className="flex flex-row flex-wrap items-center gap-2 sm:gap-3">
+          <div className="inline-flex rounded-xl border border-border bg-card p-0.5 shrink-0">
             <Button
               type="button"
               size="sm"
@@ -319,30 +319,50 @@ export default function DemosPage() {
             </Button>
           </div>
 
-          {tab === 'agentes' && (
-            <div className="flex shrink-0 gap-2 self-start sm:self-auto">
-              <Button
+          {tab === 'agentes' ? (
+            <>
+              <div className="relative min-w-[140px] flex-1 max-w-md">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar demos…"
+                  className="rounded-xl border-gray-200 pl-9 h-9"
+                />
+              </div>
+              <Badge variant="outline" className="shrink-0 border-gray-200 text-gray-700 font-normal hidden md:inline-flex">
+                {demos.length} {demos.length === 1 ? 'demo' : 'demos'}
+              </Badge>
+              <Badge
                 variant="outline"
-                size="icon"
-                onClick={load}
-                disabled={loading}
-                className="rounded-xl border-gray-200 h-9 w-9"
-                title="Actualizar"
+                className="shrink-0 border-emerald-200 bg-emerald-50 text-emerald-800 font-normal hidden md:inline-flex"
               >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              </Button>
-              <Button
-                onClick={() => {
-                  setEditing(null)
-                  setFormOpen(true)
-                }}
-                className="rounded-xl h-9"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Nueva Demo
-              </Button>
-            </div>
-          )}
+                {activeCount} activas
+              </Badge>
+              <div className="flex shrink-0 gap-2 ml-auto">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={load}
+                  disabled={loading}
+                  className="rounded-xl border-gray-200 h-9 w-9"
+                  title="Actualizar"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                </Button>
+                <Button
+                  onClick={() => {
+                    setEditing(null)
+                    setFormOpen(true)
+                  }}
+                  className="rounded-xl h-9"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nueva Demo
+                </Button>
+              </div>
+            </>
+          ) : null}
         </div>
 
         {tab === 'preparar' ? (
@@ -354,27 +374,6 @@ export default function DemosPage() {
           </div>
         ) : (
           <>
-            <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
-              <div className="relative w-full min-w-[200px] max-w-md flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar demos…"
-                  className="rounded-xl border-gray-200 pl-9"
-                />
-              </div>
-              <Badge variant="outline" className="shrink-0 border-gray-200 text-gray-700 font-normal">
-                {demos.length} {demos.length === 1 ? 'demo' : 'demos'}
-              </Badge>
-              <Badge
-                variant="outline"
-                className="shrink-0 border-emerald-200 bg-emerald-50 text-emerald-800 font-normal"
-              >
-                {activeCount} activas
-              </Badge>
-            </div>
-
             {error && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                 {error}

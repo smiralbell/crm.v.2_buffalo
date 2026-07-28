@@ -11,6 +11,7 @@ import {
   syncColdCallProspectToGlobalReunion,
   syncContactToGlobalReunion,
 } from '@/lib/pipelines/global-funnel'
+import { attachMeetingAlerts } from '@/lib/pipelines/meeting-alerts'
 
 const createCardSchema = z.object({
   entity_id: z.union([z.string(), z.number()]).transform((val) => String(val)), // Acepta string o number, convierte a string
@@ -104,6 +105,8 @@ export default async function handler(
           amount: card.amount != null ? Number(card.amount) : null,
         }))
       }
+
+      cards = await attachMeetingAlerts(cards)
 
       // Agrupar por stage para facilitar el frontend
       const cardsByStage: Record<string, typeof cards> = {}

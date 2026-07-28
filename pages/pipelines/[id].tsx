@@ -22,6 +22,7 @@ import {
   backfillReunionsToGlobalFunnel,
   isGlobalPipeline,
 } from '@/lib/pipelines/global-funnel'
+import { attachMeetingAlerts } from '@/lib/pipelines/meeting-alerts'
 
 interface PipelineCard {
   id: string
@@ -36,6 +37,7 @@ interface PipelineCard {
   notes?: string | null
   created_at: string
   updated_at: string
+  meeting_alert?: boolean
 }
 
 interface Pipeline {
@@ -132,7 +134,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           }),
     ])
 
-    const initialCards = cardsRaw.map((card) => ({
+    const initialCardsRaw = cardsRaw.map((card) => ({
       id: card.id,
       entity_id: card.entity_id,
       entity_type: card.entity_type as 'client' | 'contact',
@@ -146,6 +148,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       created_at: card.created_at.toISOString(),
       updated_at: card.updated_at.toISOString(),
     }))
+    const initialCards = await attachMeetingAlerts(initialCardsRaw)
 
     const initialProspectDisplay = coldCall
       ? await getColdCallProspectDisplayMap(initialCards.map((c) => c.entity_id))
@@ -315,6 +318,13 @@ export default function PipelineDetail({
   }
 
   const handleCardDelete = async (cardId: string) => {
+    if (
+      !window.confirm(
+        '¿Eliminar esta tarjeta? No se volverá a crear automáticamente por sync de WEB/reuniones.'
+      )
+    ) {
+      return
+    }
     setLoading(true)
     try {
       const res = await fetch(`/api/pipelines/${pipeline.id}/cards/${cardId}`, {

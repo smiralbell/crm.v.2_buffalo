@@ -32,6 +32,7 @@ interface PipelineCard {
   capture_date?: string | null
   amount?: number | null
   notes?: string | null
+  meeting_alert?: boolean
 }
 
 interface PipelineCardDrawerProps {
@@ -166,8 +167,18 @@ export default function PipelineCardDrawer({
           {/* Name + avatar */}
           <div className="px-6 pt-5 pb-5">
             <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-11 h-11 rounded-full bg-gray-900 flex items-center justify-center text-white text-base font-bold">
-                {(entityName || '?').charAt(0).toUpperCase()}
+              <div className="relative flex-shrink-0">
+                <div className="w-11 h-11 rounded-full bg-gray-900 flex items-center justify-center text-white text-base font-bold">
+                  {(entityName || '?').charAt(0).toUpperCase()}
+                </div>
+                {card.meeting_alert && (
+                  <span
+                    className="absolute -top-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white"
+                    title="Reunión agendada · revisar"
+                  >
+                    1
+                  </span>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-xl font-bold text-gray-900 leading-tight truncate">
@@ -176,6 +187,11 @@ export default function PipelineCardDrawer({
                 <p className="text-xs text-gray-400 mt-0.5">ID #{card.entity_id}</p>
               </div>
             </div>
+            {card.meeting_alert && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                Reunión ya agendada — revisa esta tarjeta antes de avanzar.
+              </div>
+            )}
           </div>
 
           {/* Contact info */}

@@ -4,6 +4,8 @@ import { BUFFALO_STAGE_COLORS, defaultStageColor } from '@/lib/pipelines/default
 /** Pipeline global Buffalo LEADS-VENTA — entrada desde columna REUNIÓN de WEB / Cold Calling */
 export const DEFAULT_GLOBAL_PIPELINE_ID = 'c900485d-7395-4def-9149-ef98f3d406ce'
 export const GLOBAL_FUNNEL_TAG = 'global-funnel'
+/** Si está en tags (aunque la tarjeta esté soft-deleted), no se vuelve a crear por sync/backfill */
+export const SYNC_SUPPRESSED_TAG = 'sync-suppressed'
 
 export type GlobalFunnelSource = 'web' | 'coldcall'
 
@@ -80,6 +82,24 @@ export async function syncContactToGlobalReunion(input: {
 
   const entityId = String(input.contactId)
   const sourceTag = input.source === 'web' ? 'from-web' : 'from-coldcall'
+
+  // Respetar borrados intencionados: no recrear si hay tarjeta (activa o no) con sync-suppressed
+  const suppressed = await prisma.pipelineCard.findFirst({
+    where: {
+      pipeline_id: pipelineId,
+      entity_id: entityId,
+      tags: { has: SYNC_SUPPRESSED_TAG },
+    },
+    select: { id: true },
+  })
+  if (suppressed) {
+    console.log('[global-funnel] skip sync (sync-suppressed)', {
+      contactId: input.contactId,
+      cardId: suppressed.id,
+    })
+    return null
+  }
+
   const existing = await prisma.pipelineCard.findFirst({
     where: {
       pipeline_id: pipelineId,
@@ -271,3 +291,56 @@ export async function syncColdCallProspectToGlobalReunion(prospect: {
     source: 'coldcall',
   })
 }
+
+/**
+ * Soft-delete de tarjeta con anti-resync.
+ * - Marca sync-suppressed para que backfill/global no la recree.
+ * - Si es embudo global o WEB en REUNIÓN, limpia las tarjetas hermanas del mismo contacto.
+ */
+export async function softDeletePipelineCard(cardId: string): Promise<{ id: string } | null> {
+  const card = await prisma.pipelineCard.findUnique({ where: { id: cardId } })
+  if (!card || card.deleted_at) return null
+
+  const tags = Array.from(new Set([...card.tags, SYNC_SUPPRESSED_TAG]))
+  const deleted = await prisma.pipelineCard.update({
+    where: { id: cardId },
+    data: { deleted_at: new Date(), tags },
+  })
+
+  const globalId = await getGlobalPipelineId()
+  const { getWebPipelineId } = await import('@/lib/pipelines/web')
+  const webId = await getWebPipelineId()
+
+  const isGlobal = globalId === card.pipeline_id
+  const isWebReunion = webId === card.pipeline_id && isReunionStageName(card.stage)
+
+  if (isGlobal || isWebReunion) {
+    const siblingPipelines = [globalId, webId].filter(
+      (id): id is string => Boolean(id) && id !== card.pipeline_id
+    )
+    for (const pid of siblingPipelines) {
+      const siblings = await prisma.pipelineCard.findMany({
+        where: {
+          pipeline_id: pid,
+          entity_id: card.entity_id,
+          deleted_at: null,
+          ...(pid === webId ? {} : {}),
+        },
+      })
+      for (const sib of siblings) {
+        // En WEB solo tocamos REUNIÓN; en global cualquiera (suele ser REUNIÓN al borrar)
+        if (pid === webId && !isReunionStageName(sib.stage)) continue
+        await prisma.pipelineCard.update({
+          where: { id: sib.id },
+          data: {
+            deleted_at: new Date(),
+            tags: Array.from(new Set([...sib.tags, SYNC_SUPPRESSED_TAG])),
+          },
+        })
+      }
+    }
+  }
+
+  return { id: deleted.id }
+}
+

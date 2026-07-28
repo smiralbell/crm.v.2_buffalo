@@ -19,6 +19,7 @@ interface PipelineCard {
   notes?: string | null
   created_at: string
   updated_at: string
+  meeting_alert?: boolean
 }
 
 interface KanbanBoardProps {
