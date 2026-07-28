@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { AlertTriangle, Plus, X } from 'lucide-react'
+import { AlertTriangle, Info, Plus, X } from 'lucide-react'
 import RetellVariableChips, { insertTextAtSelection } from '@/components/demos/RetellVariableChips'
 import {
   DEFAULT_CRM_ASSISTANT_GREETING,
@@ -90,6 +90,66 @@ function numerosLabel(tipo: DemoTipo, direccion: DemoDireccion): string {
   if (direccion === 'outbound') return 'Número del cliente a llamar'
   if (direccion === 'inbound') return 'Números autorizados a llamar'
   return 'Números (inbound y outbound)'
+}
+
+/** Hint hover: cómo referenciar el RAG / base de conocimiento en el prompt */
+function RagPromptHint({ isVoz }: { isVoz: boolean }) {
+  return (
+    <span className="relative inline-flex items-center group align-middle ml-1.5">
+      <button
+        type="button"
+        tabIndex={0}
+        aria-label="Cómo referenciar la base de conocimiento en el prompt"
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-gray-300 text-gray-500 hover:border-gray-500 hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
+      >
+        <Info className="h-3 w-3" />
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-[min(22rem,calc(100vw-3rem))] -translate-x-1/2 rounded-xl border border-gray-200 bg-white p-3 text-left text-xs leading-relaxed text-gray-700 shadow-lg opacity-0 invisible transition-opacity group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible"
+      >
+        {isVoz ? (
+          <>
+            <p className="font-semibold text-gray-900 mb-1.5">RAG / Knowledge Base (Retell)</p>
+            <p className="mb-2">
+              Retell busca solo en la base de conocimiento y mete los trozos relevantes en el
+              prompt bajo este encabezado:
+            </p>
+            <code className="block rounded-lg bg-gray-100 px-2 py-1.5 font-mono text-[11px] text-gray-900 mb-2 break-all">
+              ## Related Knowledge Base Contexts
+            </code>
+            <p className="mb-1.5">En tu prompt puedes escribir, por ejemplo:</p>
+            <p className="rounded-lg bg-gray-50 border border-gray-100 px-2 py-1.5 text-[11px] text-gray-800">
+              Cuando necesites información del cliente (precios, servicios, FAQs…), usa solo lo
+              que aparezca en{' '}
+              <span className="font-mono">## Related Knowledge Base Contexts</span>. Si no hay
+              datos relevantes, dilo y no inventes.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="font-semibold text-gray-900 mb-1.5">RAG WhatsApp · tool search_knowledge</p>
+            <p className="mb-2">
+              Al guardar, el texto se trocea y se convierte en vectores (embeddings) en Postgres.
+              Si la base es larga, el agente usa la herramienta:
+            </p>
+            <code className="block rounded-lg bg-gray-100 px-2 py-1.5 font-mono text-[11px] text-gray-900 mb-2 break-all">
+              search_knowledge
+            </code>
+            <p className="mb-1.5">En tu prompt puedes escribir, por ejemplo:</p>
+            <p className="rounded-lg bg-gray-50 border border-gray-100 px-2 py-1.5 text-[11px] text-gray-800">
+              Cuando el usuario pregunte por la empresa (precios, servicios, horarios…), llama a{' '}
+              <span className="font-mono">search_knowledge</span> antes de responder. No inventes
+              datos.
+            </p>
+            <p className="mt-2 text-[11px] text-gray-500">
+              Si la base es corta (&lt; ~3500 caracteres), se inyecta entera sin tool (más simple).
+            </p>
+          </>
+        )}
+      </span>
+    </span>
+  )
 }
 
 export default function DemoFormDialog({
@@ -396,7 +456,10 @@ export default function DemoFormDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="base_conocimiento">Base de conocimiento</Label>
+            <Label htmlFor="base_conocimiento" className="inline-flex items-center">
+              Base de conocimiento
+              <RagPromptHint isVoz={isVoz} />
+            </Label>
             <Textarea
               id="base_conocimiento"
               value={form.base_conocimiento}
@@ -407,8 +470,16 @@ export default function DemoFormDialog({
             />
             {!isVoz && (
               <p className="text-xs text-gray-500">
-                El agente recibe todo este texto en cada mensaje (contexto completo, no búsqueda
-                vectorial).
+                Al guardar se indexa en vectores (RAG). Si es larga, el agente busca con la tool{' '}
+                <span className="font-mono text-[11px]">search_knowledge</span>. Si es corta, se
+                inyecta entera en el prompt.
+              </p>
+            )}
+            {isVoz && (
+              <p className="text-xs text-gray-500">
+                En Retell se indexa como Knowledge Base (RAG). El agente recupera trozos y los
+                añade bajo{' '}
+                <span className="font-mono text-[11px]">## Related Knowledge Base Contexts</span>.
               </p>
             )}
           </div>
@@ -442,7 +513,10 @@ export default function DemoFormDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="prompt">Prompt de instrucciones</Label>
+            <Label htmlFor="prompt" className="inline-flex items-center">
+              Prompt de instrucciones
+              <RagPromptHint isVoz={isVoz} />
+            </Label>
             <Textarea
               ref={promptRef}
               id="prompt"

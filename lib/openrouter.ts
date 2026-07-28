@@ -143,6 +143,65 @@ export async function openRouterChatCompletion(
   return content
 }
 
+/** Embeddings via OpenRouter (OpenAI-compatible). Returns one vector per input text. */
+export async function openRouterEmbedTexts(
+  texts: string[],
+  options?: { model?: string }
+): Promise<number[][]> {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY no está configurada')
+  if (texts.length === 0) return []
+
+  const model = options?.model || process.env.DEMO_EMBEDDING_MODEL || 'openai/text-embedding-3-small'
+  const siteUrl = process.env.OPENROUTER_HTTP_REFERER || process.env.NEXT_PUBLIC_BASE_URL || ''
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+    ...(siteUrl ? { 'HTTP-Referer': siteUrl } : {}),
+    'X-OpenRouter-Title': 'Buffalo CRM - demo RAG embeddings',
+  }
+
+  const out: number[][] = []
+  const BATCH = 32
+
+  for (let i = 0; i < texts.length; i += BATCH) {
+    const batch = texts.slice(i, i + BATCH)
+    const res = await fetch('https://openrouter.ai/api/v1/embeddings', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        input: batch.length === 1 ? batch[0] : batch,
+      }),
+    })
+
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(`OpenRouter embeddings ${res.status}: ${errText.slice(0, 500)}`)
+    }
+
+    const data = (await res.json()) as {
+      data?: Array<{ embedding?: number[]; index?: number }>
+    }
+    const items = [...(data.data || [])].sort(
+      (a, b) => (a.index ?? 0) - (b.index ?? 0)
+    )
+    if (items.length !== batch.length) {
+      throw new Error(
+        `OpenRouter embeddings: esperaba ${batch.length} vectores, recibí ${items.length}`
+      )
+    }
+    for (const item of items) {
+      if (!item.embedding?.length) {
+        throw new Error('OpenRouter embeddings: vector vacío')
+      }
+      out.push(item.embedding)
+    }
+  }
+
+  return out
+}
+
 export function parseJsonFromModelOutput(raw: string): unknown {
   let s = raw.trim()
   if (s.startsWith('```')) {
@@ -150,3 +209,4 @@ export function parseJsonFromModelOutput(raw: string): unknown {
   }
   return JSON.parse(s)
 }
+

@@ -1,4 +1,5 @@
 import { query } from '@/lib/db'
+import { indexDemoKnowledgeBase } from '@/lib/demos/kb-rag'
 import { PhoneNumberConflictError } from './errors'
 import type {
   DemoDireccion,
@@ -13,6 +14,19 @@ import type {
   VoiceDemoMatch,
 } from './types'
 import { normalizePhoneNumber } from './phone'
+
+/** Indexa KB en vectores para demos WhatsApp (no voz / no asistente CRM). */
+async function maybeIndexWhatsappKb(demo: DemoListItem): Promise<void> {
+  if (demo.tipo !== 'whatsapp' || demo.es_asistente_crm) return
+  try {
+    const result = await indexDemoKnowledgeBase(demo.id, demo.base_conocimiento)
+    console.log(
+      `[demos/kb-rag] demo ${demo.id}: ${result.skipped ? 'skip' : 'indexed'} ${result.chunks} chunks`
+    )
+  } catch (err) {
+    console.error(`[demos/kb-rag] Fallo indexando demo ${demo.id}:`, err)
+  }
+}
 
 function mapDemoRow(row: {
   id: number
@@ -359,6 +373,7 @@ export async function createDemo(
 
   const demo = await getDemoById(row.id)
   if (!demo) throw new Error('Demo no encontrada tras crear')
+  await maybeIndexWhatsappKb(demo)
   return demo
 }
 
@@ -434,7 +449,9 @@ export async function updateDemo(
     await assignDemoNumeros(id, input.numeros, options)
   }
 
-  return getDemoById(id)
+  const demo = await getDemoById(id)
+  if (demo) await maybeIndexWhatsappKb(demo)
+  return demo
 }
 
 export async function updateDemoRetellIds(

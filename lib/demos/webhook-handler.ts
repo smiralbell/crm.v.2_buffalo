@@ -255,7 +255,8 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
             demo.prompt,
             demo.base_conocimiento,
             history,
-            userText
+            userText,
+            { demoId: demo.demo_id }
           ),
           attachments: [] as Awaited<
             ReturnType<typeof generateCrmAssistantReply>

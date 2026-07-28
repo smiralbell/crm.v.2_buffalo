@@ -291,13 +291,13 @@ export default function DemosPage() {
       <div className="space-y-6">
         <OnboardingSectionTabs active="demos" />
 
-        <div className="flex justify-end">
-          <div className="inline-flex rounded-xl border border-border bg-card p-0.5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="inline-flex rounded-xl border border-border bg-card p-0.5 self-start">
             <Button
               type="button"
               size="sm"
               variant={tab === 'agentes' ? 'default' : 'ghost'}
-              className={`rounded-lg gap-1.5 h-8 ${
+              className={`rounded-lg gap-1.5 h-9 ${
                 tab === 'agentes' ? '' : 'text-muted-foreground'
               }`}
               onClick={() => setTab('agentes')}
@@ -309,7 +309,7 @@ export default function DemosPage() {
               type="button"
               size="sm"
               variant={tab === 'preparar' ? 'default' : 'ghost'}
-              className={`rounded-lg gap-1.5 h-8 ${
+              className={`rounded-lg gap-1.5 h-9 ${
                 tab === 'preparar' ? '' : 'text-muted-foreground'
               }`}
               onClick={() => setTab('preparar')}
@@ -318,6 +318,31 @@ export default function DemosPage() {
               Preparar
             </Button>
           </div>
+
+          {tab === 'agentes' && (
+            <div className="flex shrink-0 gap-2 self-start sm:self-auto">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={load}
+                disabled={loading}
+                className="rounded-xl border-gray-200 h-9 w-9"
+                title="Actualizar"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </Button>
+              <Button
+                onClick={() => {
+                  setEditing(null)
+                  setFormOpen(true)
+                }}
+                className="rounded-xl h-9"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nueva Demo
+              </Button>
+            </div>
+          )}
         </div>
 
         {tab === 'preparar' ? (
@@ -329,49 +354,25 @@ export default function DemosPage() {
           </div>
         ) : (
           <>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
-                <div className="relative w-full min-w-[200px] max-w-md flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                  <Input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Buscar demos…"
-                    className="rounded-xl border-gray-200 pl-9"
-                  />
-                </div>
-                <Badge variant="outline" className="shrink-0 border-gray-200 text-gray-700 font-normal">
-                  {demos.length} {demos.length === 1 ? 'demo' : 'demos'}
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className="shrink-0 border-emerald-200 bg-emerald-50 text-emerald-800 font-normal"
-                >
-                  {activeCount} activas
-                </Badge>
+            <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
+              <div className="relative w-full min-w-[200px] max-w-md flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar demos…"
+                  className="rounded-xl border-gray-200 pl-9"
+                />
               </div>
-              <div className="flex shrink-0 gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={load}
-                  disabled={loading}
-                  className="rounded-xl border-gray-200"
-                  title="Actualizar"
-                >
-                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                </Button>
-                <Button
-                  onClick={() => {
-                    setEditing(null)
-                    setFormOpen(true)
-                  }}
-                  className="rounded-xl"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nueva Demo
-                </Button>
-              </div>
+              <Badge variant="outline" className="shrink-0 border-gray-200 text-gray-700 font-normal">
+                {demos.length} {demos.length === 1 ? 'demo' : 'demos'}
+              </Badge>
+              <Badge
+                variant="outline"
+                className="shrink-0 border-emerald-200 bg-emerald-50 text-emerald-800 font-normal"
+              >
+                {activeCount} activas
+              </Badge>
             </div>
 
             {error && (

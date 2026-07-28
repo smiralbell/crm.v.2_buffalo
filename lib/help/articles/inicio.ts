@@ -108,7 +108,7 @@ El sidebar se filtra por rol. Al pasar el ratón (desktop) se expande y empuja e
 
 ## Developer
 
-Orden: Dashboard → Proyectos → Retención → Facturas → Cómo funciona (+ Ayuda).
+Orden: Dashboard → Proyectos → Retención → Facturas (+ Ayuda).
 
 ## Comercial
 

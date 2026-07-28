@@ -25,7 +25,6 @@ import {
   Sparkles,
   Moon,
   Sun,
-  BookOpen,
   HelpCircle,
   Video,
 } from 'lucide-react'
@@ -119,7 +118,6 @@ const NAV: NavItem[] = [
     ],
   },
   { href: '/developer', label: 'Dashboard', icon: LayoutDashboard, roles: ['developer'] },
-  { href: '/developer/onboarding', label: 'Cómo funciona', icon: BookOpen, roles: ['developer'] },
   { href: '/comercial', label: 'Inicio', icon: LayoutDashboard, roles: ['comercial'] },
   { href: '/comercial/campanas', label: 'Campañas', icon: Megaphone, roles: ['comercial'] },
   { href: '/comercial/pipeline', label: 'Pipeline', icon: Workflow, roles: ['comercial'] },
