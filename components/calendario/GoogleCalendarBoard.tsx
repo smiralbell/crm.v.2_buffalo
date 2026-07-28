@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
+import { useRouter } from 'next/router'
 import FullCalendarImport from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -11,6 +12,13 @@ import CalendarAgendaView from '@/components/calendario/CalendarAgendaView'
 import CalendarEventDetailDialog from '@/components/calendario/CalendarEventDetailDialog'
 import { agendaRangeIso } from '@/components/calendario/calendar-utils'
 import { ChevronLeft, ChevronRight, LayoutGrid, List } from 'lucide-react'
+
+function parseInitialDate(raw: string | string[] | undefined): string | undefined {
+  const v = Array.isArray(raw) ? raw[0] : raw
+  if (!v || !/^\d{4}-\d{2}-\d{2}/.test(v)) return undefined
+  const d = new Date(`${v.slice(0, 10)}T12:00:00`)
+  return Number.isNaN(d.getTime()) ? undefined : v.slice(0, 10)
+}
 
 const FullCalendar =
   typeof FullCalendarImport === 'function'
@@ -63,6 +71,7 @@ function attachNotes(events: CalendarApiEvent[], notes: Record<string, string>):
 }
 
 export default function GoogleCalendarBoard({ onNeedsReauth }: Props) {
+  const router = useRouter()
   const calendarRef = useRef<ComponentRef<typeof FullCalendar> | null>(null)
   const [boardMode, setBoardMode] = useState<BoardMode>('calendario')
   const [events, setEvents] = useState<EventInput[]>([])
@@ -74,6 +83,16 @@ export default function GoogleCalendarBoard({ onNeedsReauth }: Props) {
   const [selected, setSelected] = useState<CalendarApiEvent | null>(null)
   const [view, setView] = useState<CalView>('dayGridMonth')
   const [title, setTitle] = useState('')
+  const initialDate = parseInitialDate(router.query.date)
+
+  useEffect(() => {
+    if (!router.isReady || !initialDate) return
+    const cal = calendarRef.current?.getApi()
+    if (!cal) return
+    cal.gotoDate(initialDate)
+    cal.changeView('timeGridDay')
+    setView('timeGridDay')
+  }, [router.isReady, initialDate])
 
   const loadEvents = useCallback(
     async (timeMin: string, timeMax: string) => {
@@ -284,7 +303,8 @@ export default function GoogleCalendarBoard({ onNeedsReauth }: Props) {
               plugins={plugins}
               locale={esLocale}
               timeZone="Europe/Madrid"
-              initialView="dayGridMonth"
+              initialView={initialDate ? 'timeGridDay' : 'dayGridMonth'}
+              initialDate={initialDate}
               headerToolbar={false}
               height="auto"
               events={events}
