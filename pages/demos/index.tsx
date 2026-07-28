@@ -210,9 +210,10 @@ export default function DemosPage() {
   const handleCreate = async (values: DemoFormValues) => {
     setSaving(true)
     try {
-      await saveDemo(values)
-      setFormOpen(false)
+      const data = await saveDemo(values)
+      if (data.demo) setEditing(data.demo)
       await load()
+      return { rag: data.rag }
     } finally {
       setSaving(false)
     }
@@ -222,10 +223,10 @@ export default function DemosPage() {
     if (!editing) return
     setSaving(true)
     try {
-      await saveDemo(values, { demoId: editing.id })
-      setEditing(null)
-      setFormOpen(false)
+      const data = await saveDemo(values, { demoId: editing.id })
+      if (data.demo) setEditing(data.demo)
       await load()
+      return { rag: data.rag }
     } finally {
       setSaving(false)
     }

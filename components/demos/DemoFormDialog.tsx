@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { AlertTriangle, Info, Plus, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info, Plus, X, XCircle } from 'lucide-react'
 import RetellVariableChips, { insertTextAtSelection } from '@/components/demos/RetellVariableChips'
 import {
   DEFAULT_CRM_ASSISTANT_GREETING,
@@ -56,12 +56,20 @@ export interface DemoFormValues {
   es_asistente_crm: boolean
 }
 
+export type DemoRagUiStatus = {
+  ok: boolean
+  status: string
+  chunks: number
+  message: string
+  error?: string
+}
+
 interface DemoFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   demo?: DemoListItem | null
   allDemos?: DemoListItem[]
-  onSubmit: (values: DemoFormValues) => Promise<void>
+  onSubmit: (values: DemoFormValues) => Promise<{ rag?: DemoRagUiStatus } | void>
   saving?: boolean
 }
 
@@ -171,6 +179,7 @@ export default function DemoFormDialog({
   const fraseRef = useRef<HTMLTextAreaElement>(null)
   const [promptSel, setPromptSel] = useState({ start: 0, end: 0 })
   const [fraseSel, setFraseSel] = useState({ start: 0, end: 0 })
+  const [ragStatus, setRagStatus] = useState<DemoRagUiStatus | null>(null)
 
   const exceptDemoId = demo?.id
   const isEdit = Boolean(demo)
@@ -197,8 +206,19 @@ export default function DemoFormDialog({
         es_principal: demo.es_principal ?? false,
         es_asistente_crm: demo.es_asistente_crm ?? false,
       })
+      if (demo.tipo === 'whatsapp' && !demo.es_asistente_crm) {
+        fetch(`/api/demos/${demo.id}/rag`)
+          .then((r) => r.json())
+          .then((data) => {
+            if (data?.rag) setRagStatus(data.rag as DemoRagUiStatus)
+          })
+          .catch(() => {})
+      } else {
+        setRagStatus(null)
+      }
     } else {
       setForm(emptyForm)
+      setRagStatus(null)
     }
   }, [open, demo])
 
@@ -342,7 +362,12 @@ export default function DemoFormDialog({
 
     const numeros = form.numeros.map((n) => n.trim()).filter(Boolean)
     try {
-      await onSubmit({ ...form, numeros })
+      const result = await onSubmit({ ...form, numeros })
+      if (result?.rag) {
+        setRagStatus(result.rag)
+        // Deja ver la señal RAG; el usuario cierra el diálogo
+        return
+      }
       onOpenChange(false)
     } catch (err) {
       if (err instanceof Error && err.message === 'PHONE_CONFLICT') {
@@ -463,7 +488,10 @@ export default function DemoFormDialog({
             <Textarea
               id="base_conocimiento"
               value={form.base_conocimiento}
-              onChange={(e) => setForm((p) => ({ ...p, base_conocimiento: e.target.value }))}
+              onChange={(e) => {
+                setForm((p) => ({ ...p, base_conocimiento: e.target.value }))
+                setRagStatus(null)
+              }}
               placeholder="Pega aquí el texto scrapeado de la web del cliente…"
               rows={8}
               className="min-h-[160px] rounded-xl border-gray-200 font-mono text-sm"
@@ -474,6 +502,33 @@ export default function DemoFormDialog({
                 <span className="font-mono text-[11px]">search_knowledge</span>. Si es corta, se
                 inyecta entera en el prompt.
               </p>
+            )}
+            {!isVoz && ragStatus && (
+              <div
+                className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+                  ragStatus.ok
+                    ? ragStatus.status === 'empty' || ragStatus.status === 'n_a'
+                      ? 'border-gray-200 bg-gray-50 text-gray-700'
+                      : 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                    : 'border-red-200 bg-red-50 text-red-900'
+                }`}
+              >
+                {ragStatus.ok ? (
+                  ragStatus.status === 'empty' || ragStatus.status === 'n_a' ? (
+                    <Info className="h-4 w-4 shrink-0 mt-0.5 text-gray-500" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
+                  )
+                ) : (
+                  <XCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-600" />
+                )}
+                <div className="min-w-0">
+                  <p className="font-medium leading-snug">{ragStatus.message}</p>
+                  {ragStatus.error && (
+                    <p className="mt-1 text-xs opacity-80 break-words">{ragStatus.error}</p>
+                  )}
+                </div>
+              </div>
             )}
             {isVoz && (
               <p className="text-xs text-gray-500">
@@ -756,6 +811,16 @@ export default function DemoFormDialog({
             <Button type="submit" disabled={saving} className="rounded-xl">
               {saving ? 'Guardando…' : demo ? 'Guardar cambios' : 'Crear demo'}
             </Button>
+            {ragStatus?.ok && ragStatus.status !== 'error' && (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl"
+                onClick={() => onOpenChange(false)}
+              >
+                Cerrar
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

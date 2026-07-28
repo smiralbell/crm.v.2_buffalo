@@ -93,14 +93,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (existing.tipo === 'voz') {
         await updateVoiceDemoInRetell(existing, payload)
-        const demo = await updateDemo(id, payload, options)
-        if (!demo) return res.status(404).json({ error: 'Demo no encontrada' })
-        return res.status(200).json({ demo })
+        const updated = await updateDemo(id, payload, options)
+        if (!updated) return res.status(404).json({ error: 'Demo no encontrada' })
+        return res.status(200).json({ demo: updated.demo, rag: updated.rag })
       }
 
-      const demo = await updateDemo(id, payload, options)
-      if (!demo) return res.status(404).json({ error: 'Demo no encontrada' })
-      return res.status(200).json({ demo })
+      const updated = await updateDemo(id, payload, options)
+      if (!updated) return res.status(404).json({ error: 'Demo no encontrada' })
+      return res.status(200).json({ demo: updated.demo, rag: updated.rag })
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ error: err.errors[0]?.message || 'Datos inválidos' })

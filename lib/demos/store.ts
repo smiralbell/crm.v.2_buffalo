@@ -16,15 +16,71 @@ import type {
 import { normalizePhoneNumber } from './phone'
 
 /** Indexa KB en vectores para demos WhatsApp (no voz / no asistente CRM). */
-async function maybeIndexWhatsappKb(demo: DemoListItem): Promise<void> {
-  if (demo.tipo !== 'whatsapp' || demo.es_asistente_crm) return
+export type DemoRagSaveResult = {
+  ok: boolean
+  status: 'indexed' | 'skipped' | 'empty' | 'n_a' | 'error'
+  chunks: number
+  message: string
+  error?: string
+}
+
+export async function maybeIndexWhatsappKb(demo: DemoListItem): Promise<DemoRagSaveResult> {
+  if (demo.tipo !== 'whatsapp' || demo.es_asistente_crm) {
+    return {
+      ok: true,
+      status: 'n_a',
+      chunks: 0,
+      message:
+        demo.tipo === 'voz'
+          ? 'RAG de voz lo gestiona Retell (no vectores locales).'
+          : 'Asistente CRM no usa este índice RAG.',
+    }
+  }
+
+  const text = demo.base_conocimiento.trim()
+  if (!text) {
+    try {
+      await indexDemoKnowledgeBase(demo.id, '')
+    } catch {
+      /* ignore clear errors */
+    }
+    return {
+      ok: true,
+      status: 'empty',
+      chunks: 0,
+      message: 'Sin base de conocimiento (nada que indexar).',
+    }
+  }
+
   try {
     const result = await indexDemoKnowledgeBase(demo.id, demo.base_conocimiento)
     console.log(
       `[demos/kb-rag] demo ${demo.id}: ${result.skipped ? 'skip' : 'indexed'} ${result.chunks} chunks`
     )
+    if (result.skipped) {
+      return {
+        ok: true,
+        status: 'skipped',
+        chunks: result.chunks,
+        message: `RAG ya estaba al día · ${result.chunks} trozo${result.chunks === 1 ? '' : 's'} en vectores.`,
+      }
+    }
+    return {
+      ok: true,
+      status: 'indexed',
+      chunks: result.chunks,
+      message: `Base subida correctamente al RAG · ${result.chunks} trozo${result.chunks === 1 ? '' : 's'} indexado${result.chunks === 1 ? '' : 's'}.`,
+    }
   } catch (err) {
+    const error = err instanceof Error ? err.message : 'Error desconocido'
     console.error(`[demos/kb-rag] Fallo indexando demo ${demo.id}:`, err)
+    return {
+      ok: false,
+      status: 'error',
+      chunks: 0,
+      message: 'Error al indexar la base en el RAG.',
+      error,
+    }
   }
 }
 
@@ -288,7 +344,7 @@ async function assignDemoNumeros(
 export async function createDemo(
   input: DemoInput,
   options?: DemoSaveOptions
-): Promise<DemoListItem> {
+): Promise<{ demo: DemoListItem; rag: DemoRagSaveResult }> {
   const tipo: DemoTipo = input.tipo === 'voz' ? 'voz' : 'whatsapp'
   const esPrincipal = input.es_principal === true
   // Asistente CRM solo WhatsApp; nunca como captura global de desconocidos
@@ -373,15 +429,15 @@ export async function createDemo(
 
   const demo = await getDemoById(row.id)
   if (!demo) throw new Error('Demo no encontrada tras crear')
-  await maybeIndexWhatsappKb(demo)
-  return demo
+  const rag = await maybeIndexWhatsappKb(demo)
+  return { demo, rag }
 }
 
 export async function updateDemo(
   id: number,
   input: Partial<DemoInput>,
   options?: DemoSaveOptions
-): Promise<DemoListItem | null> {
+): Promise<{ demo: DemoListItem; rag: DemoRagSaveResult } | null> {
   const existing = await getDemoById(id)
   if (!existing) return null
 
@@ -450,8 +506,9 @@ export async function updateDemo(
   }
 
   const demo = await getDemoById(id)
-  if (demo) await maybeIndexWhatsappKb(demo)
-  return demo
+  if (!demo) return null
+  const rag = await maybeIndexWhatsappKb(demo)
+  return { demo, rag }
 }
 
 export async function updateDemoRetellIds(

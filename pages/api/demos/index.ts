@@ -84,7 +84,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(201).json({ demo })
       }
 
-      const demo = await createDemo(
+      const { demo, rag } = await createDemo(
         {
           nombre_cliente: parsed.nombre_cliente.trim(),
           prompt: parsed.prompt.trim(),
@@ -98,7 +98,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
         { mover_numeros: parsed.mover_numeros }
       )
-      return res.status(201).json({ demo })
+      return res.status(201).json({ demo, rag })
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ error: err.errors[0]?.message || 'Datos inválidos' })

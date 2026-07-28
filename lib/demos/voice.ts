@@ -25,7 +25,7 @@ export async function createVoiceDemo(
     throw new Error('La dirección (inbound/outbound) es obligatoria para demos de voz')
   }
 
-  const demo = await createDemo(
+  const { demo } = await createDemo(
     {
       ...input,
       tipo: 'voz',

@@ -139,8 +139,8 @@ export default function DemoDetailPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al guardar')
-      setFormOpen(false)
       await load()
+      return { rag: data.rag }
     } finally {
       setSaving(false)
     }
