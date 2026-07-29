@@ -43,6 +43,25 @@ export interface ConfiguradorConfig {
   /** Proyecto a medida (no empaquetado) */
   title?: string
   description?: string
+  /**
+   * Contexto bruto del proyecto: auditoría, reuniones, notas previas, texto pegado.
+   * La definición (`description`) se regenera con IA a partir de este contexto.
+   */
+  project_context?: string
+  /** Borrador de propuesta comercial generado con IA */
+  proposal_draft?: string
+  /** Borrador de contrato generado con IA */
+  contract_draft?: string
+  /** Borrador de pre-kick-off generado con IA */
+  pre_kickoff_draft?: string
+  /** Facturas vinculadas a este onboarding (hilo) */
+  linked_invoices?: Array<{
+    id: number
+    invoice_number: string
+    total: number
+    status: string
+    linked_at: string
+  }>
   service_type?: ProyectoServiceType
   scope_items?: string[]
   line_items?: ConfiguradorLineItem[]

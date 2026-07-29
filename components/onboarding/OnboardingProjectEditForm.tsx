@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, Save, Search, UserPlus, X, Check, Building2, Mail, Phone, MapPin, User } from 'lucide-react'
+import { Loader2, Save, Search, UserPlus, X, Check, Building2, Mail, Phone, MapPin, User, Sparkles } from 'lucide-react'
+import OnboardingDocumentActions from '@/components/onboarding/OnboardingDocumentActions'
 
 type ContactHit = {
   id: number
@@ -33,6 +34,7 @@ type FormState = {
   contact_telefono: string
   contact_ciudad: string
   name: string
+  project_context: string
   project_definition: string
   setup_fee_eur: string
   monthly_fee_eur: string
@@ -50,6 +52,7 @@ const empty = (): FormState => ({
   contact_telefono: '',
   contact_ciudad: '',
   name: '',
+  project_context: '',
   project_definition: '',
   setup_fee_eur: '',
   monthly_fee_eur: '',
@@ -103,6 +106,8 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
   const [form, setForm] = useState<FormState>(empty)
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(false)
+  const [contextLoading, setContextLoading] = useState(false)
+  const [includeSources, setIncludeSources] = useState(true)
   const [error, setError] = useState('')
   const [okMsg, setOkMsg] = useState('')
 
@@ -153,7 +158,8 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
           contact_telefono: lead?.contact?.telefono || '',
           contact_ciudad: lead?.contact?.ciudad || '',
           name: p?.name || lead?.contact?.empresa || lead?.contact?.nombre || '',
-          project_definition: lead?.notas || '',
+          project_context: data.project_context || '',
+          project_definition: data.project_definition || lead?.notas || '',
           setup_fee_eur: setup,
           monthly_fee_eur: p?.monthly_fee_eur != null ? String(p.monthly_fee_eur) : '',
           duration_amount: dur.amount,
@@ -256,6 +262,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
       const body: Record<string, unknown> = {
         contact_id: form.contact_id ?? undefined,
         name: form.name.trim() || 'Proyecto',
+        project_context: form.project_context.trim() || null,
         project_definition: form.project_definition.trim() || null,
         setup_fee_eur: form.setup_fee_eur ? parseFloat(form.setup_fee_eur) : null,
         monthly_fee_eur: form.monthly_fee_eur ? parseFloat(form.monthly_fee_eur) : null,
@@ -279,6 +286,39 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
       setError(err instanceof Error ? err.message : 'Error al guardar')
     } finally {
       setLoading(false)
+    }
+  }
+
+  /** Guarda contexto y regenera automáticamente la definición con IA. */
+  const updateContextAndDefinition = async () => {
+    const id = Number(leadId)
+    if (!Number.isFinite(id) || id <= 0) return
+    setContextLoading(true)
+    setError('')
+    setOkMsg('')
+    try {
+      const res = await fetch(`/api/onboarding/projects/${id}/context`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          context: form.project_context,
+          include_sources: includeSources,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Error al actualizar contexto')
+      setForm((prev) => ({
+        ...prev,
+        project_context: data.context || prev.project_context,
+        project_definition: data.definition || prev.project_definition,
+      }))
+      setOkMsg('Contexto guardado · definición actualizada con IA')
+      onSaved?.()
+      window.setTimeout(() => setOkMsg(''), 3500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al actualizar contexto')
+    } finally {
+      setContextLoading(false)
     }
   }
 
@@ -467,18 +507,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Nombre del proyecto</Label>
-            <Input value={form.name} onChange={(e) => set('name', e.target.value)} disabled={loading} />
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Definición del proyecto</Label>
-            <Textarea
-              rows={8}
-              value={form.project_definition}
-              onChange={(e) => set('project_definition', e.target.value)}
-              disabled={loading}
-              placeholder="Qué se está construyendo, alcance, notas…"
-              className="min-h-[180px] resize-y text-sm leading-relaxed"
-            />
+            <Input value={form.name} onChange={(e) => set('name', e.target.value)} disabled={loading || contextLoading} />
           </div>
           <div className="space-y-1.5">
             <Label>Precio del proyecto (€)</Label>
@@ -487,7 +516,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
               step="0.01"
               value={form.setup_fee_eur}
               onChange={(e) => set('setup_fee_eur', e.target.value)}
-              disabled={loading}
+              disabled={loading || contextLoading}
             />
           </div>
           <div className="space-y-1.5">
@@ -497,7 +526,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
               step="0.01"
               value={form.monthly_fee_eur}
               onChange={(e) => set('monthly_fee_eur', e.target.value)}
-              disabled={loading}
+              disabled={loading || contextLoading}
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
@@ -509,7 +538,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
                 step="1"
                 value={form.duration_amount}
                 onChange={(e) => set('duration_amount', e.target.value)}
-                disabled={loading}
+                disabled={loading || contextLoading}
                 placeholder="Ej. 4"
                 className="w-28"
               />
@@ -534,7 +563,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
               type="date"
               value={form.fecha_inicio_real}
               onChange={(e) => set('fecha_inicio_real', e.target.value)}
-              disabled={loading}
+              disabled={loading || contextLoading}
             />
           </div>
           <div className="space-y-1.5">
@@ -543,10 +572,87 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
               type="date"
               value={form.fecha_fin_real}
               onChange={(e) => set('fecha_fin_real', e.target.value)}
-              disabled={loading}
+              disabled={loading || contextLoading}
             />
           </div>
         </div>
+      </div>
+
+      {/* Contexto → Definición (IA) */}
+      <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50/50 p-4 sm:p-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            Contexto y definición
+          </p>
+          <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+            El contexto es la materia prima (auditoría, reuniones, lo hablado antes…).
+            Al actualizarlo, la IA regenera solo la definición — el contexto bien redactado y explicado.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Contexto del proyecto</Label>
+          <Textarea
+            rows={10}
+            value={form.project_context}
+            onChange={(e) => set('project_context', e.target.value)}
+            disabled={loading || contextLoading}
+            placeholder="Pega notas, lo comentado antes de la reunión, hallazgos… La auditoría y reuniones se pueden añadir automáticamente abajo."
+            className="min-h-[200px] resize-y text-sm leading-relaxed bg-white"
+          />
+        </div>
+
+        <label className="flex items-start gap-2.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={includeSources}
+            onChange={(e) => setIncludeSources(e.target.checked)}
+            disabled={contextLoading}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300"
+          />
+          <span className="text-xs text-gray-600 leading-relaxed">
+            Incluir automáticamente auditoría del copiloto y resúmenes de reuniones Fireflies
+          </span>
+        </label>
+
+        <button
+          type="button"
+          onClick={() => void updateContextAndDefinition()}
+          disabled={loading || contextLoading}
+          className="inline-flex items-center gap-2 px-4 h-10 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
+        >
+          {contextLoading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Actualizando definición…
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" />
+              Actualizar contexto y definición
+            </>
+          )}
+        </button>
+
+        <div className="space-y-1.5 pt-2 border-t border-gray-200">
+          <Label>Definición del proyecto</Label>
+          <p className="text-[11px] text-gray-400 mb-1">
+            Se actualiza sola con la IA al cambiar el contexto. Puedes retocarla a mano si hace falta.
+          </p>
+          <Textarea
+            rows={10}
+            value={form.project_definition}
+            onChange={(e) => set('project_definition', e.target.value)}
+            disabled={loading || contextLoading}
+            placeholder="La definición aparecerá aquí tras actualizar el contexto…"
+            className="min-h-[200px] resize-y text-sm leading-relaxed bg-white"
+          />
+        </div>
+      </div>
+
+      {/* Documentos */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+        <OnboardingDocumentActions leadId={leadId} />
       </div>
 
       {error && (

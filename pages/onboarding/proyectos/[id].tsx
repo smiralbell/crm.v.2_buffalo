@@ -1,20 +1,23 @@
 import { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
 import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
 import DeleteOnboardingProjectDialog from '@/components/onboarding/DeleteOnboardingProjectDialog'
+import OnboardingSectionTabs from '@/components/onboarding/OnboardingSectionTabs'
 import { DeveloperTags } from '@/components/gestion-proyecto/ProjectDevelopersPanel'
 import {
-  ArrowLeft, Pencil, FileText, Settings, User, Building2,
-  Mail, Phone, MapPin, Receipt, Calendar, Trash2, CheckCircle2, PlayCircle,
+  ArrowLeft, Pencil, Mail, Phone, MapPin, Building2,
+  Trash2, CheckCircle2, PlayCircle, Calendar,
 } from 'lucide-react'
 import { buildProjectViewData, fmt } from '@/lib/onboarding/project-view'
 import { isAuditConfiguracion } from '@/lib/onboarding/audit/config-detect'
 import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
+import OnboardingDocumentActions from '@/components/onboarding/OnboardingDocumentActions'
+import OnboardingInvoicesThread from '@/components/onboarding/OnboardingInvoicesThread'
 
 interface Props {
   lead: {
@@ -79,10 +82,23 @@ const estadoLabel: Record<string, string> = {
   cerrado: 'Contrato', activo: 'Activo', negociando: 'Negociando',
 }
 
+function MetaRow({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-6 py-2.5 border-b border-gray-100 last:border-0">
+      <dt className="text-[12px] text-gray-400 shrink-0">{label}</dt>
+      <dd className="text-sm font-medium text-gray-900 text-right min-w-0">{children}</dd>
+    </div>
+  )
+}
+
 export default function ProyectoDetailPage({ lead }: Props) {
   const router = useRouter()
-  const [iframeHeight, setIframeHeight] = useState(820)
-  const [iframeUrl, setIframeUrl] = useState('')
   const [developers, setDevelopers] = useState<{ id: number; name: string }[]>([])
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [esBuffalo, setEsBuffalo] = useState(false)
@@ -162,6 +178,7 @@ export default function ProyectoDetailPage({ lead }: Props) {
   }
 
   const displayName = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
+  const initial = (displayName || '?').charAt(0).toUpperCase()
   const projectBase = useMemo(
     () => buildProjectViewData(lead.configuracion, lead.valor, lead.notas),
     [lead.configuracion, lead.valor, lead.notas]
@@ -195,364 +212,443 @@ export default function ProyectoDetailPage({ lead }: Props) {
     if (lead.contact?.empresa)  p.set('empresa', lead.contact.empresa)
     if (lead.contact?.email)    p.set('email', lead.contact.email)
     if (lead.contact?.ciudad)   p.set('ciudad', lead.contact.ciudad || '')
+    p.set('edit', '1')
     return `/onboarding/configure?${p.toString()}`
   }, [lead])
 
-  useEffect(() => {
-    if (!lead.configuracion) return
-    const p = new URLSearchParams({ crm: '1', projectView: '1' })
-    p.set('leadId', String(lead.id))
-    p.set('cfg', lead.configuracion)
-    if (lead.contact?.nombre)  p.set('nombre', lead.contact.nombre)
+  const auditUrl = useMemo(() => {
+    const p = new URLSearchParams({ lead: String(lead.id) })
+    if (lead.contact?.nombre) p.set('nombre', lead.contact.nombre)
     if (lead.contact?.empresa) p.set('empresa', lead.contact.empresa)
-    if (lead.contact?.email)   p.set('email', lead.contact.email)
-    if (lead.contact?.ciudad)  p.set('ciudad', lead.contact.ciudad || '')
-    p.set('baseurl', window.location.origin)
-    setIframeUrl(`/configurador.html?${p.toString()}`)
+    if (lead.contact?.email) p.set('email', lead.contact.email)
+    return `/onboarding/audit?${p.toString()}`
   }, [lead])
 
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type === 'buffalo_iframe_height') {
-        setIframeHeight(Math.max(640, e.data.height + 24))
-      }
-    }
-    window.addEventListener('message', handler)
-    return () => window.removeEventListener('message', handler)
-  }, [])
+  const hasEconomics =
+    project.setupTotal > 0 || (project.maintMonthly != null && project.maintMonthly > 0)
+
+  const startLabel = fmtDate(timeline.fecha_inicio_real)
+  const endLabel = timeline.fecha_fin_real
+    ? fmtDate(timeline.fecha_fin_real)
+    : null
+  const inProgress = Boolean(timeline.fecha_inicio_real) && !timeline.fecha_fin_real
 
   return (
     <Layout>
-      <div className="w-full space-y-6">
+      <div className="w-full space-y-8">
+        <OnboardingSectionTabs active="projects" />
 
-        {/* Header */}
-        <div className="rounded-xl bg-gray-900 text-white px-5 py-3 flex items-center justify-between gap-3">
-          <p className="text-xs font-medium tracking-wide uppercase opacity-80">Vista completa del proyecto</p>
-          <p className="text-xs opacity-60 hidden sm:block">Resumen · Cliente · Documentos</p>
-        </div>
+        <div className="mx-auto w-full max-w-6xl space-y-8">
+          {/* Back */}
+          <Link
+            href="/onboarding?tab=projects"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-gray-800 transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Proyectos
+          </Link>
 
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-start gap-3 min-w-0">
-            <Link
-              href="/onboarding?tab=projects"
-              className="mt-1 flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-700 transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-gray-400 mb-0.5">Proyecto</p>
-              <h1 className="text-2xl font-bold text-gray-900 truncate">{displayName}</h1>
-              {lead.contact?.empresa && (
-                <p className="text-sm text-gray-500 mt-0.5">{lead.contact.empresa}</p>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 flex-shrink-0 justify-end">
-            {isAuditConfiguracion(lead.configuracion) && (
-              <Link
-                href={`/onboarding/audit?${new URLSearchParams({
-                  lead: String(lead.id),
-                  ...(lead.contact?.nombre ? { nombre: lead.contact.nombre } : {}),
-                  ...(lead.contact?.empresa ? { empresa: lead.contact.empresa } : {}),
-                  ...(lead.contact?.email ? { email: lead.contact.email } : {}),
-                }).toString()}`}
-                className="inline-flex items-center gap-2 px-4 h-10 text-sm font-semibold rounded-xl bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
-              >
-                <PlayCircle className="h-4 w-4" />
-                Reanudar auditoría
-              </Link>
-            )}
-            {esBuffalo && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Proyecto Buffalo
-              </span>
-            )}
-            <AssignDevelopersButton leadId={lead.id} onAssigned={loadDevelopers} />
-            {!esBuffalo ? (
-              <button
-                type="button"
-                onClick={toggleBuffalo}
-                disabled={buffaloLoading || !lead.configuracion}
-                className="inline-flex items-center gap-2 px-4 h-10 text-sm font-semibold rounded-xl bg-gray-900 text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
-                title={
-                  lead.configuracion
-                    ? 'Poner en marcha como proyecto real de Buffalo'
-                    : 'Necesitas configuración primero'
-                }
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                {buffaloLoading ? '…' : 'Poner en marcha'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={toggleBuffalo}
-                disabled={buffaloLoading}
-                className="inline-flex items-center gap-2 px-3 h-10 text-sm font-medium rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
-                title="Quitar de Gestión de proyectos"
-              >
-                Quitar de Buffalo
-              </button>
-            )}
-            <Link
-              href={configureUrl}
-              className="inline-flex items-center gap-2 px-4 h-10 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition-colors"
-            >
-              <Pencil className="h-4 w-4" />
-              Editar
-            </Link>
-            <button
-              type="button"
-              onClick={() => setDeleteOpen(true)}
-              className="inline-flex items-center gap-2 px-4 h-10 border border-red-200 text-red-600 text-sm font-medium rounded-xl hover:bg-red-50 transition-colors"
-            >
-              <Trash2 className="h-4 w-4" />
-              Eliminar
-            </button>
-          </div>
-        </div>
-
-        {buffaloError && (
-          <p className="text-sm text-red-600">{buffaloError}</p>
-        )}
-
-        <DeleteOnboardingProjectDialog
-          open={deleteOpen}
-          leadId={lead.id}
-          projectName={displayName}
-          onOpenChange={setDeleteOpen}
-          onDeleted={() => {
-            void router.push('/onboarding?tab=projects')
-          }}
-        />
-
-        {/* KPI strip */}
-        {(project.setupTotal > 0 || (project.maintMonthly != null && project.maintMonthly > 0)) && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="rounded-2xl border border-gray-200 bg-white p-5">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Setup total</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {project.setupTotal > 0 ? fmt(project.setupTotal) : '—'}
-              </p>
-              <p className="text-xs text-gray-400 mt-0.5">sin IVA</p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white p-5">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">1er pago · inicio</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {project.setupTotal > 0 ? fmt(project.pay1) : '—'}
-              </p>
-              <p className="text-xs text-gray-400 mt-0.5">50%</p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white p-5">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">2do pago · producción</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {project.setupTotal > 0 ? fmt(project.pay2) : '—'}
-              </p>
-              <p className="text-xs text-gray-400 mt-0.5">50%</p>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white p-5">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Mensualidad</p>
-              {project.maintMonthly != null && project.maintMonthly > 0 ? (
-                <>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{fmt(project.maintMonthly)}<span className="text-sm font-medium text-gray-400">/mes</span></p>
-                  <p className="text-xs text-gray-400 mt-0.5">{project.maintLabel}</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-2xl font-bold text-gray-400 mt-1">—</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Sin mensualidad</p>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Client + meta */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-4">
-              <User className="h-4 w-4 text-gray-400" />
-              Cliente
-            </h2>
-            <dl className="space-y-3">
-              {lead.contact?.nombre && (
-                <div className="flex justify-between gap-4 text-sm">
-                  <dt className="text-gray-400">Nombre</dt>
-                  <dd className="font-medium text-gray-900 text-right">{lead.contact.nombre}</dd>
-                </div>
-              )}
-              {lead.contact?.empresa && (
-                <div className="flex justify-between gap-4 text-sm">
-                  <dt className="text-gray-400 flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> Empresa</dt>
-                  <dd className="font-medium text-gray-900 text-right">{lead.contact.empresa}</dd>
-                </div>
-              )}
-              {lead.contact?.email && (
-                <div className="flex justify-between gap-4 text-sm">
-                  <dt className="text-gray-400 flex items-center gap-1"><Mail className="h-3.5 w-3.5" /> Email</dt>
-                  <dd className="text-right">
-                    <a href={`mailto:${lead.contact.email}`} className="font-medium text-blue-600 hover:underline">
-                      {lead.contact.email}
-                    </a>
-                  </dd>
-                </div>
-              )}
-              {lead.contact?.telefono && (
-                <div className="flex justify-between gap-4 text-sm">
-                  <dt className="text-gray-400 flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> Teléfono</dt>
-                  <dd className="font-medium text-gray-900 text-right">{lead.contact.telefono}</dd>
-                </div>
-              )}
-              {lead.contact?.ciudad && (
-                <div className="flex justify-between gap-4 text-sm">
-                  <dt className="text-gray-400 flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> Ciudad</dt>
-                  <dd className="font-medium text-gray-900 text-right">{lead.contact.ciudad}</dd>
-                </div>
-              )}
-            </dl>
-          </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-white p-6">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-4">
-              <Settings className="h-4 w-4 text-gray-400" />
-              Proyecto
-            </h2>
-            <dl className="space-y-3">
-              {project.ref && (
-                <div className="flex justify-between gap-4 text-sm">
-                  <dt className="text-gray-400">Referencia</dt>
-                  <dd className="font-mono text-xs font-medium text-gray-900 text-right">{project.ref}</dd>
-                </div>
-              )}
-              <div className="flex justify-between gap-4 text-sm">
-                <dt className="text-gray-400">Estado</dt>
-                <dd>
-                  <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wide bg-gray-100 text-gray-700">
+          {/* Hero */}
+          <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gray-900 text-white text-lg font-semibold tracking-tight shadow-sm">
+                {initial}
+              </div>
+              <div className="min-w-0 space-y-1.5">
+                <h1 className="text-2xl font-semibold tracking-tight text-gray-900 truncate">
+                  {displayName}
+                </h1>
+                {lead.contact?.empresa && (
+                  <p className="text-sm text-gray-500 truncate">{lead.contact.empresa}</p>
+                )}
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <span className="inline-flex px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-gray-100 text-gray-700">
                     {estadoLabel[lead.estado] || lead.estado}
                   </span>
-                </dd>
-              </div>
-              {lead.prioridad && (
-                <div className="flex justify-between gap-4 text-sm">
-                  <dt className="text-gray-400">Prioridad</dt>
-                  <dd className="font-medium text-gray-900 capitalize text-right">{lead.prioridad}</dd>
+                  {esBuffalo && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-emerald-50 text-emerald-800 border border-emerald-100">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Buffalo
+                    </span>
+                  )}
+                  {isAuditConfiguracion(lead.configuracion) && (
+                    <span className="inline-flex px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-sky-50 text-sky-800 border border-sky-100">
+                      Auditoría
+                    </span>
+                  )}
+                  {project.ref && (
+                    <span className="inline-flex px-2.5 py-1 rounded-full text-[10px] font-mono font-medium tracking-wide bg-white text-gray-500 border border-gray-200">
+                      {project.ref}
+                    </span>
+                  )}
                 </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <Link
+                href={auditUrl}
+                className="inline-flex items-center gap-2 px-4 h-10 text-sm font-medium rounded-xl bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
+              >
+                <PlayCircle className="h-4 w-4" />
+                {isAuditConfiguracion(lead.configuracion)
+                  ? 'Reanudar auditoría'
+                  : 'Iniciar auditoría'}
+              </Link>
+              {!esBuffalo ? (
+                <button
+                  type="button"
+                  onClick={toggleBuffalo}
+                  disabled={buffaloLoading || !lead.configuracion}
+                  className="inline-flex items-center gap-2 px-4 h-10 text-sm font-medium rounded-xl bg-gray-900 text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
+                  title={
+                    lead.configuracion
+                      ? 'Poner en marcha como proyecto real de Buffalo'
+                      : 'Necesitas configuración primero'
+                  }
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {buffaloLoading ? '…' : 'Poner en marcha'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={toggleBuffalo}
+                  disabled={buffaloLoading}
+                  className="inline-flex items-center gap-2 px-4 h-10 text-sm font-medium rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Quitar de Buffalo
+                </button>
               )}
-              <div className="flex justify-between gap-4 text-sm">
-                <dt className="text-gray-400">Tiempo previsto</dt>
-                <dd className="font-medium text-gray-900 text-right">
-                  {timeline.tiempo_previsto || '—'}
-                </dd>
+              <AssignDevelopersButton leadId={lead.id} onAssigned={loadDevelopers} />
+              <Link
+                href={configureUrl}
+                className="inline-flex items-center gap-2 px-4 h-10 text-sm font-medium rounded-xl border border-gray-200 text-gray-800 hover:bg-gray-50 transition-colors"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Editar
+              </Link>
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(true)}
+                className="inline-flex items-center justify-center h-10 w-10 rounded-xl border border-red-100 text-red-500 hover:bg-red-50 transition-colors"
+                title="Eliminar proyecto"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </header>
+
+          {buffaloError && (
+            <p className="text-sm text-red-600">{buffaloError}</p>
+          )}
+
+          <DeleteOnboardingProjectDialog
+            open={deleteOpen}
+            leadId={lead.id}
+            projectName={displayName}
+            onOpenChange={setDeleteOpen}
+            onDeleted={() => {
+              void router.push('/onboarding?tab=projects')
+            }}
+          />
+
+          {/* Nombre + definición del proyecto */}
+          <section className="rounded-2xl border border-gray-200 bg-white px-6 py-6 sm:px-8 sm:py-7">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+              Proyecto
+            </p>
+            <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-gray-900">
+              {project.projectName || 'Sin nombre de proyecto'}
+            </h2>
+            {project.projectDefinition ? (
+              <div className="mt-4 space-y-3">
+                {project.projectDefinition.split('\n').filter(Boolean).map((line, i) => (
+                  <p key={i} className="text-sm leading-relaxed text-gray-600">
+                    {line}
+                  </p>
+                ))}
               </div>
-              <div className="flex justify-between gap-4 text-sm">
-                <dt className="text-gray-400 flex items-center gap-1">
-                  <Calendar className="h-3.5 w-3.5" /> Inicio real
-                </dt>
-                <dd className="font-medium text-gray-900 text-right">
-                  {fmtDate(timeline.fecha_inicio_real) || '—'}
-                </dd>
+            ) : (
+              <p className="mt-3 text-sm text-gray-400">
+                Todavía no hay definición del proyecto.
+              </p>
+            )}
+            {project.scopeItems.length > 0 &&
+              project.projectDefinition !== project.scopeItems.join('\n') && (
+                <ul className="mt-5 pt-5 border-t border-gray-100 space-y-2">
+                  {project.scopeItems.map((item) => (
+                    <li
+                      key={item}
+                      className="flex gap-2.5 text-sm text-gray-600 leading-relaxed"
+                    >
+                      <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-gray-300" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </section>
+
+          {project.projectContext && (
+            <section className="rounded-2xl border border-gray-200 bg-white px-6 py-6 sm:px-8 sm:py-7">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
+                Contexto
+              </p>
+              <p className="text-xs text-gray-400 mb-4">
+                Materia prima: auditoría, reuniones y notas. La definición de arriba es este contexto
+                redactado.
+              </p>
+              <div className="max-h-72 overflow-y-auto rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 space-y-2">
+                {project.projectContext.split('\n').filter(Boolean).map((line, i) => (
+                  <p key={i} className="text-xs leading-relaxed text-gray-600 whitespace-pre-wrap">
+                    {line}
+                  </p>
+                ))}
               </div>
-              <div className="flex justify-between gap-4 text-sm">
-                <dt className="text-gray-400 flex items-center gap-1">
-                  <Calendar className="h-3.5 w-3.5" /> Fin real
-                </dt>
-                <dd className="font-medium text-gray-900 text-right">
-                  {timeline.fecha_fin_real
-                    ? fmtDate(timeline.fecha_fin_real)
-                    : (
-                      <span className="text-amber-700 font-medium">En curso</span>
-                    )}
-                </dd>
+            </section>
+          )}
+
+          {/* Documentos: propuesta, factura, contrato, pre-kick-off */}
+          <div className="rounded-2xl border border-gray-200 bg-white px-5 py-5 sm:px-6 sm:py-6">
+            <OnboardingDocumentActions leadId={lead.id} />
+          </div>
+
+          <OnboardingInvoicesThread leadId={lead.id} />
+
+          {/* Economics — single strip */}
+          {hasEconomics && (
+            <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-gray-100">
+                <div className="px-5 py-5 text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Setup</p>
+                  <p className="mt-1.5 text-xl font-semibold tabular-nums text-gray-900">
+                    {project.setupTotal > 0 ? fmt(project.setupTotal) : '—'}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-gray-400">sin IVA</p>
+                </div>
+                <div className="px-5 py-5 text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">1er pago</p>
+                  <p className="mt-1.5 text-xl font-semibold tabular-nums text-gray-900">
+                    {project.setupTotal > 0 ? fmt(project.pay1) : '—'}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-gray-400">inicio · 50%</p>
+                </div>
+                <div className="px-5 py-5 text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">2º pago</p>
+                  <p className="mt-1.5 text-xl font-semibold tabular-nums text-gray-900">
+                    {project.setupTotal > 0 ? fmt(project.pay2) : '—'}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-gray-400">producción · 50%</p>
+                </div>
+                <div className="px-5 py-5 text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Mensual</p>
+                  {project.maintMonthly != null && project.maintMonthly > 0 ? (
+                    <>
+                      <p className="mt-1.5 text-xl font-semibold tabular-nums text-gray-900">
+                        {fmt(project.maintMonthly)}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-gray-400">
+                        {project.maintLabel || '/mes'}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-1.5 text-xl font-semibold text-gray-300">—</p>
+                      <p className="mt-0.5 text-[11px] text-gray-400">sin recurrente</p>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="flex justify-between gap-4 text-sm">
-                <dt className="text-gray-400 flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> Actualizado</dt>
-                <dd className="text-gray-900 text-right">
-                  {new Date(lead.updated_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </dd>
+            </section>
+          )}
+
+          {/* Timeline */}
+          <section className="rounded-2xl border border-gray-200 bg-white px-6 py-6">
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <h2 className="text-sm font-semibold text-gray-900">Fechas</h2>
+              {timeline.tiempo_previsto && (
+                <span className="text-xs text-gray-400">
+                  Previsto · <span className="text-gray-700 font-medium">{timeline.tiempo_previsto}</span>
+                </span>
+              )}
+            </div>
+
+            <div className="relative flex items-start justify-between gap-4">
+              <div className="absolute left-4 right-4 top-[11px] h-px bg-gray-100" aria-hidden />
+              <div
+                className={
+                  endLabel
+                    ? 'absolute left-4 right-4 top-[11px] h-px bg-emerald-400'
+                    : inProgress
+                      ? 'absolute left-4 top-[11px] h-px w-1/2 bg-amber-300'
+                      : 'absolute left-4 top-[11px] h-px w-0'
+                }
+                aria-hidden
+              />
+
+              <div className="relative z-[1] flex flex-col items-start gap-2 min-w-0 flex-1">
+                <span
+                  className={`flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 bg-white ${
+                    startLabel ? 'border-gray-900' : 'border-gray-200'
+                  }`}
+                >
+                  {startLabel ? (
+                    <span className="h-2 w-2 rounded-full bg-gray-900" />
+                  ) : null}
+                </span>
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Inicio</p>
+                  <p className="text-sm font-medium text-gray-900 mt-0.5">
+                    {startLabel || 'Sin definir'}
+                  </p>
+                </div>
               </div>
-              <div className="flex justify-between gap-4 text-sm items-start">
-                <dt className="text-gray-400 pt-0.5">Developers</dt>
-                <dd className="text-right">
+
+              <div className="relative z-[1] flex flex-col items-end gap-2 min-w-0 flex-1 text-right">
+                <span
+                  className={`flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 bg-white ${
+                    endLabel
+                      ? 'border-emerald-500'
+                      : inProgress
+                        ? 'border-amber-400'
+                        : 'border-gray-200'
+                  }`}
+                >
+                  {endLabel ? (
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  ) : inProgress ? (
+                    <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                  ) : null}
+                </span>
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Fin</p>
+                  <p className={`text-sm font-medium mt-0.5 ${inProgress ? 'text-amber-700' : 'text-gray-900'}`}>
+                    {endLabel || (inProgress ? 'En curso' : 'Sin definir')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <p className="mt-5 pt-4 border-t border-gray-100 text-center text-[11px] text-gray-400 flex items-center justify-center gap-1.5">
+              <Calendar className="h-3 w-3" />
+              Actualizado{' '}
+              {new Date(lead.updated_at).toLocaleDateString('es-ES', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+              })}
+            </p>
+          </section>
+
+          {/* Contact + project meta */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6">
+              <h2 className="text-sm font-semibold text-gray-900 mb-1">Cliente</h2>
+              <p className="text-[11px] text-gray-400 mb-4">Datos de contacto</p>
+
+              <div className="space-y-3">
+                {lead.contact?.nombre && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-500">
+                      <span className="text-xs font-semibold">{initial}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-gray-400">Nombre</p>
+                      <p className="text-sm font-medium text-gray-900 truncate">{lead.contact.nombre}</p>
+                    </div>
+                  </div>
+                )}
+                {lead.contact?.empresa && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-400">
+                      <Building2 className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-gray-400">Empresa</p>
+                      <p className="text-sm font-medium text-gray-900 truncate">{lead.contact.empresa}</p>
+                    </div>
+                  </div>
+                )}
+                {lead.contact?.email && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-400">
+                      <Mail className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-gray-400">Email</p>
+                      <a
+                        href={`mailto:${lead.contact.email}`}
+                        className="text-sm font-medium text-gray-900 hover:underline truncate block"
+                      >
+                        {lead.contact.email}
+                      </a>
+                    </div>
+                  </div>
+                )}
+                {lead.contact?.telefono && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-400">
+                      <Phone className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-gray-400">Teléfono</p>
+                      <p className="text-sm font-medium text-gray-900">{lead.contact.telefono}</p>
+                    </div>
+                  </div>
+                )}
+                {lead.contact?.ciudad && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-400">
+                      <MapPin className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-gray-400">Ciudad</p>
+                      <p className="text-sm font-medium text-gray-900">{lead.contact.ciudad}</p>
+                    </div>
+                  </div>
+                )}
+                {!lead.contact?.nombre && !lead.contact?.email && !lead.contact?.empresa && (
+                  <p className="text-sm text-gray-400 py-2">Sin datos de contacto</p>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6">
+              <h2 className="text-sm font-semibold text-gray-900 mb-1">Estado y equipo</h2>
+              <p className="text-[11px] text-gray-400 mb-4">Metadatos del proyecto</p>
+
+              <dl>
+                <MetaRow label="Estado">
+                  <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-gray-100 text-gray-700">
+                    {estadoLabel[lead.estado] || lead.estado}
+                  </span>
+                </MetaRow>
+                {lead.prioridad && (
+                  <MetaRow label="Prioridad">
+                    <span className="capitalize">{lead.prioridad}</span>
+                  </MetaRow>
+                )}
+                {project.ref && (
+                  <MetaRow label="Referencia">
+                    <span className="font-mono text-xs">{project.ref}</span>
+                  </MetaRow>
+                )}
+                <MetaRow label="Developers">
                   {developers.length > 0 ? (
                     <DeveloperTags developers={developers} className="justify-end" />
                   ) : (
-                    <span className="text-xs text-gray-400">Sin asignar</span>
+                    <span className="text-xs font-normal text-gray-400">Sin asignar</span>
                   )}
-                </dd>
-              </div>
-            </dl>
-            {project.services.length > 0 && (
-              <div className="mt-5 pt-4 border-t border-gray-100">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400 mb-2">Servicios</p>
-                <div className="flex flex-wrap gap-2">
-                  {project.services.map((s) => (
-                    <span key={s} className="px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-100 text-xs font-medium text-gray-700">
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+                </MetaRow>
+              </dl>
+            </section>
           </div>
+
+          {/* Meetings */}
+          <LeadMeetingsPanel leadId={lead.id} />
         </div>
-
-        <LeadMeetingsPanel leadId={lead.id} />
-
-        {/* Resumen detallado */}
-        {lead.notas && (
-          <div className="rounded-2xl border border-gray-200 bg-white p-6">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 mb-4">
-              <Receipt className="h-4 w-4 text-gray-400" />
-              Resumen económico
-            </h2>
-            <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans leading-relaxed">
-              {lead.notas}
-            </pre>
-            {lead.valor != null && (
-              <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
-                <span className="text-sm text-gray-500">Total con IVA (21%)</span>
-                <span className="text-lg font-bold text-gray-900">
-                  {fmt(Math.round(lead.valor * 1.21))}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Documentos — configurador step 2 embebido */}
-        {lead.configuracion ? (
-          <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                <FileText className="h-4 w-4 text-gray-400" />
-                Documentos del proyecto
-              </h2>
-              <p className="text-xs text-gray-400">Propuesta · Onboarding · Contrato</p>
-            </div>
-            <iframe
-              src={iframeUrl || undefined}
-              title="Documentos del proyecto"
-              style={{
-                width: '100%',
-                height: `${iframeHeight}px`,
-                border: 'none',
-                display: 'block',
-              }}
-              scrolling="no"
-            />
-          </div>
-        ) : (
-          <div className="rounded-2xl border-2 border-dashed border-gray-200 py-14 text-center">
-            <p className="text-sm text-gray-400 mb-4">Este proyecto aún no tiene configuración guardada.</p>
-            <Link
-              href={configureUrl}
-              className="inline-flex items-center gap-2 px-4 h-10 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition-colors"
-            >
-              Configurar proyecto
-            </Link>
-          </div>
-        )}
       </div>
     </Layout>
   )

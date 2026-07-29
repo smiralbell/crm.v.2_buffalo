@@ -10,6 +10,13 @@ export interface ProjectViewData {
   pay2: number
   ref: string | null
   services: string[]
+  /** Nombre comercial del proyecto (title o resumen de paquetes) */
+  projectName: string | null
+  /** Definición / brief del proyecto */
+  projectDefinition: string | null
+  /** Contexto bruto (auditoría, reuniones, notas) */
+  projectContext: string | null
+  scopeItems: string[]
 }
 
 const fmt = (n: number) =>
@@ -55,6 +62,29 @@ export function buildProjectViewData(
     })
   }
 
+  const scopeItems = (cfg?.scope_items || []).map((s) => String(s).trim()).filter(Boolean)
+
+  let projectName = (cfg?.title || '').trim() || null
+  if (!projectName && services.length) {
+    projectName = cfg?.pack ? 'Pack Voz + Chat' : services.join(' · ')
+  }
+
+  let projectDefinition = (cfg?.description || '').trim() || null
+  if (!projectDefinition && scopeItems.length) {
+    projectDefinition = scopeItems.join('\n')
+  }
+  if (!projectDefinition && notas) {
+    const cleaned = notas
+      .split('\n')
+      .map((l) => l.replace(/^[•\-\s—]+/, '').trim())
+      .filter((l) => l && !l.toLowerCase().startsWith('total setup') && !l.startsWith('audit_status:'))
+      .slice(0, 8)
+      .join('\n')
+    if (cleaned) projectDefinition = cleaned
+  }
+
+  const projectContext = (cfg?.project_context || '').trim() || null
+
   return {
     cfg,
     setupTotal,
@@ -64,6 +94,10 @@ export function buildProjectViewData(
     pay2,
     ref: cfg?.ref ?? null,
     services,
+    projectName,
+    projectDefinition,
+    projectContext,
+    scopeItems,
   }
 }
 

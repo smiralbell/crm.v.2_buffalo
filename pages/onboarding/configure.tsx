@@ -45,15 +45,17 @@ export default function ConfigurePage() {
   const [notifType, setNotifType]           = useState<'ok' | 'err'>('ok')
   const [draftSaved, setDraftSaved]         = useState(false)
   const [savedConfig, setSavedConfig]       = useState('')   // base64 saved configuracion
+  const [configLoading, setConfigLoading]   = useState(true)
   const [saving, setSaving]                 = useState(false)
   const [configSaved, setConfigSaved]       = useState(false)
   const [resolvedLeadId, setResolvedLeadId] = useState('')
   const [ensuringLead, setEnsuringLead]     = useState(false)
 
   // Read URL params
-  const { lead, nombre, empresa, email, ciudad, pipeline, card, mode } = router.query as Record<string, string>
+  const { lead, nombre, empresa, email, ciudad, pipeline, card, mode, edit } = router.query as Record<string, string>
   const activeLeadId = resolvedLeadId || lead || ''
   const [pickedMode, setPickedMode] = useState<'packaged' | 'custom' | 'audit' | null>(null)
+  const isEditIntent = edit === '1' || edit === 'true'
 
   const effectiveMode: 'packaged' | 'custom' | 'audit' | null =
     (mode === 'custom' || mode === 'packaged' || mode === 'audit' ? mode : null) ||
@@ -137,16 +139,40 @@ export default function ConfigurePage() {
 
   // ── Step 0: load saved configuracion from lead ───────────────────────
   useEffect(() => {
-    if (!router.isReady || !activeLeadId) return
+    if (!router.isReady) return
+    if (!activeLeadId) {
+      setSavedConfig('')
+      setConfigSaved(false)
+      setConfigLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setConfigLoading(true)
+
     fetch(`/api/leads/${activeLeadId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
+        if (cancelled) return
         if (data?.configuracion) {
           setSavedConfig(data.configuracion)
           setConfigSaved(true)
+        } else {
+          setSavedConfig('')
+          setConfigSaved(false)
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) {
+          setSavedConfig('')
+          setConfigSaved(false)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setConfigLoading(false)
+      })
+
+    return () => { cancelled = true }
   }, [router.isReady, activeLeadId])
 
   // ── Step 1: resolve pipeline + card ─────────────────────────────────
@@ -177,9 +203,9 @@ export default function ConfigurePage() {
 
   // Si eligen a medida o auditoría sin config aún → brief + IA
   useEffect(() => {
-    if (!router.isReady) return
+    if (!router.isReady || configLoading) return
+    if (isEditIntent || savedConfig) return
     if (effectiveMode !== 'custom' && effectiveMode !== 'audit') return
-    if (savedConfig && parseConfiguradorConfig(savedConfig)?.mode === 'custom') return
 
     const params = new URLSearchParams()
     if (activeLeadId) params.set('lead', activeLeadId)
@@ -196,6 +222,8 @@ export default function ConfigurePage() {
     router.replace(`/onboarding/custom?${params.toString()}`)
   }, [
     router.isReady,
+    configLoading,
+    isEditIntent,
     effectiveMode,
     savedConfig,
     activeLeadId,
@@ -208,14 +236,24 @@ export default function ConfigurePage() {
     router,
   ])
 
-  // ── Step 2: build iframe URL once we have all params ────────────────
+  // Edición con config: solo formulario (nombre, precios, fechas). Sin iframe de resumen/documentos/a medida.
+  const isEditWithConfig = Boolean(savedConfig)
+  const showModePicker =
+    !configLoading &&
+    !isEditIntent &&
+    !isEditWithConfig &&
+    !effectiveMode
+
+  // Configurador embebido: solo si no hay config guardada y el modo es empaquetado
+  const showConfiguratorIframe = Boolean(
+    !configLoading && effectiveMode === 'packaged' && !isEditWithConfig
+  )
+
+  // ── Step 2: build iframe URL (solo empaquetados nuevos) ────────────────
   useEffect(() => {
     if (!router.isReady) return
-    if (!effectiveMode) return
-    if (
-      (effectiveMode === 'custom' || effectiveMode === 'audit') &&
-      !(savedConfig && parseConfiguradorConfig(savedConfig)?.mode === 'custom')
-    ) {
+    if (!showConfiguratorIframe) {
+      setIframeUrl('')
       return
     }
 
@@ -227,15 +265,23 @@ export default function ConfigurePage() {
     if (activeLeadId)     p.set('leadId',     activeLeadId)
     if (resolvedPipeline) p.set('pipelineId', resolvedPipeline)
     if (resolvedCard)     p.set('cardId',     resolvedCard)
-    if (savedConfig)      p.set('cfg',        savedConfig)   // restore saved config
 
-    // Default ref
     const slug = (empresa || nombre || 'XXX').substring(0, 6).toUpperCase().replace(/\s/g, '-')
     p.set('ref',     `BUF-2026-${slug}-001`)
     p.set('baseurl', typeof window !== 'undefined' ? window.location.origin : '')
 
     setIframeUrl(`/configurador.html?${p.toString()}`)
-  }, [router.isReady, effectiveMode, nombre, empresa, email, ciudad, activeLeadId, resolvedPipeline, resolvedCard, savedConfig])
+  }, [
+    router.isReady,
+    showConfiguratorIframe,
+    nombre,
+    empresa,
+    email,
+    ciudad,
+    activeLeadId,
+    resolvedPipeline,
+    resolvedCard,
+  ])
 
   // ── postMessage listener: pipeline moves + invoice + height ─────────
   useEffect(() => {
@@ -482,7 +528,7 @@ export default function ConfigurePage() {
               Guardado
             </div>
           )}
-          {activeLeadId && (
+          {activeLeadId && showConfiguratorIframe && (
             <button
               type="button"
               onClick={requestSave}
@@ -506,7 +552,26 @@ export default function ConfigurePage() {
         </div>
       </div>
 
-      {activeLeadId && (
+      {activeLeadId && configLoading && (
+        <div className="mb-6 flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white py-16 text-sm text-gray-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Cargando proyecto…
+        </div>
+      )}
+
+      {activeLeadId && !configLoading && isEditWithConfig && (
+        <div className="mb-6 rounded-2xl border border-gray-200 bg-white px-5 py-5 sm:px-6 sm:py-6">
+          <div className="mb-4">
+            <p className="text-sm font-semibold text-gray-900">Editar proyecto</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Cliente, precio, mensualidad, definición y fechas
+            </p>
+          </div>
+          <OnboardingProjectEditForm leadId={activeLeadId} />
+        </div>
+      )}
+
+      {activeLeadId && !configLoading && !isEditWithConfig && (
         <div className="mb-6 rounded-2xl border border-gray-200 bg-white overflow-hidden">
           <button
             type="button"
@@ -534,8 +599,8 @@ export default function ConfigurePage() {
         </div>
       )}
 
-      {/* Mode picker */}
-      {!effectiveMode && (
+      {/* Mode picker — solo proyectos nuevos sin configuración */}
+      {showModePicker && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 max-w-5xl">
           <button
             type="button"
@@ -571,7 +636,7 @@ export default function ConfigurePage() {
           >
             <div className="flex items-center gap-2 mb-3">
               <Sparkles className="h-5 w-5 text-gray-800" />
-              <span className="text-base font-semibold text-gray-900">Proyecto a medida</span>
+              <span className="text-base font-semibold text-gray-900">A medida (IA)</span>
             </div>
             <p className="text-sm text-gray-500 leading-relaxed">
               Brief con IA cuando el servicio no es una auditoría estándar.
@@ -580,8 +645,8 @@ export default function ConfigurePage() {
         </div>
       )}
 
-      {/* Configurador (solo proyectos ya empaquetados / configs guardadas) */}
-      {effectiveMode && iframeUrl ? (
+      {/* Configurador empaquetado — no en edición (sin resumen / documentos / a medida) */}
+      {showConfiguratorIframe && iframeUrl ? (
         <iframe
           ref={iframeRef}
           src={iframeUrl}
@@ -595,13 +660,9 @@ export default function ConfigurePage() {
           scrolling="no"
           title="Configurador de proyecto Buffalo"
         />
-      ) : effectiveMode ? (
+      ) : showConfiguratorIframe ? (
         <div className="h-64 flex items-center justify-center text-sm text-gray-400">
-          {effectiveMode === 'audit'
-            ? 'Abriendo brief de auditoría…'
-            : effectiveMode === 'custom'
-              ? 'Abriendo brief + IA…'
-              : 'Cargando configurador...'}
+          Cargando configurador...
         </div>
       ) : null}
       </div>

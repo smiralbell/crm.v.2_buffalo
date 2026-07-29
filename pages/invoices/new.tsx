@@ -1,6 +1,6 @@
 import { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import FullScreenLayout from '@/components/FullScreenLayout'
@@ -123,6 +123,8 @@ export default function NewInvoice({ contacts, nextInvoiceNumber }: NewInvoicePr
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [onboardingLeadId, setOnboardingLeadId] = useState<number | null>(null)
+  const [onboardingLabel, setOnboardingLabel] = useState('')
   const invoicePreviewRef = useRef<HTMLDivElement>(null)
 
   const [formData, setFormData] = useState({
@@ -142,6 +144,82 @@ export default function NewInvoice({ contacts, nextInvoiceNumber }: NewInvoicePr
   const [services, setServices] = useState<Service[]>([
     { description: '', quantity: 1, price: 0, tax: 21, total: 0 },
   ])
+
+  // Prefill + track desde onboarding (?lead=)
+  useEffect(() => {
+    if (!router.isReady) return
+    const leadId = Number(router.query.lead)
+    if (!Number.isFinite(leadId) || leadId <= 0) return
+
+    let cancelled = false
+    setOnboardingLeadId(leadId)
+
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/onboarding/projects/${leadId}`)
+        const data = await res.json()
+        if (!res.ok || cancelled) return
+
+        const contact = data.lead?.contact
+        const proyecto = data.proyecto
+        const name =
+          proyecto?.name ||
+          contact?.empresa ||
+          contact?.nombre ||
+          `Lead #${leadId}`
+        setOnboardingLabel(name)
+
+        setFormData((prev) => ({
+          ...prev,
+          client_name: contact?.nombre || contact?.empresa || prev.client_name,
+          client_company_name: contact?.empresa || prev.client_company_name,
+          client_email: contact?.email || prev.client_email,
+          client_address: contact?.direccion_fiscal || prev.client_address,
+          client_tax_id: contact?.cif || prev.client_tax_id,
+        }))
+
+        const setup =
+          proyecto?.setup_fee_eur != null
+            ? Number(proyecto.setup_fee_eur)
+            : data.lead?.valor != null
+              ? Number(data.lead.valor)
+              : 0
+        const monthly =
+          proyecto?.monthly_fee_eur != null ? Number(proyecto.monthly_fee_eur) : 0
+
+        const lines: Service[] = []
+        if (setup > 0) {
+          const lineSubtotal = setup
+          const tax = 21
+          lines.push({
+            description: `${name} — Setup`,
+            quantity: 1,
+            price: setup,
+            tax,
+            total: lineSubtotal + lineSubtotal * (tax / 100),
+          })
+        }
+        if (monthly > 0) {
+          const lineSubtotal = monthly
+          const tax = 21
+          lines.push({
+            description: `${name} — Mensualidad`,
+            quantity: 1,
+            price: monthly,
+            tax,
+            total: lineSubtotal + lineSubtotal * (tax / 100),
+          })
+        }
+        if (lines.length) setServices(lines)
+      } catch {
+        /* best-effort prefill */
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [router.isReady, router.query.lead])
 
   const addService = () => {
     setServices([...services, { description: '', quantity: 1, price: 0, tax: 21, total: 0 }])
@@ -241,6 +319,7 @@ export default function NewInvoice({ contacts, nextInvoiceNumber }: NewInvoicePr
           iva: totals.iva,
           total: totals.total,
           status: formData.status,
+          ...(onboardingLeadId ? { lead_id: onboardingLeadId } : {}),
         }),
       })
 
@@ -338,6 +417,11 @@ export default function NewInvoice({ contacts, nextInvoiceNumber }: NewInvoicePr
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Nueva Factura</h1>
               <p className="text-sm text-gray-600">{formData.invoice_number || nextInvoiceNumber}</p>
+              {onboardingLeadId && (
+                <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-0.5">
+                  Onboarding · {onboardingLabel || `Lead #${onboardingLeadId}`}
+                </p>
+              )}
             </div>
           </div>
         </div>

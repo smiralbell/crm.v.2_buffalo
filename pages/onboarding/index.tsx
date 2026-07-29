@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import {
@@ -6,7 +6,7 @@ import {
   X, Check, Building2,
   Mail, Phone, User, Zap, Eye,
   LayoutList, LayoutGrid, FolderOpen, Plus, Trash2, CheckCircle2, Rocket, Pencil,
-  Wallet, PlayCircle,
+  PlayCircle, ClipboardList, PauseCircle,
 } from 'lucide-react'
 import { BUFFALO_STAGE_COLORS } from '@/components/PipelineCardDrawer'
 import Link from 'next/link'
@@ -41,6 +41,22 @@ const fmt = (v: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 type ProjectFee = { setup: number | null; monthly: number | null }
+
+type ProjectsFilter = 'all' | 'en_marcha' | 'no_en_marcha' | 'auditoria' | 'sin_auditoria'
+
+const PROJECT_FILTERS: {
+  id: ProjectsFilter
+  label: string
+  short: string
+  setupLabel: string
+  monthlyLabel: string
+}[] = [
+  { id: 'all', label: 'Todos', short: 'Todos', setupLabel: 'Setup', monthlyLabel: 'Mensual' },
+  { id: 'en_marcha', label: 'En marcha', short: 'En marcha', setupLabel: 'Setup en marcha', monthlyLabel: 'Mensual en marcha' },
+  { id: 'no_en_marcha', label: 'No en marcha', short: 'Pendientes', setupLabel: 'Setup', monthlyLabel: 'Mensual' },
+  { id: 'auditoria', label: 'Auditoría iniciada', short: 'Auditoría', setupLabel: 'Setup', monthlyLabel: 'Mensual' },
+  { id: 'sin_auditoria', label: 'Sin auditoría', short: 'Sin auditoría', setupLabel: 'Setup', monthlyLabel: 'Mensual' },
+]
 
 function auditResumeUrl(lead: Lead): string {
   const params = new URLSearchParams()
@@ -111,6 +127,7 @@ export default function OnboardingPage() {
   const [buffaloFlags, setBuffaloFlags] = useState<Record<number, boolean>>({})
   const [projectFees, setProjectFees] = useState<Record<number, ProjectFee>>({})
   const [launchingId, setLaunchingId] = useState<number | null>(null)
+  const [projectsFilter, setProjectsFilter] = useState<ProjectsFilter>('all')
 
   useEffect(() => {
     if (!router.isReady) return
@@ -335,23 +352,76 @@ export default function OnboardingPage() {
     }
 
     // Reconfigurar proyecto existente → picker Auditoría / A medida (o config guardada)
+    if (leadId != null) params.set('edit', '1')
     router.push(`/onboarding/configure?${params.toString()}`)
   }
 
-  const totals = projects.reduce(
-    (acc, lead) => {
-      const fee = projectFees[lead.id] || resolveProjectFees(lead, null)
-      if (fee.setup) acc.setup += fee.setup
-      if (fee.monthly) acc.monthly += fee.monthly
-      return acc
-    },
-    { setup: 0, monthly: 0 }
-  )
+  const filterCounts = useMemo(() => {
+    let enMarcha = 0
+    let noEnMarcha = 0
+    let auditoria = 0
+    let sinAuditoria = 0
+    for (const lead of projects) {
+      const launched = Boolean(buffaloFlags[lead.id])
+      const audit = isAuditConfiguracion(lead.configuracion)
+      if (launched) enMarcha += 1
+      else noEnMarcha += 1
+      if (audit) auditoria += 1
+      else sinAuditoria += 1
+    }
+    return {
+      all: projects.length,
+      en_marcha: enMarcha,
+      no_en_marcha: noEnMarcha,
+      auditoria,
+      sin_auditoria: sinAuditoria,
+    }
+  }, [projects, buffaloFlags])
+
+  const filteredProjects = useMemo(() => {
+    return projects.filter((lead) => {
+      const launched = Boolean(buffaloFlags[lead.id])
+      const audit = isAuditConfiguracion(lead.configuracion)
+      switch (projectsFilter) {
+        case 'en_marcha':
+          return launched
+        case 'no_en_marcha':
+          return !launched
+        case 'auditoria':
+          return audit
+        case 'sin_auditoria':
+          return !audit
+        default:
+          return true
+      }
+    })
+  }, [projects, buffaloFlags, projectsFilter])
+
+  const activeFilterMeta =
+    PROJECT_FILTERS.find((f) => f.id === projectsFilter) || PROJECT_FILTERS[0]
+
+  const filteredTotals = useMemo(() => {
+    return filteredProjects.reduce(
+      (acc, lead) => {
+        const fee = projectFees[lead.id] || resolveProjectFees(lead, null)
+        if (fee.setup) acc.setup += fee.setup
+        if (fee.monthly) acc.monthly += fee.monthly
+        return acc
+      },
+      { setup: 0, monthly: 0 }
+    )
+  }, [filteredProjects, projectFees])
 
   // ══════════════════════════════════════════════════════════════════
   return (
     <Layout>
-      <div className="w-full space-y-6">
+      <div
+        className={
+          activeTab === 'configure'
+            ? 'w-full flex flex-col gap-6 min-h-[calc(100dvh-5rem)] md:min-h-[calc(100dvh-3.5rem)]'
+            : 'w-full space-y-6'
+        }
+      >
 
         {/* ── Tab bar ── */}
         <OnboardingSectionTabs
@@ -363,10 +433,10 @@ export default function OnboardingPage() {
             TAB 1 — Configurar nuevo proyecto
         ══════════════════════════════════════════════════════════════ */}
         {activeTab === 'configure' && (
-          <div className="space-y-6">
+          <div className="flex flex-1 flex-col gap-6 min-h-0">
 
             {/* Steps strip */}
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 shrink-0">
               {STEPS.map((s, i) => (
                 <div key={s.n} className="flex items-center">
                   <div className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-full bg-gray-50 border border-gray-100">
@@ -384,7 +454,7 @@ export default function OnboardingPage() {
 
             {/* Success banner */}
             {created && view === 'hub' && (
-              <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-700">
+              <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-700 shrink-0">
                 <Check className="h-4 w-4 flex-shrink-0" />
                 <span>Lead <strong>{created.nombre}</strong> creado y añadido al pipeline.</span>
               </div>
@@ -392,7 +462,7 @@ export default function OnboardingPage() {
 
             {/* Selected lead → configure CTA */}
             {selected && view === 'hub' && (
-              <div className="flex items-center gap-4 rounded-2xl border-2 border-gray-900 bg-white px-5 py-4 shadow-sm">
+              <div className="flex items-center gap-4 rounded-2xl border-2 border-gray-900 bg-white px-5 py-4 shadow-sm shrink-0">
                 <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center text-white font-bold text-base">
                   {(selected.nombre || '?').charAt(0).toUpperCase()}
                 </div>
@@ -422,33 +492,31 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {/* Action cards (hub) */}
+            {/* Action cards (hub) — centradas vertical y horizontalmente */}
             {view === 'hub' && !selected && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex-1 flex flex-wrap items-center justify-center gap-5 content-center">
                 <button
+                  type="button"
                   onClick={() => { setView('new_lead'); setCreated(null) }}
-                  className="group text-left rounded-2xl border border-gray-200/80 bg-white p-10 min-h-[300px] flex flex-col hover:border-gray-300 hover:shadow-sm transition-all"
+                  className="group w-44 h-44 sm:w-48 sm:h-48 rounded-2xl border border-gray-200 bg-white flex flex-col items-center justify-center text-center px-4 hover:border-gray-300 hover:shadow-sm transition-all"
                 >
-                  <div className="text-lg font-semibold text-gray-900 mb-2">Nuevo lead</div>
-                  <p className="text-sm text-gray-400 leading-relaxed flex-1">
-                    Primera vez con este cliente. Rellena sus datos y empieza a configurar.
+                  <UserPlus className="h-6 w-6 text-gray-700 mb-3" />
+                  <div className="text-sm font-semibold text-gray-900">Nuevo lead</div>
+                  <p className="text-[11px] text-gray-400 leading-snug mt-1.5">
+                    Primera vez con este cliente
                   </p>
-                  <div className="mt-8 inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900">
-                    Crear lead <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                  </div>
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => { setView('select'); setCreated(null) }}
-                  className="group text-left rounded-2xl border border-gray-200/80 bg-white p-10 min-h-[300px] flex flex-col hover:border-gray-300 hover:shadow-sm transition-all"
+                  className="group w-44 h-44 sm:w-48 sm:h-48 rounded-2xl border border-gray-200 bg-white flex flex-col items-center justify-center text-center px-4 hover:border-gray-300 hover:shadow-sm transition-all"
                 >
-                  <div className="text-lg font-semibold text-gray-900 mb-2">Lead existente</div>
-                  <p className="text-sm text-gray-400 leading-relaxed flex-1">
-                    Ya está en el sistema. Busca por nombre, empresa o email y configura.
+                  <Search className="h-6 w-6 text-gray-700 mb-3" />
+                  <div className="text-sm font-semibold text-gray-900">Lead existente</div>
+                  <p className="text-[11px] text-gray-400 leading-snug mt-1.5">
+                    Busca por nombre, empresa o email
                   </p>
-                  <div className="mt-8 inline-flex items-center gap-1.5 text-sm font-semibold text-gray-900">
-                    Buscar lead <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                  </div>
                 </button>
               </div>
             )}
@@ -574,76 +642,191 @@ export default function OnboardingPage() {
         ══════════════════════════════════════════════════════════════ */}
         {activeTab === 'projects' && (
           <div>
-            {/* Header with totals + toggle */}
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-bold text-gray-900">Proyectos configurados</h2>
-                {!loadingProjects && projects.length > 0 && (
-                  <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2.5 py-0.5 rounded-full">
-                    {projects.length}
-                  </span>
-                )}
-                {!loadingProjects && projects.length > 0 && (
-                  <div className="inline-flex items-stretch h-10 rounded-xl border border-gray-200 bg-white overflow-hidden">
-                    <div className="flex items-center gap-2 px-3.5 border-r border-gray-100">
-                      <Wallet className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                      <div className="leading-tight min-w-0">
-                        <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">
-                          Setup
-                        </p>
-                        <p className="text-xs font-semibold text-gray-900 tabular-nums truncate">
-                          {fmt(totals.setup)}
-                        </p>
+            {/* Header: filtro + métricas + acciones */}
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  {/* Filtro */}
+                  {!loadingProjects && projects.length > 0 && (
+                    <div className="inline-flex flex-wrap items-center gap-0.5 p-1 rounded-xl bg-gray-100/90 border border-gray-200/80">
+                      {PROJECT_FILTERS.map((f) => {
+                        const active = projectsFilter === f.id
+                        const count = filterCounts[f.id]
+                        const icon =
+                          f.id === 'en_marcha' ? (
+                            <Rocket className="h-3 w-3" />
+                          ) : f.id === 'no_en_marcha' ? (
+                            <PauseCircle className="h-3 w-3" />
+                          ) : f.id === 'auditoria' ? (
+                            <ClipboardList className="h-3 w-3" />
+                          ) : f.id === 'sin_auditoria' ? (
+                            <FolderOpen className="h-3 w-3" />
+                          ) : null
+                        return (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setProjectsFilter(f.id)}
+                            title={`${f.label} (${count})`}
+                            className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[11px] font-semibold transition-all ${
+                              active
+                                ? 'bg-white text-gray-900 shadow-sm border border-gray-200/80'
+                                : 'text-gray-500 hover:text-gray-800 border border-transparent'
+                            }`}
+                          >
+                            {icon}
+                            <span className="hidden sm:inline">{f.short}</span>
+                            <span className="sm:hidden">
+                              {f.id === 'all'
+                                ? 'Todos'
+                                : f.id === 'en_marcha'
+                                  ? 'Marcha'
+                                  : f.id === 'no_en_marcha'
+                                    ? 'Pend.'
+                                    : f.id === 'auditoria'
+                                      ? 'Audit.'
+                                      : 'Sin aud.'}
+                            </span>
+                            <span
+                              className={`min-w-[1.25rem] h-5 px-1.5 rounded-full text-[10px] font-bold tabular-nums inline-flex items-center justify-center ${
+                                active
+                                  ? f.id === 'en_marcha'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : f.id === 'auditoria'
+                                      ? 'bg-sky-100 text-sky-800'
+                                      : 'bg-gray-900 text-white'
+                                  : 'bg-gray-200/80 text-gray-600'
+                              }`}
+                            >
+                              {count}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Burbuja total del filtro activo */}
+                  {!loadingProjects && projects.length > 0 && (
+                    <span
+                      className="inline-flex items-center justify-center min-w-[2rem] h-8 px-2.5 rounded-full bg-gray-900 text-white text-xs font-bold tabular-nums"
+                      title={`${filteredProjects.length} onboarding${filteredProjects.length === 1 ? '' : 's'} en este filtro`}
+                    >
+                      {filteredProjects.length}
+                    </span>
+                  )}
+
+                  {/* Métricas del filtro */}
+                  {!loadingProjects && projects.length > 0 && (
+                    <div
+                      className={`inline-flex items-stretch h-10 rounded-xl border overflow-hidden ${
+                        projectsFilter === 'en_marcha'
+                          ? 'border-emerald-200 bg-emerald-50/60'
+                          : projectsFilter === 'auditoria'
+                            ? 'border-sky-200 bg-sky-50/60'
+                            : 'border-gray-200 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 px-3.5 border-r border-inherit/60">
+                        <Rocket
+                          className={`h-3.5 w-3.5 shrink-0 ${
+                            projectsFilter === 'en_marcha'
+                              ? 'text-emerald-600'
+                              : projectsFilter === 'auditoria'
+                                ? 'text-sky-600'
+                                : 'text-gray-400'
+                          }`}
+                        />
+                        <div className="leading-tight min-w-0">
+                          <p
+                            className={`text-[9px] font-medium uppercase tracking-wide ${
+                              projectsFilter === 'en_marcha'
+                                ? 'text-emerald-700/70'
+                                : projectsFilter === 'auditoria'
+                                  ? 'text-sky-700/70'
+                                  : 'text-gray-400'
+                            }`}
+                          >
+                            {activeFilterMeta.setupLabel}
+                          </p>
+                          <p
+                            className={`text-xs font-semibold tabular-nums truncate ${
+                              projectsFilter === 'en_marcha'
+                                ? 'text-emerald-900'
+                                : projectsFilter === 'auditoria'
+                                  ? 'text-sky-900'
+                                  : 'text-gray-900'
+                            }`}
+                          >
+                            {fmt(filteredTotals.setup)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center px-3.5">
+                        <div className="leading-tight min-w-0">
+                          <p
+                            className={`text-[9px] font-medium uppercase tracking-wide ${
+                              projectsFilter === 'en_marcha'
+                                ? 'text-emerald-700/70'
+                                : projectsFilter === 'auditoria'
+                                  ? 'text-sky-700/70'
+                                  : 'text-gray-400'
+                            }`}
+                          >
+                            {activeFilterMeta.monthlyLabel}
+                          </p>
+                          <p
+                            className={`text-xs font-semibold tabular-nums truncate ${
+                              projectsFilter === 'en_marcha'
+                                ? 'text-emerald-900'
+                                : projectsFilter === 'auditoria'
+                                  ? 'text-sky-900'
+                                  : 'text-gray-900'
+                            }`}
+                          >
+                            {fmt(filteredTotals.monthly)}/mes
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center px-3.5">
-                      <div className="leading-tight min-w-0">
-                        <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">
-                          Mensualidades
-                        </p>
-                        <p className="text-xs font-semibold text-gray-900 tabular-nums truncate">
-                          {fmt(totals.monthly)}/mes
-                        </p>
-                      </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setActiveTab('configure')}
+                    className="flex items-center gap-1.5 px-3 h-8 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:border-gray-300 hover:text-gray-800 transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Nuevo
+                  </button>
+                  {projects.length > 0 && (
+                    <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
+                      <button
+                        onClick={() => setProjectsView('list')}
+                        className={`flex items-center justify-center w-7 h-7 rounded-md transition-all ${
+                          projectsView === 'list'
+                            ? 'bg-white shadow-sm text-gray-900'
+                            : 'text-gray-400 hover:text-gray-600'
+                        }`}
+                        title="Vista lista"
+                      >
+                        <LayoutList className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setProjectsView('grid')}
+                        className={`flex items-center justify-center w-7 h-7 rounded-md transition-all ${
+                          projectsView === 'grid'
+                            ? 'bg-white shadow-sm text-gray-900'
+                            : 'text-gray-400 hover:text-gray-600'
+                        }`}
+                        title="Vista tarjetas"
+                      >
+                        <LayoutGrid className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {/* New project shortcut */}
-                <button
-                  onClick={() => setActiveTab('configure')}
-                  className="flex items-center gap-1.5 px-3 h-8 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:border-gray-300 hover:text-gray-800 transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Nuevo
-                </button>
-                {projects.length > 0 && (
-                  <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
-                    <button
-                      onClick={() => setProjectsView('list')}
-                      className={`flex items-center justify-center w-7 h-7 rounded-md transition-all ${
-                        projectsView === 'list'
-                          ? 'bg-white shadow-sm text-gray-900'
-                          : 'text-gray-400 hover:text-gray-600'
-                      }`}
-                      title="Vista lista"
-                    >
-                      <LayoutList className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setProjectsView('grid')}
-                      className={`flex items-center justify-center w-7 h-7 rounded-md transition-all ${
-                        projectsView === 'grid'
-                          ? 'bg-white shadow-sm text-gray-900'
-                          : 'text-gray-400 hover:text-gray-600'
-                      }`}
-                      title="Vista tarjetas"
-                    >
-                      <LayoutGrid className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
 
@@ -661,11 +844,24 @@ export default function OnboardingPage() {
                   Crear el primero
                 </button>
               </div>
+            ) : filteredProjects.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-gray-200 py-12 text-center">
+                <p className="text-sm text-gray-500">
+                  No hay onboardings en «{activeFilterMeta.label}».
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setProjectsFilter('all')}
+                  className="mt-2 text-xs font-semibold text-gray-500 underline hover:text-gray-800"
+                >
+                  Ver todos
+                </button>
+              </div>
             ) : projectsView === 'list' ? (
 
               /* ── LIST VIEW ── */
               <div className="space-y-3">
-                {projects.map(lead => {
+                {filteredProjects.map(lead => {
                   const stageName  = stageLabel(lead.estado)
                   const name       = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
                   const company    = lead.contact?.empresa
@@ -708,17 +904,21 @@ export default function OnboardingPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 pr-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                        {isAuditConfiguracion(lead.configuracion) && (
-                          <button
-                            type="button"
-                            onClick={() => router.push(auditResumeUrl(lead))}
-                            className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
-                            title="Continuar la auditoría con el copiloto"
-                          >
-                            <PlayCircle className="h-3.5 w-3.5" />
-                            Reanudar auditoría
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => router.push(auditResumeUrl(lead))}
+                          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
+                          title={
+                            isAuditConfiguracion(lead.configuracion)
+                              ? 'Continuar la auditoría con el copiloto'
+                              : 'Empezar auditoría con el copiloto'
+                          }
+                        >
+                          <PlayCircle className="h-3.5 w-3.5" />
+                          {isAuditConfiguracion(lead.configuracion)
+                            ? 'Reanudar auditoría'
+                            : 'Iniciar auditoría'}
+                        </button>
                         {buffaloFlags[lead.id] ? (
                           <button
                             type="button"
@@ -774,7 +974,7 @@ export default function OnboardingPage() {
 
               /* ── GRID VIEW ── */
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {projects.map(lead => {
+                {filteredProjects.map(lead => {
                   const stageName  = stageLabel(lead.estado)
                   const name       = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
                   const company    = lead.contact?.empresa
@@ -821,17 +1021,21 @@ export default function OnboardingPage() {
                         <div className="text-[11px] text-gray-400">{dateStr}</div>
 
                         <div className="flex flex-col gap-1.5 pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
-                          {isAuditConfiguracion(lead.configuracion) && (
-                            <button
-                              type="button"
-                              onClick={() => router.push(auditResumeUrl(lead))}
-                              className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-semibold bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
-                              title="Continuar la auditoría con el copiloto"
-                            >
-                              <PlayCircle className="h-3.5 w-3.5" />
-                              Reanudar auditoría
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => router.push(auditResumeUrl(lead))}
+                            className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-semibold bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
+                            title={
+                              isAuditConfiguracion(lead.configuracion)
+                                ? 'Continuar la auditoría con el copiloto'
+                                : 'Empezar auditoría con el copiloto'
+                            }
+                          >
+                            <PlayCircle className="h-3.5 w-3.5" />
+                            {isAuditConfiguracion(lead.configuracion)
+                              ? 'Reanudar auditoría'
+                              : 'Iniciar auditoría'}
+                          </button>
                           {buffaloFlags[lead.id] ? (
                             <button
                               type="button"

@@ -27,6 +27,8 @@ const invoiceSchema = z.object({
   iva: z.number().min(0),
   total: z.number().positive(),
   status: z.enum(['draft', 'sent', 'cancelled']).optional(),
+  /** Si viene de onboarding, se trackea la factura al lead */
+  lead_id: z.number().int().positive().optional().nullable(),
 })
 
 export default async function handler(
@@ -40,11 +42,61 @@ export default async function handler(
       const page = parseInt(req.query.page as string) || 1
       const status = (req.query.status as string) || ''
       const search = (req.query.search as string) || ''
-      const pageSize = 10
+      const leadIdRaw = req.query.lead_id as string | undefined
+      const leadId = leadIdRaw ? parseInt(leadIdRaw, 10) : NaN
+      const pageSize = leadIdRaw ? 50 : 10
       const skip = (page - 1) * pageSize
 
       const where: any = {
         deleted_at: null,
+      }
+
+      if (Number.isFinite(leadId) && leadId > 0) {
+        // Raw por si el client Prisma aún no tiene lead_id regenerado
+        const rows = await prisma.$queryRaw<
+          Array<{
+            id: number
+            invoice_number: string
+            client_name: string
+            status: string
+            subtotal: unknown
+            iva: unknown
+            total: unknown
+            issue_date: Date
+            due_date: Date | null
+            created_at: Date
+            updated_at: Date
+            deleted_at: Date | null
+            lead_id: number | null
+          }>
+        >`
+          SELECT id, invoice_number, client_name, status,
+                 subtotal, iva, total, issue_date, due_date,
+                 created_at, updated_at, deleted_at, lead_id
+          FROM invoices
+          WHERE deleted_at IS NULL AND lead_id = ${leadId}
+          ORDER BY issue_date DESC
+          LIMIT ${pageSize}
+        `
+        return res.status(200).json({
+          invoices: rows.map((inv) => ({
+            ...inv,
+            subtotal: Number(inv.subtotal),
+            iva: Number(inv.iva),
+            total: Number(inv.total),
+            issue_date: inv.issue_date.toISOString(),
+            due_date: inv.due_date?.toISOString() || null,
+            created_at: inv.created_at.toISOString(),
+            updated_at: inv.updated_at.toISOString(),
+            deleted_at: inv.deleted_at?.toISOString() || null,
+          })),
+          pagination: {
+            page: 1,
+            pageSize,
+            total: rows.length,
+            totalPages: 1,
+          },
+        })
       }
 
       if (status && status !== 'all') {
@@ -72,6 +124,7 @@ export default async function handler(
       return res.status(200).json({
         invoices: invoices.map((inv) => ({
           ...inv,
+          lead_id: (inv as { lead_id?: number | null }).lead_id ?? null,
           subtotal: Number(inv.subtotal),
           iva: Number(inv.iva),
           total: Number(inv.total),
@@ -147,6 +200,15 @@ export default async function handler(
 
       const status = data.status || 'draft'
 
+      let leadId: number | null = data.lead_id ?? null
+      if (leadId != null) {
+        const leadExists = await prisma.lead.findUnique({
+          where: { id: leadId },
+          select: { id: true },
+        })
+        if (!leadExists) leadId = null
+      }
+
       // Crear factura
       const invoice = await prisma.invoice.create({
         data: {
@@ -168,6 +230,16 @@ export default async function handler(
         },
       })
 
+      if (leadId != null) {
+        try {
+          await prisma.$executeRaw`
+            UPDATE invoices SET lead_id = ${leadId} WHERE id = ${invoice.id}
+          `
+        } catch (e) {
+          console.error('[invoices] set lead_id', e)
+        }
+      }
+
       if (status === 'sent' && invoice.client_email) {
         try {
           const { advanceLeadOnGlobalByContactEmail } = await import(
@@ -181,6 +253,7 @@ export default async function handler(
 
       return res.status(201).json({
         ...invoice,
+        lead_id: leadId,
         subtotal: Number(invoice.subtotal),
         iva: Number(invoice.iva),
         total: Number(invoice.total),

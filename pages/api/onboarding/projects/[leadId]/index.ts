@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { syncProyectoFromLead } from '@/lib/engranaje5/sync-proyecto'
+import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
+import { mergeLeadConfig } from '@/lib/onboarding/project-context-ai'
 
 const SERVICE_TYPES = [
   'voice_agent',
@@ -55,8 +57,10 @@ const patchSchema = z.object({
   lead_valor: z.number().nullable().optional(),
   lead_estado: z.string().optional(),
   lead_notas: z.string().nullable().optional(),
-  /** Definición / descripción del proyecto (se guarda en lead.notas) */
+  /** Definición / descripción del proyecto (se guarda en lead.notas + config.description) */
   project_definition: z.string().nullable().optional(),
+  /** Contexto bruto (auditoría, reuniones, notas). Si se envía aquí no regenera IA. */
+  project_context: z.string().nullable().optional(),
   /** Duración estimada o fecha prevista, ej. "2026-08-01" o "4 semanas" */
   tiempo_previsto: z.string().nullable().optional(),
   /** YYYY-MM-DD o null */
@@ -167,6 +171,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               empresa: true,
               telefono: true,
               ciudad: true,
+              direccion_fiscal: true,
+              cif: true,
             },
           },
         },
@@ -174,6 +180,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
 
       const proyecto = await getProyectoByLead(leadId)
+      const cfg = parseConfiguradorConfig(lead.configuracion)
+      const definition = (cfg?.description || lead.notas || '').trim() || null
+      const context = (cfg?.project_context || '').trim() || null
       return res.status(200).json({
         lead: {
           id: lead.id,
@@ -184,6 +193,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           contact: lead.contact,
         },
         proyecto: serializeProyecto(proyecto),
+        project_definition: definition,
+        project_context: context,
+        proposal_draft: (cfg?.proposal_draft || '').trim() || null,
+        contract_draft: (cfg?.contract_draft || '').trim() || null,
+        pre_kickoff_draft: (cfg?.pre_kickoff_draft || '').trim() || null,
+        linked_invoices: cfg?.linked_invoices || [],
       })
     }
 
@@ -283,6 +298,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (data.lead_estado !== undefined) leadPatch.estado = data.lead_estado
       if (data.lead_notas !== undefined) leadPatch.notas = data.lead_notas
       if (data.project_definition !== undefined) leadPatch.notas = data.project_definition
+
+      // Persist context / definition inside configuracion JSON
+      if (data.project_definition !== undefined || data.project_context !== undefined) {
+        const { encoded } = mergeLeadConfig(lead.configuracion, {
+          ...(data.project_definition !== undefined
+            ? { description: data.project_definition?.trim() || undefined }
+            : {}),
+          ...(data.project_context !== undefined
+            ? { project_context: data.project_context?.trim() || undefined }
+            : {}),
+        })
+        leadPatch.configuracion = encoded
+      }
+
       if (Object.keys(leadPatch).length) {
         await prisma.lead.update({ where: { id: leadId }, data: leadPatch })
       }

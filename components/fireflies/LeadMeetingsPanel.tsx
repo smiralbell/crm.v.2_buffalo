@@ -1,9 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import {
   Calendar,
   ChevronDown,
@@ -132,19 +130,19 @@ export default function LeadMeetingsPanel({ leadId }: Props) {
   }
 
   return (
-    <Card className="shadow-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-          <Video className="h-4 w-4" />
-          Historial de reuniones
-          {!loading && (
-            <Badge variant="secondary" className="ml-1 text-xs font-normal">
-              {meetings.length}
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+      <div className="px-5 sm:px-6 pt-5 pb-3 flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+          <Video className="h-4 w-4 text-gray-400" />
+          Reuniones
+        </h2>
+        {!loading && (
+          <span className="text-[11px] font-medium text-gray-400 tabular-nums">
+            {meetings.length}
+          </span>
+        )}
+      </div>
+      <div className="px-5 sm:px-6 pb-5">
         {loading && (
           <div className="flex items-center gap-2 text-sm text-gray-400 py-6 justify-center">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -274,7 +272,7 @@ export default function LeadMeetingsPanel({ leadId }: Props) {
             })}
           </ul>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
