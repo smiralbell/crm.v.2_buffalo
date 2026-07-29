@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
 import type { CategorizedTransaction } from './categorize-transactions'
+import { isPaymentBucket } from './payment-concepts'
 import { clampPeriodStart } from './period-presets'
 
 export interface ExpenseLoadResult {
@@ -29,19 +30,36 @@ export async function loadExpenseTransactionsForPeriod(
   let manual_count = 0
 
   try {
-    const bankResult = await query<{ description: string; amount: string; date: string }>(
-      `SELECT description, amount, date::text AS date
+    const bankResult = await query<{
+      description: string
+      amount: string
+      date: string
+      expense_bucket: string | null
+    }>(
+      `SELECT description, amount, date::text AS date, expense_bucket
        FROM bank_transactions
        WHERE date >= $1 AND date <= $2 AND amount < 0
        ORDER BY date DESC`,
       [startStr, endStr]
-    )
+    ).catch(async () => {
+      const fallback = await query<{ description: string; amount: string; date: string }>(
+        `SELECT description, amount, date::text AS date
+         FROM bank_transactions
+         WHERE date >= $1 AND date <= $2 AND amount < 0
+         ORDER BY date DESC`,
+        [startStr, endStr]
+      )
+      return {
+        rows: fallback.rows.map((r) => ({ ...r, expense_bucket: null as string | null })),
+      }
+    })
     for (const r of bankResult.rows) {
       bank_count++
       transactions.push({
         description: r.description || 'Movimiento bancario',
         amount: Number(r.amount),
         date: r.date,
+        expense_bucket: isPaymentBucket(r.expense_bucket) ? r.expense_bucket : null,
       })
     }
   } catch {

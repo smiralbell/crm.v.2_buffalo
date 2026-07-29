@@ -205,16 +205,13 @@ export default function EditContact({ contact }: EditContactProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">
-                    Email <span className="text-red-500">*</span>
-                  </Label>
+                  <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
                     name="email"
                     type="email"
                     value={formData.email}
                     onChange={handleChange}
-                    required
                     disabled={loading}
                   />
                 </div>

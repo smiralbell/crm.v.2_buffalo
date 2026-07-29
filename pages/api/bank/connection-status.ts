@@ -25,6 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         valid_until: null,
         days_remaining: null,
         expires_soon: false,
+        last_synced_at: null,
         needs_migration: true,
       })
     }

@@ -1,7 +1,11 @@
+import type { PaymentBucket } from './payment-concepts'
+
 export interface CategorizedTransaction {
   description: string
   amount: number
   date: string
+  /** Override manual de categoría (bank_transactions.expense_bucket) */
+  expense_bucket?: PaymentBucket | null
 }
 
 export interface CategorySlice {

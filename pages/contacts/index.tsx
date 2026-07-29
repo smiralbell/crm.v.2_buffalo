@@ -116,6 +116,9 @@ export default function ContactsPage({
   const [contactToDelete, setContactToDelete] = useState<{ id: number; name: string } | null>(null)
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
 
+  const namesMatch = (a: string, b: string) =>
+    a.trim().toLocaleLowerCase('es') === b.trim().toLocaleLowerCase('es')
+
   const handleDeleteClick = (contact: Contact) => {
     setContactToDelete({ id: contact.id, name: contact.nombre || contact.email || `Contacto #${contact.id}` })
     setDeleteConfirmName('')
@@ -124,8 +127,8 @@ export default function ContactsPage({
 
   const handleDeleteConfirm = async () => {
     if (!contactToDelete) return
-    
-    if (deleteConfirmName !== contactToDelete.name) {
+
+    if (!namesMatch(deleteConfirmName, contactToDelete.name)) {
       alert('El nombre no coincide. Por favor, escribe el nombre exacto para confirmar.')
       return
     }
@@ -134,6 +137,7 @@ export default function ContactsPage({
       const res = await fetch(`/api/contacts/${contactToDelete.id}`, {
         method: 'DELETE',
       })
+      const data = await res.json().catch(() => ({}))
 
       if (res.ok) {
         setDeleteDialogOpen(false)
@@ -141,9 +145,9 @@ export default function ContactsPage({
         setDeleteConfirmName('')
         router.reload()
       } else {
-        alert('Error al eliminar contacto')
+        alert(data.error || 'Error al eliminar contacto')
       }
-    } catch (error) {
+    } catch {
       alert('Error de conexión')
     }
   }
@@ -218,7 +222,9 @@ export default function ContactsPage({
               <Button
                 variant="destructive"
                 onClick={handleDeleteConfirm}
-                disabled={deleteConfirmName !== contactToDelete?.name}
+                disabled={
+                  !contactToDelete || !namesMatch(deleteConfirmName, contactToDelete.name)
+                }
               >
                 Eliminar
               </Button>

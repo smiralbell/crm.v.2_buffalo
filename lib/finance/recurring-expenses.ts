@@ -37,6 +37,7 @@ type ExpenseInput = {
   description: string
   amount: number
   date: string
+  expense_bucket?: PaymentBucket | null
 }
 
 const BUCKET_ORDER: PaymentBucket[] = [
@@ -48,6 +49,28 @@ const BUCKET_ORDER: PaymentBucket[] = [
   'tax',
   'other',
 ]
+
+/** Gastos recurrentes “operativos”: plataformas SaaS + marketing + servicios profesionales */
+export const OPS_RECURRING_BUCKETS: PaymentBucket[] = [
+  'platform',
+  'marketing',
+  'professional',
+]
+
+export function isOpsRecurringBucket(bucket: PaymentBucket): boolean {
+  return OPS_RECURRING_BUCKETS.includes(bucket)
+}
+
+/** Equivalente mensual de SaaS + marketing + servicios profesionales */
+export function recurringOpsMonthly(rows: RecurringExpenseRow[]): number {
+  return (
+    Math.round(
+      rows
+        .filter((r) => isOpsRecurringBucket(r.bucket))
+        .reduce((s, r) => s + r.monthly_equivalent, 0) * 100
+    ) / 100
+  )
+}
 
 function inferFrequency(avgIntervalDays: number): string {
   if (avgIntervalDays >= 25 && avgIntervalDays <= 35) return 'Mensual'
@@ -97,17 +120,28 @@ export function detectRecurringExpenses(expenses: ExpenseInput[]): RecurringExpe
     const abs = Math.abs(e.amount)
     if (abs <= 0) continue
     const parsed = parsePaymentConcept(e.description || 'Sin concepto')
-    if (!byKey.has(parsed.grouping_key)) {
-      byKey.set(parsed.grouping_key, {
-        label: parsed.display_label,
-        bucket: parsed.bucket,
-        bucket_label: parsed.bucket_label,
-        detection_source: parsed.detection_source === 'none' ? 'pattern' : parsed.detection_source,
+    const bucket = e.expense_bucket ?? parsed.bucket
+    const bucket_label = PAYMENT_BUCKET_LABELS[bucket]
+    const groupingKey = e.expense_bucket
+      ? `manual:${e.expense_bucket}:${parsed.grouping_key}`
+      : parsed.grouping_key
+    if (!byKey.has(groupingKey)) {
+      byKey.set(groupingKey, {
+        label: e.expense_bucket
+          ? `${bucket_label} · ${parsed.display_label}`
+          : parsed.display_label,
+        bucket,
+        bucket_label,
+        detection_source: e.expense_bucket
+          ? 'concept'
+          : parsed.detection_source === 'none'
+            ? 'pattern'
+            : parsed.detection_source,
         sample_description: e.description || '',
         items: [],
       })
     }
-    byKey.get(parsed.grouping_key)!.items.push({ date: e.date.slice(0, 10), amount: abs })
+    byKey.get(groupingKey)!.items.push({ date: e.date.slice(0, 10), amount: abs })
   }
 
   const rows: RecurringExpenseRow[] = []

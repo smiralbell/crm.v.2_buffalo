@@ -7,6 +7,8 @@ import {
 import {
   detectRecurringExpenses,
   recurringExpensesSummary,
+  recurringOpsMonthly,
+  isOpsRecurringBucket,
 } from './recurring-expenses'
 import type { RecurringExpensesSummary } from './types'
 import type { CategorySlice } from './types'
@@ -37,6 +39,8 @@ type ExpenseInput = {
   description: string
   amount: number
   date: string
+  /** Override manual; si existe, manda sobre el parseo automático */
+  expense_bucket?: PaymentBucket | null
 }
 
 function monthLabelFromKey(monthKey: string): string {
@@ -79,10 +83,44 @@ export interface CuttableExpenseItem {
 export interface ExpenseAnalyticsTotals {
   period_total: number
   recurring_monthly: number
+  /** SaaS + marketing + servicios profesionales (equiv. mensual detectado) */
+  recurring_ops_monthly: number
+  /** Media de gasto ops real: suma meses / meses con gasto */
+  recurring_ops_avg: number
+  /** Gasto ops del último mes del rango de analítica */
+  recurring_ops_last_month: number
+  recurring_ops_last_month_label: string
   platform_period: number
   payroll_period: number
   developer_period: number
   marketing_period: number
+}
+
+export interface OpsRecurringItem {
+  date: string
+  description: string
+  amount: number
+  bucket: PaymentBucket
+  bucket_label: string
+}
+
+export interface OpsRecurringMonthPoint {
+  month: string
+  month_key: string
+  total: number
+  platform: number
+  marketing: number
+  professional: number
+  items: OpsRecurringItem[]
+}
+
+export interface OpsRecurringSeries {
+  months: OpsRecurringMonthPoint[]
+  average_monthly: number
+  last_month_total: number
+  last_month_label: string
+  last_month_key: string
+  months_with_spend: number
 }
 
 export interface VendorSpendRow {
@@ -102,6 +140,7 @@ export interface ExpenseAnalytics {
   vendor_spend: VendorSpendRow[]
   recurring: RecurringExpensesSummary
   cuttable_items: CuttableExpenseItem[]
+  ops_recurring: OpsRecurringSeries
   totals: ExpenseAnalyticsTotals
 }
 
@@ -109,6 +148,7 @@ function buildRecurrencePromotions(expenses: ExpenseInput[]): Map<string, Paymen
   const byKey = new Map<string, { bucket: PaymentBucket; months: Set<string> }>()
 
   for (const e of expenses) {
+    if (e.expense_bucket) continue
     const parsed = parsePaymentConcept(e.description || 'Sin concepto')
     if (!byKey.has(parsed.grouping_key)) {
       byKey.set(parsed.grouping_key, { bucket: parsed.bucket, months: new Set() })
@@ -126,10 +166,11 @@ function buildRecurrencePromotions(expenses: ExpenseInput[]): Map<string, Paymen
 }
 
 function resolveBucket(
-  description: string,
+  expense: ExpenseInput,
   promotions: Map<string, PaymentBucket>
 ): PaymentBucket {
-  const parsed = parsePaymentConcept(description || 'Sin concepto')
+  if (expense.expense_bucket) return expense.expense_bucket
+  const parsed = parsePaymentConcept(expense.description || 'Sin concepto')
   return promotions.get(parsed.grouping_key) ?? parsed.bucket
 }
 
@@ -141,7 +182,7 @@ export function buildMonthlyBucketTimeline(expenses: ExpenseInput[]): MonthlyBuc
     const abs = Math.abs(e.amount)
     if (abs <= 0) continue
     const monthKey = e.date.slice(0, 7)
-    const bucketKey = resolveBucket(e.description, promotions)
+    const bucketKey = resolveBucket(e, promotions)
     if (!byMonth.has(monthKey)) {
       byMonth.set(monthKey, {
         platform: 0,
@@ -187,7 +228,7 @@ export function buildBucketBreakdown(expenses: ExpenseInput[]): CategorySlice[] 
   for (const e of expenses) {
     const abs = Math.abs(e.amount)
     if (abs <= 0) continue
-    const bucketKey = resolveBucket(e.description, promotions)
+    const bucketKey = resolveBucket(e, promotions)
     const bucket = buckets.get(bucketKey)!
     bucket.amounts.push(abs)
     if (e.description?.trim()) bucket.descriptions.push(e.description.trim())
@@ -270,16 +311,22 @@ export function buildVendorSpend(expenses: ExpenseInput[]): VendorSpendRow[] {
     const abs = Math.abs(e.amount)
     if (abs <= 0) continue
     const parsed = parsePaymentConcept(e.description || 'Sin concepto')
-    const bucket = promotions.get(parsed.grouping_key) ?? parsed.bucket
+    const bucket = resolveBucket(e, promotions)
     let label = parsed.display_label
-    if (bucket === 'platform' && parsed.bucket === 'other') {
+    if (e.expense_bucket) {
+      label = `${PAYMENT_BUCKET_LABELS[e.expense_bucket]} · ${parsed.display_label}`
+    } else if (bucket === 'platform' && parsed.bucket === 'other') {
       label = platformLabelFromDescription(e.description || '')
     }
 
-    if (!byKey.has(parsed.grouping_key)) {
-      byKey.set(parsed.grouping_key, { label, bucket, amounts: [] })
+    const groupingKey = e.expense_bucket
+      ? `manual:${e.expense_bucket}:${parsed.grouping_key}`
+      : parsed.grouping_key
+
+    if (!byKey.has(groupingKey)) {
+      byKey.set(groupingKey, { label, bucket, amounts: [] })
     }
-    const row = byKey.get(parsed.grouping_key)!
+    const row = byKey.get(groupingKey)!
     if (bucket === 'platform') row.bucket = 'platform'
     row.amounts.push(abs)
   }
@@ -334,6 +381,106 @@ function buildCuttableItems(
     }))
 }
 
+/**
+ * Serie mensual real de SaaS + marketing + servicios profesionales.
+ * Media = suma de meses / meses con gasto (>0).
+ * Último mes = el más reciente del rango analizado.
+ */
+export function buildOpsRecurringSeries(expenses: ExpenseInput[]): OpsRecurringSeries {
+  const promotions = buildRecurrencePromotions(expenses)
+  const byMonth = new Map<string, OpsRecurringMonthPoint>()
+
+  let minKey = ''
+  let maxKey = ''
+  for (const e of expenses) {
+    const month_key = e.date.slice(0, 7)
+    if (!month_key || month_key.length < 7) continue
+    if (!minKey || month_key < minKey) minKey = month_key
+    if (!maxKey || month_key > maxKey) maxKey = month_key
+  }
+
+  const ensureMonth = (month_key: string) => {
+    if (!byMonth.has(month_key)) {
+      byMonth.set(month_key, {
+        month: monthLabelFromKey(month_key),
+        month_key,
+        total: 0,
+        platform: 0,
+        marketing: 0,
+        professional: 0,
+        items: [],
+      })
+    }
+  }
+
+  if (minKey && maxKey) {
+    const [sy, sm] = minKey.split('-').map(Number)
+    const [ey, em] = maxKey.split('-').map(Number)
+    let y = sy
+    let m = sm
+    while (y < ey || (y === ey && m <= em)) {
+      ensureMonth(`${y}-${String(m).padStart(2, '0')}`)
+      m += 1
+      if (m > 12) {
+        m = 1
+        y += 1
+      }
+    }
+  }
+
+  for (const e of expenses) {
+    const abs = Math.abs(e.amount)
+    if (abs <= 0) continue
+    const bucket = resolveBucket(e, promotions)
+    if (!isOpsRecurringBucket(bucket)) continue
+
+    const month_key = e.date.slice(0, 7)
+    ensureMonth(month_key)
+    const row = byMonth.get(month_key)!
+    row.total += abs
+    if (bucket === 'platform') row.platform += abs
+    else if (bucket === 'marketing') row.marketing += abs
+    else row.professional += abs
+    row.items.push({
+      date: e.date.slice(0, 10),
+      description: e.description?.trim() || 'Sin concepto',
+      amount: Math.round(abs * 100) / 100,
+      bucket,
+      bucket_label: PAYMENT_BUCKET_LABELS[bucket],
+    })
+  }
+
+  const months = Array.from(byMonth.values())
+    .sort((a, b) => a.month_key.localeCompare(b.month_key))
+    .map((m) => ({
+      ...m,
+      total: Math.round(m.total * 100) / 100,
+      platform: Math.round(m.platform * 100) / 100,
+      marketing: Math.round(m.marketing * 100) / 100,
+      professional: Math.round(m.professional * 100) / 100,
+      items: m.items.sort((a, b) => b.amount - a.amount || b.date.localeCompare(a.date)),
+    }))
+
+  const monthsWithSpend = months.filter((m) => m.total > 0)
+  const average_monthly =
+    monthsWithSpend.length > 0
+      ? Math.round(
+          (monthsWithSpend.reduce((s, m) => s + m.total, 0) / monthsWithSpend.length) * 100
+        ) / 100
+      : 0
+
+  const last = months.length > 0 ? months[months.length - 1] : null
+
+  return {
+    months,
+    average_monthly,
+    last_month_total: last?.total ?? 0,
+    last_month_label: last?.month ?? '—',
+    last_month_key: last?.month_key ?? '',
+    months_with_spend: monthsWithSpend.length,
+  }
+}
+
 export function buildExpenseAnalytics(
   expenses: ExpenseInput[],
   periodExpenses?: ExpenseInput[]
@@ -342,6 +489,7 @@ export function buildExpenseAnalytics(
   const recurring = recurringExpensesSummary(recurringItems)
   const period = periodExpenses ?? expenses
   const breakdown = buildBucketBreakdown(period)
+  const ops_recurring = buildOpsRecurringSeries(expenses)
 
   return {
     bucket_breakdown: breakdown,
@@ -350,9 +498,14 @@ export function buildExpenseAnalytics(
     vendor_spend: buildVendorSpend(period),
     recurring,
     cuttable_items: buildCuttableItems(recurring),
+    ops_recurring,
     totals: {
       period_total: Math.round(expenses.reduce((s, e) => s + Math.abs(e.amount), 0) * 100) / 100,
       recurring_monthly: recurring.monthly_total,
+      recurring_ops_monthly: recurringOpsMonthly(recurringItems),
+      recurring_ops_avg: ops_recurring.average_monthly,
+      recurring_ops_last_month: ops_recurring.last_month_total,
+      recurring_ops_last_month_label: ops_recurring.last_month_label,
       platform_period: bucketTotalFromBreakdown(breakdown, 'platform'),
       payroll_period: bucketTotalFromBreakdown(breakdown, 'payroll'),
       developer_period: bucketTotalFromBreakdown(breakdown, 'developer'),

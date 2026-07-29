@@ -11,10 +11,7 @@ import Link from 'next/link'
 import { format, startOfDay, endOfDay, startOfYear, endOfMonth } from 'date-fns'
 import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
 import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
-import {
-  buildFiscalPeriodSummary,
-  type FiscalPeriodSummary,
-} from '@/lib/finance/fiscal-summary'
+import type { FiscalPeriodSummary } from '@/lib/finance/fiscal-summary'
 
 const ResultsMonthlyChart = dynamic(() => import('@/components/finances/ResultsMonthlyChart'), {
   ssr: false,
@@ -31,6 +28,12 @@ const EMPTY_FISCAL: FiscalPeriodSummary = {
   iva_repercutido: 0,
   iva_soportado: 0,
   iva_liquidacion: 0,
+  iva_a_deber: 0,
+  iva_since_settlement_repercutido: 0,
+  iva_since_settlement_soportado: 0,
+  last_modelo_303: null,
+  modelo_303_in_period: [],
+  iva_movements: [],
   fiscal_gross: 0,
   corporate_tax_percent: 25,
   corporate_tax: 0,
@@ -82,6 +85,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       endDate = endOfMonth(now)
     }
 
+    const { buildFiscalPeriodSummary } = await import('@/lib/finance/fiscal-summary')
     const fiscal = await buildFiscalPeriodSummary(startDate, endDate)
 
     return {

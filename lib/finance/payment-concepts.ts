@@ -1,15 +1,15 @@
 /**
  * Convención de conceptos bancarios Buffalo IA
  *
- * Formato recomendado en transferencias (mayúsculas, sin tildes):
- * - NOMINA {MES} {APELLIDO}     → nóminas
- * - DEV {NOMBRE} {PROYECTO-ID}  → pagos a developers por proyecto
- * - MKT {CANAL} {DETALLE}       → marketing (EMAIL, ADS, SEO…)
- * - PLT {SERVICIO}              → plataformas/SaaS por transferencia
- * - GTO {CONCEPTO}              → otros gastos operativos
- * - FAC {CLIENTE} {NUM-FACTURA} → cobros (opcional en ingresos)
+ * Formato en transferencias (mayúsculas, sin tildes):
+ * - NOMINA {MES} {APELLIDO}           → nóminas del equipo interno
+ * - DEV {ID} {NOMBRE} {PROYECTO-ID}    → pago a developer (ID = crm_users.id)
+ * - MKT {CANAL} {TIPO} […]            → marketing (ver MARKETING_PAYMENT_RULES)
+ * - PLT {SERVICIO}                    → plataformas/SaaS por transferencia
+ * - FAC {CLIENTE} {NUM-FACTURA}       → cobros (opcional en ingresos)
  *
  * Los cargos de tarjeta (TWILIO, CURSOR…) se clasifican automáticamente.
+ * No uses conceptos “GTO / gastos varios”: no se catalogan.
  */
 
 export type PaymentBucket =
@@ -31,15 +31,118 @@ export const PAYMENT_BUCKET_LABELS: Record<PaymentBucket, string> = {
   other: 'Otros gastos',
 }
 
+export const PAYMENT_BUCKETS = Object.keys(PAYMENT_BUCKET_LABELS) as PaymentBucket[]
+
+export function isPaymentBucket(value: unknown): value is PaymentBucket {
+  return typeof value === 'string' && value in PAYMENT_BUCKET_LABELS
+}
+
+/** Canales de coste que alimentan KPIs de leads (dashboard) */
+export type LeadCostChannel = 'email' | 'web' | 'cold_calling'
+
+export type MarketingPaymentRule = {
+  /** Token exacto tras MKT (META, GOOGLE, EMAIL, COLDCALL) */
+  token: string
+  /** Canal de leads al que suma el gasto */
+  lead_channel: LeadCostChannel | null
+  label: string
+  model: string
+  concepts: Array<{ example: string; detail: string }>
+}
+
+/**
+ * Cómo poner el concepto del banco para que el dashboard asocie el gasto al canal.
+ * Web orgánica: no se invierte → no hay concepto.
+ */
+export const MARKETING_PAYMENT_RULES: MarketingPaymentRule[] = [
+  {
+    token: 'META',
+    lead_channel: 'web',
+    label: 'Meta Ads',
+    model: 'Setup + mensualidad',
+    concepts: [
+      { example: 'MKT META SETUP', detail: 'Pago inicial / configuración de la cuenta' },
+      { example: 'MKT META MENSUAL', detail: 'Cuota o recarga mensual de anuncios' },
+    ],
+  },
+  {
+    token: 'GOOGLE',
+    lead_channel: 'web',
+    label: 'Google Ads',
+    model: 'Setup + mensualidad',
+    concepts: [
+      { example: 'MKT GOOGLE SETUP', detail: 'Pago inicial / configuración' },
+      { example: 'MKT GOOGLE MENSUAL', detail: 'Cuota o recarga mensual de anuncios' },
+    ],
+  },
+  {
+    token: 'EMAIL',
+    lead_channel: 'email',
+    label: 'Email marketing',
+    model: 'Setup + mensualidad',
+    concepts: [
+      { example: 'MKT EMAIL SETUP', detail: 'Setup / onboarding (Instantly, etc.)' },
+      { example: 'MKT EMAIL MENSUAL', detail: 'Cuota mensual de la herramienta o gestión' },
+    ],
+  },
+  {
+    token: 'COLDCALL',
+    lead_channel: 'cold_calling',
+    label: 'Cold calling',
+    model: 'Comisión % cuando se cierra un lead',
+    concepts: [
+      {
+        example: 'MKT COLDCALL COMISION NOMBRE',
+        detail: 'Comisión al comercial cuando el lead se gana/cierra',
+      },
+    ],
+  },
+  {
+    token: 'WEB',
+    lead_channel: null,
+    label: 'Web (orgánico)',
+    model: 'Sin inversión',
+    concepts: [],
+  },
+]
+
+/** Normaliza el token MKT del banco → canal de leads (KPIs) */
+export function marketingTokenToLeadChannel(token: string): LeadCostChannel | null {
+  const t = (token || '').trim().toUpperCase()
+  if (!t) return null
+  if (t === 'EMAIL' || t === 'INSTANTLY' || t === 'OUTREACH' || t === 'MAIL') return 'email'
+  if (t === 'COLDCALL' || t === 'COLD' || t === 'COLDCALLING' || t === 'CALLING') {
+    return 'cold_calling'
+  }
+  // Ads de pago → se imputan al canal Web (leads ads/web); orgánico no genera gasto
+  if (
+    t === 'META' ||
+    t === 'FACEBOOK' ||
+    t === 'FB' ||
+    t === 'INSTAGRAM' ||
+    t === 'GOOGLE' ||
+    t === 'ADS' ||
+    t === 'ADWORDS' ||
+    t === 'SEM'
+  ) {
+    return 'web'
+  }
+  return null
+}
+
 export interface ParsedPaymentConcept {
   raw: string
   bucket: PaymentBucket
   bucket_label: string
   display_label: string
   developer_name?: string
+  /** ID del developer en crm_users */
+  developer_id?: string
   project_id?: string
   payroll_label?: string
   marketing_channel?: string
+  /** Canal de leads asociado (email | web | cold_calling) */
+  lead_cost_channel?: LeadCostChannel
   platform_name?: string
   grouping_key: string
   detection_source: 'concept' | 'pattern' | 'none'
@@ -61,13 +164,37 @@ const PLATFORM_PATTERNS: Array<{ key: string; label: string; patterns: RegExp[] 
 ]
 
 export const PAYMENT_CONCEPT_EXAMPLES = [
-  { category: 'Nóminas', format: 'NOMINA JUNIO MIRALBELL', example: 'NOMINA JUNIO SERGI' },
-  { category: 'Developers', format: 'DEV {nombre} {proyecto-id}', example: 'DEV LAURA BUF-2026-0042' },
-  { category: 'Marketing', format: 'MKT {canal} {detalle}', example: 'MKT ADS META CAMPANA-Q2' },
+  { category: 'Nóminas (equipo)', format: 'NOMINA {MES} {APELLIDO}', example: 'NOMINA JULIO MASOLIVER' },
+  {
+    category: 'Developers',
+    format: 'DEV {ID} {NOMBRE} {PROYECTO-ID}',
+    example: 'DEV 3 LAURA BUF-2026-0042',
+  },
+  { category: 'Marketing Meta', format: 'MKT META MENSUAL', example: 'MKT META MENSUAL' },
+  { category: 'Marketing Email', format: 'MKT EMAIL MENSUAL', example: 'MKT EMAIL MENSUAL' },
+  { category: 'Cold calling', format: 'MKT COLDCALL COMISION {nombre}', example: 'MKT COLDCALL COMISION SERGI' },
   { category: 'Plataformas', format: 'PLT {servicio}', example: 'PLT CONTABO SERVIDOR-01' },
   { category: 'Cobros cliente', format: 'FAC {cliente} {nº factura}', example: 'FAC CBD BUF-2026-00115' },
-  { category: 'Gastos varios', format: 'GTO {concepto}', example: 'GTO GESTORIA TRIMESTRE' },
+  {
+    category: 'Liquidación IVA (Hacienda)',
+    format: 'I.V.A. MODELO 303',
+    example: 'I.V.A. MODELO 303',
+  },
 ] as const
+
+/**
+ * Detecta el pago de liquidación IVA a Hacienda.
+ * Concepto recomendado: `I.V.A. MODELO 303`
+ */
+export function isModelo303Settlement(description: string): boolean {
+  const u = (description || '')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  if (!/MODELO\s*303/.test(u) && !u.replace(/\s+/g, '').includes('MODELO303')) return false
+  if (/I\.?\s*V\.?\s*A\.?|IVA|AEAT|HACIENDA/.test(u)) return true
+  return /^MODELO\s*303\b/.test(u.trim())
+}
 
 /** Plataformas que cobran por tarjeta — no requieren concepto manual */
 export const AUTO_DETECTED_SAAS = [
@@ -83,31 +210,34 @@ export const AUTO_DETECTED_SAAS = [
   'NexiaIA',
 ] as const
 
-/** Transferencias a personas y proveedores — convención obligatoria desde ahora */
+/**
+ * Transferencias que SÍ llevan concepto fijo.
+ * (Marketing tiene su propia sección; no documentamos gastos varios / GTO.)
+ */
 export const MANUAL_TRANSFER_RULES = [
   {
-    category: 'Nóminas',
-    applies_to: 'Equipo interno (nóminas y liquidaciones)',
+    category: 'Nóminas (nosotros / equipo interno)',
+    applies_to: 'Cuando os pagáis el sueldo a vosotros mismos o al equipo fijo',
     format: 'NOMINA {MES} {APELLIDO}',
-    example: 'NOMINA JUNIO MIRALBELL',
+    example: 'NOMINA JULIO MASOLIVER',
+    detail:
+      'Mes en mayúsculas + apellido (o nombre corto). Ejemplo: NOMINA JULIO SERGI · NOMINA JULIO MIRALBELL',
   },
   {
-    category: 'Developers',
-    applies_to: 'Freelancers y colaboradores por proyecto',
-    format: 'DEV {NOMBRE} {PROYECTO-ID}',
-    example: 'DEV LAURA BUF-2026-0042',
+    category: 'Developers (freelancers)',
+    applies_to: 'Pago a un developer con su ID de usuario CRM + proyecto',
+    format: 'DEV {ID} {NOMBRE} {PROYECTO-ID}',
+    example: 'DEV 3 LAURA BUF-2026-0042',
+    detail:
+      'ID = número del developer en Usuarios (crm_users). PROYECTO-ID = código del proyecto (p. ej. BUF-2026-0042).',
   },
   {
-    category: 'Marketing',
-    applies_to: 'Agencias, ads, SEO, contenido, influencers',
-    format: 'MKT {CANAL} {DETALLE}',
-    example: 'MKT ADS META CAMPANA-Q2',
-  },
-  {
-    category: 'Gastos varios',
-    applies_to: 'Gestoría, suministros u otros pagos por transferencia',
-    format: 'GTO {CONCEPTO}',
-    example: 'GTO GESTORIA TRIMESTRE',
+    category: 'Liquidación IVA (Hacienda)',
+    applies_to: 'Cuando pagáis el modelo 303 — pone a 0 el IVA a deber en Finanzas',
+    format: 'I.V.A. MODELO 303',
+    example: 'I.V.A. MODELO 303',
+    detail:
+      'Tras este pago, el CRM vuelve a sumar IVA de cobros y restar IVA de gastos hasta el siguiente 303.',
   },
 ] as const
 
@@ -163,19 +293,30 @@ export function parsePaymentConcept(description: string): ParsedPaymentConcept {
     )
   }
 
-  const devMatch = upper.match(/^DEV\s+([A-ZÁÉÍÓÚÑ\s]+?)\s+([A-Z0-9][\w-]{2,})$/i)
-  if (devMatch) {
-    const developer_name = norm(devMatch[1])
-    const project_id = devMatch[2]
+  // Formato nuevo: DEV {ID} {NOMBRE} {PROYECTO-ID}
+  // Compat: DEV {NOMBRE} {PROYECTO-ID}
+  const devWithId = upper.match(
+    /^DEV\s+(\d+)\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]*?)\s+([A-Z0-9][\w-]{2,})$/i
+  )
+  const devLegacy = upper.match(/^DEV\s+([A-ZÁÉÍÓÚÑ\s]+?)\s+([A-Z0-9][\w-]{2,})$/i)
+  if (devWithId || (devLegacy && !/^\d+\s/.test(devLegacy[1]))) {
+    const developer_id = devWithId?.[1]
+    const developer_name = norm(devWithId?.[2] || devLegacy![1])
+    const project_id = (devWithId?.[3] || devLegacy![2]).toUpperCase()
     return withSource(
       {
         raw,
         bucket: 'developer',
         bucket_label: PAYMENT_BUCKET_LABELS.developer,
-        display_label: `${developer_name} · ${project_id}`,
+        display_label: developer_id
+          ? `Dev #${developer_id} ${developer_name} · ${project_id}`
+          : `${developer_name} · ${project_id}`,
         developer_name,
+        developer_id,
         project_id,
-        grouping_key: `dev_${developer_name.toLowerCase()}_${project_id.toLowerCase()}`,
+        grouping_key: developer_id
+          ? `dev_${developer_id}_${project_id.toLowerCase()}`
+          : `dev_${developer_name.toLowerCase()}_${project_id.toLowerCase()}`,
       },
       'concept'
     )
@@ -183,22 +324,56 @@ export function parsePaymentConcept(description: string): ParsedPaymentConcept {
 
   const mktMatch = upper.match(/^(?:MKT|MARKETING)\s+(\w+)(?:\s+(.+))?$/i)
   if (mktMatch) {
-    const marketing_channel = mktMatch[1]
+    const marketing_channel = mktMatch[1].toUpperCase()
     const detail = mktMatch[2]?.trim()
+    const lead_cost_channel = marketingTokenToLeadChannel(marketing_channel) || undefined
     return withSource(
       {
         raw,
         bucket: 'marketing',
         bucket_label: PAYMENT_BUCKET_LABELS.marketing,
-        display_label: detail ? `Marketing ${marketing_channel} · ${detail}` : `Marketing ${marketing_channel}`,
+        display_label: detail
+          ? `Marketing ${marketing_channel} · ${detail}`
+          : `Marketing ${marketing_channel}`,
         marketing_channel,
+        lead_cost_channel,
         grouping_key: `mkt_${marketing_channel.toLowerCase()}`,
       },
       'concept'
     )
   }
 
-  if (/facebk|facebook|meta\b|google\s*ads|linkedin\s*ads/i.test(upper)) {
+  if (/facebk|facebook|\bmeta\b|instagram\s*ads/i.test(upper)) {
+    return withSource(
+      {
+        raw,
+        bucket: 'marketing',
+        bucket_label: PAYMENT_BUCKET_LABELS.marketing,
+        display_label: raw.slice(0, 48),
+        marketing_channel: 'META',
+        lead_cost_channel: 'web',
+        grouping_key: `mkt_meta_${raw.slice(0, 20).toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+      },
+      'pattern'
+    )
+  }
+
+  if (/google\s*ads|adwords|\bgoogle\s*ad\b/i.test(upper)) {
+    return withSource(
+      {
+        raw,
+        bucket: 'marketing',
+        bucket_label: PAYMENT_BUCKET_LABELS.marketing,
+        display_label: raw.slice(0, 48),
+        marketing_channel: 'GOOGLE',
+        lead_cost_channel: 'web',
+        grouping_key: `mkt_google_${raw.slice(0, 20).toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+      },
+      'pattern'
+    )
+  }
+
+  if (/linkedin\s*ads/i.test(upper)) {
     return withSource(
       {
         raw,
@@ -206,22 +381,26 @@ export function parsePaymentConcept(description: string): ParsedPaymentConcept {
         bucket_label: PAYMENT_BUCKET_LABELS.marketing,
         display_label: raw.slice(0, 48),
         marketing_channel: 'ADS',
+        lead_cost_channel: 'web',
         grouping_key: `mkt_ads_${raw.slice(0, 20).toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
       },
       'pattern'
     )
   }
 
-  if (/hacienda|aeat|\biva\b|irpf|modelo\s*303|modelo\s*111|impuesto/i.test(upper)) {
+  if (isModelo303Settlement(raw) || /hacienda|aeat|\biva\b|irpf|modelo\s*303|modelo\s*111|impuesto/i.test(upper)) {
+    const settlement = isModelo303Settlement(raw)
     return withSource(
       {
         raw,
         bucket: 'tax',
         bucket_label: PAYMENT_BUCKET_LABELS.tax,
-        display_label: raw.slice(0, 48),
-        grouping_key: `tax_${raw.slice(0, 24).toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+        display_label: settlement ? 'I.V.A. Modelo 303' : raw.slice(0, 48),
+        grouping_key: settlement
+          ? 'tax_modelo_303'
+          : `tax_${raw.slice(0, 24).toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
       },
-      'pattern'
+      settlement ? 'concept' : 'pattern'
     )
   }
 

@@ -2,14 +2,18 @@ import { prisma } from '@/lib/prisma'
 import { isCalBookingsTableAvailable } from '@/lib/marketing/cal-bookings'
 import { query } from '@/lib/db'
 import { listMeetingsForLead } from '@/lib/integrations/fireflies/store'
+import { buildProjectViewData } from '@/lib/onboarding/project-view'
+import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import type {
   PipelineCardContext,
+  PipelineProjectContext,
   PipelineTimelineItem,
   PipelineUpcomingMeeting,
 } from '@/lib/pipelines/card-context.types'
 
 export type {
   PipelineCardContext,
+  PipelineProjectContext,
   PipelineTimelineItem,
   PipelineUpcomingMeeting,
 } from '@/lib/pipelines/card-context.types'
@@ -100,12 +104,37 @@ async function listCalBookingsForEmail(email: string): Promise<CalRow[]> {
   }
 }
 
-async function loadProyectoForLead(leadId: number) {
+type ProyectoBrief = {
+  id: string
+  name: string
+  status: string
+  created_at: string | null
+  service_type: string | null
+  setup_fee_eur: number | null
+  monthly_fee_eur: number | null
+}
+
+async function loadProyectoForLead(leadId: number): Promise<ProyectoBrief | null> {
   try {
     const rows = await prisma.$queryRaw<
-      { id: string; name: string; status: string; created_at: Date | null }[]
+      {
+        id: string
+        name: string
+        status: string
+        created_at: Date | null
+        service_type: string | null
+        setup_fee_eur: number | null
+        monthly_fee_eur: number | null
+      }[]
     >`
-      SELECT id::text AS id, name, status, created_at
+      SELECT
+        id::text AS id,
+        name,
+        status,
+        created_at,
+        service_type,
+        setup_fee_eur,
+        monthly_fee_eur
       FROM proyectos
       WHERE lead_id = ${leadId}
       LIMIT 1
@@ -117,10 +146,179 @@ async function loadProyectoForLead(leadId: number) {
       name: p.name,
       status: p.status,
       created_at: toIso(p.created_at),
+      service_type: p.service_type,
+      setup_fee_eur: p.setup_fee_eur != null ? Number(p.setup_fee_eur) : null,
+      monthly_fee_eur: p.monthly_fee_eur != null ? Number(p.monthly_fee_eur) : null,
     }
   } catch {
     return null
   }
+}
+
+async function loadDevOnboarding(proyectoId: string) {
+  try {
+    const rows = await prisma.$queryRaw<
+      {
+        summary: string | null
+        client_context: string | null
+        scope_text: string | null
+        internal_notes: string | null
+      }[]
+    >`
+      SELECT summary, client_context, scope_text, internal_notes
+      FROM project_dev_onboarding
+      WHERE project_id = ${proyectoId}::uuid
+      LIMIT 1
+    `
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}
+
+async function loadRetentionExcerpt(proyectoId: string): Promise<{
+  excerpt: string | null
+  status: string | null
+}> {
+  try {
+    const rows = await prisma.$queryRaw<
+      { audit_knowledge: string | null; audit_status: string | null }[]
+    >`
+      SELECT audit_knowledge, audit_status
+      FROM retencion_agent_configs
+      WHERE proyecto_id = ${proyectoId}::uuid
+      LIMIT 1
+    `
+    const row = rows[0]
+    if (!row?.audit_knowledge?.trim()) {
+      return { excerpt: null, status: row?.audit_status ?? null }
+    }
+    return {
+      excerpt: extractRetentionBrief(row.audit_knowledge),
+      status: row.audit_status,
+    }
+  } catch {
+    return { excerpt: null, status: null }
+  }
+}
+
+/** Prefer Identität + Producto sections; fall back to truncated doc. */
+function extractRetentionBrief(md: string, maxLen = 1400): string {
+  const sections = ['Identidad y cliente', 'Producto contratado', 'Comercial / mensualidad']
+  const parts: string[] = []
+  for (const title of sections) {
+    const re = new RegExp(`##\\s+${title}[\\s\\S]*?(?=\\n##\\s+|$)`, 'i')
+    const m = md.match(re)
+    if (m?.[0]?.trim()) parts.push(m[0].trim())
+  }
+  const joined = parts.length ? parts.join('\n\n') : md.trim()
+  if (joined.length <= maxLen) return joined
+  return `${joined.slice(0, maxLen).trim()}…`
+}
+
+function emptyProjectContext(): PipelineProjectContext {
+  return {
+    has_any: false,
+    title: null,
+    description: null,
+    mode: null,
+    status: null,
+    services: [],
+    setup_eur: null,
+    monthly_eur: null,
+    monthly_label: null,
+    lead_notas: null,
+    onboarding_notes: null,
+    onboarding_summary: null,
+    scope_text: null,
+    last_meeting_summary: null,
+    last_meeting_title: null,
+    retention_excerpt: null,
+    retention_status: null,
+    hrefs: { onboarding: null, retencion: null, gestion: null },
+  }
+}
+
+async function buildProjectContext(input: {
+  contactId: number
+  lead: {
+    id: number
+    notas: string | null
+    configuracion: string | null
+    valor: unknown
+  } | null
+  proyecto: ProyectoBrief | null
+}): Promise<PipelineProjectContext> {
+  const ctx = emptyProjectContext()
+  if (!input.lead) return ctx
+
+  const lead = input.lead
+  const valor = lead.valor != null ? Number(lead.valor) : null
+  const view = buildProjectViewData(lead.configuracion, valor, lead.notas)
+  const cfg = view.cfg || parseConfiguradorConfig(lead.configuracion)
+
+  ctx.lead_notas = lead.notas?.trim() || null
+  ctx.services = view.services
+  ctx.setup_eur =
+    view.setupTotal > 0
+      ? view.setupTotal
+      : input.proyecto?.setup_fee_eur ?? (cfg?.setup_total_eur != null ? Number(cfg.setup_total_eur) : null)
+  ctx.monthly_eur = view.maintMonthly ?? input.proyecto?.monthly_fee_eur ?? null
+  ctx.monthly_label = view.maintLabel
+  ctx.mode = cfg?.mode === 'custom' || cfg?.mode === 'packaged' ? cfg.mode : null
+  ctx.onboarding_notes = cfg?.onboarding_notes?.trim() || null
+
+  if (cfg?.mode === 'custom') {
+    ctx.title = cfg.title?.trim() || input.proyecto?.name || null
+    ctx.description = cfg.description?.trim() || null
+    if (cfg.scope_items?.length) {
+      ctx.scope_text = cfg.scope_items.map((s) => `• ${s}`).join('\n')
+    }
+  } else {
+    ctx.title =
+      input.proyecto?.name ||
+      (view.services.length ? view.services.join(' + ') : null) ||
+      cfg?.empresa?.trim() ||
+      null
+    ctx.description = null
+  }
+
+  ctx.status = input.proyecto?.status ?? null
+  ctx.hrefs.onboarding = `/onboarding?lead=${input.contactId}`
+
+  if (input.proyecto) {
+    ctx.hrefs.gestion = `/gestion-proyecto/proyectos/${input.proyecto.id}`
+    ctx.hrefs.retencion = `/retencion/proyectos/${input.proyecto.id}?tab=configurar`
+
+    const onboarding = await loadDevOnboarding(input.proyecto.id)
+    if (onboarding) {
+      ctx.onboarding_summary = onboarding.summary?.trim() || onboarding.client_context?.trim() || null
+      if (!ctx.scope_text) ctx.scope_text = onboarding.scope_text?.trim() || null
+      if (!ctx.description && onboarding.client_context?.trim()) {
+        ctx.description = onboarding.client_context.trim()
+      }
+    }
+
+    const retention = await loadRetentionExcerpt(input.proyecto.id)
+    ctx.retention_excerpt = retention.excerpt
+    ctx.retention_status = retention.status
+  }
+
+  ctx.has_any = Boolean(
+    ctx.title ||
+      ctx.description ||
+      ctx.services.length ||
+      ctx.lead_notas ||
+      ctx.onboarding_notes ||
+      ctx.onboarding_summary ||
+      ctx.scope_text ||
+      ctx.last_meeting_summary ||
+      ctx.retention_excerpt ||
+      ctx.setup_eur ||
+      ctx.monthly_eur
+  )
+
+  return ctx
 }
 
 /**
@@ -235,6 +433,9 @@ export async function getPipelineCardContext(contactId: number): Promise<Pipelin
     }
   }
 
+  let lastMeetingSummary: string | null = null
+  let lastMeetingTitle: string | null = null
+
   if (lead?.id) {
     try {
       const fireflies = await listMeetingsForLead(lead.id)
@@ -248,6 +449,12 @@ export async function getPipelineCardContext(contactId: number): Promise<Pipelin
           detail: m.title || 'Grabación vinculada',
           at,
         })
+        if (!lastMeetingSummary && m.summary_overview?.trim()) {
+          const overview = m.summary_overview.trim()
+          lastMeetingTitle = m.title
+          lastMeetingSummary =
+            overview.length > 600 ? `${overview.slice(0, 600).trim()}…` : overview
+        }
       }
     } catch {
       // tabla puede no existir
@@ -292,6 +499,25 @@ export async function getPipelineCardContext(contactId: number): Promise<Pipelin
     deduped.push(item)
   }
 
+  const project_context = lead
+    ? await buildProjectContext({
+        contactId,
+        lead: {
+          id: lead.id,
+          notas: lead.notas,
+          configuracion: lead.configuracion,
+          valor: lead.valor,
+        },
+        proyecto,
+      })
+    : emptyProjectContext()
+
+  if (lastMeetingSummary) {
+    project_context.last_meeting_summary = lastMeetingSummary
+    project_context.last_meeting_title = lastMeetingTitle
+    project_context.has_any = true
+  }
+
   return {
     contact_id: contactId,
     lead_id: lead?.id ?? null,
@@ -302,6 +528,14 @@ export async function getPipelineCardContext(contactId: number): Promise<Pipelin
     lead_created_at: leadCreatedAt,
     upcoming_meeting: upcoming,
     timeline: deduped.slice(0, 20),
-    proyecto,
+    proyecto: proyecto
+      ? {
+          id: proyecto.id,
+          name: proyecto.name,
+          status: proyecto.status,
+          created_at: proyecto.created_at,
+        }
+      : null,
+    project_context,
   }
 }

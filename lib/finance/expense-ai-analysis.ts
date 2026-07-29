@@ -4,6 +4,7 @@ import { query } from '@/lib/db'
 import { prisma } from '@/lib/prisma'
 import { openRouterChatCompletion, parseJsonFromModelOutput } from '@/lib/openrouter'
 import { buildExpenseAnalytics } from './expense-analytics'
+import { isPaymentBucket } from './payment-concepts'
 import type { ExpenseAiSummary } from './types'
 
 const SYSTEM = `Eres el analista de gastos de Buffalo AI (agencia de agentes IA).
@@ -42,13 +43,30 @@ export async function buildExpenseAiPayload(startDate: Date, endDate: Date) {
     date: Date | string
     amount: number
     description: string
+    expense_bucket: string | null
   }>(
-    `SELECT bt.id, bt.date, bt.amount, bt.description
+    `SELECT bt.id, bt.date, bt.amount, bt.description, bt.expense_bucket
      FROM bank_transactions bt
      WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0
      ORDER BY bt.date DESC`,
     [startStr, endStr]
-  )
+  ).catch(async () => {
+    const fallback = await query<{
+      id: string
+      date: Date | string
+      amount: number
+      description: string
+    }>(
+      `SELECT bt.id, bt.date, bt.amount, bt.description
+       FROM bank_transactions bt
+       WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0
+       ORDER BY bt.date DESC`,
+      [startStr, endStr]
+    )
+    return {
+      rows: fallback.rows.map((r) => ({ ...r, expense_bucket: null as string | null })),
+    }
+  })
 
   const bankRows = expensesResult.rows.map((e) => {
     const dateStr = e.date instanceof Date ? e.date.toISOString() : String(e.date)
@@ -57,6 +75,7 @@ export async function buildExpenseAiPayload(startDate: Date, endDate: Date) {
       date: dateStr.slice(0, 10),
       amount: Math.abs(Number(e.amount)),
       description: e.description || '',
+      expense_bucket: isPaymentBucket(e.expense_bucket) ? e.expense_bucket : null,
     }
   })
 
@@ -104,22 +123,39 @@ export async function buildExpenseAiPayload(startDate: Date, endDate: Date) {
   }
 
   const analyticsStart = new Date(endDate.getFullYear(), endDate.getMonth() - 11, 1)
-  const analyticsResult = await query<{ date: string; amount: number; description: string }>(
-    `SELECT bt.date::text AS date, bt.amount, bt.description
+  const analyticsResult = await query<{
+    date: string
+    amount: number
+    description: string
+    expense_bucket: string | null
+  }>(
+    `SELECT bt.date::text AS date, bt.amount, bt.description, bt.expense_bucket
      FROM bank_transactions bt
      WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0`,
     [format(analyticsStart, 'yyyy-MM-dd'), endStr]
-  )
+  ).catch(async () => {
+    const fallback = await query<{ date: string; amount: number; description: string }>(
+      `SELECT bt.date::text AS date, bt.amount, bt.description
+       FROM bank_transactions bt
+       WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0`,
+      [format(analyticsStart, 'yyyy-MM-dd'), endStr]
+    )
+    return {
+      rows: fallback.rows.map((r) => ({ ...r, expense_bucket: null as string | null })),
+    }
+  })
 
   const analyticsExpenses = analyticsResult.rows.map((e) => ({
     description: e.description || '',
     amount: Number(e.amount),
     date: e.date.slice(0, 10),
+    expense_bucket: isPaymentBucket(e.expense_bucket) ? e.expense_bucket : null,
   }))
   const periodExpenses = bankRows.map((e) => ({
     description: e.description,
     amount: -e.amount,
     date: e.date,
+    expense_bucket: e.expense_bucket,
   }))
   const analytics = buildExpenseAnalytics(analyticsExpenses, periodExpenses)
 
@@ -155,7 +191,7 @@ export async function buildExpenseAiPayload(startDate: Date, endDate: Date) {
     })),
     convencion_conceptos: {
       nomina: 'NOMINA {MES} {APELLIDO}',
-      developer: 'DEV {NOMBRE} {PROYECTO-ID}',
+      developer: 'DEV {ID} {NOMBRE} {PROYECTO-ID}',
       marketing: 'MKT {CANAL} {DETALLE}',
       saas_tarjeta: 'auto-detectado (Twilio, Cursor…)',
     },

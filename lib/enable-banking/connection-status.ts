@@ -6,6 +6,7 @@ export interface BankConnectionStatus {
   valid_until: string | null
   days_remaining: number | null
   expires_soon: boolean
+  last_synced_at: string | null
 }
 
 export function daysUntil(validUntil: Date): number {
@@ -22,6 +23,7 @@ export async function getBankConnectionStatus(): Promise<BankConnectionStatus> {
       valid_until: null,
       days_remaining: null,
       expires_soon: false,
+      last_synced_at: null,
     }
   }
 
@@ -33,5 +35,8 @@ export async function getBankConnectionStatus(): Promise<BankConnectionStatus> {
     valid_until: session.valid_until.toISOString(),
     days_remaining: remaining,
     expires_soon: remaining <= 5,
+    last_synced_at: session.last_synced_at
+      ? session.last_synced_at.toISOString()
+      : null,
   }
 }

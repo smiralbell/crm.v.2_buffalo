@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { GetServerSideProps } from 'next'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
 import Layout from '@/components/Layout'
@@ -15,10 +16,16 @@ import ColdCallingDashboard from '@/components/coldcall/ColdCallingDashboard'
 import ColdCallTeamDashboard from '@/components/coldcall/ColdCallTeamDashboard'
 import ColdCallingCampanasTab from '@/components/ColdCallingCampanasTab'
 import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
+import MarketingChannelCostsCard from '@/components/marketing/MarketingChannelCostsCard'
 import { parseColdCallFilterParam } from '@/lib/coldcall/api-query'
 import type { ColdCallFilter } from '@/lib/coldcall/scope'
 import { useAuth } from '@/components/AuthContext'
 import { cn } from '@/lib/utils'
+
+const LeadsAnalyticsPanel = dynamic(() => import('@/components/leads/LeadsAnalyticsPanel'), {
+  ssr: false,
+  loading: () => <div className="h-40 animate-pulse rounded-2xl bg-gray-100" />,
+})
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -444,8 +451,8 @@ export default function MarketingPage() {
           </div>
         </div>
 
-        {/* Loading skeleton — solo pestañas que usan métricas globales */}
-        {loading && (tab === 'global' || tab === 'email') && (
+        {/* Loading skeleton — email (global tiene su propio skeleton) */}
+        {loading && tab === 'email' && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-pulse">
             {[...Array(8)].map((_, i) => (
               <div key={i} className="h-28 bg-gray-100 rounded-xl" />
@@ -453,8 +460,8 @@ export default function MarketingPage() {
           </div>
         )}
 
-        {/* No data yet */}
-        {!loading && !data && (
+        {/* No data yet — no tapa Métricas Globales (ahí vive la analítica de leads) */}
+        {!loading && !data && tab !== 'global' && tab !== 'web' && tab !== 'coldcalling' && (
           <div className="rounded-xl border border-dashed border-gray-200 p-16 text-center">
             <p className="text-gray-400 text-sm">No hay datos de marketing todavía.</p>
             <p className="text-gray-400 text-xs mt-1">Conecta Instantly para que los datos empiecen a llegar automáticamente.</p>
@@ -467,97 +474,137 @@ export default function MarketingPage() {
         )}
 
         {/* ── GLOBAL TAB ───────────────────────────────────────────────────── */}
-        {!loading && data && tab === 'global' && (
+        {tab === 'global' && (
           <div className="space-y-6">
-
-            {/* KPIs */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <KpiCard
-                label="Leads captados"
-                value={fmt(data.global.interested + data.global.replies)}
-                sub="respuestas + interesados"
-              />
-              <KpiCard
-                label="Reuniones"
-                value={fmt(data.global.meetingsBooked)}
-                sub={`${data.meetingTasks} pendientes`}
-              />
-              <KpiCard
-                label="Cierres"
-                value={fmt(data.global.closedLeads)}
-                sub="leads → cliente"
-              />
-              <KpiCard
-                label="Cash Collected"
-                value={data.global.cashCollected > 0 ? `${fmt(data.global.cashCollected)} €` : '—'}
-                sub="valor leads cerrados"
-              />
-              <KpiCard
-                label="Inversión total"
-                value={data.global.totalSpend > 0 ? `${fmt(data.global.totalSpend)} €` : '—'}
-                sub="todos los canales"
-              />
-              <KpiCard
-                label="CAC"
-                value={data.global.cac != null ? `${fmt(data.global.cac)} €` : '—'}
-                sub="coste adquisición"
-              />
-              <KpiCard
-                label="Emails enviados"
-                value={fmt(data.global.emailsSent)}
-                sub={`${fmt(data.global.contactsSent)} contactos únicos`}
-              />
-              <KpiCard
-                label="Tasa de respuesta"
-                value={pct(data.global.replies, data.global.contactsSent)}
-                sub={`${fmt(data.global.replies)} respuestas`}
-              />
-            </div>
-
-            {/* Channel breakdown */}
-            {data.metrics.length > 0 && (
-              <Card className="shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold text-gray-700">Canales activos · {periodLabel(period)}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="divide-y divide-gray-50">
-                    {data.metrics.map(m => (
-                      <div key={m.id} className="flex items-center justify-between py-3">
-                        <div>
-                          <p className="text-sm font-medium text-gray-800 capitalize">
-                            {m.channel.replace('_', ' ')}
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            {m.spend > 0 ? `${fmt(Number(m.spend))} € invertidos` : 'Sin inversión registrada'}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-6 text-right">
-                          <div>
-                            <p className="text-sm font-semibold text-gray-800">{fmt(m.contacts_sent)}</p>
-                            <p className="text-xs text-gray-400">contactos</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-800">{fmt(m.replies)}</p>
-                            <p className="text-xs text-gray-400">respuestas</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-800">{fmt(m.meetings_booked)}</p>
-                            <p className="text-xs text-gray-400">reuniones</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+            {loading && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-pulse">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="h-28 bg-gray-100 rounded-xl" />
+                ))}
+              </div>
             )}
+
+            {!loading && data && (
+              <>
+                {/* KPIs Instantly / marketing_metrics */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <KpiCard
+                    label="Leads captados"
+                    value={fmt(data.global.interested + data.global.replies)}
+                    sub="respuestas + interesados"
+                  />
+                  <KpiCard
+                    label="Reuniones"
+                    value={fmt(data.global.meetingsBooked)}
+                    sub={`${data.meetingTasks} pendientes`}
+                  />
+                  <KpiCard
+                    label="Cierres"
+                    value={fmt(data.global.closedLeads)}
+                    sub="leads → cliente"
+                  />
+                  <KpiCard
+                    label="Cash Collected"
+                    value={data.global.cashCollected > 0 ? `${fmt(data.global.cashCollected)} €` : '—'}
+                    sub="valor leads cerrados"
+                  />
+                  <KpiCard
+                    label="Inversión total"
+                    value={data.global.totalSpend > 0 ? `${fmt(data.global.totalSpend)} €` : '—'}
+                    sub="todos los canales"
+                  />
+                  <KpiCard
+                    label="CAC"
+                    value={data.global.cac != null ? `${fmt(data.global.cac)} €` : '—'}
+                    sub="coste adquisición"
+                  />
+                  <KpiCard
+                    label="Emails enviados"
+                    value={fmt(data.global.emailsSent)}
+                    sub={`${fmt(data.global.contactsSent)} contactos únicos`}
+                  />
+                  <KpiCard
+                    label="Tasa de respuesta"
+                    value={pct(data.global.replies, data.global.contactsSent)}
+                    sub={`${fmt(data.global.replies)} respuestas`}
+                  />
+                </div>
+
+                {data.metrics.length > 0 && (
+                  <Card className="shadow-sm">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-semibold text-gray-700">
+                        Canales activos · {periodLabel(period)}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="divide-y divide-gray-50">
+                        {data.metrics.map((m) => (
+                          <div key={m.id} className="flex items-center justify-between py-3">
+                            <div>
+                              <p className="text-sm font-medium text-gray-800 capitalize">
+                                {m.channel.replace('_', ' ')}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {m.spend > 0
+                                  ? `${fmt(Number(m.spend))} € invertidos`
+                                  : 'Sin inversión registrada'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-6 text-right">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-800">
+                                  {fmt(m.contacts_sent)}
+                                </p>
+                                <p className="text-xs text-gray-400">contactos</p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-800">{fmt(m.replies)}</p>
+                                <p className="text-xs text-gray-400">respuestas</p>
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-800">
+                                  {fmt(m.meetings_booked)}
+                                </p>
+                                <p className="text-xs text-gray-400">reuniones</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
+
+            {!loading && !data && (
+              <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center">
+                <p className="text-gray-400 text-sm">Sin métricas Instantly para este mes.</p>
+                <p className="text-gray-400 text-xs mt-1">
+                  La analítica de leads del CRM sigue disponible abajo.
+                </p>
+              </div>
+            )}
+
+            {/* Mismo bloque que Dashboard → Analítica de leads */}
+            <LeadsAnalyticsPanel
+              period={effectivePeriod || undefined}
+              onPeriodChange={handlePeriod}
+              hidePeriodSelect
+              defaultOpen
+            />
           </div>
         )}
 
         {/* ── EMAIL OUTREACH TAB ────────────────────────────────────────────── */}
         {!loading && data && tab === 'email' && (
           <div className="space-y-6">
+            <MarketingChannelCostsCard
+              period={effectivePeriod}
+              channel="email"
+              title="Costes Email marketing"
+            />
 
             {/* KPIs email */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -729,13 +776,20 @@ export default function MarketingPage() {
           />
         )}
         {tab === 'coldcalling' && ccSection === 'dashboard' && (
-          <ColdCallingDashboard
-            filter={ccFilter}
-            onFilterChange={setColdCallFilter}
-            reloadToken={coldCallReload}
-            hideToolbar
-            onLoadingChange={setColdCallLoading}
-          />
+          <div className="space-y-6">
+            <MarketingChannelCostsCard
+              period={effectivePeriod}
+              channel="cold_calling"
+              title="Costes Cold calling (comisiones)"
+            />
+            <ColdCallingDashboard
+              filter={ccFilter}
+              onFilterChange={setColdCallFilter}
+              reloadToken={coldCallReload}
+              hideToolbar
+              onLoadingChange={setColdCallLoading}
+            />
+          </div>
         )}
         {tab === 'coldcalling' && ccSection === 'campanas' && (
           <ColdCallingCampanasTab
@@ -748,13 +802,27 @@ export default function MarketingPage() {
         )}
 
         {/* ── META ADS TAB ─────────────────────────────────────────────────── */}
-        {!loading && data && tab === 'meta' && (
-          <ComingSoon name="Meta Ads" />
+        {tab === 'meta' && (
+          <div className="space-y-6">
+            <MarketingChannelCostsCard
+              period={effectivePeriod}
+              channel="meta"
+              title="Costes Meta Ads"
+            />
+            <ComingSoon name="Meta Ads" />
+          </div>
         )}
 
         {/* ── GOOGLE ADS TAB ───────────────────────────────────────────────── */}
-        {!loading && data && tab === 'google' && (
-          <ComingSoon name="Google Ads" />
+        {tab === 'google' && (
+          <div className="space-y-6">
+            <MarketingChannelCostsCard
+              period={effectivePeriod}
+              channel="google"
+              title="Costes Google Ads"
+            />
+            <ComingSoon name="Google Ads" />
+          </div>
         )}
 
       </div>

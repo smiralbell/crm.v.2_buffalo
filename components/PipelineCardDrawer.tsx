@@ -17,6 +17,7 @@ import {
   FolderKanban,
   Radio,
   Video,
+  BookOpen,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -25,6 +26,7 @@ import { BUFFALO_STAGE_COLORS, defaultStageColor } from '@/lib/pipelines/default
 import type { PipelineStageRow } from '@/lib/pipelines/stages'
 import type {
   PipelineCardContext,
+  PipelineProjectContext,
   PipelineTimelineItem,
 } from '@/lib/pipelines/card-context.types'
 
@@ -90,6 +92,232 @@ function timelineIcon(kind: PipelineTimelineItem['kind']) {
     default:
       return History
   }
+}
+
+function formatMoney(val: number) {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 0,
+  }).format(val)
+}
+
+function ProjectContextBlock({
+  project,
+  loading,
+  onNavigate,
+}: {
+  project: PipelineProjectContext | null | undefined
+  loading: boolean
+  onNavigate: (href: string) => void
+}) {
+  if (loading && !project) {
+    return (
+      <div className="px-6 pb-5">
+        <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
+          <BookOpen className="h-3.5 w-3.5" />
+          <span className="font-semibold uppercase tracking-wider">Contexto del proyecto</span>
+        </div>
+        <div className="h-28 rounded-xl bg-gray-50 border border-gray-100 animate-pulse" />
+      </div>
+    )
+  }
+
+  if (!project) return null
+
+  return (
+    <div className="px-6 pb-5">
+      <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
+        <BookOpen className="h-3.5 w-3.5" />
+        <span className="font-semibold uppercase tracking-wider">Contexto del proyecto</span>
+      </div>
+
+      {!project.has_any ? (
+        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3.5 py-3 space-y-2.5">
+          <p className="text-sm text-gray-600">
+            Aún no hay proyecto ni configuración guardada para este lead.
+          </p>
+          {project.hrefs.onboarding && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-9 text-sm rounded-lg border-gray-200"
+              onClick={() => onNavigate(project.hrefs.onboarding!)}
+            >
+              <Settings className="h-3.5 w-3.5 mr-2" />
+              Configurar proyecto
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-gray-200 bg-white p-3.5 space-y-3">
+          {(project.title || project.status || project.mode) && (
+            <div>
+              {project.title && (
+                <p className="text-sm font-semibold text-gray-900 leading-snug">{project.title}</p>
+              )}
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {project.mode && (
+                  <span className="px-2 py-0.5 rounded-md bg-gray-100 text-[11px] font-medium text-gray-600">
+                    {project.mode === 'custom' ? 'A medida' : 'Packaged'}
+                  </span>
+                )}
+                {project.status && (
+                  <span className="px-2 py-0.5 rounded-md bg-gray-100 text-[11px] font-medium text-gray-600 capitalize">
+                    {project.status}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {project.description && (
+            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+              {project.description}
+            </p>
+          )}
+
+          {project.services.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {project.services.map((s) => (
+                <span
+                  key={s}
+                  className="px-2 py-1 rounded-full bg-slate-50 border border-slate-100 text-[11px] font-semibold text-slate-700"
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {(project.setup_eur != null || project.monthly_eur != null) && (
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              {project.setup_eur != null && project.setup_eur > 0 && (
+                <div className="rounded-lg bg-gray-50 px-2.5 py-2">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">
+                    Setup
+                  </p>
+                  <p className="font-semibold text-gray-900">{formatMoney(project.setup_eur)}</p>
+                </div>
+              )}
+              {project.monthly_eur != null && project.monthly_eur > 0 && (
+                <div className="rounded-lg bg-gray-50 px-2.5 py-2">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">
+                    {project.monthly_label || 'Mensual'}
+                  </p>
+                  <p className="font-semibold text-gray-900">{formatMoney(project.monthly_eur)}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {project.scope_text && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
+                Alcance
+              </p>
+              <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">
+                {project.scope_text}
+              </p>
+            </div>
+          )}
+
+          {project.onboarding_summary && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
+                Resumen onboarding
+              </p>
+              <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">
+                {project.onboarding_summary}
+              </p>
+            </div>
+          )}
+
+          {project.onboarding_notes && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
+                Notas de configuración
+              </p>
+              <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">
+                {project.onboarding_notes}
+              </p>
+            </div>
+          )}
+
+          {project.lead_notas && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
+                Notas del lead
+              </p>
+              <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">
+                {project.lead_notas}
+              </p>
+            </div>
+          )}
+
+          {project.last_meeting_summary && (
+            <div className="rounded-lg border border-violet-100 bg-violet-50/60 px-2.5 py-2">
+              <p className="text-[10px] uppercase tracking-wider text-violet-500 font-semibold mb-1">
+                Última reunión
+                {project.last_meeting_title ? ` · ${project.last_meeting_title}` : ''}
+              </p>
+              <p className="text-xs text-violet-950 whitespace-pre-line leading-relaxed">
+                {project.last_meeting_summary}
+              </p>
+            </div>
+          )}
+
+          {project.retention_excerpt && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
+                Contexto retención
+                {project.retention_status ? ` · ${project.retention_status}` : ''}
+              </p>
+              <pre className="text-[11px] text-gray-700 whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto bg-gray-50 rounded-lg p-2.5 border border-gray-100 font-sans">
+                {project.retention_excerpt}
+              </pre>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1.5 pt-0.5">
+            {project.hrefs.onboarding && (
+              <button
+                type="button"
+                onClick={() => onNavigate(project.hrefs.onboarding!)}
+                className="flex items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-900"
+              >
+                <Settings className="h-3.5 w-3.5" />
+                Ver / editar configuración
+                <ExternalLink className="h-3 w-3 ml-auto opacity-50" />
+              </button>
+            )}
+            {project.hrefs.retencion && project.retention_excerpt && (
+              <button
+                type="button"
+                onClick={() => onNavigate(project.hrefs.retencion!)}
+                className="flex items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-900"
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                Abrir contexto completo (retención)
+                <ExternalLink className="h-3 w-3 ml-auto opacity-50" />
+              </button>
+            )}
+            {project.hrefs.gestion && (
+              <button
+                type="button"
+                onClick={() => onNavigate(project.hrefs.gestion!)}
+                className="flex items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-900"
+              >
+                <FolderKanban className="h-3.5 w-3.5" />
+                Gestión del proyecto
+                <ExternalLink className="h-3 w-3 ml-auto opacity-50" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function PipelineCardDrawer({
@@ -346,6 +574,15 @@ export default function PipelineCardDrawer({
                 </div>
               )}
             </div>
+          )}
+
+          {/* Project / commercial context */}
+          {!isColdCallPipeline && (
+            <ProjectContextBlock
+              project={context?.project_context}
+              loading={contextLoading}
+              onNavigate={(href) => router.push(href)}
+            />
           )}
 
           <div className="mx-6 border-t border-gray-100" />

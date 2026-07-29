@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, Copy, CreditCard, Landmark, Sparkles } from 'lucide-react'
+import { Check, Copy, CreditCard, Landmark, Sparkles, Users, Code2 } from 'lucide-react'
 import {
   AUTO_DETECTED_SAAS,
   MANUAL_TRANSFER_RULES,
+  MARKETING_PAYMENT_RULES,
 } from '@/lib/finance/payment-concepts'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,7 +34,7 @@ function CopyChip({ text }: { text: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="group inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] text-slate-700 transition-colors hover:border-slate-300 hover:bg-white"
+      className="group inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 font-mono text-[11px] text-slate-700 transition-colors hover:border-slate-300 hover:bg-white"
       title="Copiar concepto"
     >
       <span>{text}</span>
@@ -47,23 +48,131 @@ function CopyChip({ text }: { text: string }) {
 }
 
 function PaymentConceptGuideContent() {
+  const nomina = MANUAL_TRANSFER_RULES[0]
+  const developer = MANUAL_TRANSFER_RULES[1]
+  const iva303 = MANUAL_TRANSFER_RULES[2]
+
   return (
-    <div className="grid gap-0 lg:grid-cols-2 -mx-1">
-      <div className="border-b border-slate-100 p-1 pb-5 lg:border-b-0 lg:border-r lg:pr-6 lg:pb-1">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-slate-100 text-slate-600">
-            <CreditCard className="h-3.5 w-3.5" />
-          </span>
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Plataformas SaaS</p>
-            <p className="text-[11px] text-slate-500">Cobro directo en tarjeta · no hace falta concepto</p>
+    <div className="mx-auto w-full max-w-2xl space-y-8">
+      <p className="text-center text-sm text-slate-600 leading-relaxed">
+        En el <strong className="font-semibold text-slate-800">concepto de la transferencia</strong>{' '}
+        pon exactamente el formato indicado (mayúsculas, sin tildes). Así el CRM sabe si es nómina,
+        developer, IVA o marketing.
+      </p>
+
+      {/* Nóminas */}
+      <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5 text-center shadow-sm">
+        <div className="mx-auto mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white">
+          <Users className="h-4 w-4" />
+        </div>
+        <h3 className="text-base font-semibold text-slate-900">{nomina.category}</h3>
+        <p className="mt-1 text-xs text-slate-500">{nomina.applies_to}</p>
+
+        <div className="mt-4 rounded-xl bg-slate-50 border border-slate-100 px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Concepto exacto
+          </p>
+          <p className="mt-1 font-mono text-sm font-semibold text-slate-900">{nomina.format}</p>
+          <p className="mt-2 text-[11px] text-slate-500 leading-relaxed">{nomina.detail}</p>
+          <div className="mt-3 flex justify-center">
+            <CopyChip text={nomina.example} />
           </div>
         </div>
-        <p className="text-xs leading-relaxed text-slate-600">
-          Twilio, Cursor, Retell, OpenAI y el resto de herramientas que nos cargan solas se clasifican
-          automáticamente. Si el mismo cargo aparece 2+ meses, entra en plataformas recurrentes.
+      </section>
+
+      {/* Developers */}
+      <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5 text-center shadow-sm">
+        <div className="mx-auto mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white">
+          <Code2 className="h-4 w-4" />
+        </div>
+        <h3 className="text-base font-semibold text-slate-900">{developer.category}</h3>
+        <p className="mt-1 text-xs text-slate-500">{developer.applies_to}</p>
+
+        <div className="mt-4 rounded-xl bg-indigo-50/50 border border-indigo-100 px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400">
+            Concepto exacto
+          </p>
+          <p className="mt-1 font-mono text-sm font-semibold text-slate-900">{developer.format}</p>
+          <p className="mt-2 text-[11px] text-slate-500 leading-relaxed">{developer.detail}</p>
+          <div className="mt-3 flex justify-center">
+            <CopyChip text={developer.example} />
+          </div>
+        </div>
+      </section>
+
+      {/* IVA 303 */}
+      <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5 text-center shadow-sm">
+        <div className="mx-auto mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-amber-600 text-white">
+          <Landmark className="h-4 w-4" />
+        </div>
+        <h3 className="text-base font-semibold text-slate-900">{iva303.category}</h3>
+        <p className="mt-1 text-xs text-slate-500">{iva303.applies_to}</p>
+
+        <div className="mt-4 rounded-xl bg-amber-50/60 border border-amber-100 px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-700/70">
+            Concepto exacto
+          </p>
+          <p className="mt-1 font-mono text-sm font-semibold text-slate-900">{iva303.format}</p>
+          <p className="mt-2 text-[11px] text-slate-500 leading-relaxed">{iva303.detail}</p>
+          <div className="mt-3 flex justify-center">
+            <CopyChip text={iva303.example} />
+          </div>
+        </div>
+      </section>
+
+      {/* Marketing */}
+      <section className="rounded-2xl border border-slate-200 bg-slate-50/50 px-5 py-5">
+        <div className="text-center mb-4">
+          <div className="mx-auto mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-rose-100 text-rose-700">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <h3 className="text-base font-semibold text-slate-900">Marketing / captación</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Concepto exacto → canal y ROI en Analítica de leads
+          </p>
+        </div>
+
+        <div className="space-y-2.5">
+          {MARKETING_PAYMENT_RULES.map((rule) => (
+            <div
+              key={rule.token}
+              className="rounded-xl border border-white bg-white px-4 py-3 shadow-sm text-center sm:text-left"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1">
+                <p className="text-xs font-semibold text-slate-900">{rule.label}</p>
+                <p className="text-[10px] text-slate-500">{rule.model}</p>
+              </div>
+              {rule.concepts.length === 0 ? (
+                <p className="mt-1.5 text-[11px] text-slate-500">
+                  Sin gasto: web orgánica no lleva inversión.
+                </p>
+              ) : (
+                <div className="mt-2 flex flex-wrap justify-center sm:justify-start gap-1.5">
+                  {rule.concepts.map((c) => (
+                    <div key={c.example} className="flex flex-col gap-0.5 items-center sm:items-start">
+                      <CopyChip text={c.example} />
+                      <span className="text-[10px] text-slate-400 px-0.5">{c.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* SaaS auto */}
+      <section className="rounded-2xl border border-dashed border-slate-200 px-5 py-4 text-center">
+        <div className="mx-auto mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+          <CreditCard className="h-3.5 w-3.5" />
+        </div>
+        <h3 className="text-sm font-semibold text-slate-900">Plataformas SaaS (tarjeta)</h3>
+        <p className="mt-1 text-[11px] text-slate-500 leading-relaxed max-w-md mx-auto">
+          Twilio, Cursor, Retell, OpenAI… se detectan solos. No hace falta concepto. Solo usa{' '}
+          <span className="font-mono text-slate-600">PLT {'{servicio}'}</span> si pagas por
+          transferencia.
         </p>
-        <div className="mt-4 flex flex-wrap gap-1.5">
+        <div className="mt-3 flex flex-wrap justify-center gap-1.5">
           {AUTO_DETECTED_SAAS.map((name) => (
             <span
               key={name}
@@ -73,47 +182,13 @@ function PaymentConceptGuideContent() {
             </span>
           ))}
         </div>
-        <p className="mt-4 text-[10px] text-slate-400 leading-relaxed">
-          Solo usa <span className="font-mono text-slate-500">PLT {'{servicio}'}</span> si pagas una
-          plataforma por transferencia bancaria (no tarjeta).
-        </p>
-      </div>
+      </section>
 
-      <div className="p-1 pt-5 lg:pt-1 lg:pl-6">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-indigo-100 text-indigo-700">
-            <Landmark className="h-3.5 w-3.5" />
-          </span>
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Transferencias a personas y proveedores</p>
-            <p className="text-[11px] text-slate-500">Obligatorio en el concepto del banco · mayúsculas, sin tildes</p>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          {MANUAL_TRANSFER_RULES.map((row) => (
-            <div
-              key={row.category}
-              className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5"
-            >
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-xs font-semibold text-slate-900">{row.category}</p>
-                <p className="text-[10px] text-slate-500">{row.applies_to}</p>
-              </div>
-              <p className="mt-1 font-mono text-[10px] text-slate-400">{row.format}</p>
-              <div className="mt-2">
-                <CopyChip text={row.example} />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <p className="mt-4 text-[10px] text-slate-400 leading-relaxed border-t border-slate-100 pt-3">
-          En cobros de clientes por transferencia usa{' '}
-          <span className="font-mono text-slate-500">FAC {'{cliente}'} {'{nº factura}'}</span> para
-          vincular ingresos. Los datos alimentan los gráficos de proyecto (DEV), marketing y nóminas.
-        </p>
-      </div>
+      <p className="text-center text-[11px] text-slate-400 leading-relaxed">
+        Cobros de clientes:{' '}
+        <span className="font-mono text-slate-500">FAC {'{cliente}'} {'{nº factura}'}</span>
+        . Los gastos variables / gestoría no llevan plantilla fija.
+      </p>
     </div>
   )
 }
@@ -139,30 +214,24 @@ export default function PaymentConceptGuide({ className }: { className?: string 
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0 sm:rounded-2xl">
-          <DialogHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-6 py-5 text-left space-y-0">
-            <div className="flex flex-wrap items-start justify-between gap-3 pr-8">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-white shrink-0">
-                  <Landmark className="h-4 w-4" />
-                </span>
-                <div>
-                  <DialogTitle className="text-lg font-semibold tracking-tight text-slate-900">
-                    Cómo pagar a partir de ahora
-                  </DialogTitle>
-                  <DialogDescription className="text-xs text-slate-500 mt-1">
-                    Para que los estudios de gasto por equipo, proyecto y canal sean fiables
-                  </DialogDescription>
-                </div>
-              </div>
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
-                <Sparkles className="h-3 w-3" />
-                Política Buffalo
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 gap-0 sm:rounded-2xl">
+          <DialogHeader className="border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-6 py-5 text-center sm:text-center space-y-0">
+            <div className="flex flex-col items-center gap-2 pr-6">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-white shrink-0">
+                <Landmark className="h-4 w-4" />
               </span>
+              <div>
+                <DialogTitle className="text-lg font-semibold tracking-tight text-slate-900">
+                  Cómo poner el concepto al pagar
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500 mt-1">
+                  Nóminas · developers (con ID) · marketing
+                </DialogDescription>
+              </div>
             </div>
           </DialogHeader>
 
-          <div className="px-6 py-5">
+          <div className="px-5 py-6 sm:px-8">
             <PaymentConceptGuideContent />
           </div>
         </DialogContent>

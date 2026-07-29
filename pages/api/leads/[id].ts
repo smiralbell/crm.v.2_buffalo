@@ -63,11 +63,59 @@ export default async function handler(
     }
 
     if (req.method === 'DELETE') {
-      await prisma.lead.delete({
+      const lead = await prisma.lead.findUnique({
         where: { id },
+        select: { id: true, contact_id: true },
       })
+      if (!lead) {
+        return res.status(404).json({ error: 'Lead no encontrado' })
+      }
 
-      return res.status(200).json({ success: true })
+      const contactId = lead.contact_id
+      const alsoContact =
+        req.query.alsoContact !== '0' && req.query.also_contact !== '0'
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          // Desvincular proyecto de onboarding / gestión
+          await tx.$executeRaw`
+            UPDATE proyectos
+            SET
+              lead_id = NULL,
+              es_buffalo = FALSE,
+              status = CASE WHEN status = 'churned' THEN status ELSE 'churned' END,
+              updated_at = NOW()
+            WHERE lead_id = ${id}
+          `
+
+          if (alsoContact && contactId) {
+            // Soft-delete tarjetas de pipeline del contacto
+            await tx.pipelineCard.updateMany({
+              where: {
+                entity_id: String(contactId),
+                deleted_at: null,
+              },
+              data: { deleted_at: new Date() },
+            })
+            // Borrar contacto → cascade messages/tasks/lead (1:1)
+            await tx.contact.delete({ where: { id: contactId } })
+          } else {
+            await tx.lead.delete({ where: { id } })
+          }
+        })
+      } catch (err) {
+        // Fallback si proyectos/pipeline fallan: borrar lead (+ contacto si se pide)
+        console.warn('[api/leads DELETE] transaction warn, fallback', err)
+        if (alsoContact && contactId) {
+          await prisma.contact.delete({ where: { id: contactId } }).catch(async () => {
+            await prisma.lead.delete({ where: { id } })
+          })
+        } else {
+          await prisma.lead.delete({ where: { id } })
+        }
+      }
+
+      return res.status(200).json({ success: true, deleted_contact: alsoContact })
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

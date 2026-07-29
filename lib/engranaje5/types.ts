@@ -60,6 +60,7 @@ export type ProyectoServiceType =
   | 'automation'
   | 'lead_gen'
   | 'geo_seo'
+  | 'audit'
 
 export type ProyectoStatus = 'development' | 'active' | 'paused' | 'churned'
 

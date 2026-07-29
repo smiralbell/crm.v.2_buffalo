@@ -12,6 +12,7 @@ import {
   Home,
 } from 'lucide-react'
 import { CUSTOM_BRIEF_NEEDS } from '@/lib/onboarding/custom-brief-needs'
+import { AUDIT_BRIEF_SEED } from '@/lib/onboarding/project-kinds'
 import type { ConfiguradorConfig } from '@/lib/engranaje5/types'
 
 type ChatMsg = { role: 'user' | 'assistant'; content: string }
@@ -21,7 +22,8 @@ const fmt = (n: number) =>
 
 export default function CustomProjectBriefPage() {
   const router = useRouter()
-  const { lead, nombre, empresa, email, ciudad, pipeline, card } = router.query as Record<string, string>
+  const { lead, nombre, empresa, email, ciudad, pipeline, card, tipo } = router.query as Record<string, string>
+  const isAudit = tipo === 'auditoria' || tipo === 'audit'
 
   const [brief, setBrief] = useState('')
   const [messages, setMessages] = useState<ChatMsg[]>([])
@@ -31,10 +33,25 @@ export default function CustomProjectBriefPage() {
   const [questions, setQuestions] = useState<string[]>([])
   const [config, setConfig] = useState<ConfiguradorConfig | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const seededAudit = useRef(false)
 
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const lastAssistantRef = useRef<HTMLDivElement>(null)
   const pendingScrollToAssistant = useRef(false)
+
+  useEffect(() => {
+    if (!router.isReady) return
+    if (!isAudit || seededAudit.current) return
+    seededAudit.current = true
+    let fromAudit = ''
+    try {
+      const leadId = Number(lead)
+      if (leadId) fromAudit = sessionStorage.getItem(`audit_brief_${leadId}`) || ''
+    } catch {
+      /* ignore */
+    }
+    setBrief((prev) => (prev.trim() ? prev : fromAudit.trim() || AUDIT_BRIEF_SEED))
+  }, [router.isReady, isAudit, lead])
 
   const clientLabel = useMemo(
     () => [nombre, empresa].filter(Boolean).join(' · ') || email || (lead ? `Lead #${lead}` : 'Cliente'),
@@ -76,6 +93,7 @@ export default function CustomProjectBriefPage() {
           brief: nextBrief,
           messages: nextMessages,
           client: clientPayload,
+          kind: isAudit ? 'audit' : 'custom',
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -238,7 +256,9 @@ export default function CustomProjectBriefPage() {
 
         {/* Brief */}
         <div className="rounded-2xl border border-gray-200 bg-white p-6 md:p-7 space-y-3">
-          <label className="text-sm font-semibold text-gray-900">Brief del proyecto</label>
+          <label className="text-sm font-semibold text-gray-900">
+            {isAudit ? 'Brief de la auditoría' : 'Brief del proyecto'}
+          </label>
           <textarea
             value={brief}
             onChange={(e) => setBrief(e.target.value)}

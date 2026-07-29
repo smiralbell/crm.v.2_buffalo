@@ -3,18 +3,18 @@ import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import {
   Search, UserPlus, ChevronRight, ArrowRight,
-  X, Check, Settings, FileText, Building2,
+  X, Check, Building2,
   Mail, Phone, User, Zap, Eye,
-  LayoutList, LayoutGrid, FolderOpen, Plus, Trash2, Pencil, CheckCircle2, Rocket,
-  Wallet,
+  LayoutList, LayoutGrid, FolderOpen, Plus, Trash2, CheckCircle2, Rocket, Pencil,
+  Wallet, PlayCircle,
 } from 'lucide-react'
 import { BUFFALO_STAGE_COLORS } from '@/components/PipelineCardDrawer'
 import Link from 'next/link'
 import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
 import OnboardingSectionTabs from '@/components/onboarding/OnboardingSectionTabs'
 import DeleteOnboardingProjectDialog from '@/components/onboarding/DeleteOnboardingProjectDialog'
-import EditOnboardingProjectDialog from '@/components/onboarding/EditOnboardingProjectDialog'
 import { buildProjectViewData } from '@/lib/onboarding/project-view'
+import { isAuditConfiguracion } from '@/lib/onboarding/audit/config-detect'
 
 // ── Types ──────────────────────────────────────────────────────────────
 interface Contact {
@@ -41,6 +41,15 @@ const fmt = (v: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
 
 type ProjectFee = { setup: number | null; monthly: number | null }
+
+function auditResumeUrl(lead: Lead): string {
+  const params = new URLSearchParams()
+  params.set('lead', String(lead.id))
+  if (lead.contact?.nombre) params.set('nombre', lead.contact.nombre)
+  if (lead.contact?.empresa) params.set('empresa', lead.contact.empresa)
+  if (lead.contact?.email) params.set('email', lead.contact.email)
+  return `/onboarding/audit?${params.toString()}`
+}
 
 function resolveProjectFees(
   lead: Lead,
@@ -72,7 +81,7 @@ function resolveProjectFees(
 const STEPS = [
   { n: '1', label: 'Registra el lead' },
   { n: '2', label: 'Configura el proyecto' },
-  { n: '3', label: 'Genera propuesta · contrato · factura' },
+  { n: '3', label: 'Genera propuesta · contrato' },
 ]
 
 // ── Tab definition (add more here in the future) ───────────────────────
@@ -99,7 +108,6 @@ export default function OnboardingPage() {
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [projectsView, setProjectsView] = useState<'list' | 'grid'>('list')
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null)
-  const [editLeadId, setEditLeadId] = useState<number | null>(null)
   const [buffaloFlags, setBuffaloFlags] = useState<Record<number, boolean>>({})
   const [projectFees, setProjectFees] = useState<Record<number, ProjectFee>>({})
   const [launchingId, setLaunchingId] = useState<number | null>(null)
@@ -269,7 +277,13 @@ export default function OnboardingPage() {
     setSelected(c); setSearch(''); setResults([]); setView('hub')
   }
 
-  const handleConfigure = async (contact: Contact, overridePipeline?: string, overrideCard?: string, leadId?: number | null) => {
+  const handleConfigure = async (
+    contact: Contact,
+    overridePipeline?: string,
+    overrideCard?: string,
+    leadId?: number | null,
+    kind?: 'audit' | 'custom'
+  ) => {
     let resolvedLeadId = leadId ?? null
 
     if (!resolvedLeadId) {
@@ -310,7 +324,17 @@ export default function OnboardingPage() {
     const crd = overrideCard     || urlCard
     if (pip) params.set('pipeline', pip)
     if (crd) params.set('card',     crd)
-    params.set('mode', 'packaged')
+
+    if (kind === 'audit' || kind === 'custom') {
+      if (kind === 'audit') {
+        router.push(`/onboarding/audit?${params.toString()}`)
+        return
+      }
+      router.push(`/onboarding/custom?${params.toString()}`)
+      return
+    }
+
+    // Reconfigurar proyecto existente → picker Auditoría / A medida (o config guardada)
     router.push(`/onboarding/configure?${params.toString()}`)
   }
 
@@ -383,53 +407,13 @@ export default function OnboardingPage() {
                 </button>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
-                    onClick={() => void handleConfigure(selected)}
+                    onClick={() => void handleConfigure(selected, undefined, undefined, undefined, 'audit')}
                     className="px-4 h-10 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition-colors"
                   >
-                    Paquete Buffalo
+                    Auditoría
                   </button>
                   <button
-                    onClick={async () => {
-                      const params = new URLSearchParams()
-                      // resolve lead like handleConfigure
-                      let resolvedLeadId: number | null = null
-                      try {
-                        const lRes = await fetch(
-                          `/api/leads?search=${encodeURIComponent(selected.email || selected.nombre || '')}&pageSize=5`
-                        )
-                        if (lRes.ok) {
-                          const lData = await lRes.json()
-                          const match = (lData.leads || []).find(
-                            (l: Lead) => l.contact?.id === selected.id
-                          )
-                          if (match) resolvedLeadId = match.id
-                        }
-                      } catch { /* */ }
-                      if (!resolvedLeadId) {
-                        try {
-                          const createRes = await fetch('/api/leads', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              contact_id: selected.id,
-                              estado: 'frio',
-                              prioridad: 'media',
-                            }),
-                          })
-                          if (createRes.ok) resolvedLeadId = (await createRes.json()).id
-                          else if (createRes.status === 409) {
-                            const err = await createRes.json().catch(() => ({}))
-                            resolvedLeadId = err.leadId ?? null
-                          }
-                        } catch { /* */ }
-                      }
-                      if (resolvedLeadId) params.set('lead', String(resolvedLeadId))
-                      if (selected.nombre) params.set('nombre', selected.nombre)
-                      if (selected.empresa) params.set('empresa', selected.empresa)
-                      if (selected.email) params.set('email', selected.email)
-                      if (selected.ciudad) params.set('ciudad', selected.ciudad || '')
-                      router.push(`/onboarding/custom?${params.toString()}`)
-                    }}
+                    onClick={() => void handleConfigure(selected, undefined, undefined, undefined, 'custom')}
                     className="px-4 h-10 border border-gray-300 text-gray-900 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
                   >
                     A medida (IA)
@@ -724,6 +708,17 @@ export default function OnboardingPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 pr-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        {isAuditConfiguracion(lead.configuracion) && (
+                          <button
+                            type="button"
+                            onClick={() => router.push(auditResumeUrl(lead))}
+                            className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
+                            title="Continuar la auditoría con el copiloto"
+                          >
+                            <PlayCircle className="h-3.5 w-3.5" />
+                            Reanudar auditoría
+                          </button>
+                        )}
                         {buffaloFlags[lead.id] ? (
                           <button
                             type="button"
@@ -753,24 +748,13 @@ export default function OnboardingPage() {
                         <button
                           onClick={async () => { const r = await fetch(`/api/contacts/${lead.contact.id}`); if (r.ok) void handleConfigure(await r.json(), undefined, undefined, lead.id) }}
                           className="flex items-center gap-1.5 px-3 h-9 border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
-                          title="Abrir el configurador del producto"
-                        >
-                          <Settings className="h-3.5 w-3.5" />
-                          Configurador
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditLeadId(lead.id)}
-                          className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-300 hover:text-gray-900 transition-colors"
-                          title="Editar datos del cliente / proyecto"
+                          title="Editar cliente, proyecto y configuración"
                         >
                           <Pencil className="h-3.5 w-3.5" />
+                          Editar
                         </button>
                         <Link href={`/onboarding/proyectos/${lead.id}`} className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-300 hover:text-gray-900 transition-colors" title="Ver proyecto">
                           <Eye className="h-3.5 w-3.5" />
-                        </Link>
-                        <Link href={`/invoices?search=${encodeURIComponent(lead.contact?.nombre || '')}`} className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-400 rounded-lg hover:border-gray-300 hover:text-gray-700 transition-colors" title="Facturas">
-                          <FileText className="h-3.5 w-3.5" />
                         </Link>
                         <button
                           type="button"
@@ -837,6 +821,17 @@ export default function OnboardingPage() {
                         <div className="text-[11px] text-gray-400">{dateStr}</div>
 
                         <div className="flex flex-col gap-1.5 pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+                          {isAuditConfiguracion(lead.configuracion) && (
+                            <button
+                              type="button"
+                              onClick={() => router.push(auditResumeUrl(lead))}
+                              className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-semibold bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
+                              title="Continuar la auditoría con el copiloto"
+                            >
+                              <PlayCircle className="h-3.5 w-3.5" />
+                              Reanudar auditoría
+                            </button>
+                          )}
                           {buffaloFlags[lead.id] ? (
                             <button
                               type="button"
@@ -867,18 +862,10 @@ export default function OnboardingPage() {
                             <button
                               onClick={async () => { const r = await fetch(`/api/contacts/${lead.contact.id}`); if (r.ok) void handleConfigure(await r.json(), undefined, undefined, lead.id) }}
                               className="flex-1 flex items-center justify-center gap-1 h-9 border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
-                              title="Abrir el configurador del producto"
-                            >
-                              <Settings className="h-3.5 w-3.5" />
-                              Configurador
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditLeadId(lead.id)}
-                              className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-400 rounded-lg hover:border-gray-300 hover:text-gray-700 transition-colors"
-                              title="Editar datos del cliente / proyecto"
+                              title="Editar cliente, proyecto y configuración"
                             >
                               <Pencil className="h-3.5 w-3.5" />
+                              Editar
                             </button>
                             <Link
                               href={`/onboarding/proyectos/${lead.id}`}
@@ -886,13 +873,6 @@ export default function OnboardingPage() {
                               title="Ver proyecto"
                             >
                               <Eye className="h-3.5 w-3.5" />
-                            </Link>
-                            <Link
-                              href={`/invoices?search=${encodeURIComponent(lead.contact?.nombre || '')}`}
-                              className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-400 rounded-lg hover:border-gray-300 hover:text-gray-700 transition-colors"
-                              title="Facturas"
-                            >
-                              <FileText className="h-3.5 w-3.5" />
                             </Link>
                             <button
                               type="button"
@@ -926,18 +906,6 @@ export default function OnboardingPage() {
             loadProjects()
           }}
         />
-        <EditOnboardingProjectDialog
-          open={editLeadId != null}
-          leadId={editLeadId}
-          onOpenChange={(open) => {
-            if (!open) setEditLeadId(null)
-          }}
-          onSaved={() => {
-            setEditLeadId(null)
-            loadProjects()
-          }}
-        />
-
       </div>
     </Layout>
   )

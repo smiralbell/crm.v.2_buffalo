@@ -161,9 +161,40 @@ export default async function handler(
     }
 
     if (req.method === 'DELETE') {
-      await prisma.contact.delete({
+      const contact = await prisma.contact.findUnique({
         where: { id },
+        select: { id: true },
       })
+      if (!contact) {
+        return res.status(404).json({ error: 'Contacto no encontrado' })
+      }
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.pipelineCard.updateMany({
+            where: {
+              entity_id: String(id),
+              deleted_at: null,
+            },
+            data: { deleted_at: new Date() },
+          })
+          await tx.$executeRaw`
+            UPDATE proyectos
+            SET
+              contact_id = NULL,
+              lead_id = NULL,
+              es_buffalo = FALSE,
+              status = CASE WHEN status = 'churned' THEN status ELSE 'churned' END,
+              updated_at = NOW()
+            WHERE contact_id = ${id}
+               OR lead_id IN (SELECT id FROM leads WHERE contact_id = ${id})
+          `
+          await tx.contact.delete({ where: { id } })
+        })
+      } catch (err) {
+        console.warn('[api/contacts DELETE] transaction warn, fallback', err)
+        await prisma.contact.delete({ where: { id } })
+      }
 
       return res.status(200).json({ success: true })
     }

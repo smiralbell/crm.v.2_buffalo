@@ -10,9 +10,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, MoreVertical, Upload } from 'lucide-react'
 import Link from 'next/link'
-import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear } from 'date-fns'
+import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
-import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
+import FinancePeriodFilter, { periodToQuery } from '@/components/finances/FinancePeriodFilter'
+import {
+  getDefaultPeriodRange,
+  parsePeriodFromQuery,
+  type PeriodPresetId,
+  type PeriodRange,
+} from '@/lib/finance/period-presets'
 import {
   Dialog,
   DialogContent,
@@ -27,9 +33,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
+import AssignExpenseBuckets from '@/components/finances/AssignExpenseBuckets'
+import ChannelCostsEditor from '@/components/leads/ChannelCostsEditor'
 import { Textarea } from '@/components/ui/textarea'
 import { buildExpenseAnalytics, type ExpenseAnalytics } from '@/lib/finance/expense-analytics'
 import { createPlaceholderNotePdfBlob } from '@/lib/pdf/placeholder-note-pdf'
+import { isPaymentBucket, type PaymentBucket } from '@/lib/finance/payment-concepts'
 
 const ExpenseVendorBarChart = dynamic(() => import('@/components/finances/ExpenseVendorBarChart'), {
   ssr: false,
@@ -52,6 +61,13 @@ const ProjectSpendChart = dynamic(() => import('@/components/finances/ProjectSpe
 const ExpenseAiPanel = dynamic(() => import('@/components/finances/ExpenseAiPanel'), {
   ssr: false,
 })
+const OpsRecurringChart = dynamic(() => import('@/components/finances/OpsRecurringChart'), {
+  ssr: false,
+})
+const OpsRecurringDetailDialog = dynamic(
+  () => import('@/components/finances/OpsRecurringDetailDialog'),
+  { ssr: false }
+)
 
 const EMPTY_ANALYTICS: ExpenseAnalytics = {
   bucket_breakdown: [],
@@ -60,9 +76,21 @@ const EMPTY_ANALYTICS: ExpenseAnalytics = {
   vendor_spend: [],
   recurring: { monthly_total: 0, annual_total: 0, count: 0, items: [], groups: [] },
   cuttable_items: [],
+  ops_recurring: {
+    months: [],
+    average_monthly: 0,
+    last_month_total: 0,
+    last_month_label: '—',
+    last_month_key: '',
+    months_with_spend: 0,
+  },
   totals: {
     period_total: 0,
     recurring_monthly: 0,
+    recurring_ops_monthly: 0,
+    recurring_ops_avg: 0,
+    recurring_ops_last_month: 0,
+    recurring_ops_last_month_label: '—',
     platform_period: 0,
     payroll_period: 0,
     developer_period: 0,
@@ -78,6 +106,7 @@ interface ExpensesPageProps {
     account_name: string
     matched: boolean
     linkedExpenseId: number | null
+    expense_bucket: PaymentBucket | null
   }>
   expenseAnalytics: ExpenseAnalytics
   invoices: Array<{
@@ -96,6 +125,7 @@ interface ExpensesPageProps {
     account_name: string
     matched: boolean
     linkedExpenseId: number | null
+    expense_bucket: PaymentBucket | null
   }>
   dateRange?: {
     start: string | null
@@ -108,7 +138,7 @@ interface ExpensesPageProps {
 export const getServerSideProps: GetServerSideProps = async (context) => {
   // Durante el build, si DATABASE_URL no está disponible, retornar datos por defecto
   if (!process.env.DATABASE_URL && process.env.NEXT_PHASE === 'phase-production-build') {
-    const now = new Date()
+    const defaultRange = getDefaultPeriodRange()
     return {
       props: {
         expenses: [],
@@ -118,8 +148,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         totalVat: 0,
         totalIrpf: 0,
         dateRange: {
-          start: startOfMonth(now).toISOString(),
-          end: endOfMonth(now).toISOString(),
+          start: defaultRange.start.toISOString(),
+          end: defaultRange.end.toISOString(),
         },
       },
     }
@@ -137,45 +167,71 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   }
 
   try {
-    // Obtener rango de fechas de query params o usar mes actual por defecto
-    const startParam = context.query.start as string
-    const endParam = context.query.end as string
-    
-    let startDate: Date
-    let endDate: Date
-    
-    if (startParam && endParam) {
-      startDate = startOfDay(new Date(startParam))
-      endDate = endOfDay(new Date(endParam))
-    } else {
-      const now = new Date()
-      startDate = startOfYear(now)
-      endDate = endOfMonth(now)
-    }
+    const { start: startDate, end: endDate } = parsePeriodFromQuery(
+      context.query.start as string | undefined,
+      context.query.end as string | undefined
+    )
 
     const startStr = format(startDate, 'yyyy-MM-dd')
     const endStr = format(endDate, 'yyyy-MM-dd')
 
     // Obtener gastos desde bank_transactions (datos reales)
-    const expensesResult = await query<{
-      id: string
-      date: any
-      amount: number
-      description: string
-      account_name: string
-    }>(
-      `SELECT 
-        bt.id,
-        bt.date,
-        bt.amount,
-        bt.description,
-        ba.name as account_name
-       FROM bank_transactions bt
-       JOIN bank_accounts ba ON bt.account_id = ba.id
-       WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0
-       ORDER BY bt.date DESC`,
-      [startStr, endStr]
-    )
+    let expensesResult: {
+      rows: Array<{
+        id: string
+        date: any
+        amount: number
+        description: string
+        account_name: string
+        expense_bucket: string | null
+      }>
+    }
+    try {
+      expensesResult = await query<{
+        id: string
+        date: any
+        amount: number
+        description: string
+        account_name: string
+        expense_bucket: string | null
+      }>(
+        `SELECT 
+          bt.id,
+          bt.date,
+          bt.amount,
+          bt.description,
+          ba.name as account_name,
+          bt.expense_bucket
+         FROM bank_transactions bt
+         JOIN bank_accounts ba ON bt.account_id = ba.id
+         WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0
+         ORDER BY bt.date DESC`,
+        [startStr, endStr]
+      )
+    } catch {
+      const fallback = await query<{
+        id: string
+        date: any
+        amount: number
+        description: string
+        account_name: string
+      }>(
+        `SELECT 
+          bt.id,
+          bt.date,
+          bt.amount,
+          bt.description,
+          ba.name as account_name
+         FROM bank_transactions bt
+         JOIN bank_accounts ba ON bt.account_id = ba.id
+         WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0
+         ORDER BY bt.date DESC`,
+        [startStr, endStr]
+      )
+      expensesResult = {
+        rows: fallback.rows.map((r) => ({ ...r, expense_bucket: null })),
+      }
+    }
 
     // Normalizar gastos para reutilizarlos
     const normalizeText = (text: string | null) =>
@@ -192,6 +248,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         amount: Math.abs(Number(e.amount)),
         description: e.description,
         account_name: e.account_name,
+        expense_bucket: isPaymentBucket(e.expense_bucket) ? e.expense_bucket : null,
       }
     })
 
@@ -261,22 +318,45 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     // Analytics: últimos 12 meses hasta fin del período (gráficos + proyección)
     const analyticsStart = new Date(endDate.getFullYear(), endDate.getMonth() - 11, 1)
     const analyticsStartStr = format(analyticsStart, 'yyyy-MM-dd')
-    const analyticsResult = await query<{ date: string; amount: number; description: string }>(
-      `SELECT bt.date::text AS date, bt.amount, bt.description
-       FROM bank_transactions bt
-       WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0
-       ORDER BY bt.date`,
-      [analyticsStartStr, endStr]
-    )
+    let analyticsResult: {
+      rows: Array<{ date: string; amount: number; description: string; expense_bucket: string | null }>
+    }
+    try {
+      analyticsResult = await query<{
+        date: string
+        amount: number
+        description: string
+        expense_bucket: string | null
+      }>(
+        `SELECT bt.date::text AS date, bt.amount, bt.description, bt.expense_bucket
+         FROM bank_transactions bt
+         WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0
+         ORDER BY bt.date`,
+        [analyticsStartStr, endStr]
+      )
+    } catch {
+      const fallback = await query<{ date: string; amount: number; description: string }>(
+        `SELECT bt.date::text AS date, bt.amount, bt.description
+         FROM bank_transactions bt
+         WHERE bt.date >= $1 AND bt.date <= $2 AND bt.amount < 0
+         ORDER BY bt.date`,
+        [analyticsStartStr, endStr]
+      )
+      analyticsResult = {
+        rows: fallback.rows.map((r) => ({ ...r, expense_bucket: null })),
+      }
+    }
     const analyticsExpenses = analyticsResult.rows.map((e) => ({
       description: e.description || '',
       amount: Number(e.amount),
       date: e.date.slice(0, 10),
+      expense_bucket: isPaymentBucket(e.expense_bucket) ? e.expense_bucket : null,
     }))
     const periodExpenses = normalizedExpensesBase.map((e) => ({
       description: e.description,
       amount: -e.amount,
       date: e.date,
+      expense_bucket: e.expense_bucket,
     }))
     const expenseAnalytics = buildExpenseAnalytics(analyticsExpenses, periodExpenses)
 
@@ -359,7 +439,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     if (process.env.NODE_ENV === 'development') {
       console.error('[ERROR] Error loading expenses:', error)
     }
-    const now = new Date()
+    const defaultRange = getDefaultPeriodRange()
     return {
       props: {
         expenses: [],
@@ -369,8 +449,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         totalVat: 0,
         totalIrpf: 0,
         dateRange: {
-          start: startOfMonth(now).toISOString(),
-          end: endOfMonth(now).toISOString(),
+          start: defaultRange.start.toISOString(),
+          end: defaultRange.end.toISOString(),
         },
       },
     }
@@ -384,7 +464,6 @@ export default function ExpensesPage({
   unmatchedExpenses,
   dateRange: initialDateRange,
   totalVat,
-  totalIrpf,
 }: ExpensesPageProps) {
   const router = useRouter()
   const [displayExpenses, setDisplayExpenses] = useState(expenses)
@@ -403,30 +482,32 @@ export default function ExpensesPage({
   const [uploadHasInvoice, setUploadHasInvoice] = useState(true)
   const [uploadNoInvoiceNote, setUploadNoInvoiceNote] = useState('')
   const [unlinkLoadingId, setUnlinkLoadingId] = useState<string | null>(null)
+  const [opsDetailOpen, setOpsDetailOpen] = useState(false)
+  const [opsHighlightMonth, setOpsHighlightMonth] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     setDisplayExpenses(expenses)
     setDisplayUnmatched(unmatchedExpenses)
   }, [expenses, unmatchedExpenses])
-  
-  // Valores por defecto si initialDateRange no está definido
-  const now = new Date()
-  const defaultRange: DateRangePickerResult = {
-    // Desde el 1 de enero del año actual hasta fin de mes actual
-    start: startOfYear(now),
-    end: endOfMonth(now),
-  }
-  
-  const [dateRange, setDateRange] = useState<DateRangePickerResult>(
+
+  const [dateRange, setDateRange] = useState<PeriodRange>(() =>
     initialDateRange?.start && initialDateRange?.end
       ? {
           start: new Date(initialDateRange.start),
           end: new Date(initialDateRange.end),
         }
-      : defaultRange
+      : getDefaultPeriodRange()
   )
 
-  // Función para formatear moneda
+  useEffect(() => {
+    if (initialDateRange?.start && initialDateRange?.end) {
+      setDateRange({
+        start: new Date(initialDateRange.start),
+        end: new Date(initialDateRange.end),
+      })
+    }
+  }, [initialDateRange?.start, initialDateRange?.end])
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-ES', {
       style: 'currency',
@@ -435,16 +516,10 @@ export default function ExpensesPage({
     }).format(amount)
   }
 
-  const handleDateRangeChange = (range: DateRangePickerResult) => {
+  const handlePeriodChange = (range: PeriodRange, _preset: PeriodPresetId) => {
     setDateRange(range)
-    // Actualizar URL con los nuevos parámetros
-    if (range.start && range.end) {
-      const params = new URLSearchParams({
-        start: format(range.start, 'yyyy-MM-dd'),
-        end: format(range.end, 'yyyy-MM-dd'),
-      })
-      router.push(`/finances/expenses?${params.toString()}`)
-    }
+    const params = periodToQuery(range)
+    router.push(`/finances/expenses?start=${params.start}&end=${params.end}`)
   }
 
   const handleUnlinkExpense = async (bankExpenseId: string, linkedExpenseId: number | null) => {
@@ -632,8 +707,7 @@ export default function ExpensesPage({
     }
   }
 
-  // Asegurar que dateRange siempre tenga un valor válido
-  const currentDateRange = dateRange || defaultRange
+
 
   // Calcular totales
   const expensesTotal = displayExpenses.reduce((sum, e) => sum + e.amount, 0)
@@ -656,12 +730,23 @@ export default function ExpensesPage({
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <PaymentConceptGuide />
-            <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={currentDateRange} className="w-full sm:w-auto" />
+            <AssignExpenseBuckets
+              expenses={displayExpenses.map((e) => ({
+                id: e.id,
+                date: e.date,
+                amount: e.amount,
+                description: e.description,
+                expense_bucket: e.expense_bucket ?? null,
+              }))}
+              onChanged={() => router.replace(router.asPath)}
+            />
+            <ChannelCostsEditor triggerLabel="Costes captación" />
+            <FinancePeriodFilter value={dateRange} onChange={handlePeriodChange} />
           </div>
         </div>
 
         {/* KPIs del período */}
-        <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <Card className="border-slate-200/80 shadow-sm bg-white">
             <CardContent className="pt-5 pb-4">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
@@ -698,16 +783,76 @@ export default function ExpensesPage({
               <p className="text-[11px] text-slate-400 mt-1">Facturas de gasto</p>
             </CardContent>
           </Card>
-          <Card className="border-slate-200/80 shadow-sm bg-white">
-            <CardContent className="pt-5 pb-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-                IRPF acumulado
+          <button
+            type="button"
+            onClick={() => {
+              setOpsHighlightMonth(undefined)
+              setOpsDetailOpen(true)
+            }}
+            className="text-left rounded-xl border border-indigo-200/70 shadow-sm bg-gradient-to-br from-indigo-50/50 to-white hover:border-indigo-300 hover:shadow transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+          >
+            <div className="pt-5 pb-4 px-6">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-700/80 mb-1.5">
+                Recurrentes · media
               </p>
-              <p className="text-2xl font-semibold tabular-nums text-slate-900">{formatCurrency(totalIrpf)}</p>
-              <p className="text-[11px] text-slate-400 mt-1">Facturas de gasto</p>
-            </CardContent>
-          </Card>
+              <p className="text-2xl font-semibold tabular-nums text-indigo-950">
+                {formatCurrency(expenseAnalytics.totals.recurring_ops_avg)}
+                <span className="text-sm font-medium text-indigo-400 ml-1">/ mes</span>
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">
+                SaaS · MKT · profesionales ·{' '}
+                {expenseAnalytics.ops_recurring.months_with_spend} meses
+              </p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpsHighlightMonth(expenseAnalytics.ops_recurring.last_month_key || undefined)
+              setOpsDetailOpen(true)
+            }}
+            className="text-left rounded-xl border border-indigo-200/70 shadow-sm bg-gradient-to-br from-indigo-50/40 to-white hover:border-indigo-300 hover:shadow transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+          >
+            <div className="pt-5 pb-4 px-6">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-700/80 mb-1.5">
+                Recurrentes · último mes
+              </p>
+              <p className="text-2xl font-semibold tabular-nums text-indigo-950">
+                {formatCurrency(expenseAnalytics.totals.recurring_ops_last_month)}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">
+                {expenseAnalytics.totals.recurring_ops_last_month_label} · clic para detalle
+              </p>
+            </div>
+          </button>
         </div>
+
+        <Card className="border-slate-200/80 shadow-sm overflow-hidden">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
+            <CardTitle className="text-base font-semibold text-slate-900">
+              Gastos recurrentes en el tiempo
+            </CardTitle>
+            <p className="text-xs text-slate-500 font-normal mt-0.5">
+              SaaS + marketing + servicios profesionales · últimos 12 meses
+            </p>
+          </CardHeader>
+          <CardContent className="pt-5">
+            <OpsRecurringChart
+              data={expenseAnalytics.ops_recurring.months}
+              onMonthClick={(monthKey) => {
+                setOpsHighlightMonth(monthKey)
+                setOpsDetailOpen(true)
+              }}
+            />
+          </CardContent>
+        </Card>
+
+        <OpsRecurringDetailDialog
+          open={opsDetailOpen}
+          onOpenChange={setOpsDetailOpen}
+          data={expenseAnalytics.ops_recurring}
+          highlightMonthKey={opsHighlightMonth}
+        />
 
         <Card className="border-slate-200/80 shadow-sm overflow-hidden">
           <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-4">
@@ -783,8 +928,8 @@ export default function ExpensesPage({
             </CardHeader>
             <CardContent className="pt-5">
               <ExpenseAiPanel
-                periodStart={format(currentDateRange.start ?? defaultRange.start!, 'yyyy-MM-dd')}
-                periodEnd={format(currentDateRange.end ?? defaultRange.end!, 'yyyy-MM-dd')}
+                periodStart={format(dateRange.start, 'yyyy-MM-dd')}
+                periodEnd={format(dateRange.end, 'yyyy-MM-dd')}
               />
             </CardContent>
           </Card>

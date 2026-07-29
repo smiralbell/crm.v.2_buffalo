@@ -2,16 +2,21 @@ import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
 import { getBankConnectionStatus } from '@/lib/enable-banking/connection-status'
 import { buildFinanceAlerts } from './alerts'
-import { categorizeExpenses, categorizeIncome } from './categorize-transactions'
 import { ANNUAL_TARGET } from './chart-theme'
 import {
   countUnclassifiedExpenses,
   loadExpenseTransactionsForPeriod,
 } from './expense-sources'
+import { buildBucketBreakdown } from './expense-analytics'
 import { computeBankMrr } from './mrr-from-bank'
 import { computePlatformMonthlyBurn } from './platform-burn'
 import { buildAnnualGoalDetail, buildRichKpiCards } from './kpi-details'
 import { detectRecurringExpenses, recurringExpensesSummary } from './recurring-expenses'
+import {
+  buildClientBreakdown,
+  clientBreakdownToCategorySlices,
+  type IncomeInput,
+} from './income-analytics'
 import {
   formatPeriodLabel,
   getDefaultPeriodRange,
@@ -203,6 +208,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
       valid_until: null,
       days_remaining: null,
       expires_soon: false,
+      last_synced_at: null,
     })),
   ])
 
@@ -363,39 +369,115 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
 
   const pendingCollectionTotal = pendingInvoices.reduce((s, i) => s + i.total, 0)
 
-  const [expenseLoad, unclassified] = await Promise.all([
-    loadExpenseTransactionsForPeriod(periodStart, periodEnd, 'bank_only'),
-    countUnclassifiedExpenses(periodStart, periodEnd),
-  ])
+  const recurringLookbackStart = new Date(periodEnd.getFullYear(), periodEnd.getMonth() - 11, 1)
+  const [expenseLoad, unclassified, recurringLoad, incomeTxFromBank, linkedInvoices] =
+    await Promise.all([
+      loadExpenseTransactionsForPeriod(periodStart, periodEnd, 'bank_only'),
+      countUnclassifiedExpenses(periodStart, periodEnd),
+      loadExpenseTransactionsForPeriod(recurringLookbackStart, periodEnd, 'bank_only'),
+      query<{
+        id: string
+        description: string
+        amount: string
+        date: string
+        is_recurring_income: boolean
+      }>(
+        `SELECT id, description, amount, date::text AS date,
+                COALESCE(is_recurring_income, false) AS is_recurring_income
+         FROM bank_transactions
+         WHERE date >= $1 AND date <= $2 AND amount > 0
+         ORDER BY date DESC`,
+        [periodStartStr, periodEndStr]
+      ).catch(async () => {
+        const fallback = await query<{
+          id: string
+          description: string
+          amount: string
+          date: string
+        }>(
+          `SELECT id, description, amount, date::text AS date
+           FROM bank_transactions
+           WHERE date >= $1 AND date <= $2 AND amount > 0
+           ORDER BY date DESC`,
+          [periodStartStr, periodEndStr]
+        )
+        return {
+          rows: fallback.rows.map((r) => ({ ...r, is_recurring_income: false })),
+        }
+      }).catch(() => ({
+        rows: [] as {
+          id: string
+          description: string
+          amount: string
+          date: string
+          is_recurring_income: boolean
+        }[],
+      })),
+      query<{
+        bank_transaction_id: string
+        client_name: string
+        subtotal: number
+        iva: number
+      }>(
+        `SELECT bank_transaction_id, client_name, subtotal, iva
+         FROM invoices
+         WHERE deleted_at IS NULL AND bank_transaction_id IS NOT NULL`
+      ).catch(() => ({
+        rows: [] as {
+          bank_transaction_id: string
+          client_name: string
+          subtotal: number
+          iva: number
+        }[],
+      })),
+    ])
 
   const expenseTx = expenseLoad.transactions.filter((t) => t.amount < 0)
-  const incomeTxFromBank = await query<{ description: string; amount: string; date: string }>(
-    `SELECT description, amount, date::text AS date
-     FROM bank_transactions
-     WHERE date >= $1 AND date <= $2 AND amount > 0
-     ORDER BY date DESC`,
-    [periodStartStr, periodEndStr]
-  ).catch(() => ({ rows: [] as { description: string; amount: string; date: string }[] }))
-
-  const incomeTx = incomeTxFromBank.rows.map((r) => ({
-    description: r.description || '',
-    amount: Number(r.amount),
-    date: r.date,
+  const periodExpenseInputs = expenseTx.map((t) => ({
+    description: t.description,
+    amount: t.amount,
+    date: t.date,
+    expense_bucket: t.expense_bucket ?? null,
   }))
 
-  const expense_breakdown = categorizeExpenses(expenseTx)
-  const income_breakdown = categorizeIncome(incomeTx)
+  // Misma taxonomía que /finances/expenses (payment-concepts + expense_bucket)
+  const expense_breakdown = buildBucketBreakdown(periodExpenseInputs)
   const expense_source_label = expenseLoad.source_label
-  const net_trend = cashFlow.map((c) => ({ month: c.month, net: c.net }))
 
   const recurringItems = detectRecurringExpenses(
-    expenseTx.map((t) => ({
-      description: t.description,
-      amount: t.amount,
-      date: t.date,
-    }))
+    recurringLoad.transactions
+      .filter((t) => t.amount < 0)
+      .map((t) => ({
+        description: t.description,
+        amount: t.amount,
+        date: t.date,
+        expense_bucket: t.expense_bucket ?? null,
+      }))
   )
   const recurring_expenses = recurringExpensesSummary(recurringItems)
+
+  const linkedByBtId = new Map(
+    linkedInvoices.rows.map((inv) => [inv.bank_transaction_id, inv] as const)
+  )
+
+  const incomeInputs: IncomeInput[] = incomeTxFromBank.rows.map((r) => {
+    const linked = linkedByBtId.get(r.id)
+    return {
+      description: r.description || '',
+      amount: Number(r.amount),
+      date: r.date,
+      is_recurring_income: Boolean(r.is_recurring_income),
+      linked_client_name: linked?.client_name,
+      linked_invoice_subtotal: linked ? Number(linked.subtotal) : undefined,
+      linked_invoice_iva: linked ? Number(linked.iva) : undefined,
+    }
+  })
+
+  const income_breakdown = clientBreakdownToCategorySlices(buildClientBreakdown(incomeInputs), {
+    maxSlices: 8,
+  })
+
+  const net_trend = cashFlow.map((c) => ({ month: c.month, net: c.net }))
 
   const mrr_by_client = bankMrr.by_client
 

@@ -18,7 +18,7 @@ export default function ProjectSpendChart({ data }: { data: ProjectSpendRow[] })
     return (
       <div className="h-52 flex flex-col items-center justify-center text-sm text-gray-400 px-4 text-center gap-1">
         <p>Sin pagos a developers por proyecto</p>
-        <p className="text-xs">Usa conceptos tipo DEV LAURA BUF-2026-0042</p>
+        <p className="text-xs">Usa conceptos tipo DEV 3 LAURA BUF-2026-0042</p>
       </div>
     )
   }

@@ -13,13 +13,10 @@ import FinanceKpiCard from '@/components/finances/FinanceKpiCard'
 import AnnualGoalCard from '@/components/finances/AnnualGoalCard'
 import RecurringExpensesPanel from '@/components/finances/RecurringExpensesPanel'
 import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
+import ChannelCostsEditor from '@/components/leads/ChannelCostsEditor'
 import PeriodInsightCard from '@/components/finances/PeriodInsightCard'
 import { buildPeriodInsights } from '@/lib/finance/kpi-details'
-import {
-  buildFiscalPeriodSummary,
-  fiscalToOverviewKpis,
-} from '@/lib/finance/fiscal-summary'
-import { computePlatformMonthlyBurn } from '@/lib/finance/platform-burn'
+import { computeOpsRecurringMonthlyAvg } from '@/lib/finance/ops-recurring-burn'
 
 const CashFlowChart = dynamic(() => import('@/components/finances/CashFlowChart'), { ssr: false })
 const InvoicedVsCollectedChart = dynamic(() => import('@/components/finances/InvoicedVsCollectedChart'), { ssr: false })
@@ -38,7 +35,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import Link from 'next/link'
-import { format } from 'date-fns'
+import { format, subYears, endOfDay, startOfDay } from 'date-fns'
 import FinancePeriodFilter, { periodToQuery } from '@/components/finances/FinancePeriodFilter'
 import {
   getDefaultPeriodRange,
@@ -54,6 +51,7 @@ interface DashboardProps {
   }
   stats: {
     currentBalance: number
+    realBalance: number
     income: number
     expenses: number
     profit: number
@@ -76,7 +74,8 @@ interface DashboardProps {
   }
   runway: {
     months: number | null
-    platform_burn_monthly: number
+    /** Media mensual gastos recurrentes ops (3 meses) */
+    recurring_burn_monthly: number
   }
   bankConnection: BankConnectionStatus
   initialAiAnalysis: {
@@ -98,6 +97,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         },
         stats: {
           currentBalance: 0,
+          realBalance: 0,
           income: 0,
           expenses: 0,
           profit: 0,
@@ -120,7 +120,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         },
         runway: {
           months: null,
-          platform_burn_monthly: 0,
+          recurring_burn_monthly: 0,
         },
         bankConnection: {
           connected: false,
@@ -128,6 +128,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           valid_until: null,
           days_remaining: null,
           expires_soon: false,
+          last_synced_at: null,
         },
         initialAiAnalysis: null,
       },
@@ -163,21 +164,39 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       ? Number(balanceResult.rows[0].balance)
       : 0
 
+    const { buildFiscalPeriodSummary, fiscalToOverviewKpis } = await import(
+      '@/lib/finance/fiscal-summary'
+    )
+
     const fiscal = await buildFiscalPeriodSummary(startDate, endDate)
-    const overviewKpis = fiscalToOverviewKpis(fiscal)
-    const platformBurn = await computePlatformMonthlyBurn(3)
+    // IVA vivo a hoy (no depende del filtro) → saldo real y caja Impuestos
+    const today = endOfDay(new Date())
+    const ivaLiveFiscal = await buildFiscalPeriodSummary(startOfDay(subYears(today, 2)), today)
+    const ivaLive = ivaLiveFiscal.iva_a_deber
+    // Debes IVA (+) → resta · Te deben / a favor (−) → suma
+    const realBalance = Math.round((currentBalance - ivaLive) * 100) / 100
+
+    const opsBurn = await computeOpsRecurringMonthlyAvg(3)
     const runwayMonths =
-      platformBurn.avg_monthly > 0 && currentBalance > 0
-        ? Math.round((currentBalance / platformBurn.avg_monthly) * 10) / 10
-        : null
+      opsBurn.avg_monthly > 0 && realBalance > 0
+        ? Math.round((realBalance / opsBurn.avg_monthly) * 10) / 10
+        : realBalance <= 0 && opsBurn.avg_monthly > 0
+          ? 0
+          : null
+
+    const overviewKpis = {
+      ...fiscalToOverviewKpis(fiscal),
+      taxes: ivaLive,
+      has_iva_data: ivaLiveFiscal.has_iva_data || fiscal.has_iva_data,
+    }
 
     const income = fiscal.income_cash
     const expenses = fiscal.expenses_cash
     const profit = fiscal.gross_cash
-    const ivaToPay = fiscal.has_iva_data ? fiscal.iva_liquidacion : 0
+    const ivaToPay = ivaLive
     const estimatedCorporateTax = fiscal.corporate_tax
     const netProfit = fiscal.has_iva_data
-      ? fiscal.fiscal_gross - Math.max(0, fiscal.iva_liquidacion)
+      ? fiscal.fiscal_gross - Math.max(0, ivaLive)
       : fiscal.gross_cash
     const netProfitAfterCorporateTax = fiscal.net_result
 
@@ -187,6 +206,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       valid_until: null,
       days_remaining: null,
       expires_soon: false,
+      last_synced_at: null,
     }
     try {
       bankConnection = await getBankConnectionStatus()
@@ -216,6 +236,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         },
         stats: {
           currentBalance,
+          realBalance,
           income,
           expenses,
           profit,
@@ -231,7 +252,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         },
         runway: {
           months: runwayMonths,
-          platform_burn_monthly: platformBurn.avg_monthly,
+          recurring_burn_monthly: opsBurn.avg_monthly,
         },
         bankConnection,
         initialAiAnalysis,
@@ -250,6 +271,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         },
         stats: {
           currentBalance: 0,
+          realBalance: 0,
           income: 0,
           expenses: 0,
           profit: 0,
@@ -272,7 +294,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         },
         runway: {
           months: null,
-          platform_burn_monthly: 0,
+          recurring_burn_monthly: 0,
         },
         bankConnection: {
           connected: false,
@@ -280,6 +302,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           valid_until: null,
           days_remaining: null,
           expires_soon: false,
+          last_synced_at: null,
         },
         initialAiAnalysis: null,
       },
@@ -465,6 +488,44 @@ export default function FinancesDashboard({
     }
   }, [router.query.status, refreshConnectionStatus, runSync])
 
+  // Auto-sync al abrir Finanzas si el último sync tiene > ~20h
+  useEffect(() => {
+    if (!bankConnection.connected || syncing) return
+    if (router.query.status === 'ok') return // ya sincroniza el efecto de OAuth
+    const last = bankConnection.last_synced_at
+      ? new Date(bankConnection.last_synced_at).getTime()
+      : 0
+    const gapMs = 20 * 60 * 60 * 1000
+    if (Date.now() - last < gapMs) return
+
+    let cancelled = false
+    ;(async () => {
+      setSyncing(true)
+      try {
+        const response = await fetch('/api/bank/sync', { method: 'POST' })
+        const data = await response.json().catch(() => ({}))
+        if (cancelled || !response.ok) return
+        if (data.inserted > 0) {
+          setSyncMessage(`${data.inserted} movimientos nuevos (sync automática)`)
+        }
+        await refreshConnectionStatus()
+        const { start, end } = periodToQuery(dateRange)
+        const execRes = await fetch(`/api/finance/executive-summary?start=${start}&end=${end}`)
+        const execData = await execRes.json()
+        if (execRes.ok) setExecutive(execData)
+      } catch {
+        // silencioso
+      } finally {
+        if (!cancelled) setSyncing(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bankConnection.connected, bankConnection.last_synced_at])
+
   useEffect(() => {
     const loadExecutive = async () => {
       setLoadingExecutive(true)
@@ -593,16 +654,32 @@ export default function FinancesDashboard({
   const periodQuery = periodToQuery(dateRange)
   const periodQs = `start=${periodQuery.start}&end=${periodQuery.end}`
 
-  // Prioridad 1: caja del período + runway plataformas + impuestos
+  // Prioridad 1: caja + saldo real (IVA vivo) + runway sobre saldo real
+  const ivaBalance = overviewKpis.taxes // + debes · − a favor (calculado a hoy)
+  const realBalance = stats.realBalance
   const cashCards = [
     {
       key: 'balance',
       href: `/finances?${periodQs}`,
-      label: 'Saldo hoy',
+      label: 'Saldo actual',
       value: stats.currentBalance,
       sub: 'Último movimiento sincronizado',
       valueClass: 'text-slate-900',
       display: formatCurrency(stats.currentBalance),
+    },
+    {
+      key: 'real_balance',
+      href: `/finances/taxes?${periodQs}`,
+      label: 'Saldo real',
+      value: realBalance,
+      sub:
+        ivaBalance > 0.009
+          ? `Cuenta − IVA que debes (${formatCurrency(ivaBalance)})`
+          : ivaBalance < -0.009
+            ? `Cuenta + IVA a tu favor (${formatCurrency(Math.abs(ivaBalance))})`
+            : 'Igual al saldo de cuenta',
+      valueClass: realBalance < 0 ? 'text-rose-800' : 'text-slate-900',
+      display: formatCurrency(realBalance),
     },
     {
       key: 'income',
@@ -628,9 +705,9 @@ export default function FinancesDashboard({
       label: 'Runway',
       value: runway.months ?? 0,
       sub:
-        runway.platform_burn_monthly > 0
-          ? `Burn PLT ${formatCurrency(runway.platform_burn_monthly)}/mes`
-          : 'Sin gastos plataformas detectados',
+        runway.recurring_burn_monthly > 0
+          ? `Saldo real ÷ ${formatCurrency(runway.recurring_burn_monthly)}/mes (3m)`
+          : 'Sin gastos recurrentes detectados',
       valueClass:
         runway.months != null && runway.months < 3 ? 'text-red-600' : 'text-slate-900',
       display: runway.months != null ? `${runway.months}m` : '—',
@@ -639,10 +716,26 @@ export default function FinancesDashboard({
       key: 'taxes',
       href: `/finances/taxes?${periodQs}`,
       label: 'Impuestos',
-      value: overviewKpis.taxes,
-      sub: overviewKpis.has_iva_data ? 'IVA + sociedades est.' : 'Solo IS est. (sin IVA vinc.)',
-      valueClass: 'text-slate-900',
-      display: formatCurrency(overviewKpis.taxes),
+      value: Math.abs(ivaBalance),
+      sub: !overviewKpis.has_iva_data
+        ? 'Sin IVA vinculado aún'
+        : ivaBalance > 0.009
+          ? 'Debes este IVA a Hacienda'
+          : ivaBalance < -0.009
+            ? 'IVA a tu favor (compensar)'
+            : 'IVA en cero · al día',
+      valueClass:
+        ivaBalance > 0.009
+          ? 'text-rose-800'
+          : ivaBalance < -0.009
+            ? 'text-emerald-800'
+            : 'text-slate-900',
+      display:
+        ivaBalance > 0.009
+          ? `Debes ${formatCurrency(ivaBalance)}`
+          : ivaBalance < -0.009
+            ? `A favor ${formatCurrency(Math.abs(ivaBalance))}`
+            : formatCurrency(0),
     },
   ]
 
@@ -698,6 +791,7 @@ export default function FinancesDashboard({
                 </Button>
               </Link>
               <PaymentConceptGuide />
+              <ChannelCostsEditor triggerLabel="Costes captación" />
             </div>
           </div>
 
@@ -741,7 +835,7 @@ export default function FinancesDashboard({
           ) : null}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {cashCards.map((card) => (
             <Link key={card.key} href={card.href}>
               <Card className="border-slate-200/80 shadow-sm bg-white hover:border-slate-300 transition-colors h-full">
@@ -787,13 +881,13 @@ export default function FinancesDashboard({
                     Distribución de pagos
                   </CardTitle>
                   <p className="text-xs text-gray-400 font-normal">
-                    {executive.period_label} · {executive.expense_source_label}
+                    {executive.period_label} · buckets + Asignar gastos
                   </p>
                 </CardHeader>
                 <CardContent>
                   <FinanceCategoryDonut
                     data={executive.expense_breakdown}
-                    emptyMessage="Sin salidas en este período — sincroniza el banco"
+                    emptyMessage="Sin salidas en este período — sincroniza el banco o cambia el filtro"
                   />
                 </CardContent>
               </Card>
@@ -803,7 +897,7 @@ export default function FinancesDashboard({
                     Gastos recurrentes
                   </CardTitle>
                   <p className="text-xs text-gray-400 font-normal">
-                    Detectados en el extracto · ahorro potencial
+                    Lookback 12 meses hasta fin del filtro · mismo criterio que Gastos
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -815,12 +909,15 @@ export default function FinancesDashboard({
             <Card className="border border-gray-200 shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-semibold text-gray-900">Origen de cobros</CardTitle>
-                <p className="text-xs text-gray-400 font-normal">{executive.period_label}</p>
+                <p className="text-xs text-gray-400 font-normal">
+                  {executive.period_label} · por cliente (factura vinculada o concepto)
+                </p>
               </CardHeader>
               <CardContent>
                 <FinanceCategoryDonut
                   data={executive.income_breakdown}
-                  emptyMessage="Sin cobros en este período — sincroniza el banco"
+                  emptyMessage="Sin cobros en este período — sincroniza el banco o cambia el filtro"
+                  variant="income"
                 />
               </CardContent>
             </Card>

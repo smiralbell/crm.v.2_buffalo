@@ -236,28 +236,45 @@ export default function LeadsPage({
     setNewDialogMode(mode)
     setNewLeadOpen(true)
   }
-  const [leadToDelete, setLeadToDelete] = useState<{ id: number; name: string } | null>(null)
+  const [leadToDelete, setLeadToDelete] = useState<{
+    id: number
+    name: string
+    kind: 'lead' | 'contact'
+  } | null>(null)
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
 
-  const handleDeleteClick = (lead: Lead) => {
+  const namesMatch = (a: string, b: string) =>
+    a.trim().toLocaleLowerCase('es') === b.trim().toLocaleLowerCase('es')
+
+  const handleDeleteLeadClick = (lead: Lead) => {
     const leadName = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
-    setLeadToDelete({ id: lead.id, name: leadName })
+    setLeadToDelete({ id: lead.id, name: leadName, kind: 'lead' })
+    setDeleteConfirmName('')
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteContactClick = (c: ContactOnlyRow) => {
+    const name = c.nombre || c.email || `Contacto #${c.id}`
+    setLeadToDelete({ id: c.id, name, kind: 'contact' })
     setDeleteConfirmName('')
     setDeleteDialogOpen(true)
   }
 
   const handleDeleteConfirm = async () => {
     if (!leadToDelete) return
-    
-    if (deleteConfirmName !== leadToDelete.name) {
+
+    if (!namesMatch(deleteConfirmName, leadToDelete.name)) {
       alert('El nombre no coincide. Por favor, escribe el nombre exacto para confirmar.')
       return
     }
 
     try {
-      const res = await fetch(`/api/leads/${leadToDelete.id}`, {
-        method: 'DELETE',
-      })
+      const url =
+        leadToDelete.kind === 'contact'
+          ? `/api/contacts/${leadToDelete.id}`
+          : `/api/leads/${leadToDelete.id}?alsoContact=1`
+      const res = await fetch(url, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
 
       if (res.ok) {
         setDeleteDialogOpen(false)
@@ -265,9 +282,9 @@ export default function LeadsPage({
         setDeleteConfirmName('')
         router.reload()
       } else {
-        alert('Error al eliminar lead')
+        alert(data.error || `Error al eliminar ${leadToDelete.kind === 'contact' ? 'contacto' : 'lead'}`)
       }
-    } catch (error) {
+    } catch {
       alert('Error de conexión')
     }
   }
@@ -369,14 +386,20 @@ export default function LeadsPage({
                 Confirmar eliminación
               </DialogTitle>
               <DialogDescription>
-                Esta acción no se puede deshacer. Escribe el nombre del lead:
+                Esta acción no se puede deshacer
+                {leadToDelete?.kind === 'lead'
+                  ? ' (se eliminará también el contacto asociado).'
+                  : '.'}{' '}
+                Escribe el nombre:
                 <span className="font-semibold text-foreground block mt-2">
                   {leadToDelete?.name}
                 </span>
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2 py-2">
-              <Label htmlFor="confirm-name">Nombre del lead</Label>
+              <Label htmlFor="confirm-name">
+                {leadToDelete?.kind === 'contact' ? 'Nombre del contacto' : 'Nombre del lead'}
+              </Label>
               <Input
                 id="confirm-name"
                 value={deleteConfirmName}
@@ -402,7 +425,9 @@ export default function LeadsPage({
                 variant="destructive"
                 className="rounded-xl"
                 onClick={handleDeleteConfirm}
-                disabled={deleteConfirmName !== leadToDelete?.name}
+                disabled={
+                  !leadToDelete || !namesMatch(deleteConfirmName, leadToDelete.name)
+                }
               >
                 Eliminar
               </Button>
@@ -466,6 +491,19 @@ export default function LeadsPage({
                                     <Eye className="h-4 w-4" />
                                   </Button>
                                 </Link>
+                                <Link href={`/contacts/${c.id}/edit`}>
+                                  <Button variant="ghost" size="icon" className="rounded-xl h-8 w-8">
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </Link>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="rounded-xl h-8 w-8"
+                                  onClick={() => handleDeleteContactClick(c)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-500" />
+                                </Button>
                               </div>
                             </td>
                           </tr>
@@ -538,7 +576,7 @@ export default function LeadsPage({
                               variant="ghost"
                               size="icon"
                               className="rounded-xl h-8 w-8"
-                              onClick={() => handleDeleteClick(lead)}
+                              onClick={() => handleDeleteLeadClick(lead)}
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>

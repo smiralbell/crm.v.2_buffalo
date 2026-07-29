@@ -2,14 +2,32 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import { query } from '@/lib/db'
+import { isPaymentBucket } from '@/lib/finance/payment-concepts'
 
 const patchSchema = z
   .object({
     is_recurring_income: z.boolean().optional(),
     is_reconciled: z.boolean().optional(),
+    expense_bucket: z
+      .union([
+        z.enum([
+          'platform',
+          'payroll',
+          'marketing',
+          'developer',
+          'professional',
+          'tax',
+          'other',
+        ]),
+        z.null(),
+      ])
+      .optional(),
   })
   .refine(
-    (data) => data.is_recurring_income !== undefined || data.is_reconciled !== undefined,
+    (data) =>
+      data.is_recurring_income !== undefined ||
+      data.is_reconciled !== undefined ||
+      data.expense_bucket !== undefined,
     { message: 'Nada que actualizar' }
   )
 
@@ -58,11 +76,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
+      if (parsed.data.expense_bucket !== undefined) {
+        const bucket = parsed.data.expense_bucket
+        if (bucket !== null && !isPaymentBucket(bucket)) {
+          return res.status(400).json({ error: 'Categoría inválida' })
+        }
+        const result = await query<{ id: string; expense_bucket: string | null }>(
+          `UPDATE bank_transactions
+           SET expense_bucket = $1
+           WHERE id = $2
+           RETURNING id, expense_bucket`,
+          [bucket, id]
+        )
+        if (!result.rows[0]) {
+          return res.status(404).json({ error: 'Movimiento no encontrado' })
+        }
+      }
+
       return res.status(200).json({
         ok: true,
         id,
         is_recurring_income: parsed.data.is_recurring_income,
         is_reconciled: parsed.data.is_reconciled,
+        expense_bucket: parsed.data.expense_bucket,
       })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al actualizar'
@@ -74,6 +110,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (message.includes('is_reconciled')) {
         return res.status(500).json({
           error: 'Falta la columna is_reconciled. Ejecuta prisma/ALTER_BANK_TRANSACTIONS_RECONCILED.sql',
+        })
+      }
+      if (message.includes('expense_bucket')) {
+        return res.status(500).json({
+          error:
+            'Falta la columna expense_bucket. Ejecuta prisma/ALTER_BANK_TRANSACTIONS_EXPENSE_BUCKET.sql',
         })
       }
       return res.status(500).json({ error: message })

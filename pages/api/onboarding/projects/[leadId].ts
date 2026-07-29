@@ -11,6 +11,7 @@ const SERVICE_TYPES = [
   'automation',
   'lead_gen',
   'geo_seo',
+  'audit',
 ] as const
 
 const STATUSES = ['development', 'active', 'paused', 'churned'] as const
@@ -45,6 +46,7 @@ const patchSchema = z.object({
   addon_multimodal: z.boolean().optional(),
   addon_voice_in_chat: z.boolean().optional(),
   // Contacto / lead
+  contact_id: z.number().int().positive().optional(),
   contact_nombre: z.string().optional(),
   contact_email: z.string().optional(),
   contact_empresa: z.string().optional(),
@@ -53,7 +55,9 @@ const patchSchema = z.object({
   lead_valor: z.number().nullable().optional(),
   lead_estado: z.string().optional(),
   lead_notas: z.string().nullable().optional(),
-  /** Duración estimada, ej. "4 semanas" */
+  /** Definición / descripción del proyecto (se guarda en lead.notas) */
+  project_definition: z.string().nullable().optional(),
+  /** Duración estimada o fecha prevista, ej. "2026-08-01" o "4 semanas" */
   tiempo_previsto: z.string().nullable().optional(),
   /** YYYY-MM-DD o null */
   fecha_inicio_real: z.string().nullable().optional(),
@@ -191,6 +195,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
       if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
 
+      let activeContactId = lead.contact_id
+
       // Marcar / desmarcar como proyecto Buffalo
       if (data.es_buffalo === true) {
         if (!lead.configuracion) {
@@ -202,6 +208,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           SET
             es_buffalo = TRUE,
             status = CASE WHEN status = 'churned' THEN 'development' ELSE status END,
+            launched_at = COALESCE(launched_at, CURRENT_DATE),
             updated_at = NOW()
           WHERE lead_id = ${leadId}
         `
@@ -216,6 +223,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const fieldUpdates = { ...data }
       delete (fieldUpdates as { es_buffalo?: boolean }).es_buffalo
 
+      // Reasignar lead a otro contacto (1 lead por contact_id)
+      if (data.contact_id !== undefined && data.contact_id !== activeContactId) {
+        const target = await prisma.contact.findUnique({
+          where: { id: data.contact_id },
+          select: { id: true },
+        })
+        if (!target) {
+          return res.status(404).json({ error: 'Cliente no encontrado' })
+        }
+        const otherLead = await prisma.lead.findUnique({
+          where: { contact_id: data.contact_id },
+          select: { id: true },
+        })
+        if (otherLead && otherLead.id !== leadId) {
+          return res.status(409).json({
+            error: 'Ese cliente ya tiene otro lead. Elige otro o créalo nuevo.',
+          })
+        }
+        await prisma.lead.update({
+          where: { id: leadId },
+          data: { contact_id: data.contact_id },
+        })
+        await prisma.$executeRaw`
+          UPDATE proyectos
+          SET contact_id = ${data.contact_id}, updated_at = NOW()
+          WHERE lead_id = ${leadId}
+        `
+        activeContactId = data.contact_id
+      }
+
       const contactPatch: Record<string, string | undefined> = {}
       if (data.contact_nombre !== undefined) contactPatch.nombre = data.contact_nombre
       if (data.contact_email !== undefined) contactPatch.email = data.contact_email
@@ -223,9 +260,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (data.contact_telefono !== undefined) contactPatch.telefono = data.contact_telefono
       if (data.contact_ciudad !== undefined) contactPatch.ciudad = data.contact_ciudad
 
-      if (Object.keys(contactPatch).length && lead.contact_id) {
+      if (Object.keys(contactPatch).length && activeContactId) {
         await prisma.contact.update({
-          where: { id: lead.contact_id },
+          where: { id: activeContactId },
           data: {
             ...(contactPatch.nombre !== undefined ? { nombre: contactPatch.nombre } : {}),
             ...(contactPatch.email !== undefined
@@ -240,8 +277,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const leadPatch: Record<string, unknown> = {}
       if (data.lead_valor !== undefined) leadPatch.valor = data.lead_valor
+      if (data.setup_fee_eur !== undefined && data.lead_valor === undefined) {
+        leadPatch.valor = data.setup_fee_eur
+      }
       if (data.lead_estado !== undefined) leadPatch.estado = data.lead_estado
       if (data.lead_notas !== undefined) leadPatch.notas = data.lead_notas
+      if (data.project_definition !== undefined) leadPatch.notas = data.project_definition
       if (Object.keys(leadPatch).length) {
         await prisma.lead.update({ where: { id: leadId }, data: leadPatch })
       }

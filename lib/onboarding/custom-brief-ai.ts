@@ -40,6 +40,7 @@ const SERVICE_TYPES: ProyectoServiceType[] = [
   'voice_agent',
   'text_agent',
   'dashboard_app',
+  'audit',
 ]
 
 function asStringArray(v: unknown): string[] {
@@ -47,17 +48,18 @@ function asStringArray(v: unknown): string[] {
   return v.map((x) => String(x || '').trim()).filter(Boolean)
 }
 
-function normalizeServiceType(v: unknown): ProyectoServiceType {
+function normalizeServiceType(v: unknown, fallback: ProyectoServiceType = 'automation'): ProyectoServiceType {
   const s = String(v || '')
     .toLowerCase()
     .trim()
   if (SERVICE_TYPES.includes(s as ProyectoServiceType)) return s as ProyectoServiceType
+  if (s.includes('audit') || s.includes('auditor')) return 'audit'
   if (s.includes('lead')) return 'lead_gen'
   if (s.includes('seo') || s.includes('geo')) return 'geo_seo'
   if (s.includes('voz') || s.includes('voice')) return 'voice_agent'
   if (s.includes('chat') || s.includes('text')) return 'text_agent'
   if (s.includes('dash')) return 'dashboard_app'
-  return 'automation'
+  return fallback
 }
 
 function normalizeConfig(
@@ -181,7 +183,7 @@ Responde SOLO JSON válido (sin markdown):
   "config": null | {
     "title": string,
     "description": string,
-    "service_type": "automation"|"lead_gen"|"geo_seo"|"voice_agent"|"text_agent"|"dashboard_app",
+    "service_type": "automation"|"lead_gen"|"geo_seo"|"voice_agent"|"text_agent"|"dashboard_app"|"audit",
     "scope_items": string[],
     "line_items": [{ "description": string, "amount_eur": number }],
     "setup_total_eur": number,
@@ -200,15 +202,30 @@ export async function analyzeCustomProjectBrief(input: {
   brief: string
   messages?: BriefChatMessage[]
   client?: { nombre?: string; empresa?: string; email?: string; ciudad?: string; ref?: string }
+  kind?: 'audit' | 'custom'
 }): Promise<CustomBriefAiResult> {
   const client = input.client || {}
+  const kind = input.kind === 'audit' ? 'audit' : 'custom'
   const history = (input.messages || [])
     .filter((m) => m.content?.trim())
     .slice(-12)
     .map((m) => `${m.role === 'user' ? 'Comercial' : 'Asistente'}: ${m.content.trim()}`)
     .join('\n')
 
+  const system =
+    kind === 'audit'
+      ? SYSTEM.replace(
+          'un PROYECTO A MEDIDA (no el configurador de agentes voz/chat/dash)',
+          'una AUDITORÍA Buffalo (diagnóstico/informe; no implementación de agentes ni paquete)'
+        ).replace(
+          '"service_type": "automation"|"lead_gen"|"geo_seo"|"voice_agent"|"text_agent"|"dashboard_app"|"audit"',
+          '"service_type": "audit"'
+        ) +
+        '\n\nPara auditorías: service_type DEBE ser "audit". Mensualidad suele ser null. Prioriza entregable = informe + hallazgos + roadmap.'
+      : SYSTEM
+
   const userPayload = {
+    tipo: kind === 'audit' ? 'auditoria' : 'a_medida',
     cliente: {
       nombre: client.nombre || null,
       empresa: client.empresa || null,
@@ -223,10 +240,10 @@ export async function analyzeCustomProjectBrief(input: {
 
   const raw = await openRouterChatCompletion(
     [
-      { role: 'system', content: SYSTEM },
+      { role: 'system', content: system },
       {
         role: 'user',
-        content: `Analiza este brief de proyecto a medida y responde en JSON:\n${JSON.stringify(userPayload, null, 2)}`,
+        content: `Analiza este brief de ${kind === 'audit' ? 'auditoría' : 'proyecto a medida'} y responde en JSON:\n${JSON.stringify(userPayload, null, 2)}`,
       },
     ],
     { temperature: 0.2 }
@@ -247,7 +264,16 @@ export async function analyzeCustomProjectBrief(input: {
       ? 'Proyecto listo. Revisa y confirma.'
       : 'Necesito un poco más de información.')
 
-  const config = normalizeConfig(parsed.config, client)
+  let config = normalizeConfig(parsed.config, client)
+  if (config && kind === 'audit') {
+    config = {
+      ...config,
+      service_type: 'audit',
+      title: /auditor/i.test(config.title || '')
+        ? config.title
+        : `Auditoría · ${config.title || client.empresa || client.nombre || 'Cliente'}`,
+    }
+  }
   const completeness = configIsComplete(config)
 
   if (parsed.status === 'ready' && completeness.ok && config) {

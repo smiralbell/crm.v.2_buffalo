@@ -138,6 +138,9 @@ export function isValidConfiguradorConfig(
 ): cfg is ConfiguradorConfig {
   if (!cfg) return false
   if (cfg.mode === 'custom') {
+    if (cfg.service_type === 'audit') {
+      return Boolean(cfg.title || cfg.empresa || cfg.nombre)
+    }
     return Boolean(
       (cfg.title || cfg.empresa || cfg.nombre) &&
         (cfg.setup_total_eur || (cfg.line_items && cfg.line_items.length > 0))

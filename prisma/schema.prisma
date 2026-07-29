@@ -412,6 +412,22 @@ model MarketingMetric {
   @@map("marketing_metrics")
 }
 
+/// Override manual de coste de captación por canal (meta|google|email|cold_calling) + tipo
+model ChannelCostOverride {
+  id         Int      @id @default(autoincrement())
+  period     String   // YYYY-MM
+  channel    String   // meta | google | email | cold_calling
+  cost_kind  String   @default("monthly") // setup | monthly | commission
+  spend_eur  Decimal  @default(0) @db.Decimal(12, 2)
+  notes      String?  @db.Text
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([period, channel, cost_kind])
+  @@index([period])
+  @@map("channel_cost_overrides")
+}
+
 // Webhooks de Instantly (Email Outreach)
 model InstantlyWebhook {
   id          Int       @id @default(autoincrement())

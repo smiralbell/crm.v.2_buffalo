@@ -13,6 +13,7 @@ const schema = z.object({
       })
     )
     .optional(),
+  kind: z.enum(['audit', 'custom']).optional(),
   client: z
     .object({
       nombre: z.string().optional(),

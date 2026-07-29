@@ -3,6 +3,11 @@ import { requireAuthAPI } from '@/lib/auth'
 import { findCrmUserById } from '@/lib/crm-users'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Arranca el sync bancario diario una vez (idempotente), sin instrumentation.
+  void import('@/lib/enable-banking/daily-sync-scheduler')
+    .then((m) => m.startBankSyncScheduler())
+    .catch(() => {})
+
   try {
     let user = await requireAuthAPI(req, res)
     if (user.role === 'developer' && user.id > 0) {

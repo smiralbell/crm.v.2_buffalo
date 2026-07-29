@@ -474,28 +474,6 @@ header{padding:20px 40px;border-bottom:1px solid var(--rule);display:flex;align-
             </div>
           </div>
 
-          <!-- Factura -->
-          <div class="cta-row">
-            <div class="cta-info">
-              <div class="cta-title">Factura — 1er pago (50%)</div>
-              <div class="cta-sub">Con IVA · lista para enviar</div>
-            </div>
-            <div class="cta-btns">
-              <button class="btn-action" onclick="generateFactura()">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                Generar
-              </button>
-              <button class="btn-view" type="button" onclick="viewDoc('factura')" title="Abrir / borrador sin marcar enviada">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                Ver
-              </button>
-              <button class="btn-send" onclick="sendDoc('factura')">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                Enviar
-              </button>
-            </div>
-          </div>
-
         </div>
         <div class="toast-msg" id="toastMsg"></div>
       </div>

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
-import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
-import { ChevronLeft, CheckCircle, Settings, Save, Loader2, Package, Sparkles } from 'lucide-react'
+import OnboardingProjectEditForm from '@/components/onboarding/OnboardingProjectEditForm'
+import { ChevronLeft, CheckCircle, Settings, Save, Loader2, ClipboardList, Sparkles, Pencil, ChevronDown } from 'lucide-react'
 import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 
 interface InvoiceData {
@@ -53,10 +53,10 @@ export default function ConfigurePage() {
   // Read URL params
   const { lead, nombre, empresa, email, ciudad, pipeline, card, mode } = router.query as Record<string, string>
   const activeLeadId = resolvedLeadId || lead || ''
-  const [pickedMode, setPickedMode] = useState<'packaged' | 'custom' | null>(null)
+  const [pickedMode, setPickedMode] = useState<'packaged' | 'custom' | 'audit' | null>(null)
 
-  const effectiveMode: 'packaged' | 'custom' | null =
-    (mode === 'custom' || mode === 'packaged' ? mode : null) ||
+  const effectiveMode: 'packaged' | 'custom' | 'audit' | null =
+    (mode === 'custom' || mode === 'packaged' || mode === 'audit' ? mode : null) ||
     pickedMode ||
     (savedConfig
       ? parseConfiguradorConfig(savedConfig)?.mode === 'custom'
@@ -69,6 +69,7 @@ export default function ConfigurePage() {
   // Resolved pipeline + card (from URL params OR auto-discovered)
   const [resolvedPipeline, setResolvedPipeline] = useState('')
   const [resolvedCard, setResolvedCard]         = useState('')
+  const [showDataEditor, setShowDataEditor]     = useState(true)
 
   // ── Auto-vincular lead si falta en la URL (contacto existente sin lead) ──
   useEffect(() => {
@@ -174,10 +175,10 @@ export default function ConfigurePage() {
       .catch(() => { /* best-effort */ })
   }, [router.isReady, activeLeadId, pipeline, card])
 
-  // Si eligen a medida sin config aún → brief + IA
+  // Si eligen a medida o auditoría sin config aún → brief + IA
   useEffect(() => {
     if (!router.isReady) return
-    if (effectiveMode !== 'custom') return
+    if (effectiveMode !== 'custom' && effectiveMode !== 'audit') return
     if (savedConfig && parseConfiguradorConfig(savedConfig)?.mode === 'custom') return
 
     const params = new URLSearchParams()
@@ -188,6 +189,10 @@ export default function ConfigurePage() {
     if (ciudad) params.set('ciudad', ciudad || '')
     if (pipeline) params.set('pipeline', pipeline)
     if (card) params.set('card', card)
+    if (effectiveMode === 'audit') {
+      router.replace(`/onboarding/audit?${params.toString()}`)
+      return
+    }
     router.replace(`/onboarding/custom?${params.toString()}`)
   }, [
     router.isReady,
@@ -207,7 +212,10 @@ export default function ConfigurePage() {
   useEffect(() => {
     if (!router.isReady) return
     if (!effectiveMode) return
-    if (effectiveMode === 'custom' && !(savedConfig && parseConfiguradorConfig(savedConfig)?.mode === 'custom')) {
+    if (
+      (effectiveMode === 'custom' || effectiveMode === 'audit') &&
+      !(savedConfig && parseConfiguradorConfig(savedConfig)?.mode === 'custom')
+    ) {
       return
     }
 
@@ -475,9 +483,6 @@ export default function ConfigurePage() {
             </div>
           )}
           {activeLeadId && (
-            <AssignDevelopersButton leadId={activeLeadId} />
-          )}
-          {activeLeadId && (
             <button
               type="button"
               onClick={requestSave}
@@ -501,15 +506,43 @@ export default function ConfigurePage() {
         </div>
       </div>
 
+      {activeLeadId && (
+        <div className="mb-6 rounded-2xl border border-gray-200 bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowDataEditor((v) => !v)}
+            className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-2.5">
+              <Pencil className="h-4 w-4 text-gray-500" />
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Datos del cliente y proyecto</p>
+                <p className="text-xs text-gray-400">
+                  Cliente, precio, mensualidad, definición y fechas
+                </p>
+              </div>
+            </div>
+            <ChevronDown
+              className={`h-4 w-4 text-gray-400 transition-transform ${showDataEditor ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {showDataEditor && (
+            <div className="px-5 pb-5 border-t border-gray-100 pt-4">
+              <OnboardingProjectEditForm leadId={activeLeadId} />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Mode picker */}
       {!effectiveMode && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 max-w-5xl">
           <button
             type="button"
             onClick={() => {
-              setPickedMode('packaged')
+              setPickedMode('audit')
               void router.replace(
-                { pathname: router.pathname, query: { ...router.query, mode: 'packaged' } },
+                { pathname: router.pathname, query: { ...router.query, mode: 'audit' } },
                 undefined,
                 { shallow: true }
               )
@@ -517,11 +550,11 @@ export default function ConfigurePage() {
             className="text-left rounded-2xl border border-gray-200 bg-white px-8 py-10 min-h-[180px] hover:border-gray-900 hover:shadow-sm transition-all"
           >
             <div className="flex items-center gap-2 mb-3">
-              <Package className="h-5 w-5 text-gray-800" />
-              <span className="text-base font-semibold text-gray-900">Paquete Buffalo</span>
+              <ClipboardList className="h-5 w-5 text-gray-800" />
+              <span className="text-base font-semibold text-gray-900">Auditoría</span>
             </div>
             <p className="text-sm text-gray-500 leading-relaxed">
-              Configurador de agentes (voz, chat, dashboard). Precios y add-ons empaquetados.
+              Diagnóstico e informe Buffalo. Brief + IA para propuesta, contrato y factura.
             </p>
           </button>
           <button
@@ -541,13 +574,13 @@ export default function ConfigurePage() {
               <span className="text-base font-semibold text-gray-900">Proyecto a medida</span>
             </div>
             <p className="text-sm text-gray-500 leading-relaxed">
-              Brief con IA cuando el servicio no encaja en los paquetes.
+              Brief con IA cuando el servicio no es una auditoría estándar.
             </p>
           </button>
         </div>
       )}
 
-      {/* Configurador */}
+      {/* Configurador (solo proyectos ya empaquetados / configs guardadas) */}
       {effectiveMode && iframeUrl ? (
         <iframe
           ref={iframeRef}
@@ -564,7 +597,11 @@ export default function ConfigurePage() {
         />
       ) : effectiveMode ? (
         <div className="h-64 flex items-center justify-center text-sm text-gray-400">
-          {effectiveMode === 'custom' ? 'Abriendo brief + IA…' : 'Cargando configurador...'}
+          {effectiveMode === 'audit'
+            ? 'Abriendo brief de auditoría…'
+            : effectiveMode === 'custom'
+              ? 'Abriendo brief + IA…'
+              : 'Cargando configurador...'}
         </div>
       ) : null}
       </div>

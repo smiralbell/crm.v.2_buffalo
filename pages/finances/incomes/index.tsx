@@ -10,9 +10,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, MoreVertical, Repeat, Trash2, Upload } from 'lucide-react'
 import Link from 'next/link'
-import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear } from 'date-fns'
-import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
+import { format } from 'date-fns'
+import FinancePeriodFilter, { periodToQuery } from '@/components/finances/FinancePeriodFilter'
 import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
+import {
+  getDefaultPeriodRange,
+  parsePeriodFromQuery,
+  type PeriodPresetId,
+  type PeriodRange,
+} from '@/lib/finance/period-presets'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -100,16 +106,16 @@ interface IncomesPageProps {
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  if (!process.env.DATABASE_URL && process.env.NEXT_PHASE === 'phase-production-build') {
-    const now = new Date()
+    if (!process.env.DATABASE_URL && process.env.NEXT_PHASE === 'phase-production-build') {
+    const defaultRange = getDefaultPeriodRange()
     return {
       props: {
         incomes: [],
         invoicesForLink: [],
         incomeAnalytics: EMPTY_ANALYTICS,
         dateRange: {
-          start: startOfMonth(now).toISOString(),
-          end: endOfMonth(now).toISOString(),
+          start: defaultRange.start.toISOString(),
+          end: defaultRange.end.toISOString(),
         },
       },
     }
@@ -127,20 +133,10 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   }
 
   try {
-    const startParam = context.query.start as string
-    const endParam = context.query.end as string
-
-    let startDate: Date
-    let endDate: Date
-
-    if (startParam && endParam) {
-      startDate = startOfDay(new Date(startParam))
-      endDate = endOfDay(new Date(endParam))
-    } else {
-      const now = new Date()
-      startDate = startOfYear(now)
-      endDate = endOfMonth(now)
-    }
+    const { start: startDate, end: endDate } = parsePeriodFromQuery(
+      context.query.start as string | undefined,
+      context.query.end as string | undefined
+    )
 
     const startStr = format(startDate, 'yyyy-MM-dd')
     const endStr = format(endDate, 'yyyy-MM-dd')
@@ -438,15 +434,15 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     if (process.env.NODE_ENV === 'development') {
       console.error('[ERROR] Error loading incomes:', error)
     }
-    const now = new Date()
+    const defaultRange = getDefaultPeriodRange()
     return {
       props: {
         incomes: [],
         invoicesForLink: [],
         incomeAnalytics: EMPTY_ANALYTICS,
         dateRange: {
-          start: startOfMonth(now).toISOString(),
-          end: endOfMonth(now).toISOString(),
+          start: defaultRange.start.toISOString(),
+          end: defaultRange.end.toISOString(),
         },
       },
     }
@@ -469,6 +465,14 @@ export default function IncomesPage({
   const [linkError, setLinkError] = useState<string | null>(null)
   const [recurringLoadingId, setRecurringLoadingId] = useState<string | null>(null)
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null)
+  const [dateRange, setDateRange] = useState<PeriodRange>(() =>
+    initialDateRange?.start && initialDateRange?.end
+      ? {
+          start: new Date(initialDateRange.start),
+          end: new Date(initialDateRange.end),
+        }
+      : getDefaultPeriodRange()
+  )
 
   useEffect(() => {
     setIncomes(initialIncomes)
@@ -478,30 +482,19 @@ export default function IncomesPage({
     setInvoicesForLinkLocal(invoicesForLink)
   }, [invoicesForLink])
 
-  const now = new Date()
-  const defaultRange: DateRangePickerResult = {
-    start: startOfYear(now),
-    end: endOfMonth(now),
-  }
-
-  const [dateRange, setDateRange] = useState<DateRangePickerResult>(
-    initialDateRange?.start && initialDateRange?.end
-      ? {
-          start: new Date(initialDateRange.start),
-          end: new Date(initialDateRange.end),
-        }
-      : defaultRange
-  )
-
-  const handleDateRangeChange = (range: DateRangePickerResult) => {
-    setDateRange(range)
-    if (range.start && range.end) {
-      const params = new URLSearchParams({
-        start: format(range.start, 'yyyy-MM-dd'),
-        end: format(range.end, 'yyyy-MM-dd'),
+  useEffect(() => {
+    if (initialDateRange?.start && initialDateRange?.end) {
+      setDateRange({
+        start: new Date(initialDateRange.start),
+        end: new Date(initialDateRange.end),
       })
-      router.push(`/finances/incomes?${params.toString()}`)
     }
+  }, [initialDateRange?.start, initialDateRange?.end])
+
+  const handlePeriodChange = (range: PeriodRange, _preset: PeriodPresetId) => {
+    setDateRange(range)
+    const params = periodToQuery(range)
+    router.push(`/finances/incomes?start=${params.start}&end=${params.end}`)
   }
 
   const formatCurrency = (amount: number) => {
@@ -514,7 +507,6 @@ export default function IncomesPage({
 
   const unmatchedIncomes = incomes.filter((i) => !i.matched)
   const unmatchedTotal = unmatchedIncomes.reduce((sum, i) => sum + i.amount, 0)
-  const currentDateRange = dateRange || defaultRange
 
   const totals = incomeAnalytics.totals
   const selectedIncome = selectedIncomeId
@@ -736,9 +728,9 @@ export default function IncomesPage({
               </Button>
             </Link>
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto sm:justify-end">
             <PaymentConceptGuide />
-            <DateRangePicker onRangeChange={handleDateRangeChange} defaultRange={currentDateRange} className="w-full sm:w-auto" />
+            <FinancePeriodFilter value={dateRange} onChange={handlePeriodChange} />
           </div>
         </div>
 
@@ -883,8 +875,8 @@ export default function IncomesPage({
           </CardHeader>
           <CardContent className="pt-5">
             <IncomeAiPanel
-              periodStart={format(currentDateRange.start ?? defaultRange.start!, 'yyyy-MM-dd')}
-              periodEnd={format(currentDateRange.end ?? defaultRange.end!, 'yyyy-MM-dd')}
+              periodStart={format(dateRange.start, 'yyyy-MM-dd')}
+              periodEnd={format(dateRange.end, 'yyyy-MM-dd')}
             />
           </CardContent>
         </Card>

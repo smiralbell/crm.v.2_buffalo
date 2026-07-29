@@ -22,6 +22,7 @@ const serviceTypeLabel: Record<string, string> = {
   automation: 'Automatización',
   lead_gen: 'Lead Gen',
   geo_seo: 'GEO / SEO',
+  audit: 'Auditoría',
 }
 
 const sectionIcon = {

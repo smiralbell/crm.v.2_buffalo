@@ -115,6 +115,47 @@ export function buildClientBreakdown(incomes: IncomeInput[]): ClientIncomeRow[] 
     })
 }
 
+/** Adapta cobros por cliente al donut del overview (top N + resto). */
+export function clientBreakdownToCategorySlices(
+  rows: ClientIncomeRow[],
+  opts: { maxSlices?: number } = {}
+): CategorySlice[] {
+  const maxSlices = opts.maxSlices ?? 8
+  if (rows.length === 0) return []
+
+  const toSlice = (r: ClientIncomeRow): CategorySlice => ({
+    id: r.client_key,
+    label: r.label,
+    amount: r.total,
+    percentage: r.percentage,
+    transaction_count: r.payment_count,
+    avg_transaction:
+      r.payment_count > 0 ? Math.round((r.total / r.payment_count) * 100) / 100 : 0,
+    top_descriptions: [],
+  })
+
+  if (rows.length <= maxSlices) {
+    return rows.map(toSlice)
+  }
+
+  const head = rows.slice(0, maxSlices - 1)
+  const tail = rows.slice(maxSlices - 1)
+  const slices = head.map(toSlice)
+  const amount = Math.round(tail.reduce((s, r) => s + r.total, 0) * 100) / 100
+  const payment_count = tail.reduce((s, r) => s + r.payment_count, 0)
+  const grand = rows.reduce((s, r) => s + r.total, 0)
+  slices.push({
+    id: '_resto_clientes',
+    label: `Resto (${tail.length})`,
+    amount,
+    percentage: grand > 0 ? Math.round((amount / grand) * 1000) / 10 : 0,
+    transaction_count: payment_count,
+    avg_transaction: payment_count > 0 ? Math.round((amount / payment_count) * 100) / 100 : 0,
+    top_descriptions: tail.slice(0, 3).map((r) => r.label),
+  })
+  return slices
+}
+
 export function buildMonthlyIncomeTimeline(incomes: IncomeInput[]): MonthlyIncomePoint[] {
   const byMonth = new Map<string, { total: number; recurring: number }>()
 

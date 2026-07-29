@@ -4,14 +4,35 @@ import Link from 'next/link'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
+import AnnualGoalCard from '@/components/finances/AnnualGoalCard'
+import { buildAnnualGoalDetail } from '@/lib/finance/kpi-details'
+import type { AnnualGoalDetail } from '@/lib/finance/types'
 import {
-  TrendingUp, TrendingDown, Minus,
   ArrowRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // Recharts — client-side only
 const RevenueChart = dynamic(() => import('@/components/Dashboard/RevenueChart'), { ssr: false })
+const LeadsAnalyticsPanel = dynamic(() => import('@/components/leads/LeadsAnalyticsPanel'), {
+  ssr: false,
+  loading: () => (
+    <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+      <div className="h-6 w-48 animate-pulse rounded bg-muted" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-28 animate-pulse rounded-2xl bg-muted" />
+        ))}
+      </div>
+    </div>
+  ),
+})
+const FinanceAnalyticsPanel = dynamic(() => import('@/components/finance/FinanceAnalyticsPanel'), {
+  ssr: false,
+  loading: () => (
+    <div className="rounded-2xl border border-border bg-card p-5 h-40 animate-pulse" />
+  ),
+})
 
 // ── Types ──────────────────────────────────────────────────────────────
 interface StageRow  { stage: string; count: number; amount: number }
@@ -34,6 +55,7 @@ interface DashboardProps {
     leadsTotal:           number
     contactsTotal:        number
   }
+  annualGoal: AnnualGoalDetail
   pipelineStages: StageRow[]
   recentInvoices:  InvRow[]
   hotLeads:        LeadRow[]
@@ -41,15 +63,8 @@ interface DashboardProps {
 }
 
 // ── Config ─────────────────────────────────────────────────────────────
-const ANNUAL_TARGET = 250_000
-
 const fmt = (v: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
-
-const pct = (curr: number, prev: number) => {
-  if (prev === 0) return curr > 0 ? 100 : 0
-  return Math.round(((curr - prev) / prev) * 100)
-}
 
 const STAGE_COLORS: Record<string, string> = {
   'LEAD':              '#6B7280',
@@ -82,23 +97,36 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     const m   = now.getMonth()
 
     const startThisMonth = new Date(y, m, 1)
+    const endThisMonth   = new Date(y, m + 1, 0, 23, 59, 59, 999)
     const startLastMonth = new Date(y, m - 1, 1)
     const endLastMonth   = new Date(y, m, 0, 23, 59, 59)
     const startYTD       = new Date(y, 0, 1)
     const sixMonthsAgo   = new Date(y, m - 5, 1)
 
-    // ── Invoices ──────────────────────────────────────────────────────
+    // ── Invoices (misma regla que Finanzas: status = sent) ─────────────
     const [invThisMonth, invLastMonth, invYTD, draftInvoices, recentInvRaw] = await Promise.all([
       prisma.invoice.aggregate({
-        where: { deleted_at: null, issue_date: { gte: startThisMonth } },
+        where: {
+          deleted_at: null,
+          status: 'sent',
+          issue_date: { gte: startThisMonth, lte: endThisMonth },
+        },
         _sum: { total: true },
       }),
       prisma.invoice.aggregate({
-        where: { deleted_at: null, issue_date: { gte: startLastMonth, lte: endLastMonth } },
+        where: {
+          deleted_at: null,
+          status: 'sent',
+          issue_date: { gte: startLastMonth, lte: endLastMonth },
+        },
         _sum: { total: true },
       }),
       prisma.invoice.aggregate({
-        where: { deleted_at: null, issue_date: { gte: startYTD } },
+        where: {
+          deleted_at: null,
+          status: 'sent',
+          issue_date: { gte: startYTD },
+        },
         _sum: { total: true },
       }),
       // "Sin cobrar" = solo borradores (status: draft)
@@ -113,6 +141,14 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         select: { id: true, invoice_number: true, client_name: true, total: true, status: true, issue_date: true },
       }),
     ])
+
+    const invoicedThisMonth = Number(invThisMonth._sum.total || 0)
+    const invoicedYTD = Number(invYTD._sum.total || 0)
+    const annualGoal = buildAnnualGoalDetail({
+      ytdInvoiced: invoicedYTD,
+      invoiced_this_month: invoicedThisMonth,
+      now,
+    })
 
     // ── Pipeline ──────────────────────────────────────────────────────
     const allCards = await prisma.pipelineCard.findMany({
@@ -200,9 +236,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     return {
       props: {
         kpis: {
-          invoicedThisMonth:    Number(invThisMonth._sum.total || 0),
+          invoicedThisMonth,
           invoicedLastMonth:    Number(invLastMonth._sum.total || 0),
-          invoicedYTD:          Number(invYTD._sum.total       || 0),
+          invoicedYTD,
           pipelineValue,
           pipelineDeals,
           pendingInvoices:      draftInvoices.length,
@@ -213,6 +249,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           leadsTotal,
           contactsTotal,
         },
+        annualGoal,
         pipelineStages,
         recentInvoices: recentInvRaw.map(i => ({
           id: i.id,
@@ -237,168 +274,25 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       return { redirect: { destination: '/login', permanent: false } }
     }
     console.error('Dashboard error:', error)
+    const annualGoal = buildAnnualGoalDetail({ ytdInvoiced: 0, invoiced_this_month: 0 })
     return {
       props: {
         kpis: { invoicedThisMonth:0, invoicedLastMonth:0, invoicedYTD:0, pipelineValue:0, pipelineDeals:0, pendingInvoices:0, pendingAmount:0, mrrAmount:0, dealsClosedThisMonth:0, leadsThisMonth:0, leadsTotal:0, contactsTotal:0 },
+        annualGoal,
         pipelineStages: [], recentInvoices: [], hotLeads: [], monthlyRevenue: [],
       },
     }
   }
 }
 
-// ── KPI Card ───────────────────────────────────────────────────────────
-function KpiCard({
-  title, value, sub, trend, href,
-}: {
-  title: string; value: string; sub?: string; trend?: number
-  href?: string
-}) {
-  const TrendIcon = trend == null ? null : trend > 0 ? TrendingUp : trend < 0 ? TrendingDown : Minus
-  const trendCls  = trend == null ? '' : trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-red-500' : 'text-gray-400'
-
-  const inner = (
-    <div className={cn(
-      'rounded-2xl border border-border bg-card p-4 sm:p-5 flex flex-col gap-2',
-      'hover:shadow-sm hover:border-foreground/15 transition-all h-full',
-      href && 'cursor-pointer'
-    )}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-xs text-muted-foreground font-medium leading-snug">{title}</div>
-        {TrendIcon && trend != null && (
-          <div className={cn('flex items-center gap-1 text-xs font-medium shrink-0', trendCls)}>
-            <TrendIcon className="h-3.5 w-3.5" />
-            {Math.abs(trend)}%
-          </div>
-        )}
-      </div>
-      <div className="text-xl sm:text-2xl font-semibold text-foreground leading-none tracking-tight break-words">{value}</div>
-      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
-    </div>
-  )
-  return href ? <Link href={href} className="block">{inner}</Link> : inner
-}
-
-// ── Objetivo anual card ────────────────────────────────────────────────
-function ObjetivoCard({ invoicedYTD, mrrAmount }: { invoicedYTD: number; mrrAmount: number }) {
-  const now  = new Date()
-  const year = now.getFullYear()
-
-  // Solo meses ESTRICTAMENTE futuros (tras el mes en curso).
-  // El mes actual se asume facturado (o en proceso de serlo) → cae en invoicedYTD.
-  // Esto evita doble conteo: mant. ya emitida → invoicedYTD; mant. futura → proyección.
-  // Ej: Junio (getMonth()=5) → 11-5 = 6 meses futuros (Jul–Dic)
-  const futureMonths   = Math.max(0, 11 - now.getMonth())
-  const currentMonthName = now.toLocaleDateString('es-ES', { month: 'long' })
-
-  // Proyección MRR: importe mensual × meses futuros + IVA 21%
-  const mrrProjected   = Math.round(mrrAmount * futureMonths * 1.21)
-  const totalProjected = invoicedYTD + mrrProjected
-
-  // Porcentajes para la barra segmentada
-  const billedPct = Math.min(100, (invoicedYTD / ANNUAL_TARGET) * 100)
-  const mrrPct    = Math.min(100 - billedPct, (mrrProjected / ANNUAL_TARGET) * 100)
-  const totalPct  = Math.min(100, (totalProjected / ANNUAL_TARGET) * 100)
-
-  const remaining = Math.max(0, ANNUAL_TARGET - totalProjected)
-  const exceeded  = totalProjected > ANNUAL_TARGET
-
-  return (
-    <div className="rounded-2xl border border-border bg-card p-5">
-
-      {/* ── Cabecera ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-foreground">Objetivo anual {year}</div>
-          <div className="text-xs text-muted-foreground mt-0.5">Meta: {fmt(ANNUAL_TARGET)}</div>
-        </div>
-        <div className="sm:text-right">
-          <div className="text-2xl font-semibold text-foreground leading-none tracking-tight">{fmt(totalProjected)}</div>
-          <div className="text-xs text-muted-foreground mt-1">{totalPct.toFixed(1)}% del objetivo</div>
-        </div>
-      </div>
-
-      {/* ── Barra segmentada: facturado YTD + MRR futuro ── */}
-      <div className="w-full bg-muted rounded-full h-2.5 mb-1.5 overflow-hidden flex">
-        {billedPct > 0 && (
-          <div
-            className="h-full flex-shrink-0 transition-all duration-700 bg-foreground dark:bg-white"
-            style={{
-              width: `${billedPct}%`,
-              background: exceeded ? '#22C55E' : undefined,
-              borderRadius: billedPct >= 100 ? '9999px' : '9999px 0 0 9999px',
-            }}
-          />
-        )}
-        {mrrPct > 0 && (
-          <div
-            className="h-full flex-shrink-0 transition-all duration-700 bg-muted-foreground/40"
-            style={{
-              width: `${mrrPct}%`,
-              borderRadius: billedPct + mrrPct >= 100 ? '0 9999px 9999px 0' : '0',
-            }}
-          />
-        )}
-      </div>
-
-      {/* ── Leyenda ── */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mb-4 text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-foreground inline-block flex-shrink-0" />
-          Facturado hasta {currentMonthName}
-        </span>
-        {mrrAmount > 0 && futureMonths > 0 && (
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-muted-foreground/50 inline-block flex-shrink-0" />
-            MRR ×{futureMonths} meses futuros
-          </span>
-        )}
-      </div>
-
-      {/* ── Desglose ── */}
-      <div className="grid grid-cols-1 gap-3 border-t border-border pt-3.5 sm:grid-cols-3 sm:gap-4">
-
-        <div>
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">YTD facturado</div>
-          <div className="text-sm font-bold text-foreground">{fmt(invoicedYTD)}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">setup + mant. emitido</div>
-        </div>
-
-        <div>
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-            MRR {futureMonths > 0 ? `×${futureMonths} meses` : '(dic cerrado)'}
-          </div>
-          <div className="text-sm font-bold text-foreground/80">
-            {mrrAmount > 0 && futureMonths > 0 ? fmt(mrrProjected) : '—'}
-          </div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">
-            {mrrAmount > 0
-              ? futureMonths > 0
-                ? `${fmt(mrrAmount)}/mes + IVA`
-                : 'año completado'
-              : 'sin contratos activos'}
-          </div>
-        </div>
-
-        <div className="sm:text-right">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-            {exceeded ? 'Superado' : 'Falta'}
-          </div>
-          <div className={`text-sm font-bold ${exceeded ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
-            {exceeded ? `+${fmt(totalProjected - ANNUAL_TARGET)}` : fmt(remaining)}
-          </div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">
-            {exceeded ? '¡objetivo alcanzado!' : 'para llegar al objetivo'}
-          </div>
-        </div>
-
-      </div>
-    </div>
-  )
-}
-
 // ══════════════════════════════════════════════════════════════════════
-export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLeads, monthlyRevenue }: DashboardProps) {
-  const trendMonth = pct(kpis.invoicedThisMonth, kpis.invoicedLastMonth)
+export default function Dashboard({
+  annualGoal,
+  pipelineStages,
+  recentInvoices,
+  hotLeads,
+  monthlyRevenue,
+}: DashboardProps) {
   const maxCount   = Math.max(...pipelineStages.map(s => s.count), 1)
 
   const estadoLabel: Record<string, string> = {
@@ -409,53 +303,17 @@ export default function Dashboard({ kpis, pipelineStages, recentInvoices, hotLea
   return (
     <Layout>
       <div className="space-y-6">
-        {/* ── Objetivo anual ── */}
-        <ObjetivoCard invoicedYTD={kpis.invoicedYTD} mrrAmount={kpis.mrrAmount} />
+        {/* ── Objetivo anual (mismo componente y datos que Finanzas) ── */}
+        <AnnualGoalCard goal={annualGoal} />
 
-        {/* ── KPIs fila 1: facturación ── */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          <KpiCard
-            title="Facturado este mes"
-            value={fmt(kpis.invoicedThisMonth)}
-            sub={`mes anterior: ${fmt(kpis.invoicedLastMonth)}`}
-            trend={kpis.invoicedLastMonth > 0 ? trendMonth : undefined}
-            href="/invoices"
-          />
-          <KpiCard
-            title="Facturado en el año"
-            value={fmt(kpis.invoicedYTD)}
-            sub="acumulado desde enero"
-            href="/invoices"
-          />
-          <KpiCard
-            title="Sin cobrar"
-            value={kpis.pendingAmount > 0 ? fmt(kpis.pendingAmount) : '—'}
-            sub={
-              kpis.pendingInvoices > 0
-                ? `${kpis.pendingInvoices} factura${kpis.pendingInvoices !== 1 ? 's' : ''} en borrador`
-                : 'Sin borradores pendientes'
-            }
-            href="/invoices"
-          />
-          <KpiCard
-            title="MRR · Mantenimientos"
-            value={kpis.mrrAmount > 0 ? fmt(kpis.mrrAmount) : '—'}
-            sub={kpis.mrrAmount > 0 ? 'ingresos recurrentes / mes' : 'Sin contratos activos'}
-            href="/invoices"
-          />
+        {/* ── Analítica financiera ── */}
+        <div id="finance-analytics">
+          <FinanceAnalyticsPanel />
         </div>
 
-        {/* ── KPIs fila 2: pipeline / leads ── */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          <KpiCard
-            title="Pipeline activo"
-            value={fmt(kpis.pipelineValue)}
-            sub={`${kpis.pipelineDeals} deal${kpis.pipelineDeals !== 1 ? 's' : ''} en curso`}
-            href="/pipelines"
-          />
-          <KpiCard title="Total leads"          value={String(kpis.leadsTotal)}            sub={`+${kpis.leadsThisMonth} este mes`} href="/leads" />
-          <KpiCard title="Contratos firmados"   value={String(kpis.dealsClosedThisMonth)} sub="este mes"                          href="/pipelines" />
-          <KpiCard title="Contactos"            value={String(kpis.contactsTotal)}                                                href="/contacts" />
+        {/* ── Analítica de leads ── */}
+        <div id="leads-analytics">
+          <LeadsAnalyticsPanel />
         </div>
 
         {/* ── Gráfico + Embudo ── */}

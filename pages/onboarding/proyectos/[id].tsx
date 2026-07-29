@@ -7,13 +7,13 @@ import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
 import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
 import DeleteOnboardingProjectDialog from '@/components/onboarding/DeleteOnboardingProjectDialog'
-import EditOnboardingProjectDialog from '@/components/onboarding/EditOnboardingProjectDialog'
 import { DeveloperTags } from '@/components/gestion-proyecto/ProjectDevelopersPanel'
 import {
-  ArrowLeft, Edit, FileText, Settings, User, Building2,
-  Mail, Phone, MapPin, Receipt, Calendar, Trash2, CheckCircle2, Pencil,
+  ArrowLeft, Pencil, FileText, Settings, User, Building2,
+  Mail, Phone, MapPin, Receipt, Calendar, Trash2, CheckCircle2, PlayCircle,
 } from 'lucide-react'
 import { buildProjectViewData, fmt } from '@/lib/onboarding/project-view'
+import { isAuditConfiguracion } from '@/lib/onboarding/audit/config-detect'
 import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
 
 interface Props {
@@ -85,7 +85,6 @@ export default function ProyectoDetailPage({ lead }: Props) {
   const [iframeUrl, setIframeUrl] = useState('')
   const [developers, setDevelopers] = useState<{ id: number; name: string }[]>([])
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
   const [esBuffalo, setEsBuffalo] = useState(false)
   const [buffaloLoading, setBuffaloLoading] = useState(false)
   const [buffaloError, setBuffaloError] = useState('')
@@ -249,6 +248,20 @@ export default function ProyectoDetailPage({ lead }: Props) {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 flex-shrink-0 justify-end">
+            {isAuditConfiguracion(lead.configuracion) && (
+              <Link
+                href={`/onboarding/audit?${new URLSearchParams({
+                  lead: String(lead.id),
+                  ...(lead.contact?.nombre ? { nombre: lead.contact.nombre } : {}),
+                  ...(lead.contact?.empresa ? { empresa: lead.contact.empresa } : {}),
+                  ...(lead.contact?.email ? { email: lead.contact.email } : {}),
+                }).toString()}`}
+                className="inline-flex items-center gap-2 px-4 h-10 text-sm font-semibold rounded-xl bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
+              >
+                <PlayCircle className="h-4 w-4" />
+                Reanudar auditoría
+              </Link>
+            )}
             {esBuffalo && (
               <span className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold border border-emerald-200">
                 <CheckCircle2 className="h-3.5 w-3.5" />
@@ -282,20 +295,12 @@ export default function ProyectoDetailPage({ lead }: Props) {
                 Quitar de Buffalo
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
-            >
-              <Pencil className="h-4 w-4" />
-              Editar datos
-            </button>
             <Link
               href={configureUrl}
               className="inline-flex items-center gap-2 px-4 h-10 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition-colors"
             >
-              <Edit className="h-4 w-4" />
-              Editar configuración
+              <Pencil className="h-4 w-4" />
+              Editar
             </Link>
             <button
               type="button"
@@ -319,15 +324,6 @@ export default function ProyectoDetailPage({ lead }: Props) {
           onOpenChange={setDeleteOpen}
           onDeleted={() => {
             void router.push('/onboarding?tab=projects')
-          }}
-        />
-        <EditOnboardingProjectDialog
-          open={editOpen}
-          leadId={lead.id}
-          onOpenChange={setEditOpen}
-          onSaved={() => {
-            loadBuffaloFlag()
-            void router.replace(router.asPath)
           }}
         />
 
@@ -532,7 +528,7 @@ export default function ProyectoDetailPage({ lead }: Props) {
                 <FileText className="h-4 w-4 text-gray-400" />
                 Documentos del proyecto
               </h2>
-              <p className="text-xs text-gray-400">Propuesta · Onboarding · Contrato · Factura</p>
+              <p className="text-xs text-gray-400">Propuesta · Onboarding · Contrato</p>
             </div>
             <iframe
               src={iframeUrl || undefined}

@@ -20,6 +20,7 @@ const serviceLabel: Record<string, string> = {
   automation: 'Automatización',
   lead_gen: 'Generación de leads',
   geo_seo: 'GEO / SEO',
+  audit: 'Auditoría',
 }
 
 const statusLabel: Record<string, string> = {

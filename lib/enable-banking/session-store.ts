@@ -98,6 +98,8 @@ export async function saveBankTestSession(
 }
 
 export async function getLatestBankTestSession(): Promise<BankTestSession | null> {
+  // Preferir query sin account_uids: en muchas instalaciones la columna aún no existe
+  // y Prisma loguea error aunque haya fallback.
   let rows: Array<{
     id: string
     account_uid: string
@@ -109,18 +111,22 @@ export async function getLatestBankTestSession(): Promise<BankTestSession | null
 
   try {
     rows = await prisma.$queryRaw`
-      SELECT id, account_uid, account_uids, valid_until, created_at, last_synced_at
+      SELECT id, account_uid, valid_until, created_at, last_synced_at
       FROM bank_connections
       ORDER BY created_at DESC
       LIMIT 1
     `
   } catch {
-    rows = await prisma.$queryRaw`
-      SELECT id, account_uid, valid_until, created_at
-      FROM bank_connections
-      ORDER BY created_at DESC
-      LIMIT 1
-    `
+    try {
+      rows = await prisma.$queryRaw`
+        SELECT id, account_uid, valid_until, created_at
+        FROM bank_connections
+        ORDER BY created_at DESC
+        LIMIT 1
+      `
+    } catch {
+      return null
+    }
   }
 
   const row = rows[0]
