@@ -140,7 +140,10 @@ export function sanitizeAiTurn(
     if (!isFirst) {
       next = { ...next, assistantMessage: '' }
     } else if (next.assistantMessage && /[¿?]/.test(next.assistantMessage)) {
-      next = { ...next, assistantMessage: next.assistantMessage.replace(/[¿?].*$/s, '').trim() }
+      next = {
+        ...next,
+        assistantMessage: next.assistantMessage.replace(/[¿?][\s\S]*$/, '').trim(),
+      }
     }
   }
 
