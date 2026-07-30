@@ -4,10 +4,14 @@ import {
   normalizeAiMode,
   type AuditAIResponse,
 } from './schemas'
-import { buildGapsSystemPrompt, buildModeSystemPrompt } from './prompts'
+import { buildExtractSystemPrompt, buildGapsSystemPrompt, buildModeSystemPrompt } from './prompts'
 import type { AuditStructured, ProjectAudit } from './types'
-import { pickNextCatalogQuestion, questionsFor } from './catalog'
+import { questionsFor } from './catalog'
 import { modeLabel } from './types'
+import { planNextQuestion } from './planner'
+import { topicFromFieldKey, type AuditTopicId } from './topics'
+import { isSolutionFieldKey, readyForStrategies } from './blocks'
+import { gateQuestionAgainstPrematureSolution } from './followups'
 
 const COVERED_STATUSES = new Set([
   'answered',
@@ -45,13 +49,26 @@ function knownFactsSummary(audit: ProjectAudit): string[] {
     .slice(0, 40)
 }
 
-/** Detecta si la pregunta nueva pide un dato ya conocido (p.ej. volumen/leads). */
+function blockedTopicIds(audit: ProjectAudit, extraFieldKeys: string[] = []): AuditTopicId[] {
+  const topics = new Set<AuditTopicId>()
+  for (const k of doNotAskAgainKeys(audit)) topics.add(topicFromFieldKey(k))
+  for (const k of extraFieldKeys) topics.add(topicFromFieldKey(k))
+  return Array.from(topics)
+}
+
+/** Detecta si la pregunta nueva pide un dato/tema ya conocido u omitido. */
 export function isRedundantQuestion(
   audit: ProjectAudit,
   text: string,
   fieldKey?: string | null
 ): boolean {
   if (fieldKey && isFieldCovered(audit.structured, fieldKey)) return true
+
+  if (fieldKey) {
+    const topic = topicFromFieldKey(fieldKey)
+    const blocked = new Set(blockedTopicIds(audit))
+    if (blocked.has(topic) && topic !== 'otro') return true
+  }
 
   const t = text.toLowerCase()
   const facts = knownFactsSummary(audit).join(' ').toLowerCase()
@@ -75,6 +92,15 @@ export function isRedundantQuestion(
     if (!['skipped', 'answered', 'pending', 'open', 'unknown', 'buffalo_later'].includes(q.status)) {
       continue
     }
+    // Mismo tema que una pregunta ya cerrada/omitida
+    if (
+      fieldKey &&
+      topicFromFieldKey(q.field_key) === topicFromFieldKey(fieldKey) &&
+      q.status !== 'open' &&
+      q.status !== 'pending'
+    ) {
+      return true
+    }
     const nq = norm(q.text)
     if (nq === nText) return true
     const words = new Set(nText.split(' ').filter((w) => w.length > 3))
@@ -88,11 +114,14 @@ export function isRedundantQuestion(
 
 function compactAuditForAi(audit: ProjectAudit) {
   const do_not_ask_again = doNotAskAgainKeys(audit)
+  const blocked_topics = blockedTopicIds(audit)
   return {
     project_types: audit.project_types,
     active_mode: audit.active_mode,
+    ready_for_strategies: readyForStrategies(audit),
     known_facts: knownFactsSummary(audit),
     do_not_ask_again,
+    blocked_topics,
     structured: Object.fromEntries(
       Object.entries(audit.structured).map(([k, v]) => [
         k,
@@ -107,10 +136,9 @@ function compactAuditForAi(audit: ProjectAudit) {
       question_id: t.question_id,
       message_type: t.message_type,
     })),
+    // Solo pendientes reales (no skipped) para no empujar a reabrir omitidas
     open_or_pending_questions: audit.questions
-      .filter((q) =>
-        ['open', 'pending', 'skipped', 'unknown', 'buffalo_later'].includes(q.status)
-      )
+      .filter((q) => ['open', 'pending'].includes(q.status))
       .slice(0, 20)
       .map((q) => ({
         id: q.id,
@@ -125,186 +153,22 @@ function compactAuditForAi(audit: ProjectAudit) {
   }
 }
 
-/** Evita doble burbuja y preguntas repetidas. */
-export function sanitizeAiTurn(
+function questionFromPlan(
   audit: ProjectAudit,
-  ai: AuditAIResponse,
-  opts?: { isFirst?: boolean; excludeFieldKeys?: string[] }
+  isFirst: boolean,
+  excludeFieldKeys: string[],
+  skippedFieldKey?: string | null
 ): AuditAIResponse {
-  let next: AuditAIResponse = { ...ai }
-
-  const hasQuestion = Boolean(next.question?.text)
-  const isFirst = Boolean(opts?.isFirst) && (audit.questions || []).length === 0
-
-  if (hasQuestion) {
-    if (!isFirst) {
-      next = { ...next, assistantMessage: '' }
-    } else if (next.assistantMessage && /[¿?]/.test(next.assistantMessage)) {
-      next = {
-        ...next,
-        assistantMessage: next.assistantMessage.replace(/[¿?][\s\S]*$/, '').trim(),
-      }
-    }
-  }
-
-  if (next.question?.text) {
-    const fk = next.question.fieldKey
-    const excluded = new Set([...(opts?.excludeFieldKeys || []), ...doNotAskAgainKeys(audit)])
-    if ((fk && excluded.has(fk)) || isRedundantQuestion(audit, next.question.text, fk)) {
-      return catalogFallback(audit, isFirst, Array.from(excluded))
-    }
-  }
-
-  return next
-}
-
-export function validateAuditAiResponse(raw: unknown): {
-  ok: true
-  data: AuditAIResponse
-} | { ok: false; error: string } {
-  const parsed = auditAiResponseSchema.safeParse(raw)
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues.map((i) => i.message).join('; ') }
-  }
-  const data = parsed.data
-  if (data.question?.mode) {
-    data.question.mode = normalizeAiMode(data.question.mode) || data.question.mode
-  }
-  return { ok: true, data }
-}
-
-async function callAuditAi(
-  system: string,
-  userPayload: unknown,
-  opts?: { temperature?: number }
-): Promise<AuditAIResponse> {
-  const raw = await openRouterChatCompletion(
-    [
-      { role: 'system', content: system },
-      {
-        role: 'user',
-        content: typeof userPayload === 'string' ? userPayload : JSON.stringify(userPayload),
-      },
-    ],
-    { temperature: opts?.temperature ?? 0.25, maxTokens: 2200 }
-  )
-
-  let json: unknown
-  try {
-    json = parseJsonFromModelOutput(raw)
-  } catch {
-    const repair = await openRouterChatCompletion(
-      [
-        {
-          role: 'system',
-          content:
-            'Repara la siguiente salida para que sea SOLO JSON válido según AuditAIResponse. Sin markdown.',
-        },
-        { role: 'user', content: raw },
-      ],
-      { temperature: 0, maxTokens: 2200 }
-    )
-    json = parseJsonFromModelOutput(repair)
-  }
-
-  let validated = validateAuditAiResponse(json)
-  if (!validated.ok) {
-    const repair = await openRouterChatCompletion(
-      [
-        {
-          role: 'system',
-          content: `${system}\n\nTu salida anterior falló validación: ${validated.error}. Devuelve JSON corregido. assistantMessage vacío si hay question.`,
-        },
-        { role: 'user', content: JSON.stringify({ previous: json, context: userPayload }) },
-      ],
-      { temperature: 0, maxTokens: 2200 }
-    )
-    validated = validateAuditAiResponse(parseJsonFromModelOutput(repair))
-    if (!validated.ok) throw new Error(`IA inválida: ${validated.error}`)
-  }
-  return validated.data
-}
-
-export async function generateNextAiTurn(
-  audit: ProjectAudit,
-  extras?: {
-    instruction?: string
-    lastAnswer?: string
-    isFirst?: boolean
-    lastAction?: string
-    skippedFieldKey?: string
-  }
-): Promise<AuditAIResponse> {
-  const exclude = [
-    ...doNotAskAgainKeys(audit),
-    ...(extras?.skippedFieldKey ? [extras.skippedFieldKey] : []),
-  ]
-  try {
-    const raw = await callAuditAi(buildModeSystemPrompt(audit.active_mode), {
-      instruction:
-        extras?.instruction ||
-        'Genera el siguiente turno. assistantMessage="" si hay pregunta. No repitas datos de known_facts ni do_not_ask_again.',
-      is_first: Boolean(extras?.isFirst),
-      last_answer: extras?.lastAnswer || null,
-      last_action: extras?.lastAction || null,
-      skipped_field_key: extras?.skippedFieldKey || null,
-      audit: compactAuditForAi(audit),
-    })
-    return sanitizeAiTurn(audit, raw, { isFirst: extras?.isFirst, excludeFieldKeys: exclude })
-  } catch {
-    return catalogFallback(audit, extras?.isFirst, exclude)
-  }
-}
-
-export async function analyzeGapsAi(audit: ProjectAudit): Promise<AuditAIResponse> {
-  try {
-    return await callAuditAi(buildGapsSystemPrompt(), { audit: compactAuditForAi(audit) }, { temperature: 0.15 })
-  } catch {
-    return catalogFallback(audit, false)
-  }
-}
-
-export function catalogFallback(
-  audit: ProjectAudit,
-  isFirst?: boolean,
-  excludeFieldKeys: string[] = []
-): AuditAIResponse {
-  const excluded = new Set([...excludeFieldKeys, ...doNotAskAgainKeys(audit)])
-  const tryPick = (area: typeof audit.active_area | null) => {
-    const n = pickNextCatalogQuestion(audit.active_mode, audit.project_types, audit.structured, area)
-    if (!n || excluded.has(n.field_key)) return null
-    return n
-  }
-
-  let next = tryPick(audit.active_area) || tryPick(null)
-
-  if (!next) {
-    const pool = questionsFor(audit.active_mode, audit.project_types).filter(
-      (q) => !excluded.has(q.field_key) && !isFieldCovered(audit.structured, q.field_key)
-    )
-    const pick = pool[0]
-    if (pick) {
-      next = {
-        id: `cat_${pick.field_key}`,
-        field_key: pick.field_key,
-        question: pick.question,
-        why: pick.why,
-        area: pick.area,
-        importance: pick.importance,
-        answer_type: 'textarea',
-        expected_type: pick.expected_type,
-        blocks_budget: pick.blocks_budget,
-        blocks_dev: pick.blocks_dev,
-      }
-    }
-  }
-
+  const planned = planNextQuestion(audit, {
+    excludeFieldKeys,
+    skippedFieldKey: skippedFieldKey || null,
+  })
   const intro =
     isFirst && audit.active_mode === 'descubrimiento'
       ? 'Vamos a hacer una auditoría breve para entender el negocio y el proceso actual.'
       : ''
 
-  if (!next) {
+  if (!planned.question) {
     return {
       assistantMessage:
         intro ||
@@ -317,6 +181,7 @@ export function catalogFallback(
     }
   }
 
+  const next = planned.question
   const answerType =
     next.expected_type === 'number'
       ? ('number' as const)
@@ -354,6 +219,235 @@ export function catalogFallback(
   }
 }
 
+/** Evita doble burbuja y preguntas repetidas. */
+export function sanitizeAiTurn(
+  audit: ProjectAudit,
+  ai: AuditAIResponse,
+  opts?: { isFirst?: boolean; excludeFieldKeys?: string[]; skippedFieldKey?: string | null }
+): AuditAIResponse {
+  let next: AuditAIResponse = { ...ai }
+
+  const hasQuestion = Boolean(next.question?.text)
+  const isFirst = Boolean(opts?.isFirst) && (audit.questions || []).length === 0
+
+  if (hasQuestion) {
+    if (!isFirst) {
+      next = { ...next, assistantMessage: '' }
+    } else if (next.assistantMessage && /[¿?]/.test(next.assistantMessage)) {
+      next = {
+        ...next,
+        assistantMessage: next.assistantMessage.replace(/[¿?][\s\S]*$/, '').trim(),
+      }
+    }
+  }
+
+  if (next.question?.text) {
+    const fk = next.question.fieldKey
+    const excluded = new Set([...(opts?.excludeFieldKeys || []), ...doNotAskAgainKeys(audit)])
+    if (
+      (fk && excluded.has(fk)) ||
+      isRedundantQuestion(audit, next.question.text, fk) ||
+      (fk && isSolutionFieldKey(fk) && !readyForStrategies(audit))
+    ) {
+      return catalogFallback(audit, isFirst, Array.from(excluded), {
+        skippedFieldKey: opts?.skippedFieldKey,
+      })
+    }
+    const gated = gateQuestionAgainstPrematureSolution(audit, {
+      id: next.question.id,
+      field_key: fk || '',
+      question: next.question.text,
+      why: next.question.reason || '',
+      area: next.question.category || 'negocio',
+      importance: next.question.importance || 'important',
+      answer_type: next.question.answerType || 'textarea',
+    })
+    if (!gated) {
+      return catalogFallback(audit, isFirst, Array.from(excluded), {
+        skippedFieldKey: opts?.skippedFieldKey,
+      })
+    }
+  }
+
+  return next
+}
+
+export function validateAuditAiResponse(raw: unknown): {
+  ok: true
+  data: AuditAIResponse
+} | { ok: false; error: string } {
+  const parsed = auditAiResponseSchema.safeParse(raw)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues.map((i) => i.message).join('; ') }
+  }
+  const data = parsed.data
+  if (data.question?.mode) {
+    data.question.mode = normalizeAiMode(data.question.mode) || data.question.mode
+  }
+  return { ok: true, data }
+}
+
+async function callAuditAi(
+  system: string,
+  userPayload: unknown,
+  opts?: { temperature?: number; maxTokens?: number; allowRepair?: boolean }
+): Promise<AuditAIResponse> {
+  const maxTokens = opts?.maxTokens ?? 900
+  const raw = await openRouterChatCompletion(
+    [
+      { role: 'system', content: system },
+      {
+        role: 'user',
+        content: typeof userPayload === 'string' ? userPayload : JSON.stringify(userPayload),
+      },
+    ],
+    { temperature: opts?.temperature ?? 0.2, maxTokens }
+  )
+
+  let json: unknown
+  try {
+    json = parseJsonFromModelOutput(raw)
+  } catch {
+    if (opts?.allowRepair === false) throw new Error('JSON inválido')
+    const repair = await openRouterChatCompletion(
+      [
+        {
+          role: 'system',
+          content:
+            'Repara la siguiente salida para que sea SOLO JSON válido según AuditAIResponse. Sin markdown.',
+        },
+        { role: 'user', content: raw },
+      ],
+      { temperature: 0, maxTokens }
+    )
+    json = parseJsonFromModelOutput(repair)
+  }
+
+  let validated = validateAuditAiResponse(json)
+  if (!validated.ok) {
+    if (opts?.allowRepair === false) throw new Error(`IA inválida: ${validated.error}`)
+    // Un solo intento de repair (antes había 2)
+    const repair = await openRouterChatCompletion(
+      [
+        {
+          role: 'system',
+          content: `${system}\n\nTu salida anterior falló validación: ${validated.error}. Devuelve JSON corregido. assistantMessage vacío si hay question.`,
+        },
+        { role: 'user', content: JSON.stringify({ previous: json, context: userPayload }) },
+      ],
+      { temperature: 0, maxTokens }
+    )
+    validated = validateAuditAiResponse(parseJsonFromModelOutput(repair))
+    if (!validated.ok) throw new Error(`IA inválida: ${validated.error}`)
+  }
+  return validated.data
+}
+
+/** Extracción de hechos (sin pregunta). */
+export async function extractFactsFromAnswer(
+  audit: ProjectAudit,
+  lastAnswer: string
+): Promise<AuditAIResponse['contextUpdates']> {
+  try {
+    const raw = await callAuditAi(
+      buildExtractSystemPrompt(),
+      {
+        instruction:
+          'Extrae TODOS los hechos útiles de last_answer hacia contextUpdates con paths del catálogo (business.*, problem.*, process.*, volume.*, roi.*, etc.). question:null. assistantMessage:"".',
+        last_answer: lastAnswer,
+        audit: compactAuditForAi(audit),
+      },
+      { temperature: 0.1, maxTokens: 700, allowRepair: false }
+    )
+    return raw.contextUpdates || []
+  } catch {
+    return []
+  }
+}
+
+export async function generateNextAiTurn(
+  audit: ProjectAudit,
+  extras?: {
+    instruction?: string
+    lastAnswer?: string
+    isFirst?: boolean
+    lastAction?: string
+    skippedFieldKey?: string
+    preferCatalog?: boolean
+  }
+): Promise<AuditAIResponse> {
+  const exclude = [
+    ...doNotAskAgainKeys(audit),
+    ...(extras?.skippedFieldKey ? [extras.skippedFieldKey] : []),
+  ]
+
+  // Preferencia: planner + catálogo (rápido). Extracción LLM solo si la respuesta es rica.
+  if (extras?.preferCatalog !== false) {
+    let contextUpdates: AuditAIResponse['contextUpdates'] = []
+    const answer = (extras?.lastAnswer || '').trim()
+    if (extras?.lastAction === 'save_continue' && answer.length >= 40) {
+      contextUpdates = await extractFactsFromAnswer(audit, answer)
+    }
+    const planned = questionFromPlan(audit, Boolean(extras?.isFirst), exclude, extras?.skippedFieldKey)
+    return {
+      ...planned,
+      contextUpdates,
+    }
+  }
+
+  try {
+    const planned = planNextQuestion(audit, {
+      excludeFieldKeys: exclude,
+      skippedFieldKey: extras?.skippedFieldKey || null,
+    })
+    const raw = await callAuditAi(buildModeSystemPrompt(audit.active_mode), {
+      instruction:
+        extras?.instruction ||
+        'Genera el siguiente turno. assistantMessage="" si hay pregunta. No repitas datos de known_facts ni do_not_ask_again ni blocked_topics.',
+      is_first: Boolean(extras?.isFirst),
+      last_answer: extras?.lastAnswer || null,
+      last_action: extras?.lastAction || null,
+      skipped_field_key: extras?.skippedFieldKey || null,
+      forced_field_key: planned.question?.field_key || null,
+      forced_topic: planned.topic,
+      audit: compactAuditForAi(audit),
+    }, { maxTokens: 900 })
+    // Si la IA inventa otro fieldKey, forzamos el del planner
+    if (planned.question && raw.question) {
+      raw.question.fieldKey = planned.question.field_key
+      if (isRedundantQuestion(audit, raw.question.text, planned.question.field_key)) {
+        return questionFromPlan(audit, Boolean(extras?.isFirst), exclude, extras?.skippedFieldKey)
+      }
+    }
+    return sanitizeAiTurn(audit, raw, {
+      isFirst: extras?.isFirst,
+      excludeFieldKeys: exclude,
+      skippedFieldKey: extras?.skippedFieldKey,
+    })
+  } catch {
+    return catalogFallback(audit, extras?.isFirst, exclude, {
+      skippedFieldKey: extras?.skippedFieldKey,
+    })
+  }
+}
+
+export async function analyzeGapsAi(audit: ProjectAudit): Promise<AuditAIResponse> {
+  try {
+    return await callAuditAi(buildGapsSystemPrompt(), { audit: compactAuditForAi(audit) }, { temperature: 0.15, maxTokens: 1200 })
+  } catch {
+    return catalogFallback(audit, false)
+  }
+}
+
+export function catalogFallback(
+  audit: ProjectAudit,
+  isFirst?: boolean,
+  excludeFieldKeys: string[] = [],
+  opts?: { skippedFieldKey?: string | null }
+): AuditAIResponse {
+  return questionFromPlan(audit, Boolean(isFirst), excludeFieldKeys, opts?.skippedFieldKey)
+}
+
 export async function generateExampleHelp(
   audit: ProjectAudit,
   questionText: string
@@ -386,3 +480,6 @@ export async function generateExampleHelp(
     return 'Ejemplo: “Recibimos unos 80 leads/mes por formulario web y WhatsApp; los revisa comercial en Excel y responde en 24–48h.”'
   }
 }
+
+// re-export for tests that imported questionsFor usage indirectly
+export { questionsFor }

@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyUserAnswerLocal,
+  finalizeAudit,
   normalizeConversation,
   peekNextQuestion,
 } from './agent'
 import { isRedundantQuestion, validateAuditAiResponse, catalogFallback } from './ai'
 import { emptyContext, emptyAuditCollections, type ProjectAudit } from './types'
 import { pickNextCatalogQuestion } from './catalog'
+import { planNextQuestion } from './planner'
+import { inferFactsFromText } from './topics'
+import { computeBlockStatus, readyForStrategies } from './blocks'
+import {
+  detectFollowUpSignals,
+  gateQuestionAgainstPrematureSolution,
+  pickFollowUpQuestion,
+} from './followups'
 
 function baseAudit(overrides: Partial<ProjectAudit> = {}): ProjectAudit {
   const empty = emptyAuditCollections()
@@ -249,6 +258,7 @@ describe('omitir no se repite en catálogo', () => {
       answer: '',
       action: 'skip',
     })
+    expect(skipped.audit.structured['business.company_summary']?.status).toBe('skipped')
     const next = pickNextCatalogQuestion(
       'descubrimiento',
       ['unclear'],
@@ -256,6 +266,21 @@ describe('omitir no se repite en catálogo', () => {
       null
     )
     expect(next?.field_key).not.toBe('business.company_summary')
+  })
+
+  it('tras omitir, el planner salta a otro tema (no el mismo)', () => {
+    const audit = baseAudit()
+    const skipped = applyUserAnswerLocal(audit, {
+      question_id: 'q1',
+      answer: '',
+      action: 'skip',
+    })
+    const planned = planNextQuestion(skipped.audit, {
+      skippedFieldKey: 'business.company_summary',
+    })
+    expect(planned.question).not.toBeNull()
+    expect(planned.topic).not.toBe('negocio')
+    expect(planned.question?.field_key).not.toBe('business.company_summary')
   })
 })
 
@@ -287,5 +312,59 @@ describe('contexto compartido / no redundante', () => {
 
     const fb = catalogFallback(audit, false, ['volume.monthly_volume'])
     expect(fb.question?.fieldKey).not.toBe('volume.monthly_volume')
+  })
+
+  it('infiere volumen y personas desde respuesta indirecta', () => {
+    const facts = inferFactsFromText(
+      'Somos una clínica dental. Entramos unos 400 leads al mes y hay 2 personas que dedican 10 horas.',
+      {}
+    )
+    expect(facts.some((f) => f.path === 'volume.monthly_volume')).toBe(true)
+    expect(facts.some((f) => f.path === 'roi.people_involved')).toBe(true)
+  })
+})
+
+describe('bloques y anti-solución', () => {
+  it('computeBlockStatus marca cliente pendiente sin datos', () => {
+    const blocks = computeBlockStatus(baseAudit({ structured: {} }))
+    const cliente = blocks.find((b) => b.id === 'cliente')
+    expect(cliente?.status).toBe('pending')
+    expect(cliente?.total).toBeGreaterThan(0)
+  })
+
+  it('readyForStrategies es false sin cobertura de descubrimiento', () => {
+    expect(readyForStrategies(baseAudit({ structured: {} }))).toBe(false)
+  })
+
+  it('detecta Instagram y propone follow-up de investigación', () => {
+    const signals = detectFollowUpSignals(
+      'Nos llegan muchos comentarios de Instagram y no damos abasto'
+    )
+    expect(signals).toContain('instagram')
+    const fu = pickFollowUpQuestion(
+      baseAudit({ structured: {}, questions: [], conversation: [], active_question_id: null }),
+      'Nos llegan muchos comentarios de Instagram y no damos abasto'
+    )
+    expect(fu?.field_key).toMatch(/instagram|followup/)
+    expect(fu?.question.toLowerCase()).not.toMatch(/montar un agente en instagram/)
+  })
+
+  it('gateQuestionAgainstPrematureSolution bloquea solution.*', () => {
+    const gated = gateQuestionAgainstPrematureSolution(baseAudit({ structured: {} }), {
+      id: 'x',
+      field_key: 'solution.architecture',
+      question: '¿Montamos el agente en Instagram?',
+      why: 'x',
+      area: 'solucion',
+      importance: 'important',
+      answer_type: 'textarea',
+    })
+    expect(gated).toBeNull()
+  })
+
+  it('finalizeAudit genera report markdown', () => {
+    const done = finalizeAudit(baseAudit())
+    expect(done.status).toBe('ready_for_proposal')
+    expect(done.report?.markdown).toContain('Informe de auditoría')
   })
 })

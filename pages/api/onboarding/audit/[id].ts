@@ -3,19 +3,25 @@ import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import { getAuditById, saveAudit } from '@/lib/onboarding/audit/store'
 import {
+  addManualNote,
   applyUserAnswerLocal,
   askExampleTurn,
   buildAuditSnapshot,
   changeModeTurn,
   continueAfterAnswer,
   convertGapToQuestion,
+  editAnswerTurn,
+  finalizeAudit,
+  focusBlockTurn,
+  followUpTurn,
   peekNextQuestion,
   runAnalyzeGaps,
   startOrResumeQuestion,
 } from '@/lib/onboarding/audit/agent'
 import { computeAreaProgress } from '@/lib/onboarding/audit/progress'
-import { buildProposalPayload } from '@/lib/onboarding/audit/proposal'
-import type { AuditAreaId, AuditMode, AuditProjectType } from '@/lib/onboarding/audit/types'
+import { buildAuditReport, buildProposalPayload } from '@/lib/onboarding/audit/proposal'
+import { computeBlockStatus, overallBlockProgress } from '@/lib/onboarding/audit/blocks'
+import type { AuditAreaId, AuditBlockId, AuditMode, AuditProjectType } from '@/lib/onboarding/audit/types'
 import { auditCompleteness } from '@/lib/onboarding/audit/progress'
 
 const answerSchema = z.object({
@@ -63,6 +69,13 @@ const patchSchema = z.object({
     .optional(),
   active_area: z.string().optional(),
   project_types: z.array(z.string()).optional(),
+  map_update: z
+    .object({
+      field_key: z.string().min(1),
+      map_checked: z.boolean().optional(),
+      note: z.string().max(4000).optional().nullable(),
+    })
+    .optional(),
 })
 
 const analyzeSchema = z.object({ action: z.literal('analyze') })
@@ -73,11 +86,38 @@ const gapSchema = z.object({
   gap_action: z.enum(['ask_now', 'assign_client', 'assign_buffalo', 'resolve']),
 })
 const proposalSchema = z.object({ action: z.literal('proposal_payload') })
+const followUpSchema = z.object({ action: z.literal('follow_up') })
+const finalizeSchema = z.object({ action: z.literal('finalize') })
+const addNoteSchema = z.object({
+  action: z.literal('add_note'),
+  text: z.string().min(1).max(4000),
+  block_id: z.string().optional().nullable(),
+  field_key: z.string().optional().nullable(),
+})
+const editAnswerSchema = z.object({
+  action: z.literal('edit_answer'),
+  answer_id: z.string().optional(),
+  question_id: z.string().optional(),
+  raw_text: z.string().min(1).max(20000),
+  value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]).optional(),
+})
+const focusBlockSchema = z.object({
+  action: z.literal('focus_block'),
+  block_id: z.string().min(1),
+})
 
 function pendingCount(audit: { questions?: { status: string }[] }) {
   return (audit.questions || []).filter((q) =>
     ['pending', 'skipped', 'unknown', 'buffalo_later'].includes(q.status)
   ).length
+}
+
+function enrichPayload(audit: Parameters<typeof computeBlockStatus>[0]) {
+  const blocks = computeBlockStatus(audit)
+  return {
+    blocks,
+    block_progress: overallBlockProgress(blocks),
+  }
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -102,6 +142,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         snapshot: buildAuditSnapshot(started.audit),
         pending_count: pendingCount(started.audit),
         completeness: auditCompleteness(started.audit),
+        ...enrichPayload(started.audit),
       })
     }
 
@@ -183,6 +224,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         pending_count: pendingCount(audit),
         ai_error: aiError || null,
         can_retry_generate: Boolean(aiError),
+        ...enrichPayload(audit),
       })
     }
 
@@ -197,6 +239,93 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         snapshot: buildAuditSnapshot(audit),
         pending_count: pendingCount(audit),
         ai_error: cont.aiError || null,
+        ...enrichPayload(audit),
+      })
+    }
+
+    if (action === 'follow_up') {
+      followUpSchema.parse(req.body)
+      const cont = await followUpTurn(audit)
+      audit = await saveAudit(cont.audit)
+      return res.status(200).json({
+        audit,
+        current_question: cont.current,
+        areas: computeAreaProgress(audit.structured),
+        snapshot: buildAuditSnapshot(audit),
+        pending_count: pendingCount(audit),
+        ai_error: cont.aiError || null,
+        ...enrichPayload(audit),
+      })
+    }
+
+    if (action === 'add_note') {
+      const body = addNoteSchema.parse(req.body)
+      audit = await saveAudit(
+        addManualNote(audit, {
+          text: body.text,
+          block_id: (body.block_id as AuditBlockId) || null,
+          field_key: body.field_key || null,
+        })
+      )
+      return res.status(200).json({
+        audit,
+        current_question: peekNextQuestion(audit),
+        areas: computeAreaProgress(audit.structured),
+        snapshot: buildAuditSnapshot(audit),
+        pending_count: pendingCount(audit),
+        ...enrichPayload(audit),
+      })
+    }
+
+    if (action === 'edit_answer') {
+      const body = editAnswerSchema.parse(req.body)
+      if (!body.answer_id && !body.question_id) {
+        return res.status(400).json({ error: 'answer_id o question_id requerido' })
+      }
+      audit = await saveAudit(
+        editAnswerTurn(audit, {
+          answer_id: body.answer_id,
+          question_id: body.question_id,
+          raw_text: body.raw_text,
+          value: body.value,
+        })
+      )
+      return res.status(200).json({
+        audit,
+        current_question: peekNextQuestion(audit),
+        areas: computeAreaProgress(audit.structured),
+        snapshot: buildAuditSnapshot(audit),
+        pending_count: pendingCount(audit),
+        ...enrichPayload(audit),
+      })
+    }
+
+    if (action === 'finalize') {
+      finalizeSchema.parse(req.body)
+      audit = await saveAudit(finalizeAudit(audit))
+      return res.status(200).json({
+        audit,
+        report: audit.report || buildAuditReport(audit),
+        current_question: peekNextQuestion(audit),
+        areas: computeAreaProgress(audit.structured),
+        snapshot: buildAuditSnapshot(audit),
+        pending_count: pendingCount(audit),
+        completeness: auditCompleteness(audit),
+        ...enrichPayload(audit),
+      })
+    }
+
+    if (action === 'focus_block') {
+      const body = focusBlockSchema.parse(req.body)
+      const focused = await focusBlockTurn(audit, body.block_id as AuditBlockId)
+      audit = await saveAudit(focused.audit)
+      return res.status(200).json({
+        audit,
+        current_question: focused.current,
+        areas: computeAreaProgress(audit.structured),
+        snapshot: buildAuditSnapshot(audit),
+        pending_count: pendingCount(audit),
+        ...enrichPayload(audit),
       })
     }
 
@@ -214,11 +343,57 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
 
-      audit = await saveAudit({
+      let nextAudit = {
         ...audit,
         active_area: (body.active_area as AuditAreaId) || audit.active_area,
         project_types: (body.project_types as AuditProjectType[]) || audit.project_types,
-      })
+      }
+
+      if (body.map_update?.field_key) {
+        const fk = body.map_update.field_key
+        const prev = nextAudit.structured[fk]
+        const areaGuess =
+          (prev?.area as AuditAreaId) ||
+          (fk.startsWith('volume')
+            ? 'volumen'
+            : fk.startsWith('roi')
+              ? 'roi'
+              : fk.startsWith('business')
+                ? 'negocio'
+                : fk.startsWith('problem')
+                  ? 'problema'
+                  : fk.startsWith('process')
+                    ? 'proceso'
+                    : 'negocio')
+        nextAudit = {
+          ...nextAudit,
+          structured: {
+            ...nextAudit.structured,
+            [fk]: {
+              value: prev?.value ?? null,
+              raw_answer: prev?.raw_answer,
+              status: prev?.status || 'empty',
+              source: prev?.source || 'unknown',
+              confidence: prev?.confidence ?? 0,
+              importance: prev?.importance || 'important',
+              area: areaGuess,
+              updated_at: new Date().toISOString(),
+              note:
+                body.map_update.note !== undefined ? body.map_update.note : prev?.note ?? null,
+              map_checked:
+                body.map_update.map_checked !== undefined
+                  ? body.map_update.map_checked
+                  : prev?.map_checked ?? false,
+              follow_up_owner: prev?.follow_up_owner ?? null,
+              message_id: prev?.message_id ?? null,
+              question_id: prev?.question_id ?? null,
+            },
+          },
+          updated_at: new Date().toISOString(),
+        }
+      }
+
+      audit = await saveAudit(nextAudit)
       return res.status(200).json({
         audit,
         current_question: peekNextQuestion(audit),

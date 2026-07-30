@@ -10,6 +10,7 @@ import {
   startOrResumeQuestion,
 } from '@/lib/onboarding/audit/agent'
 import { computeAreaProgress } from '@/lib/onboarding/audit/progress'
+import { computeBlockStatus, overallBlockProgress } from '@/lib/onboarding/audit/blocks'
 import { persistAuditProjectForLead } from '@/lib/onboarding/audit/persist-project'
 import type { AuditProjectType } from '@/lib/onboarding/audit/types'
 
@@ -72,6 +73,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         audit,
         current_question: current,
         areas: computeAreaProgress(audit.structured),
+        blocks: computeBlockStatus(audit),
+        block_progress: overallBlockProgress(computeBlockStatus(audit)),
         snapshot: buildAuditSnapshot(audit),
         pending_count: (audit.questions || []).filter((q) =>
           ['pending', 'skipped', 'unknown', 'buffalo_later'].includes(q.status)
@@ -115,6 +118,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           audit,
           current_question: meeting.current,
           areas: computeAreaProgress(audit.structured),
+          blocks: computeBlockStatus(audit),
+          block_progress: overallBlockProgress(computeBlockStatus(audit)),
           snapshot: buildAuditSnapshot(audit),
           pending_count: 0,
           project_saved: true,
@@ -135,6 +140,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         audit,
         current_question: current,
         areas: computeAreaProgress(audit.structured),
+        blocks: computeBlockStatus(audit),
+        block_progress: overallBlockProgress(computeBlockStatus(audit)),
         snapshot: buildAuditSnapshot(audit),
         pending_count: (audit.questions || []).filter((q) =>
           ['pending', 'skipped', 'unknown', 'buffalo_later'].includes(q.status)

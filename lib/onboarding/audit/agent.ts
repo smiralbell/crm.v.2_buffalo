@@ -17,6 +17,11 @@ import type { AuditAIResponse } from './schemas'
 import { catalogFallback, generateExampleHelp, generateNextAiTurn, analyzeGapsAi } from './ai'
 import { computeAreaProgress, computeProgressFromStructured, mergeProgress } from './progress'
 import { pickNextCatalogQuestion } from './catalog'
+import { inferFactsFromText } from './topics'
+import { pickFollowUpQuestion } from './followups'
+import type { AuditBlockId } from './types'
+import { AUDIT_BLOCKS } from './blocks'
+import { buildAuditReport } from './proposal'
 
 export { computeAreaProgress }
 
@@ -99,6 +104,8 @@ function mapStatusFromAi(
   if (status === 'unknown') return 'unknown'
   if (status === 'not_applicable') return 'not_applicable'
   if (status === 'answered') return 'answered'
+  if (status === 'skipped') return 'skipped'
+  if (status === 'buffalo_later') return 'buffalo_later'
   return 'partial'
 }
 
@@ -550,33 +557,45 @@ export function applyUserAnswerLocal(
     updated_at: nowIso(),
   }
 
-  next = applyContextUpdates(
-    next,
-    [
-      {
-        path: q.field_key,
-        value: answerRow.value,
-        status:
-          fieldMeta.status === 'answered'
-            ? 'confirmed'
-            : fieldMeta.status === 'pending_confirmation'
-              ? 'pending_confirmation'
-              : fieldMeta.status === 'unknown'
-                ? 'unknown'
-                : fieldMeta.status === 'not_applicable'
-                  ? 'not_applicable'
-                  : 'estimated',
-        source:
-          fieldMeta.source === 'client_estimate'
-            ? 'client_estimate'
-            : fieldMeta.source === 'buffalo'
-              ? 'buffalo'
+  // Solo re-sincronizar panel de contexto en respuestas reales (no sobreescribir skip)
+  if (input.action === 'save_continue') {
+    next = applyContextUpdates(
+      next,
+      [
+        {
+          path: q.field_key,
+          value: answerRow.value,
+          status:
+            fieldMeta.status === 'answered'
+              ? 'confirmed'
+              : fieldMeta.status === 'pending_confirmation'
+                ? 'pending_confirmation'
+                : 'estimated',
+          source:
+            fieldMeta.source === 'client_estimate'
+              ? 'client_estimate'
               : 'client',
-        confidence: fieldMeta.status === 'answered' ? 0.9 : 0.55,
-      },
-    ],
-    msgId
-  )
+          confidence: fieldMeta.status === 'answered' ? 0.9 : 0.55,
+        },
+      ],
+      msgId
+    )
+
+    const inferred = inferFactsFromText(input.answer, next.structured)
+    if (inferred.length) {
+      next = applyContextUpdates(
+        next,
+        inferred.map((f) => ({
+          path: f.path,
+          value: f.value,
+          status: f.status,
+          source: 'ai_inference' as const,
+          confidence: 0.7,
+        })),
+        msgId
+      )
+    }
+  }
 
   return { audit: next, question: questions.find((x) => x.id === q.id) || null }
 }
@@ -588,20 +607,65 @@ export async function continueAfterAnswer(
 ): Promise<{ audit: ProjectAudit; current: CurrentQuestion | null; aiError?: string }> {
   const audit = ensureCollections(auditIn)
   const skipped = opts?.action === 'skip' || Boolean(opts?.skippedFieldKey)
+
+  // Fast path: omitir / N/A / unknown → siguiente del planner SIN LLM
+  if (
+    skipped ||
+    opts?.action === 'not_applicable' ||
+    opts?.action === 'unknown' ||
+    opts?.action === 'buffalo_later'
+  ) {
+    const ai = catalogFallback(audit, false, opts?.skippedFieldKey ? [opts.skippedFieldKey] : [], {
+      skippedFieldKey: opts?.skippedFieldKey || null,
+    })
+    let next = applyGapsAndProgress(audit, ai)
+    return appendQuestionFromAi(next, ai, audit.active_mode)
+  }
+
   try {
+    // Primero: follow-up adaptativo por señales (Instagram, WhatsApp, etc.)
+    if (lastAnswer.trim().length > 12) {
+      const fu = pickFollowUpQuestion(audit, lastAnswer, {
+        parentQuestionId: audit.active_question_id,
+      })
+      if (fu) {
+        const asAi: AuditAIResponse = {
+          assistantMessage: '',
+          question: {
+            id: fu.id,
+            text: fu.question,
+            helpText: fu.help_text || undefined,
+            reason: fu.why,
+            mode: audit.active_mode,
+            category: String(fu.area),
+            fieldKey: fu.field_key,
+            importance: fu.importance,
+            answerType: fu.answer_type,
+          },
+          contextUpdates: [],
+          detectedGaps: [],
+          contradictions: [],
+          progressUpdates: [],
+        }
+        return appendQuestionFromAi(audit, asAi, audit.active_mode)
+      }
+    }
+
+    // Respuesta real: extracción corta opcional + pregunta del planner (sin reformular tema libre)
     const ai = await generateNextAiTurn(audit, {
-      instruction: skipped
-        ? `El usuario OMITIÓ la pregunta (fieldKey=${opts?.skippedFieldKey || 'desconocido'}). NO la repitas ni la reformules. Pasa a OTRA pregunta distinta del modo ${audit.active_mode}. assistantMessage="" .`
-        : `El cliente acaba de responder (${opts?.action || 'save_continue'}). Extrae contexto y formula UNA siguiente pregunta del modo activo. assistantMessage="". No repitas known_facts ni do_not_ask_again.`,
+      instruction: `El cliente acaba de responder (${opts?.action || 'save_continue'}). Extrae hechos nuevos en contextUpdates (paths estables del catálogo). La pregunta DEBE usar el forced_field_key si se indica. assistantMessage="". No repitas known_facts ni do_not_ask_again ni el mismo tema omitido. No propongas solución prematura.`,
       lastAnswer,
       lastAction: opts?.action,
       skippedFieldKey: opts?.skippedFieldKey,
+      preferCatalog: true,
     })
     let next = applyContextUpdates(audit, ai.contextUpdates || [])
     next = applyGapsAndProgress(next, ai)
     return appendQuestionFromAi(next, ai, audit.active_mode)
   } catch (e) {
-    const ai = catalogFallback(audit, false, opts?.skippedFieldKey ? [opts.skippedFieldKey] : [])
+    const ai = catalogFallback(audit, false, opts?.skippedFieldKey ? [opts.skippedFieldKey] : [], {
+      skippedFieldKey: opts?.skippedFieldKey || null,
+    })
     let next = applyGapsAndProgress(audit, ai)
     const result = appendQuestionFromAi(next, ai, audit.active_mode)
     return {
@@ -621,11 +685,8 @@ export async function startMeetingTurn(
     started_at: audit.started_at || nowIso(),
     status: 'in_progress',
   }
-  const ai = await generateNextAiTurn(audit, {
-    isFirst: true,
-    instruction:
-      'Empieza la reunión en Descubrimiento. assistantMessage = 1 frase corta SIN pregunta. question = primera pregunta de negocio.',
-  })
+  // Primera pregunta: catálogo (instantáneo), intro fija
+  const ai = catalogFallback(audit, true, [], { skippedFieldKey: null })
   let next = applyContextUpdates(audit, ai.contextUpdates || [])
   next = applyGapsAndProgress(next, ai)
   return appendQuestionFromAi(next, ai, 'descubrimiento', { allowIntro: true })
@@ -668,7 +729,8 @@ export async function changeModeTurn(
   }
 
   const ai = await generateNextAiTurn(audit, {
-    instruction: `Modo cambiado a ${mode}. Genera la siguiente pregunta con ese enfoque. assistantMessage="". Usa known_facts: NO repitas datos ya conocidos (volumen, empresa, problema, etc.). No hagas intro larga.`,
+    instruction: `Modo cambiado a ${mode}. Genera la siguiente pregunta con ese enfoque. assistantMessage="". Usa known_facts: NO repitas datos ya conocidos. No hagas intro larga.`,
+    preferCatalog: true,
   })
   let next = applyContextUpdates(audit, ai.contextUpdates || [])
   next = applyGapsAndProgress(next, ai)
@@ -791,4 +853,270 @@ export function getCatalogNext(audit: ProjectAudit): CurrentQuestion | null {
     importance: n.importance,
     answer_type: 'textarea',
   }
+}
+
+/** Genera una pregunta de seguimiento sobre la última respuesta del usuario. */
+export async function followUpTurn(
+  auditIn: ProjectAudit
+): Promise<{ audit: ProjectAudit; current: CurrentQuestion | null; aiError?: string }> {
+  const audit = ensureCollections(auditIn)
+  const lastUser = [...audit.conversation].reverse().find((t) => t.role === 'user')
+  const lastAnswer = lastUser?.content || ''
+
+  const fu = pickFollowUpQuestion(audit, lastAnswer || 'seguimiento', {
+    parentQuestionId: lastUser?.question_id || audit.active_question_id,
+  })
+  if (fu) {
+    if (audit.active_question_id) {
+      const parked = {
+        ...audit,
+        questions: audit.questions.map((q) =>
+          q.id === audit.active_question_id && q.status === 'open'
+            ? { ...q, status: 'pending' as const }
+            : q
+        ),
+      }
+      const asAi: AuditAIResponse = {
+        assistantMessage: '',
+        question: {
+          id: fu.id,
+          text: fu.question,
+          helpText: fu.help_text || undefined,
+          reason: fu.why,
+          mode: parked.active_mode,
+          category: String(fu.area),
+          fieldKey: fu.field_key,
+          importance: fu.importance,
+          answerType: 'textarea',
+        },
+        contextUpdates: [],
+        detectedGaps: [],
+        contradictions: [],
+        progressUpdates: [],
+      }
+      return appendQuestionFromAi(parked, asAi, parked.active_mode)
+    }
+  }
+
+  try {
+    const ai = await generateNextAiTurn(audit, {
+      instruction:
+        'Genera UNA pregunta de seguimiento más concreta sobre la última respuesta del cliente. No avances a solución. assistantMessage="". Investiga proceso, volumen, límites o dónde quieren gestionar.',
+      lastAnswer,
+      preferCatalog: false,
+    })
+    let next = audit
+    if (next.active_question_id) {
+      next = {
+        ...next,
+        questions: next.questions.map((q) =>
+          q.id === next.active_question_id && q.status === 'open'
+            ? { ...q, status: 'pending' as const }
+            : q
+        ),
+      }
+    }
+    next = applyContextUpdates(next, ai.contextUpdates || [])
+    next = applyGapsAndProgress(next, ai)
+    return appendQuestionFromAi(next, ai, next.active_mode)
+  } catch (e) {
+    return {
+      audit,
+      current: peekNextQuestion(audit),
+      aiError: e instanceof Error ? e.message : 'Error generando seguimiento',
+    }
+  }
+}
+
+export function editAnswerTurn(
+  auditIn: ProjectAudit,
+  input: {
+    answer_id?: string
+    question_id?: string
+    raw_text: string
+    value?: string | number | boolean | string[] | null
+    edited_by?: string | null
+  }
+): ProjectAudit {
+  let audit = ensureCollections(auditIn)
+  const answer =
+    (input.answer_id && audit.answers.find((a) => a.id === input.answer_id)) ||
+    (input.question_id &&
+      [...audit.answers].reverse().find((a) => a.question_id === input.question_id)) ||
+    null
+  if (!answer) return audit
+
+  const q = audit.questions.find((x) => x.id === answer.question_id)
+  const now = nowIso()
+  const answers = audit.answers.map((a) =>
+    a.id === answer.id
+      ? {
+          ...a,
+          raw_text: input.raw_text,
+          value: input.value !== undefined ? input.value : input.raw_text,
+          updated_at: now,
+          validation_status: 'draft' as const,
+        }
+      : a
+  )
+
+  const conversation = audit.conversation.map((t) =>
+    t.id === answer.message_id || (t.answer_id === answer.id && t.role === 'user')
+      ? { ...t, content: input.raw_text }
+      : t
+  )
+
+  audit = {
+    ...audit,
+    answers,
+    conversation,
+    meta: {
+      ...(audit.meta || {}),
+      last_edited_by: input.edited_by || audit.meta?.last_edited_by || null,
+      last_edited_at: now,
+    },
+    updated_at: now,
+  }
+
+  if (q?.field_key) {
+    audit = applyContextUpdates(audit, [
+      {
+        path: q.field_key,
+        value: input.value !== undefined ? input.value : input.raw_text,
+        status: 'confirmed',
+        source: 'client',
+        confidence: 0.95,
+      },
+    ])
+  }
+
+  const inferred = inferFactsFromText(input.raw_text, audit.structured)
+  if (inferred.length) {
+    audit = applyContextUpdates(
+      audit,
+      inferred.map((f) => ({
+        path: f.path,
+        value: f.value,
+        status: f.status,
+        source: 'ai_inference' as const,
+        confidence: 0.65,
+      }))
+    )
+  }
+
+  return audit
+}
+
+export function addManualNote(
+  auditIn: ProjectAudit,
+  input: {
+    text: string
+    block_id?: AuditBlockId | null
+    field_key?: string | null
+    created_by?: string | null
+  }
+): ProjectAudit {
+  const audit = ensureCollections(auditIn)
+  const now = nowIso()
+  const note = {
+    id: uid('note'),
+    text: input.text.trim(),
+    block_id: input.block_id || null,
+    field_key: input.field_key || null,
+    created_at: now,
+    created_by: input.created_by || null,
+  }
+  const notes = [...(audit.meta?.notes || []), note]
+  const turn: AuditConversationTurn = {
+    id: uid('m'),
+    role: 'system',
+    content: `Nota: ${note.text}`,
+    mode: audit.active_mode,
+    area: audit.active_area,
+    message_type: 'system',
+    created_at: now,
+    meta: { note_id: note.id, block_id: note.block_id },
+  }
+  return {
+    ...audit,
+    conversation: [...audit.conversation, turn],
+    meta: {
+      ...(audit.meta || {}),
+      notes,
+      last_edited_by: input.created_by || audit.meta?.last_edited_by || null,
+      last_edited_at: now,
+    },
+    updated_at: now,
+  }
+}
+
+export function finalizeAudit(
+  auditIn: ProjectAudit,
+  opts?: { edited_by?: string | null }
+): ProjectAudit {
+  const audit = ensureCollections(auditIn)
+  const report = buildAuditReport(audit)
+  const now = nowIso()
+  return {
+    ...audit,
+    status: 'ready_for_proposal',
+    completed_at: audit.completed_at || now,
+    report,
+    meta: {
+      ...(audit.meta || {}),
+      last_edited_by: opts?.edited_by || audit.meta?.last_edited_by || null,
+      last_edited_at: now,
+    },
+    updated_at: now,
+  }
+}
+
+/** Enfoca un bloque: cambia modo/área y genera siguiente pregunta de ese bloque. */
+export async function focusBlockTurn(
+  auditIn: ProjectAudit,
+  blockId: AuditBlockId
+): Promise<{ audit: ProjectAudit; current: CurrentQuestion | null }> {
+  const meta = AUDIT_BLOCKS.find((b) => b.id === blockId)
+  if (!meta) return { audit: auditIn, current: peekNextQuestion(auditIn) }
+
+  let audit = ensureCollections(auditIn)
+  if (audit.active_question_id) {
+    audit = {
+      ...audit,
+      questions: audit.questions.map((q) =>
+        q.id === audit.active_question_id && q.status === 'open'
+          ? { ...q, status: 'pending' as const }
+          : q
+      ),
+    }
+  }
+
+  audit = {
+    ...audit,
+    active_mode: meta.preferred_mode,
+    active_area: meta.preferred_area,
+    meta: { ...(audit.meta || {}), active_block: blockId },
+    conversation: [
+      ...audit.conversation,
+      {
+        id: uid('m'),
+        role: 'system',
+        content: `Bloque: ${meta.label}`,
+        mode: meta.preferred_mode,
+        area: meta.preferred_area,
+        message_type: 'mode_separator',
+        created_at: nowIso(),
+      },
+    ],
+    active_question_id: null,
+    updated_at: nowIso(),
+  }
+
+  const ai = await generateNextAiTurn(audit, {
+    instruction: `El auditor quiere profundizar en el bloque "${meta.label}". Genera la siguiente pregunta de ese bloque. assistantMessage="". No propongas solución.`,
+    preferCatalog: true,
+  })
+  let next = applyContextUpdates(audit, ai.contextUpdates || [])
+  next = applyGapsAndProgress(next, ai)
+  return appendQuestionFromAi(next, ai, meta.preferred_mode)
 }

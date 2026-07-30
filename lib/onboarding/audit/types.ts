@@ -27,6 +27,24 @@ export type AuditAreaId =
   | 'funcionalidades'
   | 'solucion'
 
+/** 15 bloques de navegación / progreso de la auditoría adaptativa. */
+export type AuditBlockId =
+  | 'cliente'
+  | 'problema'
+  | 'proceso'
+  | 'volumen'
+  | 'roi'
+  | 'herramientas'
+  | 'crm'
+  | 'ia'
+  | 'tono'
+  | 'reglas'
+  | 'legal'
+  | 'metricas'
+  | 'alcance'
+  | 'calendario'
+  | 'presupuesto'
+
 export type AuditFieldStatus =
   | 'empty'
   | 'answered'
@@ -104,6 +122,8 @@ export type AuditFieldValue = {
   area: AuditAreaId
   updated_at: string
   note?: string | null
+  /** Marcado en el mapa de auditoría (tachado / revisado) */
+  map_checked?: boolean
   follow_up_owner?: 'client' | 'buffalo' | null
   message_id?: string | null
   question_id?: string | null
@@ -150,6 +170,35 @@ export type AuditAnswer = {
   created_at: string
   updated_at: string
   late?: boolean
+  confidence?: number
+  source?: AuditFieldSource
+  validation_status?: 'draft' | 'validated' | 'needs_review'
+  tags?: string[]
+  parent_question_id?: string | null
+  derived_question_ids?: string[]
+}
+
+export type AuditManualNote = {
+  id: string
+  text: string
+  block_id?: AuditBlockId | null
+  field_key?: string | null
+  created_at: string
+  created_by?: string | null
+}
+
+export type AuditMeta = {
+  last_edited_by?: string | null
+  last_edited_at?: string | null
+  notes?: AuditManualNote[]
+  active_block?: AuditBlockId | null
+}
+
+export type AuditReport = {
+  markdown: string
+  generated_at: string
+  completeness_percent: number
+  sections?: Record<string, string>
 }
 
 export type AuditGap = {
@@ -268,6 +317,8 @@ export type ProjectAudit = {
   completed_at: string | null
   created_at: string
   updated_at: string
+  meta?: AuditMeta
+  report?: AuditReport | null
 }
 
 export type AuditAnswerAction =

@@ -59,10 +59,11 @@ interface LeadsPageProps {
   contactsOnly: ContactOnlyRow[]
   page: number
   totalPages: number
+  totalCount: number
   search: string
   /** all | leads | contacto */
   tipo: string
-  /** all | frio | caliente | cerrado | perdido */
+  /** all | frio | caliente | cerrado | perdido | … */
   estado: string
 }
 
@@ -75,7 +76,17 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     const tipoRaw = (context.query.tipo as string) || 'all'
     const tipo = ['all', 'leads', 'contacto'].includes(tipoRaw) ? tipoRaw : 'all'
     const estadoRaw = (context.query.estado as string) || 'all'
-    const estado = ['all', 'frio', 'caliente', 'cerrado', 'perdido'].includes(estadoRaw)
+    const estado = [
+      'all',
+      'frio',
+      'caliente',
+      'cerrado',
+      'perdido',
+      'nuevo',
+      'en_proceso',
+      'reunion',
+      'propuesta',
+    ].includes(estadoRaw)
       ? estadoRaw
       : 'all'
     const pageSize = 10
@@ -111,46 +122,87 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       ]
     }
 
-    const [leads, totalLeads, contactsOnly] = await Promise.all([
-      showLeads
-        ? prisma.lead.findMany({
-            where,
-            skip,
-            take: pageSize,
-            orderBy: { created_at: 'desc' },
-            include: {
-              contact: {
-                select: {
-                  id: true,
-                  nombre: true,
-                  email: true,
-                },
-              },
-            },
-          })
-        : Promise.resolve([]),
+    const [totalLeads, totalContactsOnly] = await Promise.all([
       showLeads ? prisma.lead.count({ where }) : Promise.resolve(0),
-      includeContacts
-        ? prisma.contact.findMany({
-            where: contactWhere,
-            take: tipo === 'contacto' ? pageSize : 50,
-            skip: tipo === 'contacto' ? skip : 0,
-            orderBy: { created_at: 'desc' },
-            select: {
-              id: true,
-              nombre: true,
-              email: true,
-              created_at: true,
-            },
-          })
-        : Promise.resolve([]),
+      includeContacts ? prisma.contact.count({ where: contactWhere }) : Promise.resolve(0),
     ])
 
+    // Lista unificada: leads + contactos sin lead, ordenados por fecha (desc).
+    // Paginar sobre el total combinado evita páginas de más y contactos repetidos.
     const totalForPages =
-      tipo === 'contacto'
-        ? await prisma.contact.count({ where: contactWhere })
-        : totalLeads
+      tipo === 'contacto' ? totalContactsOnly : tipo === 'leads' ? totalLeads : totalLeads + totalContactsOnly
     const totalPages = Math.max(1, Math.ceil(totalForPages / pageSize))
+    const safePage = Math.min(Math.max(1, page), totalPages)
+    const safeSkip = (safePage - 1) * pageSize
+
+    let leads: Array<{
+      id: number
+      estado: string | null
+      valor: unknown
+      created_at: Date
+      contact: { id: number; nombre: string | null; email: string | null } | null
+    }> = []
+    let contactsOnly: {
+      id: number
+      nombre: string | null
+      email: string | null
+      created_at: Date
+    }[] = []
+
+    if (tipo === 'contacto') {
+      contactsOnly = await prisma.contact.findMany({
+        where: contactWhere,
+        skip: safeSkip,
+        take: pageSize,
+        orderBy: { created_at: 'desc' },
+        select: { id: true, nombre: true, email: true, created_at: true },
+      })
+    } else if (tipo === 'leads') {
+      leads = await prisma.lead.findMany({
+        where,
+        skip: safeSkip,
+        take: pageSize,
+        orderBy: { created_at: 'desc' },
+        include: {
+          contact: { select: { id: true, nombre: true, email: true } },
+        },
+      })
+    } else {
+      // tipo === 'all': slice de la lista combinada (leads primero por created_at, luego contactos)
+      // Aproximación eficiente: si el offset cae dentro de leads, rellenar con contactos;
+      // si ya pasamos todos los leads, solo contactos.
+      if (safeSkip < totalLeads) {
+        const leadTake = Math.min(pageSize, totalLeads - safeSkip)
+        leads = await prisma.lead.findMany({
+          where,
+          skip: safeSkip,
+          take: leadTake,
+          orderBy: { created_at: 'desc' },
+          include: {
+            contact: { select: { id: true, nombre: true, email: true } },
+          },
+        })
+        const remaining = pageSize - leads.length
+        if (remaining > 0 && includeContacts && totalContactsOnly > 0) {
+          contactsOnly = await prisma.contact.findMany({
+            where: contactWhere,
+            skip: 0,
+            take: remaining,
+            orderBy: { created_at: 'desc' },
+            select: { id: true, nombre: true, email: true, created_at: true },
+          })
+        }
+      } else if (includeContacts) {
+        const contactSkip = safeSkip - totalLeads
+        contactsOnly = await prisma.contact.findMany({
+          where: contactWhere,
+          skip: contactSkip,
+          take: pageSize,
+          orderBy: { created_at: 'desc' },
+          select: { id: true, nombre: true, email: true, created_at: true },
+        })
+      }
+    }
 
     return {
       props: {
@@ -167,8 +219,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           email: c.email,
           created_at: c.created_at.toISOString(),
         })),
-        page,
+        page: safePage,
         totalPages,
+        totalCount: totalForPages,
         search,
         tipo,
         estado,
@@ -194,6 +247,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         contactsOnly: [],
         page: 1,
         totalPages: 1,
+        totalCount: 0,
         search: '',
         tipo: 'all',
         estado: 'all',
@@ -207,6 +261,7 @@ export default function LeadsPage({
   contactsOnly,
   page,
   totalPages,
+  totalCount,
   search: initialSearch,
   tipo: initialTipo,
   estado: initialEstado,
@@ -223,6 +278,10 @@ export default function LeadsPage({
   const safeContactsOnly = contactsOnly || []
   const safePage = page || 1
   const safeTotalPages = totalPages || 1
+  const safeTotalCount = totalCount ?? safeLeads.length + safeContactsOnly.length
+  const pageSize = 10
+  const rangeFrom = safeTotalCount === 0 ? 0 : (safePage - 1) * pageSize + 1
+  const rangeTo = Math.min(safePage * pageSize, safeTotalCount)
 
   const listRows: ListRow[] = [
     ...(tipo === 'contacto' ? [] : safeLeads.map((lead) => ({ kind: 'lead' as const, lead }))),
@@ -328,6 +387,8 @@ export default function LeadsPage({
     perdido: 'Perdido',
     nuevo: 'Nuevo',
     en_proceso: 'En Proceso',
+    reunion: 'Reunión',
+    propuesta: 'Propuesta',
   }
 
   const estadoColors: { [key: string]: string } = {
@@ -337,6 +398,8 @@ export default function LeadsPage({
     perdido: 'bg-red-500/15 text-red-700 dark:text-red-300',
     nuevo: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
     en_proceso: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
+    reunion: 'bg-violet-500/15 text-violet-700 dark:text-violet-300',
+    propuesta: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
   }
 
   return (
@@ -378,6 +441,10 @@ export default function LeadsPage({
                   <SelectItem value="all">Todos los estados</SelectItem>
                   <SelectItem value="frio">Frío</SelectItem>
                   <SelectItem value="caliente">Caliente</SelectItem>
+                  <SelectItem value="nuevo">Nuevo</SelectItem>
+                  <SelectItem value="en_proceso">En proceso</SelectItem>
+                  <SelectItem value="reunion">Reunión</SelectItem>
+                  <SelectItem value="propuesta">Propuesta</SelectItem>
                   <SelectItem value="cerrado">Cerrado</SelectItem>
                   <SelectItem value="perdido">Perdido</SelectItem>
                 </SelectContent>
@@ -505,15 +572,21 @@ export default function LeadsPage({
                         return (
                           <tr
                             key={`contact-${c.id}`}
-                            className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
+                            role="link"
+                            tabIndex={0}
+                            onClick={() => router.push(`/contacts/${c.id}`)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                router.push(`/contacts/${c.id}`)
+                              }
+                            }}
+                            className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors cursor-pointer"
                           >
                             <td className="px-4 py-3.5">
-                              <Link
-                                href={`/contacts/${c.id}`}
-                                className="font-medium text-foreground hover:underline"
-                              >
+                              <span className="font-medium text-foreground">
                                 {c.nombre || c.email || `Contacto #${c.id}`}
-                              </Link>
+                              </span>
                               {c.email && c.nombre && (
                                 <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[220px]">
                                   {c.email}
@@ -529,7 +602,7 @@ export default function LeadsPage({
                             <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">
                               {new Date(c.created_at).toLocaleDateString('es-ES')}
                             </td>
-                            <td className="px-4 py-3.5">
+                            <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                               <div className="flex justify-end gap-0.5">
                                 <Link href={`/contacts/${c.id}`}>
                                   <Button variant="ghost" size="icon" className="rounded-xl h-8 w-8">
@@ -559,17 +632,23 @@ export default function LeadsPage({
                       return (
                       <tr
                         key={`lead-${lead.id}`}
-                        className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
+                        role="link"
+                        tabIndex={0}
+                        onClick={() => router.push(`/leads/${lead.id}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            router.push(`/leads/${lead.id}`)
+                          }
+                        }}
+                        className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors cursor-pointer"
                       >
                         <td className="px-4 py-3.5">
-                          <Link
-                            href={`/leads/${lead.id}`}
-                            className="font-medium text-foreground hover:underline"
-                          >
+                          <span className="font-medium text-foreground">
                             {lead.contact?.nombre ||
                               lead.contact?.email ||
                               `Lead #${lead.id}`}
-                          </Link>
+                          </span>
                           {lead.contact?.email && lead.contact?.nombre && (
                             <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[220px]">
                               {lead.contact.email}
@@ -602,7 +681,7 @@ export default function LeadsPage({
                         <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">
                           {new Date(lead.created_at).toLocaleDateString('es-ES')}
                         </td>
-                        <td className="px-4 py-3.5">
+                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-end gap-0.5">
                             <Link href={`/leads/${lead.id}`}>
                               <Button variant="ghost" size="icon" className="rounded-xl h-8 w-8">
@@ -635,11 +714,15 @@ export default function LeadsPage({
               </div>
             )}
 
-            {safeTotalPages > 1 && (
+            {(safeTotalPages > 1 || safeTotalCount > 0) && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-border">
                 <p className="text-sm text-muted-foreground">
-                  Página {safePage} de {safeTotalPages}
+                  {safeTotalCount === 0
+                    ? 'Sin resultados'
+                    : `${rangeFrom}–${rangeTo} de ${safeTotalCount}`}
+                  {safeTotalPages > 1 ? ` · Página ${safePage} de ${safeTotalPages}` : ''}
                 </p>
+                {safeTotalPages > 1 && (
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -678,6 +761,7 @@ export default function LeadsPage({
                     Siguiente
                   </Button>
                 </div>
+                )}
               </div>
             )}
           </CardContent>
