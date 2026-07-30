@@ -182,10 +182,13 @@ export async function generateProposalFromContext(input: {
       ? `Instrucciones del comercial (prioridad):\n${input.extraInstructions.trim()}`
       : null,
     '---',
+    'OBJETIVO DEL DOCUMENTO:',
+    'Genera una PROPUESTA COMERCIAL COMPLETA multi-sección (estilo ACCIÓ / plantilla Buffalo), NO un resumen corto ni un chat. Debe incluir todas las secciones obligatorias del system prompt, con prosa desarrollada, alternativas A/B si aplica, tabla económica, RGPD, mantenimiento, calendario, recomendación y aceptación.',
+    '---',
     'DEFINICIÓN DEL PROYECTO:',
     definition || '(vacía)',
     '---',
-    'CONTEXTO (fuente):',
+    'CONTEXTO / AUDITORÍA (fuente — úsala para anclar el texto al cliente real):',
     context || '(vacío)',
   ]
     .filter(Boolean)
@@ -196,7 +199,7 @@ export async function generateProposalFromContext(input: {
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
-    { temperature: 0.35, maxTokens: 6000 }
+    { temperature: 0.4, maxTokens: 12000 }
   )
 
   const text = String(raw || '').trim()
