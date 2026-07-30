@@ -108,6 +108,12 @@ export async function syncProyectoFromLead(input: SyncProyectoInput) {
     `
     const proyecto = rows[0]
     if (!proyecto) throw new Error('No se pudo actualizar el proyecto')
+    try {
+      const { recomputeLeadCommercialValue } = await import('@/lib/crm/sync-lead-value')
+      await recomputeLeadCommercialValue(lead.id)
+    } catch (e) {
+      console.error('[sync-proyecto] commercial value (update)', e)
+    }
     return { skipped: false as const, proyecto }
   }
 
@@ -182,6 +188,13 @@ export async function syncProyectoFromLead(input: SyncProyectoInput) {
     })
   } catch (e) {
     console.error('[sync-proyecto] crm activity', e)
+  }
+
+  try {
+    const { recomputeLeadCommercialValue } = await import('@/lib/crm/sync-lead-value')
+    await recomputeLeadCommercialValue(lead.id)
+  } catch (e) {
+    console.error('[sync-proyecto] commercial value', e)
   }
 
   return { skipped: false as const, proyecto, created: true as const }

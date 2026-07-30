@@ -3,6 +3,10 @@ import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { softDeletePipelineCard } from '@/lib/pipelines/global-funnel'
 import { z } from 'zod'
+import {
+  applyLeadSetupFee,
+  resolveLeadIdFromPipelineEntity,
+} from '@/lib/crm/sync-lead-value'
 
 const updateCardSchema = z.object({
   stage: z.string().optional(),
@@ -74,6 +78,21 @@ export default async function handler(
           ...(data.notes !== undefined && { notes: data.notes || null }),
         },
       })
+
+      if (data.amount !== undefined) {
+        try {
+          const leadId = await resolveLeadIdFromPipelineEntity(updated.entity_id)
+          if (leadId) {
+            const { valor } = await applyLeadSetupFee(leadId, data.amount)
+            return res.status(200).json({
+              ...updated,
+              amount: valor,
+            })
+          }
+        } catch (e) {
+          console.error('[pipelines/cardId] sync amount→lead', e)
+        }
+      }
 
       return res.status(200).json(updated)
     }

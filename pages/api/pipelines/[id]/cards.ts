@@ -12,6 +12,10 @@ import {
   syncContactToGlobalReunion,
 } from '@/lib/pipelines/global-funnel'
 import { attachMeetingAlerts } from '@/lib/pipelines/meeting-alerts'
+import {
+  applyLeadSetupFee,
+  resolveLeadIdFromPipelineEntity,
+} from '@/lib/crm/sync-lead-value'
 
 const createCardSchema = z.object({
   entity_id: z.union([z.string(), z.number()]).transform((val) => String(val)), // Acepta string o number, convierte a string
@@ -367,6 +371,27 @@ export default async function handler(
         where: { id: card_id },
         data: { ...(parsedAmount != null ? { amount: parsedAmount } : {}) },
       })
+
+      // Misma cifra en lead + proyecto(s)
+      try {
+        const leadId = await resolveLeadIdFromPipelineEntity(updated.entity_id)
+        if (leadId) {
+          await applyLeadSetupFee(leadId, parsedAmount)
+          const lead = await prisma.lead.findUnique({
+            where: { id: leadId },
+            select: { valor: true },
+          })
+          if (lead) {
+            return res.status(200).json({
+              ...updated,
+              amount: lead.valor != null ? Number(lead.valor) : parsedAmount,
+            })
+          }
+        }
+      } catch (e) {
+        console.error('[pipelines/cards] sync amount→lead', e)
+      }
+
       return res.status(200).json(updated)
     }
 

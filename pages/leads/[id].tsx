@@ -12,6 +12,7 @@ import Link from 'next/link'
 import {
   AlertTriangle,
   ArrowLeft,
+  Bell,
   Calendar,
   ClipboardList,
   Clock,
@@ -156,6 +157,8 @@ function alertIcon(kind: LeadAlert['kind']) {
     case 'project_delayed':
     case 'project_no_start':
       return Clock
+    case 'manual_alert':
+      return Bell
     default:
       return AlertTriangle
   }

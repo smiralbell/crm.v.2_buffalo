@@ -72,18 +72,20 @@ model Lead {
 
 // Historial unificado del CRM (notas manuales + eventos de sistema).
 model CrmActivity {
-  id         BigInt   @id @default(autoincrement())
-  contact_id Int
-  lead_id    Int?
-  kind       String
-  title      String
-  body       String?  @db.Text
-  meta       Json?
-  created_by String?
-  created_at DateTime @default(now())
-  updated_at DateTime @default(now()) @updatedAt
-  contact    Contact  @relation(fields: [contact_id], references: [id], onDelete: Cascade)
-  lead       Lead?    @relation(fields: [lead_id], references: [id], onDelete: SetNull)
+  id          BigInt    @id @default(autoincrement())
+  contact_id  Int
+  lead_id     Int?
+  kind        String
+  title       String
+  body        String?   @db.Text
+  meta        Json?
+  created_by  String?
+  due_at      DateTime?
+  resolved_at DateTime?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @default(now()) @updatedAt
+  contact     Contact   @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+  lead        Lead?     @relation(fields: [lead_id], references: [id], onDelete: SetNull)
 
   @@index([contact_id, created_at])
   @@index([lead_id, created_at])
@@ -523,7 +525,7 @@ model Proyecto {
   whatsapp_number       String?
   webhook_secret        String    @default(dbgenerated("gen_random_uuid()::TEXT"))
 
-  lead_id               Int?      @unique
+  lead_id               Int?
   contact_id            Int?
   config_ref            String?
   ticket_callback_url   String?

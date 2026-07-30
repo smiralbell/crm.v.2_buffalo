@@ -12,6 +12,8 @@ import {
   Plus,
   Trash2,
   Sparkles,
+  Bell,
+  Check,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -23,7 +25,10 @@ type TimelineItem = {
   at: string
   source?: 'stored' | 'derived'
   canDelete?: boolean
+  canResolve?: boolean
   rawId?: string
+  dueAt?: string | null
+  resolvedAt?: string | null
 }
 
 type Props = {
@@ -53,6 +58,8 @@ function formatWhen(iso: string) {
 
 function kindIcon(kind: string) {
   switch (kind) {
+    case 'alert':
+      return Bell
     case 'call':
       return Phone
     case 'note':
@@ -74,6 +81,14 @@ function kindIcon(kind: string) {
   }
 }
 
+function toIsoFromLocalInput(value: string): string | null {
+  const v = value.trim()
+  if (!v) return null
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toISOString()
+}
+
 export default function CrmActivityTimeline({
   contactId,
   leadId,
@@ -86,9 +101,11 @@ export default function CrmActivityTimeline({
   const [stored, setStored] = useState<TimelineItem[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [resolvingId, setResolvingId] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const [kind, setKind] = useState<'note' | 'call'>('note')
+  const [kind, setKind] = useState<'note' | 'call' | 'alert'>('note')
   const [body, setBody] = useState('')
+  const [dueAtLocal, setDueAtLocal] = useState('')
   const [showForm, setShowForm] = useState(false)
 
   const load = useCallback(async () => {
@@ -111,15 +128,20 @@ export default function CrmActivityTimeline({
           title: string
           body?: string | null
           created_at: string
+          due_at?: string | null
+          resolved_at?: string | null
         }) => ({
           id: `stored-${it.id}`,
           kind: it.kind,
           title: it.title,
           detail: it.body,
-          at: it.created_at,
+          at: it.due_at || it.created_at,
           source: 'stored' as const,
           canDelete: true,
+          canResolve: it.kind === 'alert' && !it.resolved_at,
           rawId: it.id,
+          dueAt: it.due_at ?? null,
+          resolvedAt: it.resolved_at ?? null,
         })
       )
       setStored(items)
@@ -151,13 +173,17 @@ export default function CrmActivityTimeline({
     setError('')
     try {
       const titleText =
-        kind === 'call'
+        kind === 'alert'
           ? text.length > 80
-            ? `Llamada · ${text.slice(0, 77)}…`
-            : `Llamada · ${text}`
-          : text.length > 80
-            ? `Nota · ${text.slice(0, 77)}…`
-            : `Nota · ${text}`
+            ? `Alerta · ${text.slice(0, 77)}…`
+            : `Alerta · ${text}`
+          : kind === 'call'
+            ? text.length > 80
+              ? `Llamada · ${text.slice(0, 77)}…`
+              : `Llamada · ${text}`
+            : text.length > 80
+              ? `Nota · ${text.slice(0, 77)}…`
+              : `Nota · ${text}`
       const res = await fetch('/api/crm/activities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -167,11 +193,13 @@ export default function CrmActivityTimeline({
           kind,
           title: titleText,
           body: text,
+          due_at: kind === 'alert' ? toIsoFromLocalInput(dueAtLocal) : undefined,
         }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'No se pudo guardar')
       setBody('')
+      setDueAtLocal('')
       setShowForm(false)
       await load()
     } catch (e) {
@@ -189,6 +217,26 @@ export default function CrmActivityTimeline({
       method: 'DELETE',
     })
     if (res.ok) await load()
+  }
+
+  const resolve = async (item: TimelineItem) => {
+    const rawId = item.rawId || item.id.replace(/^stored-/, '')
+    if (!rawId || !item.canResolve) return
+    setResolvingId(rawId)
+    try {
+      const res = await fetch('/api/crm/activities?action=resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: rawId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'No se pudo resolver')
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al resolver')
+    } finally {
+      setResolvingId(null)
+    }
   }
 
   return (
@@ -219,11 +267,14 @@ export default function CrmActivityTimeline({
 
       {showForm && (
         <div className="mb-4 rounded-xl border border-gray-100 bg-gray-50/80 p-3 space-y-2">
-          <div className="flex gap-1.5">
-            {([
-              ['note', 'Nota'],
-              ['call', 'Llamada'],
-            ] as const).map(([k, label]) => (
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                ['note', 'Nota'],
+                ['call', 'Llamada'],
+                ['alert', 'Alerta'],
+              ] as const
+            ).map(([k, label]) => (
               <button
                 key={k}
                 type="button"
@@ -244,12 +295,30 @@ export default function CrmActivityTimeline({
             onChange={(e) => setBody(e.target.value)}
             rows={3}
             placeholder={
-              kind === 'call'
-                ? 'Hoy he tenido una llamada y me ha dicho…'
-                : 'Añade una nota al hilo de la historia…'
+              kind === 'alert'
+                ? 'Pendiente de llamar, follow-up, esperar respuesta…'
+                : kind === 'call'
+                  ? 'Hoy he tenido una llamada y me ha dicho…'
+                  : 'Añade una nota al hilo de la historia…'
             }
             className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-zinc-200"
           />
+          {kind === 'alert' && (
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                Avisar a partir de (opcional)
+              </label>
+              <input
+                type="datetime-local"
+                value={dueAtLocal}
+                onChange={(e) => setDueAtLocal(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-200"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                Si lo dejas vacío, la alerta aparece ya en el dashboard hasta marcarla como hecha.
+              </p>
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -265,7 +334,7 @@ export default function CrmActivityTimeline({
               className="inline-flex items-center gap-1.5 rounded-full bg-zinc-900 px-3.5 py-1.5 text-xs font-medium text-white disabled:opacity-40"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              Guardar en historial
+              {kind === 'alert' ? 'Crear alerta' : 'Guardar en historial'}
             </button>
           </div>
         </div>
@@ -282,20 +351,44 @@ export default function CrmActivityTimeline({
         </div>
       ) : merged.length === 0 ? (
         <p className="text-sm text-gray-400 py-6 text-center">
-          Aún no hay eventos. Añade una nota o una llamada.
+          Aún no hay eventos. Añade una nota, llamada o alerta.
         </p>
       ) : (
         <ol className="relative space-y-0 border-l border-gray-200 ml-2 max-h-[480px] overflow-y-auto pr-1">
           {merged.map((item) => {
             const Icon = kindIcon(item.kind)
+            const isOpenAlert = item.kind === 'alert' && item.canResolve
+            const isResolvedAlert = item.kind === 'alert' && item.resolvedAt
             return (
               <li key={item.id} className="relative pl-5 pb-4 last:pb-0 group">
-                <span className="absolute -left-1.5 top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white ring-2 ring-gray-200">
-                  <Icon className="h-2.5 w-2.5 text-gray-500" />
+                <span
+                  className={cn(
+                    'absolute -left-1.5 top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white ring-2',
+                    isOpenAlert ? 'ring-amber-400' : 'ring-gray-200'
+                  )}
+                >
+                  <Icon
+                    className={cn(
+                      'h-2.5 w-2.5',
+                      isOpenAlert ? 'text-amber-600' : 'text-gray-500'
+                    )}
+                  />
                 </span>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 leading-snug">{item.title}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="text-sm font-medium text-gray-900 leading-snug">{item.title}</p>
+                      {isOpenAlert && (
+                        <span className="rounded-full bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                          Alerta
+                        </span>
+                      )}
+                      {isResolvedAlert && (
+                        <span className="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                          Hecha
+                        </span>
+                      )}
+                    </div>
                     {item.detail && (
                       <p className="text-xs text-gray-600 mt-0.5 leading-snug whitespace-pre-wrap">
                         {item.detail}
@@ -303,16 +396,34 @@ export default function CrmActivityTimeline({
                     )}
                     <p className="text-[11px] text-gray-400 mt-1">{formatWhen(item.at)}</p>
                   </div>
-                  {item.canDelete && (
-                    <button
-                      type="button"
-                      onClick={() => void remove(item)}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"
-                      title="Borrar"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {item.canResolve && (
+                      <button
+                        type="button"
+                        onClick={() => void resolve(item)}
+                        disabled={resolvingId === item.rawId}
+                        className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                        title="Marcar como hecha"
+                      >
+                        {resolvingId === item.rawId ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Check className="h-3 w-3" />
+                        )}
+                        Hecho
+                      </button>
+                    )}
+                    {item.canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => void remove(item)}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"
+                        title="Borrar"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </li>
             )

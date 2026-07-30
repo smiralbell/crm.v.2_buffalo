@@ -4,6 +4,7 @@ import type {
   PipelineCardContext,
   PipelineTimelineItem,
 } from '@/lib/pipelines/card-context.types'
+import { listOpenAlerts } from '@/lib/crm/activities'
 
 export type LeadAlertKind =
   | 'meeting_upcoming'
@@ -13,6 +14,7 @@ export type LeadAlertKind =
   | 'project_delayed'
   | 'project_no_start'
   | 'stale_lead'
+  | 'manual_alert'
 
 export type LeadAlert = {
   id: string
@@ -290,14 +292,28 @@ export async function getLeadDetailBundle(input: {
   leadEstado: string | null
 }): Promise<LeadDetailBundle> {
   const contactId = input.contactId
-  const [pipeline, proyecto, invoiceAlerts, stageAlert] = await Promise.all([
+  const [pipeline, proyecto, invoiceAlerts, stageAlert, openManualAlerts] = await Promise.all([
     contactId ? getPipelineCardContext(contactId) : Promise.resolve(null),
     loadProyectoForLead(input.leadId),
     loadInvoiceAlerts(input.email, input.contactName),
     contactId ? loadPipelineStageAlert(contactId) : Promise.resolve(null),
+    contactId
+      ? listOpenAlerts({ contactId, limit: 20 })
+      : listOpenAlerts({ leadId: input.leadId, limit: 20 }),
   ])
 
   const alerts: LeadAlert[] = []
+
+  for (const a of openManualAlerts) {
+    alerts.push({
+      id: `manual-alert-${a.id}`,
+      kind: 'manual_alert',
+      severity: 'warn',
+      title: a.title,
+      message: a.body || 'Alerta pendiente de seguimiento',
+      href: null,
+    })
+  }
 
   if (pipeline?.upcoming_meeting) {
     const start = new Date(pipeline.upcoming_meeting.start_time)

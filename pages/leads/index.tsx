@@ -60,6 +60,9 @@ interface LeadsPageProps {
   page: number
   totalPages: number
   search: string
+  /** all | leads | contacto */
+  tipo: string
+  /** all | frio | caliente | cerrado | perdido */
   estado: string
 }
 
@@ -69,13 +72,18 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
     const page = parseInt(context.query.page as string) || 1
     const search = (context.query.search as string) || ''
-    const estado = (context.query.estado as string) || ''
+    const tipoRaw = (context.query.tipo as string) || 'all'
+    const tipo = ['all', 'leads', 'contacto'].includes(tipoRaw) ? tipoRaw : 'all'
+    const estadoRaw = (context.query.estado as string) || 'all'
+    const estado = ['all', 'frio', 'caliente', 'cerrado', 'perdido'].includes(estadoRaw)
+      ? estadoRaw
+      : 'all'
     const pageSize = 10
     const skip = (page - 1) * pageSize
 
-    const where: any = {}
+    const where: Record<string, unknown> = {}
 
-    if (estado && estado !== 'all') {
+    if (estado !== 'all') {
       where.estado = estado
     }
 
@@ -88,7 +96,10 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       }
     }
 
-    const showContactsOnly = !estado || estado === 'all' || estado === 'contacto'
+    const showLeads = tipo === 'all' || tipo === 'leads'
+    const showContactsOnly = tipo === 'all' || tipo === 'contacto'
+    // Contactos sin lead solo tienen sentido si no filtramos por estado de lead
+    const includeContacts = showContactsOnly && (tipo === 'contacto' || estado === 'all')
 
     const contactWhere: Record<string, unknown> = {
       leads: { none: {} },
@@ -101,9 +112,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     }
 
     const [leads, totalLeads, contactsOnly] = await Promise.all([
-      estado === 'contacto'
-        ? Promise.resolve([])
-        : prisma.lead.findMany({
+      showLeads
+        ? prisma.lead.findMany({
             where,
             skip,
             take: pageSize,
@@ -117,12 +127,14 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
                 },
               },
             },
-          }),
-      estado === 'contacto' ? Promise.resolve(0) : prisma.lead.count({ where }),
-      showContactsOnly
+          })
+        : Promise.resolve([]),
+      showLeads ? prisma.lead.count({ where }) : Promise.resolve(0),
+      includeContacts
         ? prisma.contact.findMany({
             where: contactWhere,
-            take: 50,
+            take: tipo === 'contacto' ? pageSize : 50,
+            skip: tipo === 'contacto' ? skip : 0,
             orderBy: { created_at: 'desc' },
             select: {
               id: true,
@@ -134,7 +146,11 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         : Promise.resolve([]),
     ])
 
-    const totalPages = Math.max(1, Math.ceil(totalLeads / pageSize))
+    const totalForPages =
+      tipo === 'contacto'
+        ? await prisma.contact.count({ where: contactWhere })
+        : totalLeads
+    const totalPages = Math.max(1, Math.ceil(totalForPages / pageSize))
 
     return {
       props: {
@@ -154,7 +170,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         page,
         totalPages,
         search,
-        estado: estado || 'all',
+        tipo,
+        estado,
       },
     }
   } catch (error) {
@@ -178,7 +195,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         page: 1,
         totalPages: 1,
         search: '',
-        estado: '',
+        tipo: 'all',
+        estado: 'all',
       },
     }
   }
@@ -190,11 +208,13 @@ export default function LeadsPage({
   page,
   totalPages,
   search: initialSearch,
+  tipo: initialTipo,
   estado: initialEstado,
 }: LeadsPageProps) {
   const router = useRouter()
   const [search, setSearch] = useState(initialSearch)
-  const [estado, setEstado] = useState(initialEstado)
+  const [tipo, setTipo] = useState(initialTipo || 'all')
+  const [estado, setEstado] = useState(initialEstado || 'all')
   const [loading, setLoading] = useState(false)
   const [newDialogMode, setNewDialogMode] = useState<'lead' | 'contact'>('lead')
 
@@ -205,27 +225,39 @@ export default function LeadsPage({
   const safeTotalPages = totalPages || 1
 
   const listRows: ListRow[] = [
-    ...safeLeads.map((lead) => ({ kind: 'lead' as const, lead })),
-    ...((!estado || estado === 'all' || estado === 'contacto')
-      ? safeContactsOnly.map((contact) => ({ kind: 'contact' as const, contact }))
-      : []),
+    ...(tipo === 'contacto' ? [] : safeLeads.map((lead) => ({ kind: 'lead' as const, lead }))),
+    ...(tipo === 'leads'
+      ? []
+      : safeContactsOnly.map((contact) => ({ kind: 'contact' as const, contact }))),
   ]
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
+  const pushFilters = (next: { search?: string; tipo?: string; estado?: string; page?: number }) => {
+    const qTipo = next.tipo ?? tipo
+    const qEstado = next.estado ?? estado
     router.push({
       pathname: '/leads',
-      query: { search, estado, page: 1 },
+      query: {
+        search: next.search ?? search,
+        tipo: qTipo === 'all' ? undefined : qTipo,
+        estado: qEstado === 'all' ? undefined : qEstado,
+        page: next.page ?? 1,
+      },
     })
   }
 
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    pushFilters({ search, page: 1 })
+  }
+
+  const handleTipoChange = (value: string) => {
+    setTipo(value)
+    pushFilters({ tipo: value, page: 1 })
+  }
+
   const handleEstadoChange = (value: string) => {
-    const estadoValue = value === 'all' ? '' : value
-    setEstado(estadoValue)
-    router.push({
-      pathname: '/leads',
-      query: { search, estado: estadoValue, page: 1 },
-    })
+    setEstado(value)
+    pushFilters({ estado: value, page: 1 })
   }
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -324,13 +356,26 @@ export default function LeadsPage({
                   />
                 </div>
               </div>
-              <Select value={estado || 'all'} onValueChange={handleEstadoChange}>
-                <SelectTrigger className="w-full sm:w-[180px] rounded-xl">
-                  <SelectValue placeholder="Todos los estados" />
+              <Select value={tipo || 'all'} onValueChange={handleTipoChange}>
+                <SelectTrigger className="w-full sm:w-[160px] rounded-xl">
+                  <SelectValue placeholder="Tipo" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="contacto">Solo contactos</SelectItem>
+                  <SelectItem value="leads">Leads</SelectItem>
+                  <SelectItem value="contacto">Contactos</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={estado || 'all'}
+                onValueChange={handleEstadoChange}
+                disabled={tipo === 'contacto'}
+              >
+                <SelectTrigger className="w-full sm:w-[160px] rounded-xl">
+                  <SelectValue placeholder="Estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los estados</SelectItem>
                   <SelectItem value="frio">Frío</SelectItem>
                   <SelectItem value="caliente">Caliente</SelectItem>
                   <SelectItem value="cerrado">Cerrado</SelectItem>
@@ -603,7 +648,12 @@ export default function LeadsPage({
                     onClick={() =>
                       router.push({
                         pathname: '/leads',
-                        query: { search, estado, page: safePage - 1 },
+                        query: {
+                          search,
+                          tipo: tipo === 'all' ? undefined : tipo,
+                          estado: estado === 'all' ? undefined : estado,
+                          page: safePage - 1,
+                        },
                       })
                     }
                   >
@@ -616,7 +666,12 @@ export default function LeadsPage({
                     onClick={() =>
                       router.push({
                         pathname: '/leads',
-                        query: { search, estado, page: safePage + 1 },
+                        query: {
+                          search,
+                          tipo: tipo === 'all' ? undefined : tipo,
+                          estado: estado === 'all' ? undefined : estado,
+                          page: safePage + 1,
+                        },
                       })
                     }
                   >

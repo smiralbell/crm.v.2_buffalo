@@ -7,7 +7,10 @@ import {
   createActivity,
   deleteActivity,
   listActivities,
+  listOpenAlerts,
+  resolveActivity,
 } from '@/lib/crm/activities'
+import { getDashboardAlerts } from '@/lib/crm/dashboard-alerts'
 
 const createSchema = z.object({
   contact_id: z.number().int().positive().optional(),
@@ -16,6 +19,11 @@ const createSchema = z.object({
   title: z.string().min(1).max(300),
   body: z.string().max(20000).optional().nullable(),
   meta: z.record(z.unknown()).optional().nullable(),
+  due_at: z.string().min(1).optional().nullable(),
+})
+
+const resolveSchema = z.object({
+  id: z.union([z.string(), z.number()]),
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -23,6 +31,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await requireAuthAPI(req, res)
 
     if (req.method === 'GET') {
+      if (req.query.dashboard === '1' || req.query.dashboard === 'true') {
+        const items = await getDashboardAlerts(2)
+        return res.status(200).json({ items })
+      }
+
+      if (req.query.open_alerts === '1' || req.query.open_alerts === 'true') {
+        let contactId = req.query.contact_id
+          ? parseInt(String(req.query.contact_id), 10)
+          : undefined
+        const leadId = req.query.lead_id
+          ? parseInt(String(req.query.lead_id), 10)
+          : undefined
+        if ((!contactId || !Number.isFinite(contactId)) && leadId && Number.isFinite(leadId)) {
+          const lead = await prisma.lead.findUnique({
+            where: { id: leadId },
+            select: { contact_id: true },
+          })
+          contactId = lead?.contact_id
+        }
+        const items = await listOpenAlerts({
+          contactId: Number.isFinite(contactId) ? contactId : undefined,
+          leadId:
+            (!contactId || !Number.isFinite(contactId)) && Number.isFinite(leadId)
+              ? leadId
+              : undefined,
+        })
+        return res.status(200).json({ items })
+      }
+
       let contactId = req.query.contact_id
         ? parseInt(String(req.query.contact_id), 10)
         : undefined
@@ -32,7 +69,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!contactId && !leadId) {
         return res.status(400).json({ error: 'contact_id o lead_id requerido' })
       }
-      // Si solo llega lead_id, resolvemos contacto para el hilo completo
       if ((!contactId || !Number.isFinite(contactId)) && leadId && Number.isFinite(leadId)) {
         const lead = await prisma.lead.findUnique({
           where: { id: leadId },
@@ -52,6 +88,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'POST') {
+      const action = String(req.query.action || req.body?.action || '')
+      if (action === 'resolve') {
+        const body = resolveSchema.parse(req.body ?? {})
+        const item = await resolveActivity(body.id)
+        if (!item) {
+          return res.status(404).json({ error: 'Alerta no encontrada o ya resuelta' })
+        }
+        return res.status(200).json({ item })
+      }
+
       const body = createSchema.parse(req.body ?? {})
       let contactId = body.contact_id
       const leadId = body.lead_id ?? null
@@ -76,6 +122,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         body: body.body,
         meta: body.meta ?? null,
         createdBy: user.email,
+        dueAt: body.due_at ?? null,
       })
       if (!item) {
         return res.status(500).json({
@@ -84,6 +131,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       }
       return res.status(201).json({ item })
+    }
+
+    if (req.method === 'PATCH') {
+      const body = resolveSchema.parse(req.body ?? {})
+      const item = await resolveActivity(body.id)
+      if (!item) {
+        return res.status(404).json({ error: 'Alerta no encontrada o ya resuelta' })
+      }
+      return res.status(200).json({ item })
     }
 
     if (req.method === 'DELETE') {

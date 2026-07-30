@@ -11,6 +11,10 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getDashboardAlerts } from '@/lib/crm/dashboard-alerts'
+import DashboardAlertsPanel, {
+  type DashboardAlertItem,
+} from '@/components/crm/DashboardAlertsPanel'
 
 // Recharts — client-side only
 const RevenueChart = dynamic(() => import('@/components/Dashboard/RevenueChart'), { ssr: false })
@@ -60,6 +64,7 @@ interface DashboardProps {
   recentInvoices:  InvRow[]
   hotLeads:        LeadRow[]
   monthlyRevenue:  MonthRow[]
+  dashboardAlerts: DashboardAlertItem[]
 }
 
 // ── Config ─────────────────────────────────────────────────────────────
@@ -233,6 +238,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     })
     const monthlyRevenue: MonthRow[] = Object.entries(monthRevMap).map(([month, revenue]) => ({ month, revenue }))
 
+    const dashboardAlerts = await getDashboardAlerts(2)
+
     return {
       props: {
         kpis: {
@@ -267,6 +274,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           estado: l.estado,
         })),
         monthlyRevenue,
+        dashboardAlerts,
       },
     }
   } catch (error) {
@@ -279,7 +287,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       props: {
         kpis: { invoicedThisMonth:0, invoicedLastMonth:0, invoicedYTD:0, pipelineValue:0, pipelineDeals:0, pendingInvoices:0, pendingAmount:0, mrrAmount:0, dealsClosedThisMonth:0, leadsThisMonth:0, leadsTotal:0, contactsTotal:0 },
         annualGoal,
-        pipelineStages: [], recentInvoices: [], hotLeads: [], monthlyRevenue: [],
+        pipelineStages: [], recentInvoices: [], hotLeads: [], monthlyRevenue: [], dashboardAlerts: [],
       },
     }
   }
@@ -292,6 +300,7 @@ export default function Dashboard({
   recentInvoices,
   hotLeads,
   monthlyRevenue,
+  dashboardAlerts,
 }: DashboardProps) {
   const maxCount   = Math.max(...pipelineStages.map(s => s.count), 1)
 
@@ -305,6 +314,9 @@ export default function Dashboard({
       <div className="space-y-6">
         {/* ── Objetivo anual (mismo componente y datos que Finanzas) ── */}
         <AnnualGoalCard goal={annualGoal} />
+
+        {/* ── Alertas CRM + reuniones ≤2 días ── */}
+        <DashboardAlertsPanel initialItems={dashboardAlerts} />
 
         {/* ── Analítica financiera ── */}
         <div id="finance-analytics">

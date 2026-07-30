@@ -141,14 +141,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const context = (cfg?.project_context || '').trim()
     const definition = (cfg?.description || lead.notas || '').trim()
     const proyectoRows = await prisma.$queryRaw<
-      { name: string; setup_fee_eur: number | null; monthly_fee_eur: number | null }[]
+      { name: string; setup_fee_eur: number | null; monthly_fee_eur: number | null; project_count: number }[]
     >`
-      SELECT name,
-             setup_fee_eur::float8 AS setup_fee_eur,
-             monthly_fee_eur::float8 AS monthly_fee_eur
+      SELECT
+        (array_agg(name ORDER BY created_at ASC NULLS LAST))[1] AS name,
+        SUM(setup_fee_eur)::float8 AS setup_fee_eur,
+        SUM(monthly_fee_eur)::float8 AS monthly_fee_eur,
+        COUNT(*)::int AS project_count
       FROM proyectos
       WHERE lead_id = ${leadId}
-      LIMIT 1
     `
     const p = proyectoRows[0]
     const meta = {

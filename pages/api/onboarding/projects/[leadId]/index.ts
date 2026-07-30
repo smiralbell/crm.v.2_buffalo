@@ -5,6 +5,11 @@ import { prisma } from '@/lib/prisma'
 import { syncProyectoFromLead } from '@/lib/engranaje5/sync-proyecto'
 import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import { mergeLeadConfig } from '@/lib/onboarding/project-context-ai'
+import {
+  applyLeadSetupFee,
+  recomputeLeadCommercialValue,
+  sumSetupFeesForLead,
+} from '@/lib/crm/sync-lead-value'
 
 const SERVICE_TYPES = [
   'voice_agent',
@@ -295,9 +300,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       const leadPatch: Record<string, unknown> = {}
-      if (data.lead_valor !== undefined) leadPatch.valor = data.lead_valor
-      if (data.setup_fee_eur !== undefined && data.lead_valor === undefined) {
-        leadPatch.valor = data.setup_fee_eur
+      // lead_valor / setup único → sync comercial (proyecto + pipeline)
+      const commercialSetup =
+        data.lead_valor !== undefined
+          ? data.lead_valor
+          : data.setup_fee_eur !== undefined
+            ? data.setup_fee_eur
+            : undefined
+      if (commercialSetup !== undefined && data.setup_fee_eur === undefined) {
+        // Solo lead_valor sin tocar un setup de proyecto concreto
+        await applyLeadSetupFee(leadId, commercialSetup, {
+          monthlyFee: data.monthly_fee_eur,
+        })
       }
       if (data.lead_estado !== undefined) leadPatch.estado = data.lead_estado
       if (data.lead_notas !== undefined) leadPatch.notas = data.lead_notas
@@ -362,6 +376,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           proyecto = await getProyectoByLead(leadId)
         }
         if (!proyecto) {
+          if (data.setup_fee_eur !== undefined) {
+            await applyLeadSetupFee(leadId, data.setup_fee_eur, {
+              monthlyFee: data.monthly_fee_eur,
+            })
+          }
           // Contacto/lead ya se actualizaron; sin config no hay fila proyectos.
           const updated = await getProyectoByLead(leadId)
           return res.status(200).json({
@@ -428,10 +447,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             updated_at = NOW()
           WHERE id = ${proyecto.id}::uuid
         `
+
+        // Tras editar fees del proyecto: lead.valor = suma de todos + pipeline
+        if (data.setup_fee_eur !== undefined || data.monthly_fee_eur !== undefined) {
+          await recomputeLeadCommercialValue(leadId)
+        } else if (data.lead_valor === undefined) {
+          // Asegura coherencia si había desfase previo
+          await recomputeLeadCommercialValue(leadId)
+        }
+      } else if (data.setup_fee_eur !== undefined) {
+        await applyLeadSetupFee(leadId, data.setup_fee_eur, {
+          monthlyFee: data.monthly_fee_eur,
+        })
       }
 
       const updated = await getProyectoByLead(leadId)
-      return res.status(200).json({ success: true, proyecto: serializeProyecto(updated) })
+      const fees = await sumSetupFeesForLead(leadId)
+      return res.status(200).json({
+        success: true,
+        proyecto: serializeProyecto(updated),
+        commercial: {
+          setup_total_eur: fees.setupSum,
+          monthly_total_eur: fees.monthlySum,
+          project_count: fees.count,
+        },
+      })
     }
 
     if (req.method === 'DELETE') {

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { applyLeadSetupFee } from '@/lib/crm/sync-lead-value'
 
 const leadUpdateSchema = z.object({
   contact_id: z.number().optional(),
@@ -44,22 +45,36 @@ export default async function handler(
     if (req.method === 'PUT') {
       const data = leadUpdateSchema.parse(req.body)
 
-      const updateData: any = {}
+      const updateData: Record<string, unknown> = {}
       if (data.contact_id !== undefined) updateData.contact_id = data.contact_id
       if (data.estado !== undefined) updateData.estado = data.estado
-      if (data.valor !== undefined) updateData.valor = data.valor
       if (data.origen_principal !== undefined) updateData.origen_principal = data.origen_principal
       if (data.prioridad !== undefined) updateData.prioridad = data.prioridad
       if (data.score !== undefined) updateData.score = data.score
       if (data.notas !== undefined) updateData.notas = data.notas
       if (data.configuracion !== undefined) updateData.configuracion = data.configuracion
 
-      const lead = await prisma.lead.update({
-        where: { id },
-        data: updateData,
-      })
+      // valor se sincroniza con proyectos + pipeline (mismo importe en todos lados)
+      if (data.valor !== undefined) {
+        await applyLeadSetupFee(id, data.valor)
+      }
 
-      return res.status(200).json(lead)
+      const lead =
+        Object.keys(updateData).length > 0
+          ? await prisma.lead.update({
+              where: { id },
+              data: updateData,
+            })
+          : await prisma.lead.findUnique({ where: { id } })
+
+      if (!lead) {
+        return res.status(404).json({ error: 'Lead no encontrado' })
+      }
+
+      return res.status(200).json({
+        ...lead,
+        valor: lead.valor != null ? Number(lead.valor) : null,
+      })
     }
 
     if (req.method === 'DELETE') {

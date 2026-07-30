@@ -106,12 +106,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const proyectoRows = await prisma.$queryRaw<
         { name: string; setup_fee_eur: number | null; monthly_fee_eur: number | null }[]
       >`
-        SELECT name,
-               setup_fee_eur::float8 AS setup_fee_eur,
-               monthly_fee_eur::float8 AS monthly_fee_eur
+        SELECT
+          (array_agg(name ORDER BY created_at ASC NULLS LAST))[1] AS name,
+          SUM(setup_fee_eur)::float8 AS setup_fee_eur,
+          SUM(monthly_fee_eur)::float8 AS monthly_fee_eur
         FROM proyectos
         WHERE lead_id = ${leadId}
-        LIMIT 1
       `
       const p = proyectoRows[0]
       const setup =
