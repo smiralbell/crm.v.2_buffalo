@@ -405,43 +405,76 @@ export default function NewInvoice({ contacts, nextInvoiceNumber }: NewInvoicePr
 
   return (
     <FullScreenLayout>
-      <div className="h-full flex flex-col">
-        {/* Header fijo */}
-        <div className="flex-shrink-0 border-b bg-white px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/invoices">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="h-4 w-4" />
+      <div className="flex h-full min-h-0 flex-col bg-zinc-100/90">
+        <header className="shrink-0 px-3 pt-3 sm:px-4 sm:pt-4">
+          <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-zinc-200/80 bg-white px-3 py-2.5 shadow-sm sm:px-4">
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <Link href="/invoices">
+                <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 rounded-full">
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              </Link>
+              <div className="min-w-0">
+                <h1 className="truncate text-[15px] font-semibold tracking-tight text-zinc-900">
+                  Nueva factura
+                  <span className="ml-2 font-medium text-zinc-500">
+                    {formData.invoice_number || nextInvoiceNumber}
+                  </span>
+                </h1>
+                {onboardingLeadId && (
+                  <p className="mt-0.5 truncate text-[11px] text-emerald-700">
+                    Onboarding · {onboardingLabel || `Lead #${onboardingLeadId}`}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadPDF}
+                disabled={!formData.client_name || services.some((s) => !s.description)}
+                className="rounded-full"
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                PDF
               </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Nueva Factura</h1>
-              <p className="text-sm text-gray-600">{formData.invoice_number || nextInvoiceNumber}</p>
-              {onboardingLeadId && (
-                <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-0.5">
-                  Onboarding · {onboardingLabel || `Lead #${onboardingLeadId}`}
-                </p>
-              )}
+              <Link href="/invoices">
+                <Button type="button" variant="ghost" size="sm" disabled={loading} className="rounded-full">
+                  Cancelar
+                </Button>
+              </Link>
+              <Button
+                type="button"
+                size="sm"
+                disabled={loading}
+                className="rounded-full"
+                onClick={() => {
+                  const form = document.getElementById('invoice-create-form') as HTMLFormElement | null
+                  form?.requestSubmit()
+                }}
+              >
+                {loading ? 'Guardando…' : 'Guardar'}
+              </Button>
             </div>
           </div>
-        </div>
+        </header>
 
-        {/* Contenido principal - Layout: 1/3 formulario, 2/3 vista previa */}
-        <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-0" style={{ height: 'calc(100vh - 80px)', maxHeight: 'calc(100vh - 80px)' }}>
-          {/* Columna izquierda: Formulario */}
-          <div className="bg-white hide-scrollbar" style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden', padding: '24px', boxSizing: 'border-box' }}>
-            <form onSubmit={handleSubmit} className="space-y-6" style={{ paddingBottom: 0 }}>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+          <div className="hide-scrollbar min-h-0 overflow-y-auto overscroll-contain rounded-3xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5">
+            <form id="invoice-create-form" onSubmit={handleSubmit} className="space-y-5 pb-8">
               {/* Cliente - Estilo minimalista */}
-              <Card className="border border-gray-200 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">Datos del Cliente</CardTitle>
+              <Card className="rounded-2xl border border-zinc-200 shadow-none">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">Datos del Cliente</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="contact_select">Seleccionar Contacto (Opcional)</Label>
                 <select
                   id="contact_select"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full rounded-xl border border-zinc-200 px-3 py-2"
                   onChange={(e) => selectContact(e.target.value)}
                   defaultValue="none"
                 >
@@ -462,6 +495,7 @@ export default function NewInvoice({ contacts, nextInvoiceNumber }: NewInvoicePr
                   onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
                   required
                   disabled={loading}
+                  className="rounded-xl"
                 />
               </div>
 
@@ -472,6 +506,7 @@ export default function NewInvoice({ contacts, nextInvoiceNumber }: NewInvoicePr
                   value={formData.client_company_name}
                   onChange={(e) => setFormData({ ...formData, client_company_name: e.target.value })}
                   disabled={loading}
+                  className="rounded-xl"
                 />
               </div>
 
@@ -510,7 +545,7 @@ export default function NewInvoice({ contacts, nextInvoiceNumber }: NewInvoicePr
               </Card>
 
               {/* Servicios - Estilo minimalista */}
-              <Card className="border border-gray-200 shadow-sm">
+              <Card className="rounded-2xl border border-zinc-200 shadow-none">
             <CardHeader>
               <CardTitle className="text-lg font-semibold">Servicios / Productos</CardTitle>
             </CardHeader>
@@ -592,7 +627,7 @@ export default function NewInvoice({ contacts, nextInvoiceNumber }: NewInvoicePr
           </Card>
 
               {/* Totales y Fechas - Estilo minimalista */}
-              <Card className="border border-gray-200 shadow-sm">
+              <Card className="rounded-2xl border border-zinc-200 shadow-none">
             <CardHeader>
               <CardTitle className="text-lg font-semibold">Resumen y Fechas</CardTitle>
             </CardHeader>
@@ -695,14 +730,14 @@ export default function NewInvoice({ contacts, nextInvoiceNumber }: NewInvoicePr
           </Card>
 
               {error && (
-                <div className="rounded-md bg-red-50 p-3 text-sm text-red-800 border border-red-200">
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                   {error}
                 </div>
               )}
 
-              <div className="flex justify-end gap-4 pt-4">
+              <div className="flex flex-wrap justify-end gap-2 pt-2 lg:hidden">
                 <Link href="/invoices">
-                  <Button type="button" variant="outline" disabled={loading}>
+                  <Button type="button" variant="outline" disabled={loading} className="rounded-full">
                     Cancelar
                   </Button>
                 </Link>
@@ -711,36 +746,24 @@ export default function NewInvoice({ contacts, nextInvoiceNumber }: NewInvoicePr
                   variant="outline"
                   onClick={handleDownloadPDF}
                   disabled={!formData.client_name || services.some((s) => !s.description)}
+                  className="rounded-full"
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  Descargar PDF
+                  PDF
                 </Button>
-                <Button type="submit" disabled={loading}>
+                <Button type="submit" disabled={loading} className="rounded-full">
                   {loading ? 'Guardando...' : 'Guardar Factura'}
                 </Button>
               </div>
             </form>
           </div>
 
-          {/* Columna derecha: Vista Previa - Pantalla completa */}
-          <div className="bg-gray-100 hide-scrollbar" style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden', padding: '32px', boxSizing: 'border-box', display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
-            <div className="w-full max-w-[210mm]">
-              <div className="mb-6 flex items-center justify-end sticky top-0 z-10">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDownloadPDF}
-                  disabled={!formData.client_name || services.some((s) => !s.description)}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Descargar PDF
-                </Button>
-              </div>
+          <div className="hide-scrollbar flex min-h-0 justify-center overflow-y-auto overscroll-contain rounded-3xl border border-zinc-200/70 bg-zinc-200/50 p-4 sm:p-6">
+            <div className="w-full max-w-[210mm] pb-8">
               <div
                 ref={invoicePreviewRef}
-                className="bg-white shadow-lg rounded-lg overflow-hidden"
-                style={{ width: '210mm', minHeight: '297mm' }}
+                className="overflow-hidden rounded-2xl bg-white shadow-md"
+                style={{ width: '100%', maxWidth: '210mm', minHeight: '297mm' }}
               >
                 <InvoicePreview
                   invoiceNumber={formData.invoice_number || nextInvoiceNumber}

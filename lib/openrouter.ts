@@ -205,8 +205,17 @@ export async function openRouterEmbedTexts(
 export function parseJsonFromModelOutput(raw: string): unknown {
   let s = raw.trim()
   if (s.startsWith('```')) {
-    s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
+    s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
   }
-  return JSON.parse(s)
+  try {
+    return JSON.parse(s)
+  } catch {
+    const start = s.indexOf('{')
+    const end = s.lastIndexOf('}')
+    if (start >= 0 && end > start) {
+      return JSON.parse(s.slice(start, end + 1))
+    }
+    throw new Error('No se pudo parsear JSON de la respuesta del modelo')
+  }
 }
 

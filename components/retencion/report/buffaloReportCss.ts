@@ -22,7 +22,7 @@ export const BUFFALO_REPORT_CSS = `
 }
 .buffalo-doc * { box-sizing: border-box; }
 
-/* --- Portada: una página completa, centrada --- */
+/* --- Portada: una página completa, bloque centrado --- */
 .buffalo-cover {
   width: var(--bf-page-w);
   height: var(--bf-page-h);
@@ -31,12 +31,23 @@ export const BUFFALO_REPORT_CSS = `
   padding: 0.85in;
   display: flex;
   flex-direction: column;
+  align-items: center;
   justify-content: center;
   position: relative;
   box-shadow: 0 12px 40px rgba(0,0,0,0.1);
   overflow: hidden;
+  box-sizing: border-box;
 }
 .buffalo-heading { font-family: 'Space Grotesk','Inter',sans-serif; color: var(--bf-heading); }
+
+.bf-cover-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: 100%;
+  max-width: 6.3in;
+}
 
 .bf-eyebrow {
   font-size: 12.5px; font-weight: 600; letter-spacing: 0.14em;
@@ -47,12 +58,33 @@ export const BUFFALO_REPORT_CSS = `
   font-family: 'Space Grotesk','Inter',sans-serif; font-size: 36px; font-weight: 700;
   line-height: 1.15; letter-spacing: -0.02em; color: var(--bf-heading); margin: 0;
 }
-.bf-rule { width: 56px; height: 4px; background: var(--bf-accent); border-radius: 2px; margin: 22px 0; }
-.bf-subtitle { font-size: 14.5px; color: var(--bf-cover-muted); line-height: 1.6; margin: 0; max-width: 80%; }
+.bf-rule { width: 56px; height: 4px; background: var(--bf-accent); border-radius: 2px; margin: 22px auto; }
+.bf-subtitle {
+  font-size: 14.5px; color: var(--bf-cover-muted); line-height: 1.6; margin: 0;
+  max-width: 5.6in; text-wrap: pretty;
+}
 .bf-meta-grid {
   display: grid; grid-template-columns: repeat(4,1fr); gap: 32px;
-  border-top: 1px solid var(--bf-border); padding-top: 20px; margin-top: auto;
+  border-top: 1px solid var(--bf-border); padding-top: 20px; margin-top: 50px;
+  width: 100%;
 }
+
+/* Portada de propuesta (meta 2×2, logo grande) */
+.buffalo-doc[data-kind="proposal"] .bf-cover-logo { height: 72px; margin-bottom: 28px; }
+.buffalo-doc[data-kind="proposal"] .bf-h1 { font-size: 32px; max-width: 6.2in; }
+.buffalo-doc[data-kind="proposal"] .bf-meta-grid {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 28px 40px;
+  max-width: 6.2in;
+}
+
+/* Preview en pantalla: hojas más redondeadas (el PDF las imprime cuadradas) */
+.buffalo-doc.proposal-preview-soft .buffalo-cover,
+.buffalo-doc.proposal-preview-soft .bf-page {
+  border-radius: 22px;
+  overflow: hidden;
+}
+
 .bf-meta-label {
   font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
   color: var(--bf-cover-muted); text-align: center; margin: 0 0 6px;
@@ -62,26 +94,60 @@ export const BUFFALO_REPORT_CSS = `
   color: var(--bf-heading); text-align: center; margin: 0;
 }
 
-/* --- Flujo de contenido: sin altura fija --- */
+/* --- Flujo continuo (informes) --- */
 .bf-flow {
   width: var(--bf-page-w);
+  min-height: var(--bf-page-h);
   background: var(--bf-bg);
   color: var(--bf-text);
-  padding: 0.5in var(--bf-pad-x);
+  padding: 0.7in var(--bf-pad-x);
   box-shadow: 0 12px 40px rgba(0,0,0,0.1);
   font-family: 'Inter', sans-serif;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 
-/* Barra de marca superior (solo pantalla / primera página del flujo) */
+/* --- Hojas de contenido (propuestas / plantilla docs) --- */
+.bf-page {
+  width: var(--bf-page-w);
+  min-height: var(--bf-page-h);
+  background: var(--bf-bg);
+  color: var(--bf-text);
+  padding: 0.7in var(--bf-pad-x);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.1);
+  font-family: 'Inter', sans-serif;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  break-after: page;
+  page-break-after: always;
+}
+.bf-page-body { flex: 1; min-height: 0; }
+.bf-page-body > .bf-h2:first-child { margin-top: 0; }
+
+/* Encabezado y pie de página (plantilla) */
 .bf-flow-header {
-  display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 1px solid var(--bf-border); padding-bottom: 10px; margin-bottom: 18px;
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  border-bottom: 1px solid var(--bf-border); padding-bottom: 10px; margin-bottom: 20px;
+  flex: none;
 }
 .bf-header-logo { height: 18px; width: auto; object-fit: contain; }
-.bf-header-title { font-size: 10px; color: var(--bf-muted); letter-spacing: 0.02em; }
+.bf-header-title {
+  font-size: 10.5px; color: var(--bf-header-text); letter-spacing: 0.02em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 4.5in;
+}
+.bf-flow-footer {
+  margin-top: auto;
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  border-top: 1px solid var(--bf-border); padding-top: 10px;
+  font-size: 9.5px; color: var(--bf-header-text); letter-spacing: 0.03em;
+  flex: none;
+}
 
 /* Cada bloque de primer nivel no se parte al paginar */
-.bf-flow > * { break-inside: avoid; page-break-inside: avoid; }
+.bf-flow > *:not(.bf-flow-header):not(.bf-flow-footer),
+.bf-page-body > * { break-inside: avoid; page-break-inside: avoid; }
 
 .bf-h2 {
   font-family: 'Space Grotesk','Inter',sans-serif; font-size: 16px; font-weight: 700;
@@ -94,31 +160,31 @@ export const BUFFALO_REPORT_CSS = `
   border-radius: 3px; padding: 3px 7px; line-height: 1;
 }
 
-.bf-flow h3 {
+.bf-flow h3, .bf-page h3 {
   font-family: 'Space Grotesk','Inter',sans-serif; font-size: 11.5px; font-weight: 700;
   letter-spacing: 0.05em; text-transform: uppercase; color: var(--bf-accent); margin: 16px 0 8px;
 }
-.bf-flow p { font-size: 12.5px; color: var(--bf-text); margin: 0 0 12px; line-height: 1.55; }
-.bf-flow strong { font-weight: 700; color: var(--bf-heading); }
-.bf-flow a { color: var(--bf-accent); text-decoration: underline; text-underline-offset: 2px; }
+.bf-flow p, .bf-page p { font-size: 12.5px; color: var(--bf-text); margin: 0 0 12px; line-height: 1.55; }
+.bf-flow strong, .bf-page strong { font-weight: 700; color: var(--bf-heading); }
+.bf-flow a, .bf-page a { color: var(--bf-accent); text-decoration: underline; text-underline-offset: 2px; }
 
-.bf-flow ul { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.bf-flow ul > li { position: relative; padding-left: 16px; font-size: 12.5px; line-height: 1.55; color: var(--bf-text); }
-.bf-flow ul > li::before {
+.bf-flow ul, .bf-page ul { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bf-flow ul > li, .bf-page ul > li { position: relative; padding-left: 16px; font-size: 12.5px; line-height: 1.55; color: var(--bf-text); }
+.bf-flow ul > li::before, .bf-page ul > li::before {
   content: ''; position: absolute; left: 0; top: 7px; width: 4px; height: 4px;
   border-radius: 50%; background: var(--bf-accent);
 }
 
-.bf-flow ol {
+.bf-flow ol, .bf-page ol {
   list-style: none; counter-reset: bf-step; margin: 0 0 12px; padding: 0;
   display: flex; flex-direction: column; gap: 8px;
 }
-.bf-flow ol > li {
+.bf-flow ol > li, .bf-page ol > li {
   counter-increment: bf-step; position: relative; padding: 0 0 8px 32px;
   font-size: 12.5px; line-height: 1.55; color: var(--bf-text); border-bottom: 1px solid var(--bf-border);
 }
-.bf-flow ol > li:last-child { border-bottom: none; padding-bottom: 0; }
-.bf-flow ol > li::before {
+.bf-flow ol > li:last-child, .bf-page ol > li:last-child { border-bottom: none; padding-bottom: 0; }
+.bf-flow ol > li::before, .bf-page ol > li::before {
   content: counter(bf-step); position: absolute; left: 0; top: 0; width: 20px; height: 20px;
   border-radius: 50%; border: 1.5px solid var(--bf-accent); color: var(--bf-accent);
   font-family: 'Space Grotesk','Inter',sans-serif; font-size: 10px; font-weight: 700;
@@ -145,14 +211,14 @@ export const BUFFALO_REPORT_CSS = `
 .bf-chart th { text-align: left; color: var(--bf-muted); font-size: 10px; text-transform: uppercase; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--bf-border); }
 .bf-chart td { padding: 4px 8px 4px 0; border-bottom: 1px solid var(--bf-border); color: var(--bf-text); }
 
-.bf-flow table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: auto; margin: 0 0 14px; }
-.bf-flow thead th {
+.bf-flow table, .bf-page table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: auto; margin: 0 0 14px; }
+.bf-flow thead th, .bf-page thead th {
   text-align: left; font-weight: 600; color: var(--bf-muted); font-size: 10px;
   letter-spacing: 0.05em; text-transform: uppercase; border-bottom: 2px solid var(--bf-border);
   padding: 0 12px 9px 0;
 }
-.bf-flow tbody td { color: var(--bf-text); padding: 9px 12px 9px 0; border-bottom: 1px solid var(--bf-border); vertical-align: top; }
-.bf-flow tbody tr { break-inside: avoid; }
+.bf-flow tbody td, .bf-page tbody td { color: var(--bf-text); padding: 9px 12px 9px 0; border-bottom: 1px solid var(--bf-border); vertical-align: top; }
+.bf-flow tbody tr, .bf-page tbody tr { break-inside: avoid; }
 
 /* KPIs */
 .bf-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 14px; margin: 0 0 14px; }
@@ -212,8 +278,9 @@ export const BUFFALO_REPORT_CSS = `
 .bf-roi .bf-kpi { background: var(--bf-bg); }
 
 @media (max-width: 900px) {
-  .buffalo-cover, .bf-flow { width: 100%; }
-  .buffalo-cover { height: auto; min-height: 60vh; }
+  .buffalo-cover, .bf-flow, .bf-page { width: 100%; }
+  .buffalo-cover { height: auto; min-height: 70vh; }
+  .bf-page { min-height: auto; }
   .bf-h1 { font-size: 28px; }
   .bf-meta-grid { grid-template-columns: repeat(2,1fr); gap: 20px; }
   .bf-roi { grid-template-columns: repeat(2,1fr); }

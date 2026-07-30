@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; }
+    a { color: inherit; }
+    a:hover { opacity: 0.7; }
+    doc-page:not(:defined) { visibility: hidden; }
+  </style>
+  <script src="./doc-page.js"></script>
+</helmet>
+
+<template id="__bundler_thumbnail" data-bg-color="#0a5e3e">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#0a5e3e"/>
+    <text x="600" y="430" font-family="sans-serif" font-size="150" font-weight="700" fill="#ffffff" text-anchor="middle">B</text>
+  </svg>
+</template>
+
+<doc-page size="letter">
+
+  <section class="page" style="{{ coverPageStyle }}">
+    <div style="{{ logoChipStyle }}"><img src="./assets/logo1-trim.png" style="{{ coverLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ coverLogo2Style }}" /></div>
+    <div style="{{ coverCenterStyle }}">
+      <div style="{{ coverEyebrowStyle }}">Onboarding &amp; documentación</div>
+      <h1 style="{{ h1Style }}">{{ docTitle }}</h1>
+      <div style="{{ coverRuleStyle }}"></div>
+      <p style="{{ coverSubtitleStyle }}">Guía operativa para el rol Developer en el CRM Buffalo. Documento vivo: refleja el panel real (proyectos, tickets, retención y facturas).</p>
+    </div>
+    <div style="{{ coverMetaGridStyle }}">
+      <div><div style="{{ coverMetaLabelStyle }}">Área</div><div style="{{ coverMetaValueStyle }}">Desarrollo</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Autor</div><div style="{{ coverMetaValueStyle }}">Equipo Buffalo</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Fecha</div><div style="{{ coverMetaValueStyle }}">20/07/2026</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Versión</div><div style="{{ coverMetaValueStyle }}">1.0</div></div>
+    </div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">01</span>Bienvenida: qué es este panel</h2>
+    <p style="{{ pStyle }}">El CRM Buffalo no es solo ventas: también es el tablero de trabajo técnico de Agencia Buffalo. Como developer verás solo lo que te toca entregar:</p>
+    <ul style="{{ plainUlStyle }}">
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Proyectos Buffalo (y tareas puntuales) que te asignemos</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Tickets de soporte / incidencias asignados a ti</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Retención: guía técnica + KPIs (sin precios)</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Tus facturas a Agencia Buffalo</span></li>
+    </ul>
+    <div style="{{ calloutStyle }}">
+      <div style="{{ calloutBarStyle }}"></div>
+      <div>
+        <div style="{{ calloutLabelStyle }}">Regla de oro</div>
+        <p style="{{ calloutTextStyle }}">Los precios, mensualidades y datos comerciales del cliente son confidenciales. El sistema los oculta a propósito. Si aparece algo que parezca dinero de cliente, avísanos.</p>
+      </div>
+    </div>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>02 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">02</span>Acceso: qué te damos nosotros</h2>
+    <div style="{{ h3Style }}">Cuenta</div>
+    <ol style="{{ olStyle }}">
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">1</span><span style="{{ stepTextStyle }}">Un admin crea tu usuario en Usuarios con rol <b style="{{ liBoldStyle }}">Developer</b>.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">2</span><span style="{{ stepTextStyle }}">Te pasamos <b style="{{ liBoldStyle }}">email + contraseña</b>.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">3</span><span style="{{ stepTextStyle }}">Entras en la URL del CRM &rarr; <b style="{{ liBoldStyle }}">/login</b>.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">4</span><span style="{{ stepTextStyle }}">Usas email y contraseña (no Google: eso es solo admin).</span></li>
+      <li style="{{ stepRowLastStyle }}"><span style="{{ stepBadgeStyle }}">5</span><span style="{{ stepTextStyle }}">Tras el login caes en tu home: <b style="{{ liBoldStyle }}">/developer</b>.</span></li>
+    </ol>
+    <div style="{{ h3Style }}">Qué te asignamos después</div>
+    <table style="{{ tableStyle }}">
+      <thead><tr><th style="{{ thStyle }}">Nosotros (Buffalo)</th><th style="{{ thStyle }}">Tú recibes</th></tr></thead>
+      <tbody>
+        <tr><td style="{{ tdStyle }}">Te vinculamos a proyectos Buffalo</td><td style="{{ tdStyle }}">Aparecen en Proyectos</td></tr>
+        <tr><td style="{{ tdStyle }}">Asignaciones puntuales</td><td style="{{ tdStyle }}">También en Proyectos, como &ldquo;Tarea puntual&rdquo;</td></tr>
+        <tr><td style="{{ tdStyle }}">Te asignamos tickets</td><td style="{{ tdStyle }}">Solo ves los tuyos</td></tr>
+        <tr><td style="{{ tdStyleLast }}">Retención activa</td><td style="{{ tdStyleLast }}">Aparece en Retención</td></tr>
+      </tbody>
+    </table>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>03 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">03</span>Mapa del menú (solo lo tuyo)</h2>
+    <table style="{{ tableStyle }}">
+      <thead><tr><th style="{{ thStyle }}">Menú</th><th style="{{ thStyle }}">Ruta</th><th style="{{ thStyle }}">Para qué sirve</th></tr></thead>
+      <tbody>
+        <tr><td style="{{ tdStyle }}">Dashboard</td><td style="{{ tdStyle }}">/developer</td><td style="{{ tdStyle }}">Resumen del día</td></tr>
+        <tr><td style="{{ tdStyle }}">Proyectos &rarr; Abiertos</td><td style="{{ tdStyle }}">/gestion-proyecto</td><td style="{{ tdStyle }}">Lista de proyectos</td></tr>
+        <tr><td style="{{ tdStyle }}">Proyectos &rarr; Tickets</td><td style="{{ tdStyle }}">/tickets</td><td style="{{ tdStyle }}">Incidencias asignadas</td></tr>
+        <tr><td style="{{ tdStyle }}">Retención &rarr; Proyectos</td><td style="{{ tdStyle }}">/retencion</td><td style="{{ tdStyle }}">Clientes en mantenimiento</td></tr>
+        <tr><td style="{{ tdStyle }}">Facturas &rarr; Mis facturas</td><td style="{{ tdStyle }}">/developer/facturas</td><td style="{{ tdStyle }}">Facturar a Buffalo</td></tr>
+        <tr><td style="{{ tdStyleLast }}">Facturas &rarr; Nueva</td><td style="{{ tdStyleLast }}">/developer/facturas/nueva</td><td style="{{ tdStyleLast }}">Crear factura</td></tr>
+      </tbody>
+    </table>
+    <p style="{{ pStyle }}">No tienes acceso a: Dashboard admin, Leads, Finanzas, Pipelines, Marketing, Calendario, Usuarios, Análisis IA. Si intentas entrar, el CRM te redirige a /developer.</p>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>04 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">04</span>Dashboard (/developer)</h2>
+    <p style="{{ pStyle }}">Al entrar ves:</p>
+    <ul style="{{ plainUlStyle }}">
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Saludo</b> (&ldquo;Tu panel&rdquo;).</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Proyectos asignados</b> — cuántos tienes.</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Tareas abiertas</b> — pendientes y completadas.</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Tickets pendientes</b> — abiertos + en progreso.</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Retención</b> — proyectos de mantenimiento a tu cargo.</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Horas estimadas</b> — abiertas vs hechas.</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Facturación</b> — total de tus facturas a Buffalo.</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Gráficos de actividad diaria y horas por proyecto.</span></li>
+    </ul>
+    <p style="{{ pStyle }}">Úsalo como &ldquo;¿qué tengo pendiente hoy?&rdquo;. Desde cada tarjeta puedes saltar a la sección.</p>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>05 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">05</span>Proyectos: el día a día</h2>
+    <div style="{{ h3Style }}">Dos tipos de trabajo</div>
+    <p style="{{ pStyleTight }}"><b style="{{ liBoldStyle }}">A) Proyecto Buffalo</b> — proyecto real que salió de Onboarding y se puso en marcha. Pestañas: Dashboard · Onboarding · Tareas.</p>
+    <p style="{{ pStyleTight }}"><b style="{{ liBoldStyle }}">B) Asignación puntual</b> — encargo concreto creado desde tu ficha. Verás qué hacer, entregables, enlaces y fechas.</p>
+    <div style="{{ h3Style }}">Tareas: kanban</div>
+    <table style="{{ tableStyle }}">
+      <thead><tr><th style="{{ thStyle }}">Columna</th><th style="{{ thStyle }}">Significado</th></tr></thead>
+      <tbody>
+        <tr><td style="{{ tdStyle }}">Pendiente</td><td style="{{ tdStyle }}">Por hacer</td></tr>
+        <tr><td style="{{ tdStyle }}">En curso</td><td style="{{ tdStyle }}">Lo estás trabajando</td></tr>
+        <tr><td style="{{ tdStyle }}">Validación por Buffalo</td><td style="{{ tdStyle }}">Listo para que revisemos</td></tr>
+        <tr><td style="{{ tdStyleLast }}">Hecho</td><td style="{{ tdStyleLast }}">Cerrado</td></tr>
+      </tbody>
+    </table>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>06 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <div style="{{ h3Style }}">Qué NO verás (y no debes buscar)</div>
+    <ul style="{{ plainUlStyle }}">
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Setup / precio del proyecto al cliente.</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Mensualidades / MRR / planes de mantenimiento.</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Totales de dinero de la cartera.</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Resumen contractual comercial.</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Finalizar / pasar a producción el proyecto (solo admin).</span></li>
+    </ul>
+    <div style="{{ h3Style }}">Flujo recomendado en un proyecto nuevo</div>
+    <ol style="{{ olStyle }}">
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">1</span><span style="{{ stepTextStyle }}">Abre el proyecto desde Proyectos.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">2</span><span style="{{ stepTextStyle }}">Lee Onboarding completo.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">3</span><span style="{{ stepTextStyle }}">Revisa Tareas (o crea las que falten).</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">4</span><span style="{{ stepTextStyle }}">Trabaja en En curso &rarr; Validación por Buffalo.</span></li>
+      <li style="{{ stepRowLastStyle }}"><span style="{{ stepBadgeStyle }}">5</span><span style="{{ stepTextStyle }}">Incidencias de cliente &rarr; Tickets; en retención &rarr; revisa Retención.</span></li>
+    </ol>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>07 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">06</span>Tickets</h2>
+    <p style="{{ pStyle }}">Mensajes / incidencias ligadas a un proyecto. Solo ves tickets asignados a ti.</p>
+    <div style="{{ h3Style }}">Qué haces tú</div>
+    <ol style="{{ olStyle }}">
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">1</span><span style="{{ stepTextStyle }}">Filtrar por estado / proyecto.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">2</span><span style="{{ stepTextStyle }}">Abrir el ticket: mensaje, datos e historial.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">3</span><span style="{{ stepTextStyle }}">Responder en el hilo.</span></li>
+      <li style="{{ stepRowLastStyle }}"><span style="{{ stepBadgeStyle }}">4</span><span style="{{ stepTextStyle }}">Cambiar estado: Abierto &rarr; En progreso &rarr; Resuelto.</span></li>
+    </ol>
+    <div style="{{ h3Style }}">Qué no haces tú</div>
+    <ul style="{{ plainUlStyle }}">
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Ver estadísticas globales de tickets (admin).</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Reasignar el ticket a otro developer (admin).</span></li>
+      <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Eliminar tickets (admin).</span></li>
+    </ul>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>08 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">07</span>Retención</h2>
+    <p style="{{ pStyle }}">Proyectos con mantenimiento activo. Tú no facturas al cliente aquí: das soporte técnico continuo.</p>
+    <table style="{{ tableStyle }}">
+      <thead><tr><th style="{{ thStyle }}">Pestaña</th><th style="{{ thStyle }}">Uso</th></tr></thead>
+      <tbody>
+        <tr><td style="{{ tdStyle }}">Guía de desarrollo</td><td style="{{ tdStyle }}">Cómo está montado el servicio</td></tr>
+        <tr><td style="{{ tdStyleLast }}">KPIs</td><td style="{{ tdStyleLast }}">Métricas del periodo</td></tr>
+      </tbody>
+    </table>
+    <p style="{{ closingStyle }}">La pestaña Proyecto (contrato, precios) no aparece para developers.</p>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>09 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">08</span>Facturas (a Agencia Buffalo)</h2>
+    <p style="{{ pStyle }}">Es lo que tú cobras a Buffalo, no lo que Buffalo cobra al cliente.</p>
+    <div style="{{ h3Style }}">Cómo facturar</div>
+    <ol style="{{ olStyle }}">
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">1</span><span style="{{ stepTextStyle }}">Nueva factura, cliente fijo Agencia Buffalo.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">2</span><span style="{{ stepTextStyle }}">Líneas: concepto, cantidad, precio sin IVA, % IVA.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">3</span><span style="{{ stepTextStyle }}">Guardar borrador o Emitir.</span></li>
+      <li style="{{ stepRowLastStyle }}"><span style="{{ stepBadgeStyle }}">4</span><span style="{{ stepTextStyle }}">Para emitir hace falta adjuntar el PDF. Sin PDF no se emite.</span></li>
+    </ol>
+    <p style="{{ closingStyle }}">Solo ves tus facturas. Estados: Borrador / Enviada / Anulada.</p>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>10 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">09</span>Responsabilidades claras</h2>
+    <div style="{{ respGridStyle }}">
+      <div>
+        <div style="{{ h3Style }}">Buffalo (admin)</div>
+        <ul style="{{ plainUlStyle }}">
+          <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Crear tu usuario y darte acceso.</span></li>
+          <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Asignarte proyectos y tickets.</span></li>
+          <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Configurar Onboarding comercial.</span></li>
+          <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Validar entregas y decidir pricing.</span></li>
+        </ul>
+      </div>
+      <div>
+        <div style="{{ h3Style }}">Tú</div>
+        <ul style="{{ plainUlStyle }}">
+          <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Entregar el trabajo técnico.</span></li>
+          <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Mantener el tablero al día.</span></li>
+          <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Atender tickets asignados.</span></li>
+          <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Facturar a Buffalo (con PDF).</span></li>
+        </ul>
+      </div>
+    </div>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>11 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">10</span>Buenas prácticas</h2>
+    <ol style="{{ olStyle }}">
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">1</span><span style="{{ stepTextStyle }}">Empieza por Onboarding + Tareas, no improvises alcance.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">2</span><span style="{{ stepTextStyle }}">Si el brief es ambiguo, pregunta antes de construir de más.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">3</span><span style="{{ stepTextStyle }}">Muévelo a Validación por Buffalo cuando esté listo.</span></li>
+      <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">4</span><span style="{{ stepTextStyle }}">Tickets: cambia a En progreso al cogerlo.</span></li>
+      <li style="{{ stepRowLastStyle }}"><span style="{{ stepBadgeStyle }}">5</span><span style="{{ stepTextStyle }}">Si ves un precio de cliente, avisa: es un bug de permisos.</span></li>
+    </ol>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>12 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">11</span>Checklist del primer día</h2>
+    <div style="{{ checklistBoxStyle }}">
+      <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">&#10003;</span><span style="{{ checkTextStyle }}">Login con email/contraseña &rarr; llegas a /developer.</span></div>
+      <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">&#10003;</span><span style="{{ checkTextStyle }}">Reconoces el menú: Dashboard, Proyectos, Retención, Facturas.</span></div>
+      <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">&#10003;</span><span style="{{ checkTextStyle }}">Confirmas que no ves Leads / Finanzas / Marketing.</span></div>
+      <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">&#10003;</span><span style="{{ checkTextStyle }}">Abres un proyecto asignado y lees Onboarding.</span></div>
+      <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">&#10003;</span><span style="{{ checkTextStyle }}">Miras el tablero de Tareas.</span></div>
+      <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">&#10003;</span><span style="{{ checkTextStyle }}">Sabes dónde están Tickets y Retención.</span></div>
+      <div style="{{ checkRowLastStyle }}"><span style="{{ checkMarkStyle }}">&#10003;</span><span style="{{ checkTextStyle }}">Entiendes: cero precios de cliente en tu panel.</span></div>
+    </div>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>13 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">12</span>Dudas frecuentes</h2>
+    <p style="{{ qStyle }}">¿Puedo entrar con Google?</p>
+    <p style="{{ pStyle }}">No. Google login es admin. Tú entras con email + contraseña.</p>
+    <p style="{{ qStyle }}">¿Por qué no veo el dinero del proyecto?</p>
+    <p style="{{ pStyle }}">Es confidencial. Solo admin. Tú trabajas con alcance técnico.</p>
+    <p style="{{ qStyle }}">¿Qué es &ldquo;Validación por Buffalo&rdquo;?</p>
+    <p style="{{ pStyle }}">Cola de review interna: ya está listo para que lo miremos nosotros.</p>
+    <p style="{{ qStyle }}">No me sale ningún proyecto</p>
+    <p style="{{ pStyleTight }}">Aún no estás asignado. Pide al admin que te vincule a uno.</p>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>14 / 15</span></div>
+  </section>
+
+  <section class="page" style="{{ contentPageStyle }}">
+    <div style="{{ pageHeaderStyle }}">
+      <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+      <span style="{{ pageHeaderTitleStyle }}">{{ docTitle }}</span>
+    </div>
+    <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">13</span>Resumen en una frase</h2>
+    <div style="{{ highlightBoxStyle }}">
+      <p style="{{ highlightTextStyle }}">Buffalo te da acceso, proyectos, tickets y contexto técnico; tú entregas, comunicas y facturas a la agencia — sin tocar la parte comercial del cliente.</p>
+    </div>
+    <p style="{{ closingStyle }}">Si algo de esta guía no coincide con lo que ves en pantalla, dínoslo: el producto evoluciona y actualizamos este documento.</p>
+    <p style="{{ closingStyle }}">Dudas &rarr; <a href="#" style="{{ linkStyle }}">soporte@buffalo.com</a></p>
+    <div style="{{ pageFooterStyle }}"><span>Confidencial &middot; Uso interno</span><span>15 / 15</span></div>
+  </section>
+
+</doc-page>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;dark&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;,&quot;green&quot;],&quot;tsType&quot;:&quot;'light'|'dark'|'green'&quot;},&quot;logo&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;logo4&quot;,&quot;options&quot;:[&quot;logo1&quot;,&quot;logo2&quot;,&quot;logo3&quot;,&quot;logo4&quot;],&quot;tsType&quot;:&quot;'logo1'|'logo2'|'logo3'|'logo4'&quot;},&quot;docTitle&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Onboarding developers — Buffalo CRM&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const TOTAL = 15;
+
+    const palettes = {
+      light: {
+        bg: '#ffffff', surface: '#eef7f4', surface2: '#e3f1ec', text: '#17211e', muted: '#56655f',
+        heading: '#0d211b', accent: '#00a084', accentContrast: '#ffffff',
+        border: '#dcece5', headerText: '#56655f', coverMuted: 'rgba(23,33,30,0.62)',
+      },
+      dark: {
+        bg: '#0b1412', surface: '#121e1a', surface2: '#16241f', text: '#eaf3ef', muted: '#93a39c',
+        heading: '#ffffff', accent: '#17c79e', accentContrast: '#06140f',
+        border: '#22322c', headerText: '#93a39c', coverMuted: 'rgba(255,255,255,0.6)',
+      },
+      green: {
+        bg: '#123524', surface: '#153a27', surface2: '#194330', text: '#eaf5ee', muted: '#a9c9b5',
+        heading: '#ffffff', accent: '#7fd9a6', accentContrast: '#123524',
+        border: 'rgba(255,255,255,0.16)', headerText: '#a9c9b5', coverMuted: 'rgba(255,255,255,0.6)',
+      },
+    };
+    const t = palettes[theme] || palettes.light;
+    const heading = `font-family:'Space Grotesk',sans-serif;color:${t.heading}`;
+    const body = `font-family:'Inter',sans-serif;color:${t.text}`;
+    const pagePad = `padding:0.75in 0.85in`;
+
+    const logoChoice = this.props.logo ?? 'logo1';
+    const combos = {
+      logo1: { cover: '1', header: '1' },
+      logo2: { cover: '2', header: '2' },
+      logo3: { cover: '1', header: '2' },
+      logo4: { cover: '2', header: '1' },
+    };
+    const combo = combos[logoChoice] || combos.logo1;
+    const show1 = combo.cover === '1' ? 'block' : 'none';
+    const show2 = combo.cover === '2' ? 'block' : 'none';
+    const hshow1 = combo.header === '1' ? 'block' : 'none';
+    const hshow2 = combo.header === '2' ? 'block' : 'none';
+
+    const docTitle = this.props.docTitle ?? 'Onboarding developers — Buffalo CRM';
+
+    return {
+      docTitle,
+      pageHeaderStyle: `display:flex;justify-content:space-between;align-items:center;gap:24px;padding-bottom:10px;border-bottom:1px solid ${t.border};margin-bottom:20px`,
+      logoChipSmStyle: `flex:none;display:flex;align-items:center;justify-content:center`,
+      headerLogo1Style: `height:19px;width:auto;display:${hshow1}`,
+      headerLogo2Style: `height:19px;width:auto;display:${hshow2}`,
+      pageHeaderTitleStyle: `${body};font-size:10px;color:${t.headerText};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:4.3in`,
+      pageFooterStyle: `margin-top:auto;display:flex;justify-content:space-between;padding-top:10px;border-top:1px solid ${t.border};font-size:9px;color:${t.headerText};letter-spacing:0.03em`,
+
+      coverPageStyle: `background:${t.bg};${pagePad};display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box`,
+      logoChipStyle: `display:flex;align-items:center;justify-content:center;margin-bottom:30px`,
+      coverLogo1Style: `height:80px;width:auto;display:${show1};margin:0 auto`,
+      coverLogo2Style: `height:80px;width:auto;display:${show2};margin:0 auto`,
+
+      coverCenterStyle: `display:flex;flex-direction:column;align-items:center;text-align:center;max-width:6.3in`,
+      coverEyebrowStyle: `${body};font-size:12.5px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${t.accent};margin-bottom:18px`,
+      h1Style: `${heading};color:${t.heading};font-size:36px;font-weight:700;line-height:1.15;margin:0 0 20px;letter-spacing:-0.02em`,
+      coverRuleStyle: `width:56px;height:4px;background:${t.accent};margin:0 auto 22px;border-radius:2px`,
+      coverSubtitleStyle: `${body};font-size:14.5px;color:${t.coverMuted};margin:0;text-wrap:pretty;line-height:1.6`,
+      coverMetaGridStyle: `display:grid;grid-template-columns:repeat(4,1fr);gap:32px;border-top:1px solid ${t.border};padding-top:20px;width:6in;margin-top:50px`,
+      coverMetaLabelStyle: `${body};font-size:10px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:${t.coverMuted};margin-bottom:6px;text-align:center`,
+      coverMetaValueStyle: `${heading};font-size:13px;font-weight:600;color:${t.heading};text-align:center`,
+
+      contentPageStyle: `background:${t.bg};${pagePad};box-sizing:border-box;display:flex;flex-direction:column;${body};font-size:12.5px;line-height:1.55`,
+
+      h2Style: `${heading};font-size:16px;font-weight:700;display:flex;align-items:center;gap:12px;margin:0 0 14px`,
+      h3Style: `${heading};font-size:11.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:${t.accent};margin:16px 0 8px`,
+      numBadgeStyle: `font-family:'Space Grotesk',sans-serif;font-size:10px;font-weight:700;color:${t.accentContrast};background:${t.accent};border-radius:3px;padding:3px 7px;letter-spacing:0.02em`,
+
+      pStyle: `${body};font-size:12.5px;color:${t.text};margin:0 0 12px;text-wrap:pretty`,
+      pStyleTight: `${body};font-size:12.5px;color:${t.text};margin:0 0 8px;text-wrap:pretty`,
+      qStyle: `${body};font-size:12.5px;font-weight:600;color:${t.heading};margin:12px 0 4px`,
+
+      plainUlStyle: `list-style:none;margin:0 0 14px;padding:0;display:flex;flex-direction:column;gap:6px`,
+      plainLiStyle: `display:flex;gap:9px;align-items:flex-start`,
+      bulletDotStyle: `flex:none;width:4px;height:4px;border-radius:50%;background:${t.accent};margin-top:6px`,
+      plainLiTextStyle: `${body};font-size:12.5px;color:${t.text};flex:1;min-width:0`,
+
+      respGridStyle: `display:grid;grid-template-columns:1fr 1fr;gap:28px`,
+
+      highlightBoxStyle: `background:${t.accent};border-radius:6px;padding:18px 22px;margin:0 0 20px`,
+      highlightTextStyle: `${heading};color:${t.accentContrast};font-size:15px;font-weight:600;line-height:1.4;margin:0`,
+
+      calloutStyle: `display:flex;gap:14px;background:${t.surface};border-radius:4px;padding:14px 16px;margin:10px 0 0`,
+      calloutBarStyle: `width:3px;flex:none;background:${t.accent};border-radius:2px`,
+      calloutLabelStyle: `${heading};font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${t.accent};margin-bottom:4px`,
+      calloutTextStyle: `${body};font-size:12px;color:${t.text};margin:0`,
+
+      olStyle: `list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:8px`,
+      stepRowStyle: `display:flex;gap:12px;align-items:flex-start;padding-bottom:8px;border-bottom:1px solid ${t.border}`,
+      stepRowLastStyle: `display:flex;gap:12px;align-items:flex-start`,
+      stepBadgeStyle: `flex:none;width:20px;height:20px;border-radius:50%;border:1.5px solid ${t.accent};color:${t.accent};font-family:'Space Grotesk',sans-serif;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center`,
+      stepTextStyle: `${body};font-size:12.5px;color:${t.text};padding-top:1px`,
+      liBoldStyle: `color:${t.heading}`,
+
+      checklistBoxStyle: `background:${t.surface2};border:1px solid ${t.border};border-radius:6px;padding:16px 20px`,
+      checkRowStyle: `display:flex;gap:10px;align-items:flex-start;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid ${t.border}`,
+      checkRowLastStyle: `display:flex;gap:10px;align-items:flex-start`,
+      checkMarkStyle: `flex:none;width:15px;height:15px;border-radius:4px;background:${t.accent};color:${t.accentContrast};font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px`,
+      checkTextStyle: `${body};font-size:12px;color:${t.text}`,
+
+      tableStyle: `width:100%;border-collapse:collapse;margin:0 0 16px;font-size:11.5px`,
+      thStyle: `text-align:left;${body};font-weight:600;color:${t.muted};font-size:10px;letter-spacing:0.05em;text-transform:uppercase;padding:0 12px 8px 0;border-bottom:2px solid ${t.border}`,
+      tdStyle: `${body};color:${t.text};padding:9px 12px 9px 0;border-bottom:1px solid ${t.border}`,
+      tdStyleLast: `${body};color:${t.text};padding:9px 12px 0 0`,
+
+      linkStyle: `color:${t.accent};text-decoration:underline;text-underline-offset:2px;font-weight:500`,
+      closingStyle: `${body};font-size:12px;color:${t.muted};margin:0 0 6px`,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

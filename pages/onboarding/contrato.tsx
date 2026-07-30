@@ -1,5 +1,5 @@
-import OnboardingAiDocWorkspace from '@/components/onboarding/OnboardingAiDocWorkspace'
+import OnboardingContractWorkspace from '@/components/onboarding/OnboardingContractWorkspace'
 
 export default function ContratoPage() {
-  return <OnboardingAiDocWorkspace kind="contract" />
+  return <OnboardingContractWorkspace />
 }

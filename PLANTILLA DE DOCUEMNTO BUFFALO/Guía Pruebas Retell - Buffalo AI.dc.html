@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="./assets/all-faces.css">
+  <style>
+    body { margin: 0; }
+    a { color: inherit; }
+    a:hover { opacity: 0.7; }
+    doc-page:not(:defined) { visibility: hidden; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  </style>
+  <script src="./doc-page.js"></script>
+</helmet>
+
+<doc-page size="a4" margin="0.9in" style="{{ pageFontStyle }}">
+
+  <div slot="header" style="{{ headerStyle }}">
+    <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+    <span style="{{ pageHeaderTitleStyle }}">Guía interna &middot; Developers</span>
+  </div>
+  <div slot="footer" style="{{ footerStyle }}">
+    <span>Confidencial &middot; Uso interno</span>
+    <span>Buffalo AI &middot; agenciabuffalo.es</span>
+  </div>
+
+  <div style="{{ pageBleedStyle }}">
+  <div style="{{ coverWrapStyle }}">
+    <div style="{{ logoChipStyle }}"><img src="./assets/logo1-trim.png" style="{{ coverLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ coverLogo2Style }}" /></div>
+    <div style="{{ coverEyebrowStyle }}">Guía técnica interna</div>
+    <h1 style="{{ h1Style }}">Pruebas masivas de agentes Retell con Claude</h1>
+    <div style="{{ coverRuleStyle }}"></div>
+    <p style="{{ coverSubtitleStyle }}">Mini tutorial paso a paso &mdash; el mismo proceso que seguimos con el agente Lucía, listo para repetir con cualquier proyecto.</p>
+    <div style="{{ coverMetaGridStyle }}">
+      <div><div style="{{ coverMetaLabelStyle }}">Área</div><div style="{{ coverMetaValueStyle }}">Desarrollo &middot; QA</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Aplica a</div><div style="{{ coverMetaValueStyle }}">Agentes Retell AI</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Fecha</div><div style="{{ coverMetaValueStyle }}">Julio 2026</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Versión</div><div style="{{ coverMetaValueStyle }}">1.0</div></div>
+    </div>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">01</span>Dale a Claude todo el contexto del proyecto</h2>
+  <p style="{{ pStyle }}">Pégale (o adjúntale) todos los documentos que definen cómo debe comportarse el agente: el guion/prompt, las condiciones de negocio, los límites, los precios, las excepciones... todo lo que tú mismo usarías para juzgar si una llamada está bien o mal.</p>
+  <p style="{{ pStyle }}">Pídele explícitamente que se lo lea entero y te confirme que lo ha entendido antes de seguir. Cuantos más matices le des &mdash; qué NO debe decir, casos límite, excepciones raras &mdash; mejor podrá luego juzgar las pruebas.</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">02</span>Dile cuántas pruebas y qué tipo de casos</h2>
+  <p style="{{ pStyle }}">Dos formas de definir la batería de casos:</p>
+  <ul style="{{ plainUlStyle }}">
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Dársela tú: &ldquo;quiero probar cliente sin garantía, importe justo en el mínimo, cliente enfadado, fuera de horario, alguien que miente sobre su hipoteca...&rdquo;</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Pedirle a Claude que las genere a partir de la documentación: &ldquo;genera 50 casuísticas que cubran los casos normales, los límites y los intentos de romper el agente&rdquo;.</span></li>
+  </ul>
+  <div style="{{ calloutStyle }}">
+    <div style="{{ calloutBarStyle }}"></div>
+    <div><div style="{{ calloutLabelStyle }}">Cantidad</div><p style="{{ calloutTextStyle }}">Indica el número total de casos que quieres (nosotros hicimos 80). Cuantos más casos, más fiable el resultado, pero también más tiempo y coste.</p></div>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">03</span>Consigue el ID del agente y la API key de Retell</h2>
+  <p style="{{ pStyle }}">En el panel de Retell AI:</p>
+  <ol style="{{ olStyle }}">
+    <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">1</span><span style="{{ stepTextStyle }}">Entra en tu agente &rarr; pestaña Simulation (o el nombre equivalente en tu versión).</span></li>
+    <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">2</span><span style="{{ stepTextStyle }}">El ID del agente aparece en la URL del navegador (algo como <b style="{{ liBoldStyle }}">agent_xxxxxxxxxxxxx</b>).</span></li>
+    <li style="{{ stepRowLastStyle }}"><span style="{{ stepBadgeStyle }}">3</span><span style="{{ stepTextStyle }}">La API key está en la configuración de tu cuenta de Retell (Settings &rarr; API Keys).</span></li>
+  </ol>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">04</span>Pásaselo a Claude y autoriza el uso</h2>
+  <p style="{{ pStyle }}">Escríbele algo como:</p>
+  <div style="{{ quoteBoxStyle }}">
+    <p style="{{ quoteTextStyle }}">&ldquo;Aquí tienes el ID del agente: agent_xxx y mi API key de Retell: key_xxx. Autorizo que lances simulaciones de prueba contra esta cuenta.&rdquo;</p>
+  </div>
+  <p style="{{ pStyle }}">Es importante decir explícitamente que autorizas el uso, porque son pruebas que quedan registradas en tu cuenta de Retell (aunque sean simulaciones de texto, no llamadas reales).</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">05</span>Pide que cree y lance las pruebas</h2>
+  <p style="{{ pStyle }}">Con eso, Claude puede:</p>
+  <ul style="{{ plainUlStyle }}">
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Crear cada caso de prueba directamente en Retell vía su API (usando &ldquo;Simulation Testing&rdquo;, si tu plan lo incluye).</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Lanzar el lote completo y esperar a que termine de procesarse.</span></li>
+  </ul>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">06</span>Lo más importante: no fiarse del marcador automático</h2>
+  <p style="{{ pStyle }}">Retell tiene su propio &ldquo;aprobado / fallado&rdquo; automático, pero se equivoca mucho &mdash; en nuestro caso, 4 de cada 10 veces.</p>
+  <div style="{{ highlightBoxStyle }}">
+    <div style="{{ highlightLabelStyle }}">Instrucción clave a Claude</div>
+    <p style="{{ highlightTextStyle }}">&ldquo;No te fíes del pass/fail automático de Retell. Lee tú mismo cada transcripción real y compárala contra las reglas de negocio que te di, y dime en qué casos Retell se equivocó.&rdquo;</p>
+  </div>
+  <p style="{{ closingStyle }}">Con más de 20&ndash;30 casos, Claude puede repartir el trabajo en varios sub-análisis en paralelo para no perder detalle &mdash; es normal, solo hay que esperar.</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">07</span>Pide el informe en el formato que prefieras</h2>
+  <ul style="{{ plainUlStyle }}">
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Informe técnico con la tabla completa de resultados.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Versión explicada en plan sencillo, sin tecnicismos, para el desarrollador.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Detalle caso por caso, uno a uno, si quieres verlo todo.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Puntuación del 1 al 10 del estado del agente.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">PDF descargable de cualquiera de los anteriores.</span></li>
+  </ul>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">08</span>Repite el proceso después de cada cambio</h2>
+  <p style="{{ pStyle }}">Cada vez que el desarrollador cambie algo en el agente (el prompt, la base de conocimiento, etc.), vuelve a lanzar la batería de pruebas &mdash; aunque sea un subconjunto &mdash; y compárala con el informe anterior. Así sabes si el cambio arregló algo sin romper otra cosa.</p>
+
+  <div style="{{ pageBreakStyle }}"></div>
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">09</span>Resumen en una frase por paso</h2>
+  <div style="{{ checklistBoxStyle }}">
+    <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">1</span><span style="{{ checkTextStyle }}">Dale todo el contexto del proyecto.</span></div>
+    <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">2</span><span style="{{ checkTextStyle }}">Dile cuántas pruebas y qué casuísticas.</span></div>
+    <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">3</span><span style="{{ checkTextStyle }}">Consigue el ID del agente y la API key en Retell.</span></div>
+    <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">4</span><span style="{{ checkTextStyle }}">Pásaselos y autoriza el uso.</span></div>
+    <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">5</span><span style="{{ checkTextStyle }}">Pide que cree y lance las pruebas.</span></div>
+    <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">6</span><span style="{{ checkTextStyle }}">Pide que audite él mismo, sin fiarse del marcador de Retell.</span></div>
+    <div style="{{ checkRowStyle }}"><span style="{{ checkMarkStyle }}">7</span><span style="{{ checkTextStyle }}">Pide el informe en el formato que necesites.</span></div>
+    <div style="{{ checkRowLastStyle }}"><span style="{{ checkMarkStyle }}">8</span><span style="{{ checkTextStyle }}">Repite tras cada cambio del desarrollador.</span></div>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">10</span>Nota de seguridad</h2>
+  <div style="{{ calloutStyle }}">
+    <div style="{{ calloutBarStyle }}"></div>
+    <div><div style="{{ calloutLabelStyle }}">Credencial sensible</div><p style="{{ calloutTextStyle }}">La API key es una credencial sensible &mdash; trátala como una contraseña. No la subas a GitHub ni la compartas fuera de esta conversación privada con Claude.</p></div>
+  </div>
+
+  <div style="{{ closingBoxStyle }}">
+    <p style="{{ closingStyle }}">Dudas sobre este proceso &rarr; equipo de desarrollo Buffalo AI.</p>
+  </div>
+  </div>
+</doc-page>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;light&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;,&quot;green&quot;],&quot;tsType&quot;:&quot;'light'|'dark'|'green'&quot;},&quot;logo&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;logo4&quot;,&quot;options&quot;:[&quot;logo1&quot;,&quot;logo2&quot;,&quot;logo3&quot;,&quot;logo4&quot;],&quot;tsType&quot;:&quot;'logo1'|'logo2'|'logo3'|'logo4'&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const palettes = {
+      light: {
+        bg: '#ffffff', surface: '#eef7f4', surface2: '#e3f1ec', text: '#17211e', muted: '#56655f',
+        heading: '#0d211b', accent: '#00a084', accentContrast: '#ffffff',
+        border: '#dcece5', headerText: '#56655f', coverMuted: 'rgba(23,33,30,0.62)',
+      },
+      dark: {
+        bg: '#0b1412', surface: '#121e1a', surface2: '#16241f', text: '#eaf3ef', muted: '#93a39c',
+        heading: '#ffffff', accent: '#17c79e', accentContrast: '#06140f',
+        border: '#22322c', headerText: '#93a39c', coverMuted: 'rgba(255,255,255,0.6)',
+      },
+      green: {
+        bg: '#123524', surface: '#153a27', surface2: '#194330', text: '#eaf5ee', muted: '#a9c9b5',
+        heading: '#ffffff', accent: '#7fd9a6', accentContrast: '#123524',
+        border: 'rgba(255,255,255,0.16)', headerText: '#a9c9b5', coverMuted: 'rgba(255,255,255,0.6)',
+      },
+    };
+    const t = palettes[theme] || palettes.light;
+    const heading = `font-family:'Space Grotesk',sans-serif;color:${t.heading}`;
+    const body = `font-family:'Inter',sans-serif;color:${t.text}`;
+
+    const logoChoice = this.props.logo ?? 'logo4';
+    const combos = {
+      logo1: { cover: '1', header: '1' }, logo2: { cover: '2', header: '2' },
+      logo3: { cover: '1', header: '2' }, logo4: { cover: '2', header: '1' },
+    };
+    const combo = combos[logoChoice] || combos.logo4;
+    const show1 = combo.cover === '1' ? 'block' : 'none';
+    const show2 = combo.cover === '2' ? 'block' : 'none';
+    const hshow1 = combo.header === '1' ? 'block' : 'none';
+    const hshow2 = combo.header === '2' ? 'block' : 'none';
+
+    return {
+      pageFontStyle: `${body};font-size:13.5px;line-height:1.7`,
+      pageBleedStyle: `background:${t.bg};margin:-0.9in;padding:0.9in;display:block`,
+
+      headerStyle: `display:flex;justify-content:space-between;align-items:center;gap:24px;padding-bottom:12px;border-bottom:1px solid ${t.border}`,
+      logoChipSmStyle: `flex:none;display:flex;align-items:center;justify-content:center`,
+      headerLogo1Style: `height:19px;width:auto;display:${hshow1}`,
+      headerLogo2Style: `height:19px;width:auto;display:${hshow2}`,
+      pageHeaderTitleStyle: `${body};font-size:10.5px;color:${t.headerText}`,
+      footerStyle: `display:flex;justify-content:space-between;padding-top:12px;border-top:1px solid ${t.border};font-size:9.5px;color:${t.headerText};letter-spacing:0.03em`,
+
+      coverWrapStyle: `display:flex;flex-direction:column;align-items:center;text-align:center;width:100%;min-height:9.6in;justify-content:center;break-after:page;box-sizing:border-box`,
+      logoChipStyle: `display:flex;align-items:center;justify-content:center;margin-bottom:30px`,
+      coverLogo1Style: `height:82px;width:auto;display:${show1};margin:0 auto`,
+      coverLogo2Style: `height:82px;width:auto;display:${show2};margin:0 auto`,
+      coverEyebrowStyle: `${body};font-size:12.5px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${t.accent};margin-bottom:20px`,
+      h1Style: `${heading};color:${t.heading};font-size:32px;font-weight:700;line-height:1.25;margin:0 auto 22px;letter-spacing:-0.01em;max-width:6.2in`,
+      coverRuleStyle: `width:56px;height:4px;background:${t.accent};margin:0 auto 24px;border-radius:2px`,
+      coverSubtitleStyle: `${body};font-size:14.5px;color:${t.coverMuted};margin:0 0 40px;text-wrap:pretty;line-height:1.65;max-width:5.6in`,
+      coverMetaGridStyle: `display:grid;grid-template-columns:repeat(2,1fr);gap:28px 40px;border-top:1px solid ${t.border};padding-top:22px;width:100%;max-width:6.2in;margin:0 auto`,
+      coverMetaLabelStyle: `${body};font-size:10px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:${t.coverMuted};margin-bottom:6px;text-align:center`,
+      coverMetaValueStyle: `${heading};font-size:13.5px;font-weight:600;color:${t.heading};text-align:center`,
+
+      pageBreakStyle: `break-before:page`,
+      h2Style: `${heading};font-size:17px;font-weight:700;display:flex;align-items:center;gap:12px;margin:34px 0 14px`,
+      numBadgeStyle: `font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;color:${t.accentContrast};background:${t.accent};border-radius:3px;padding:3px 8px;letter-spacing:0.02em`,
+
+      pStyle: `${body};font-size:13.5px;color:${t.text};margin:0 0 14px;text-wrap:pretty`,
+      liBoldStyle: `color:${t.heading}`,
+
+      plainUlStyle: `list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:8px`,
+      plainLiStyle: `display:flex;gap:10px;align-items:flex-start`,
+      bulletDotStyle: `flex:none;width:5px;height:5px;border-radius:50%;background:${t.accent};margin-top:7px`,
+      plainLiTextStyle: `${body};font-size:13px;color:${t.text};flex:1;min-width:0`,
+
+      olStyle: `list-style:none;margin:0 0 20px;padding:0;display:flex;flex-direction:column;gap:9px`,
+      stepRowStyle: `display:flex;gap:12px;align-items:flex-start;padding-bottom:9px;border-bottom:1px solid ${t.border}`,
+      stepRowLastStyle: `display:flex;gap:12px;align-items:flex-start`,
+      stepBadgeStyle: `flex:none;width:22px;height:22px;border-radius:50%;border:1.5px solid ${t.accent};color:${t.accent};font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center`,
+      stepTextStyle: `${body};font-size:13px;color:${t.text};padding-top:1px`,
+
+      quoteBoxStyle: `border-left:3px solid ${t.accent};background:${t.surface};border-radius:0 6px 6px 0;padding:14px 20px;margin:0 0 18px`,
+      quoteTextStyle: `${body};font-style:italic;font-size:13px;color:${t.text};margin:0;line-height:1.6`,
+
+      highlightBoxStyle: `background:${t.accent};border-radius:6px;padding:18px 22px;margin:6px 0 18px;break-inside:avoid`,
+      highlightLabelStyle: `font-family:'Space Grotesk',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${t.accentContrast};opacity:0.75;margin-bottom:7px`,
+      highlightTextStyle: `${heading};color:${t.accentContrast};font-size:15px;font-weight:600;line-height:1.4;margin:0`,
+
+      calloutStyle: `display:flex;gap:14px;background:${t.surface};border-radius:4px;padding:16px 18px;margin:8px 0 22px;break-inside:avoid`,
+      calloutBarStyle: `width:3px;flex:none;background:${t.accent};border-radius:2px`,
+      calloutLabelStyle: `${heading};font-size:10.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${t.accent};margin-bottom:5px`,
+      calloutTextStyle: `${body};font-size:12.5px;color:${t.text};margin:0`,
+
+      checklistBoxStyle: `background:${t.surface2};border:1px solid ${t.border};border-radius:6px;padding:18px 22px;margin:0 0 24px;break-inside:avoid`,
+      checkRowStyle: `display:flex;gap:12px;align-items:flex-start;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid ${t.border}`,
+      checkRowLastStyle: `display:flex;gap:12px;align-items:flex-start`,
+      checkMarkStyle: `flex:none;width:20px;height:20px;border-radius:5px;background:${t.accent};color:${t.accentContrast};font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center`,
+      checkTextStyle: `${body};font-size:13px;color:${t.text};padding-top:1px`,
+
+      linkStyle: `color:${t.accent};text-decoration:underline;text-underline-offset:2px;font-weight:500`,
+      closingBoxStyle: `border-top:1px solid ${t.border};padding-top:18px;margin-top:24px`,
+      closingStyle: `${body};font-size:12.5px;color:${t.muted};margin:0 0 6px`,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

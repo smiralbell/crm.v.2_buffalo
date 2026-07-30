@@ -196,7 +196,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         project_definition: definition,
         project_context: context,
         proposal_draft: (cfg?.proposal_draft || '').trim() || null,
+        proposal_status: cfg?.proposal_status === 'sent' ? 'sent' : 'draft',
+        proposal_sent_at: cfg?.proposal_sent_at || null,
         contract_draft: (cfg?.contract_draft || '').trim() || null,
+        contract_status: cfg?.contract_status === 'sent' ? 'sent' : 'draft',
+        contract_sent_at: cfg?.contract_sent_at || null,
         pre_kickoff_draft: (cfg?.pre_kickoff_draft || '').trim() || null,
         linked_invoices: cfg?.linked_invoices || [],
       })

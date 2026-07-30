@@ -8,12 +8,17 @@ import {
   generateProposalFromContext,
   mergeLeadConfig,
 } from '@/lib/onboarding/project-context-ai'
+import { generateContractAnnex } from '@/lib/onboarding/contract-annex-ai'
 
 const bodySchema = z.object({
   kind: z.enum(['proposal', 'contract', 'pre_kickoff']),
   instructions: z.string().optional(),
   draft: z.string().optional(),
   save_only: z.boolean().optional().default(false),
+  /** Solo para propuestas: borrador | enviada */
+  proposal_status: z.enum(['draft', 'sent']).optional(),
+  /** Solo para contratos: borrador | enviado */
+  contract_status: z.enum(['draft', 'sent']).optional(),
 })
 
 function draftKey(kind: 'proposal' | 'contract' | 'pre_kickoff') {
@@ -38,7 +43,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const body = bodySchema.parse(req.body ?? {})
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
-      include: { contact: { select: { nombre: true, empresa: true } } },
+      include: {
+        contact: {
+          select: {
+            nombre: true,
+            empresa: true,
+            cif: true,
+            direccion_fiscal: true,
+          },
+        },
+      },
     })
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
 
@@ -47,14 +61,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (body.save_only) {
       const draft = (body.draft || '').trim()
+      const statusPatch =
+        body.kind === 'proposal' && body.proposal_status
+          ? {
+              proposal_status: body.proposal_status,
+              ...(body.proposal_status === 'sent'
+                ? { proposal_sent_at: new Date().toISOString() }
+                : {}),
+            }
+          : body.kind === 'proposal'
+            ? { proposal_status: 'draft' as const }
+            : body.kind === 'contract' && body.contract_status
+              ? {
+                  contract_status: body.contract_status,
+                  ...(body.contract_status === 'sent'
+                    ? { contract_sent_at: new Date().toISOString() }
+                    : {}),
+                }
+              : body.kind === 'contract'
+                ? { contract_status: 'draft' as const }
+                : {}
       const { encoded } = mergeLeadConfig(lead.configuracion, {
         [key]: draft || undefined,
+        ...statusPatch,
       })
       await prisma.lead.update({
         where: { id: leadId },
         data: { configuracion: encoded },
       })
-      return res.status(200).json({ ok: true, kind: body.kind, draft })
+      return res.status(200).json({
+        ok: true,
+        kind: body.kind,
+        draft,
+        proposal_status:
+          body.kind === 'proposal'
+            ? body.proposal_status || 'draft'
+            : undefined,
+        contract_status:
+          body.kind === 'contract'
+            ? body.contract_status || 'draft'
+            : undefined,
+      })
     }
 
     const context = (cfg?.project_context || '').trim()
@@ -84,15 +131,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const draft =
       body.kind === 'proposal'
         ? await generateProposalFromContext(meta)
-        : await generateOnboardingDoc({ kind: body.kind, ...meta })
+        : body.kind === 'contract'
+          ? await generateContractAnnex({
+              context: meta.context,
+              definition: meta.definition,
+              projectName: meta.projectName,
+              clientName: meta.clientName,
+              clientCompany: meta.clientCompany,
+              clientCif: lead.contact?.cif || null,
+              clientAddress: lead.contact?.direccion_fiscal || null,
+              setupFee: meta.setupFee,
+              monthlyFee: meta.monthlyFee,
+              paymentSplit:
+                cfg?.payment_split === '100_upfront' || cfg?.payment_split === '50_50'
+                  ? cfg.payment_split
+                  : null,
+              extraInstructions: meta.extraInstructions,
+            })
+          : await generateOnboardingDoc({ kind: body.kind, ...meta })
 
-    const { encoded } = mergeLeadConfig(lead.configuracion, { [key]: draft })
+    const { encoded } = mergeLeadConfig(lead.configuracion, {
+      [key]: draft,
+      ...(body.kind === 'proposal' ? { proposal_status: 'draft' as const } : {}),
+      ...(body.kind === 'contract' ? { contract_status: 'draft' as const } : {}),
+    })
     await prisma.lead.update({
       where: { id: leadId },
       data: { configuracion: encoded },
     })
 
-    return res.status(200).json({ ok: true, kind: body.kind, draft })
+    return res.status(200).json({
+      ok: true,
+      kind: body.kind,
+      draft,
+      proposal_status: body.kind === 'proposal' ? 'draft' : undefined,
+      contract_status: body.kind === 'contract' ? 'draft' : undefined,
+    })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0]?.message || 'Datos inválidos' })

@@ -39,7 +39,7 @@ const ACTIONS = [
   {
     id: 'contrato',
     title: 'Crear contrato',
-    desc: 'Borrador de contrato con IA listo para revisar.',
+    desc: 'Contrato de prestación de servicios con plantilla Buffalo.',
     href: (id: string) => `/onboarding/contrato?lead=${id}`,
     windowName: (id: string) => `buffalo-contrato-${id}`,
     icon: ScrollText,
@@ -111,12 +111,6 @@ export default function OnboardingDocumentActions({
 
   return (
     <section className={className}>
-      <div className="mb-3">
-        <p className="text-sm font-semibold text-gray-900">Documentos del onboarding</p>
-        <p className="text-xs text-gray-500 mt-0.5">
-          Cada acción abre una ventana nueva. Las facturas se crean en Facturas Buffalo y quedan vinculadas a este onboarding.
-        </p>
-      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {ACTIONS.map((a) => {
           const Icon = a.icon

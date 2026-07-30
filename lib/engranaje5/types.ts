@@ -50,8 +50,16 @@ export interface ConfiguradorConfig {
   project_context?: string
   /** Borrador de propuesta comercial generado con IA */
   proposal_draft?: string
-  /** Borrador de contrato generado con IA */
+  /** Estado de la propuesta: borrador o enviada al cliente */
+  proposal_status?: 'draft' | 'sent'
+  /** ISO cuando se marcó como enviada */
+  proposal_sent_at?: string
+  /** Borrador de contrato (Anexo I JSON) generado con IA */
   contract_draft?: string
+  /** Estado del contrato: borrador o enviado al cliente */
+  contract_status?: 'draft' | 'sent'
+  /** ISO cuando se marcó el contrato como enviado */
+  contract_sent_at?: string
   /** Borrador de pre-kick-off generado con IA */
   pre_kickoff_draft?: string
   /** Facturas vinculadas a este onboarding (hilo) */

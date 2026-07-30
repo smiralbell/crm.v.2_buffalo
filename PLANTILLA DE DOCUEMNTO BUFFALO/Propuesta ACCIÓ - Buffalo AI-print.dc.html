@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="./assets/all-faces.css">
+  <style>
+    body { margin: 0; }
+    a { color: inherit; }
+    a:hover { opacity: 0.7; }
+    doc-page:not(:defined) { visibility: hidden; }
+  </style>
+  <script src="./doc-page.js"></script>
+</helmet>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#123524"/>
+    <text x="600" y="430" font-family="sans-serif" font-size="150" font-weight="700" fill="#ffffff" text-anchor="middle">A</text>
+  </svg>
+</template>
+
+<doc-page size="a4" margin="0.9in" style="{{ pageFontStyle }}">
+
+  <div id="pdf-header" slot="header" style="{{ headerStyle }}">
+    <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+    <span style="{{ pageHeaderTitleStyle }}">Proposta &middot; ACCIÓ &times; Buffalo AI</span>
+  </div>
+  <div id="pdf-footer" slot="footer" style="{{ footerStyle }}">
+    <span>Document confidencial</span>
+    <span>Buffalo AI &middot; agenciabuffalo.es</span>
+  </div>
+
+  <div style="{{ pageBleedStyle }}">
+  <div style="{{ coverWrapStyle }}">
+    <div style="{{ logoChipStyle }}"><img src="./assets/logo1-trim.png" style="{{ coverLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ coverLogo2Style }}" /></div>
+    <div style="{{ coverEyebrowStyle }}">Proposta de projecte</div>
+    <h1 style="{{ h1Style }}">Agent intel·ligent per a l'atenció digital d'ACCIÓ</h1>
+    <div style="{{ coverRuleStyle }}"></div>
+    <p style="{{ coverSubtitleStyle }}">Una nova capa d'atenció capaç d'entendre, orientar i derivar cada consulta a partir de la informació oficial i actualitzada d'ACCIÓ.</p>
+    <div style="{{ coverMetaGridStyle }}">
+      <div><div style="{{ coverMetaLabelStyle }}">Client</div><div style="{{ coverMetaValueStyle }}">ACCIÓ</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Proveïdor</div><div style="{{ coverMetaValueStyle }}">Buffalo AI</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Data</div><div style="{{ coverMetaValueStyle }}">27 de juliol de 2026</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Validesa</div><div style="{{ coverMetaValueStyle }}">30 dies naturals</div></div>
+    </div>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">01</span>Punt de partida</h2>
+  <p style="{{ pStyle }}">ACCIÓ rep prop de <b style="{{ liBoldStyle }}">14.000 consultes anuals</b> a través del xat del seu web. Aquest canal s'ha convertit en una porta d'entrada rellevant per a empreses i professionals que busquen informació sobre ajuts, internacionalització, innovació, creixement i altres serveis. El volum assolit demostra el valor del servei, però també obliga l'equip a dedicar moltes hores a llegir, contextualitzar, cercar informació i decidir a qui correspon cada consulta.</p>
+  <p style="{{ pStyle }}">La proposta de Buffalo AI consisteix a incorporar una primera capa d'atenció intel·ligent. L'agent podrà mantenir una conversa natural amb l'usuari, entendre què necessita, consultar el coneixement oficial d'ACCIÓ i oferir una resposta clara. Quan la consulta no es pugui resoldre amb prou garanties, el sistema no improvisarà: prepararà el context i la derivarà a la persona o àrea corresponent.</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">02</span>Què construirem</h2>
+  <p style="{{ pStyle }}">Buffalo AI desenvoluparà el sistema <b style="{{ liBoldStyle }}">a mida, des de zero i específicament per a ACCIÓ</b>. No es tractarà d'un bot genèric configurat damunt d'una plataforma tancada. La lògica de conversa, la cerca d'informació, les regles de resposta, els controls de seguretat, la classificació i els escalats formaran part d'un programari propi desenvolupat per Buffalo AI.</p>
+  <p style="{{ pStyle }}">Aquest programari utilitzarà, mitjançant API, un dels models d'intel·ligència artificial més potents disponibles. El model és el motor lingüístic que interpreta i redacta; el sistema de Buffalo AI és qui decideix quina informació pot consultar, quines regles ha de seguir, què pot respondre i quan ha d'aturar-se i demanar intervenció humana. Aquesta separació permet canviar de model en el futur sense haver de reconstruir tota la solució.</p>
+  <div style="{{ calloutStyle }}">
+    <div style="{{ calloutBarStyle }}"></div>
+    <div><div style="{{ calloutLabelStyle }}">Diferència clau</div><p style="{{ calloutTextStyle }}">La tecnologia central i les regles de negoci seran pròpies de Buffalo AI. El proveïdor del model només s'utilitzarà com a motor de processament a través d'una API empresarial i sota la configuració aprovada per ACCIÓ.</p></div>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">03</span>Entrenament amb el coneixement d'ACCIÓ</h2>
+  <p style="{{ pStyle }}">Perquè l'agent sigui útil no n'hi ha prou amb connectar-lo a un model general. Cal <b style="{{ liBoldStyle }}">entrenar-lo operativament</b> amb la informació, els criteris i la manera de treballar d'ACCIÓ. Crearem una base de coneixement pròpia a partir de les pàgines web, documents i fonts que ACCIÓ autoritzi. Abans de respondre, l'agent cercarà en aquesta base la informació relacionada amb la pregunta i construirà la resposta només a partir de contingut oficial.</p>
+  <div style="{{ highlightBoxStyle }}">
+    <div style="{{ highlightLabelStyle }}">Entrenament continu</div>
+    <p style="{{ highlightTextStyle }}">Un procés automàtic revisarà periòdicament les fonts, detectarà pàgines noves, modificades o retirades i actualitzarà el coneixement de l'agent en tot moment.</p>
+  </div>
+  <p style="{{ pStyle }}">Cada contingut conservarà la seva URL, categoria, idioma i data de revisió. Quan no hi hagi una font suficient o hi hagi contradiccions, l'agent derivarà la consulta en lloc de generar una resposta insegura. Durant la implantació també treballarem amb exemples reals i anonimitzats de consultes anteriors, per ensenyar al sistema com classificar cada cas, quines dades inicials calen, quin to utilitzar i a quin equip o especialista dirigir cada petició.</p>
+  <div style="{{ calloutStyle }}">
+    <div style="{{ calloutBarStyle }}"></div>
+    <div><div style="{{ calloutLabelStyle }}">Coneixement sempre al dia</div><p style="{{ calloutTextStyle }}">El sistema de rastreig (scraping) del web ignora automàticament les pàgines antigues o ja no visibles, i descarta el contingut retirat o obsolet. Això garanteix que l'agent respongui sempre amb la informació vigent d'ACCIÓ, sense arrossegar dades caducades.</p></div>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">04</span>Experiència de l'usuari i escalat</h2>
+  <p style="{{ pStyle }}">L'usuari continuarà iniciant la conversa des del web d'ACCIÓ i podrà expressar el seu dubte en llenguatge natural en <b style="{{ liBoldStyle }}">català, castellà o anglès</b>. L'agent identificarà l'idioma, entendrà el motiu de contacte i farà únicament les preguntes necessàries per completar el context. Quan disposi d'una resposta oficial, l'explicarà de manera entenedora i facilitarà l'enllaç a la font corresponent.</p>
+  <p style="{{ pStyle }}">Si la consulta requereix interpretació, dades internes, valoració personalitzada o coneixement d'un expedient concret, es generarà un escalat. La persona responsable rebrà les dades recollides, la classificació, un resum de la conversa, les fonts consultades i el motiu pel qual l'agent no ha continuat &mdash; evitant que l'usuari repeteixi el cas i reduint el temps de l'especialista per reprendre'l.</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">05</span>Dues alternatives d'implantació</h2>
+
+  <div style="{{ h3Style }}">Opció A &middot; Integració amb el LiveChat actual</div>
+  <p style="{{ pStyle }}">ACCIÓ manté el widget del web, el formulari previ, les quatre llicències d'agents i el panell de LiveChat que l'equip ja utilitza. Buffalo AI connecta el seu motor propi al sistema actual mitjançant les API i els webhooks de LiveChat. Per a l'usuari i per als treballadors, el canal continua sent el mateix; la diferència és que la primera atenció la realitza el nou agent intel·ligent.</p>
+  <p style="{{ pStyle }}">Quan calgui intervenció humana, la conversa es traspassarà al flux actual o generarà el correu d'escalat amb tota la informació preparada. Redueix el canvi operatiu i permet posar en marxa el projecte amb més rapidesa. La viabilitat definitiva queda subjecta a validar el pla, els permisos i les capacitats disponibles al compte de LiveChat d'ACCIÓ.</p>
+
+  <div style="{{ h3Style }}">Opció B &middot; Aplicació i panell propis d'ACCIÓ</div>
+  <p style="{{ pStyle }}">Buffalo AI desenvolupa també el canal i l'entorn de gestió: una <b style="{{ liBoldStyle }}">aplicació web pròpia des de zero</b>, amb un widget de xat personalitzat i un panell segur perquè l'equip pugui veure les converses, intervenir-hi, assignar-les, consultar l'historial i revisar els indicadors del servei. Això permetria substituir LiveChat i eliminar la dependència funcional d'aquesta plataforma.</p>
+  <p style="{{ pStyle }}">El panell inclourà la safata de converses, els estats de seguiment, la intervenció humana, la derivació per àrea, el cercador, els rols d'accés, les mètriques principals i la supervisió de les actualitzacions del coneixement.</p>
+  <div style="{{ calloutStyle }}">
+    <div style="{{ calloutBarStyle }}"></div>
+    <div><div style="{{ calloutLabelStyle }}">Rols i permisos a mida</div><p style="{{ calloutTextStyle }}">El panell admet un nombre il·limitat de rols i usuaris. Es podran configurar, per exemple, dos perfils d'administrador amb accés total i la resta de l'equip amb permisos restringits &mdash; només a les converses, àrees o mètriques que els corresponguin. L'estructura de permisos es dissenya completament a mida d'ACCIÓ.</p></div>
+  </div>
+  <div style="{{ highlightBoxStyle }}">
+    <div style="{{ highlightLabelStyle }}">Avantatge de l'aplicació pròpia</div>
+    <p style="{{ highlightTextStyle }}">Amb l'opció B, la mateixa IA que atén les consultes tindrà accés a totes les converses del sistema. Això permet generar automàticament un dashboard de mètriques &mdash; volums, temes més freqüents, temps de resposta, taxes d'escalat i molt més &mdash; sense cap procés manual d'anàlisi.</p>
+  </div>
+
+  <table style="{{ tableStyle }}">
+    <thead><tr><th style="{{ thStyle }}"></th><th style="{{ thStyle }}">Opció A &middot; LiveChat</th><th style="{{ thStyle }}">Opció B &middot; Sistema propi</th></tr></thead>
+    <tbody>
+      <tr><td style="{{ tdStyleLabel }}">Canal i panell</td><td style="{{ tdStyle }}">Es mantenen els actuals</td><td style="{{ tdStyle }}">Es creen des de zero</td></tr>
+      <tr><td style="{{ tdStyleLabel }}">Motor intel·ligent</td><td style="{{ tdStyle }}">Sistema propi Buffalo AI</td><td style="{{ tdStyle }}">Sistema propi Buffalo AI</td></tr>
+      <tr><td style="{{ tdStyleLabel }}">Canvi per a l'equip</td><td style="{{ tdStyle }}">Mínim</td><td style="{{ tdStyle }}">Nou entorn de treball</td></tr>
+      <tr><td style="{{ tdStyleLabel }}">Personalització</td><td style="{{ tdStyle }}">Limitada per LiveChat</td><td style="{{ tdStyle }}">Completa (rols il·limitats)</td></tr>
+      <tr><td style="{{ tdStyleLabel }}">Implantació</td><td style="{{ tdStyle }}">2.400 &euro; + IVA</td><td style="{{ tdStyle }}">3.600 &euro; + IVA</td></tr>
+      <tr><td style="{{ tdStyleLabelLast }}">Manteniment</td><td style="{{ tdStyleLast }}">300 &euro;/mes + IVA</td><td style="{{ tdStyleLast }}">300 &euro;/mes + IVA</td></tr>
+    </tbody>
+  </table>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">06</span>Elecció del model d'intel·ligència artificial</h2>
+  <p style="{{ pStyle }}">ACCIÓ podrà decidir quin proveïdor i quin model s'utilitza, d'acord amb els seus criteris de seguretat, contractació, residència de dades i homologació interna. La solució podrà treballar amb serveis empresarials com <b style="{{ liBoldStyle }}">OpenAI API</b> o <b style="{{ liBoldStyle }}">Microsoft Azure OpenAI / Microsoft Foundry</b>. També es podrà estudiar la compatibilitat amb l'ecosistema Microsoft Copilot i Copilot Studio, que ACCIÓ ja utilitza.</p>
+  <p style="{{ pStyle }}">Copilot és un ecosistema de productes i agents de Microsoft, no un únic model. Si es vol mantenir el projecte dins de l'entorn Microsoft, la via tècnica recomanable serà valorar Azure OpenAI o Microsoft Foundry com a servei de model i integrar-lo amb les eines Copilot necessàries. Buffalo AI presentarà una recomanació tècnica comparant qualitat de resposta, cost, latència, control de dades i requisits de compliment; la decisió final correspondrà a ACCIÓ.</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">07</span>Protecció de dades, seguretat i marc europeu</h2>
+  <p style="{{ pStyle }}">La solució es dissenyarà i desplegarà per complir el Reglament general de protecció de dades (RGPD), la Llei orgànica 3/2018, el Reglament europeu d'intel·ligència artificial i els protocols de seguretat i contractació que ACCIÓ determini. Abans de la posada en producció es documentaran els tractaments, els proveïdors, les ubicacions de processament, els terminis de conservació i les responsabilitats de cada part.</p>
+  <p style="{{ pStyle }}">S'aplicaran els principis de minimització i limitació de finalitat. Els accessos al panell estaran protegits per rols, les comunicacions s'encriptaran i es mantindrà traçabilitat de les accions rellevants. Les dades i converses no s'utilitzaran per entrenar models generals, i es prioritzaran configuracions empresarials amb processament i allotjament dins de la Unió Europea quan ACCIÓ ho requereixi.</p>
+  <p style="{{ pStyle }}">L'usuari serà informat que interactua amb un sistema d'intel·ligència artificial i tindrà una via clara per sol·licitar atenció humana. L'agent no prendrà decisions administratives ni substituirà la validació del personal d'ACCIÓ.</p>
+  <div style="{{ calloutStyle }}">
+    <div style="{{ calloutBarStyle }}"></div>
+    <div><div style="{{ calloutLabelStyle }}">Compromís de compliment</div><p style="{{ calloutTextStyle }}">La configuració final es validarà conjuntament amb els responsables jurídics, de protecció de dades i de sistemes d'ACCIÓ. Buffalo AI adaptarà l'arquitectura i els proveïdors a les exigències que resultin d'aquesta validació.</p></div>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">08</span>Implantació i validació</h2>
+  <p style="{{ pStyle }}">El projecte començarà amb una fase de definició en què concretarem les tipologies de consulta, les fonts autoritzades, els departaments, els criteris de derivació i els casos que sempre han de passar a una persona. A continuació construirem la base de coneixement, el motor conversacional i la integració corresponent a l'opció escollida.</p>
+  <p style="{{ pStyle }}">Abans del llançament es realitzarà un pilot controlat amb casos reals anonimitzats. ACCIÓ podrà revisar les respostes, les fonts i els escalats. Les incidències detectades serviran per ajustar el comportament fins a assolir els criteris acordats. La posada en producció serà progressiva i mantindrà supervisió humana.</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">09</span>Manteniment i millora contínua</h2>
+  <p style="{{ pStyle }}">La quota mensual de 300 &euro; cobreix la supervisió tècnica del servei, el manteniment correctiu, el control de les actualitzacions del coneixement, els ajustos menors de les regles i instruccions, el suport a l'equip designat per ACCIÓ i un seguiment bàsic d'activitat.</p>
+  <p style="{{ pStyle }}">Les llicències de LiveChat, els serveis de Microsoft o altres proveïdors i el consum de models d'intel·ligència artificial no estan inclosos en aquesta quota. Aquests costos dependran de l'alternativa i del proveïdor escollits i es presentaran a ACCIÓ abans de contractar-los.</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">10</span>Calendari orientatiu</h2>
+  <table style="{{ tableStyle }}">
+    <thead><tr><th style="{{ thStyle }}">Alternativa</th><th style="{{ thStyle }}">Termini estimat</th></tr></thead>
+    <tbody>
+      <tr><td style="{{ tdStyle }}">Opció A &middot; Integració amb LiveChat</td><td style="{{ tdStyle }}">3 &ndash; 5 setmanes</td></tr>
+      <tr><td style="{{ tdStyleLast }}">Opció B &middot; Aplicació i panell propis</td><td style="{{ tdStyleLast }}">3 &ndash; 7 setmanes</td></tr>
+    </tbody>
+  </table>
+
+  <div style="{{ h3Style }}">Desglossament per fases</div>
+  <ol style="{{ olStyle }}">
+    <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">1</span><span style="{{ stepTextStyle }}"><b style="{{ liBoldStyle }}">Recollida d'informació.</b> Definició de tipologies de consulta, fonts autoritzades, departaments i criteris de derivació amb ACCIÓ.</span></li>
+    <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">2</span><span style="{{ stepTextStyle }}"><b style="{{ liBoldStyle }}">Desenvolupament.</b> Construcció de la base de coneixement, el motor conversacional i la integració o aplicació escollida.</span></li>
+    <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">3</span><span style="{{ stepTextStyle }}"><b style="{{ liBoldStyle }}">Proves internes.</b> Validació amb casos reals anonimitzats per part de l'equip de Buffalo AI.</span></li>
+    <li style="{{ stepRowLastStyle }}"><span style="{{ stepBadgeStyle }}">4</span><span style="{{ stepTextStyle }}"><b style="{{ liBoldStyle }}">Proves amb ACCIÓ.</b> Pilot controlat revisat conjuntament, ajustos finals i posada en producció progressiva.</span></li>
+  </ol>
+  <p style="{{ closingStyle }}">El calendari definitiu dependrà de la disponibilitat dels accessos, les fonts, els responsables de validació i els requisits tècnics i jurídics d'ACCIÓ.</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">11</span>Condicions econòmiques</h2>
+  <table style="{{ tableStyle }}">
+    <thead><tr><th style="{{ thStyle }}">Alternativa</th><th style="{{ thStyle }}">Implantació</th><th style="{{ thStyle }}">Manteniment</th></tr></thead>
+    <tbody>
+      <tr><td style="{{ tdStyle }}">Opció A &middot; Integració amb LiveChat</td><td style="{{ tdStyle }}">2.400 &euro; + IVA</td><td style="{{ tdStyle }}">300 &euro;/mes + IVA</td></tr>
+      <tr><td style="{{ tdStyleLast }}">Opció B &middot; Aplicació i panell propis</td><td style="{{ tdStyleLast }}">3.600 &euro; + IVA</td><td style="{{ tdStyleLast }}">300 &euro;/mes + IVA</td></tr>
+    </tbody>
+  </table>
+  <p style="{{ pStyle }}">Es proposa un pagament del 50% a l'inici del projecte i del 50% després de la validació final, abans de la posada en producció. La quota mensual començarà amb l'activació del servei. Qualsevol ampliació funcional o integració no descrita es valorarà prèviament.</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">12</span>Recomanació de Buffalo AI</h2>
+  <p style="{{ pStyle }}">Recomanem l'<b style="{{ liBoldStyle }}">opció B</b>, l'aplicació i panell propis. Tot i suposar un canvi operatiu inicial una mica més gran, ofereix control complet, personalització total &mdash; rols i permisos il·limitats &mdash; i, sobretot, un dashboard de mètriques generat automàticament gràcies a l'accés de la IA a totes les converses. És la base més sòlida i flexible a llarg termini per a ACCIÓ.</p>
+  <div style="{{ highlightBoxStyle }}">
+    <div style="{{ highlightLabelStyle }}">Resultat esperat</div>
+    <p style="{{ highlightTextStyle }}">Un servei més ràpid i coherent per a l'usuari, menys càrrega repetitiva per a l'equip i una derivació més completa i precisa cap als especialistes.</p>
+  </div>
+
+  <div style="{{ acceptBreakStyle }}"></div>
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">13</span>Acceptació</h2>
+  <p style="{{ pStyle }}">La proposta es podrà formalitzar mitjançant la signatura, l'emissió de la comanda corresponent o el procediment de contractació que ACCIÓ determini.</p>
+  <table style="{{ smallTableStyle }}">
+    <thead><tr><th style="{{ thStyleSmall }}"></th><th style="{{ thStyleSmall }}">Client</th><th style="{{ thStyleSmall }}">Proveïdor</th></tr></thead>
+    <tbody>
+      <tr><td style="{{ tdStyleLabelSmall }}">Titular</td><td style="{{ tdStyleSmall }}">Agència per a la Competitivitat de l'Empresa</td><td style="{{ tdStyleSmall }}">Buffalo IA Global Digital Solutions, S.L.</td></tr>
+      <tr><td style="{{ tdStyleLabelSmall }}">NIF / CIF</td><td style="{{ tdStyleSmall }}">S-0800476-D</td><td style="{{ tdStyleSmall }}">B22944599</td></tr>
+      <tr><td style="{{ tdStyleLabelSmall }}">Domicili</td><td style="{{ tdStyleSmall }}">Passeig de Gràcia, 129, 08008 Barcelona</td><td style="{{ tdStyleSmall }}">C/ Provença 474, esc B, entr. 2ª, 08025 Barcelona</td></tr>
+      <tr><td style="{{ tdStyleLabelSmallLast }}">Telèfon</td><td style="{{ tdStyleSmallLast }}">934 767 200</td><td style="{{ tdStyleSmallLast }}">658 571 087</td></tr>
+    </tbody>
+  </table>
+  <div style="{{ signGridStyle }}">
+    <div style="{{ signColStyle }}">
+      <div style="{{ signLabelStyle }}">Per ACCIÓ</div>
+      <div style="{{ signDateLineStyle }}">Data</div>
+      <div style="{{ signSignatureLineStyle }}">Firma</div>
+    </div>
+    <div style="{{ signColStyle }}">
+      <div style="{{ signLabelStyle }}">Per Buffalo AI</div>
+      <div style="{{ signDateLineStyle }}">Data</div>
+      <div style="{{ signSignatureLineStyle }}">Firma</div>
+    </div>
+  </div>
+
+  <div style="{{ closingBoxStyle }}">
+    <p style="{{ closingStyle }}">Buffalo AI &middot; <a href="#" style="{{ linkStyle }}">agenciabuffalo.es</a></p>
+  </div>
+
+  </div>
+</doc-page>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;light&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;,&quot;green&quot;],&quot;tsType&quot;:&quot;'light'|'dark'|'green'&quot;},&quot;logo&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;logo4&quot;,&quot;options&quot;:[&quot;logo1&quot;,&quot;logo2&quot;,&quot;logo3&quot;,&quot;logo4&quot;],&quot;tsType&quot;:&quot;'logo1'|'logo2'|'logo3'|'logo4'&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'green';
+    const palettes = {
+      light: {
+        bg: '#ffffff', surface: '#eef7f4', surface2: '#e3f1ec', text: '#17211e', muted: '#56655f',
+        heading: '#0d211b', accent: '#00a084', accentContrast: '#ffffff',
+        border: '#dcece5', headerText: '#56655f', coverMuted: 'rgba(23,33,30,0.62)',
+      },
+      dark: {
+        bg: '#0b1412', surface: '#121e1a', surface2: '#16241f', text: '#eaf3ef', muted: '#93a39c',
+        heading: '#ffffff', accent: '#17c79e', accentContrast: '#06140f',
+        border: '#22322c', headerText: '#93a39c', coverMuted: 'rgba(255,255,255,0.6)',
+      },
+      green: {
+        bg: '#123524', surface: '#153a27', surface2: '#194330', text: '#eaf5ee', muted: '#a9c9b5',
+        heading: '#ffffff', accent: '#7fd9a6', accentContrast: '#123524',
+        border: 'rgba(255,255,255,0.16)', headerText: '#a9c9b5', coverMuted: 'rgba(255,255,255,0.6)',
+      },
+    };
+    const t = palettes[theme] || palettes.green;
+    const heading = `font-family:'Space Grotesk',sans-serif;color:${t.heading}`;
+    const body = `font-family:'Inter',sans-serif;color:${t.text}`;
+
+    const logoChoice = this.props.logo ?? 'logo4';
+    const combos = {
+      logo1: { cover: '1', header: '1' }, logo2: { cover: '2', header: '2' },
+      logo3: { cover: '1', header: '2' }, logo4: { cover: '2', header: '1' },
+    };
+    const combo = combos[logoChoice] || combos.logo4;
+    const show1 = combo.cover === '1' ? 'block' : 'none';
+    const show2 = combo.cover === '2' ? 'block' : 'none';
+    const hshow1 = combo.header === '1' ? 'block' : 'none';
+    const hshow2 = combo.header === '2' ? 'block' : 'none';
+
+    return {
+      pageFontStyle: `${body};font-size:13.5px;line-height:1.7`,
+      pageBleedStyle: `background:${t.bg};margin:-0.9in;padding:0.9in;display:block`,
+      headerStyle: `display:flex;justify-content:space-between;align-items:center;gap:24px;padding-bottom:12px;border-bottom:1px solid ${t.border};margin-bottom:0`,
+      logoChipSmStyle: `flex:none;display:flex;align-items:center;justify-content:center`,
+      headerLogo1Style: `height:19px;width:auto;display:${hshow1}`,
+      headerLogo2Style: `height:19px;width:auto;display:${hshow2}`,
+      pageHeaderTitleStyle: `${body};font-size:10.5px;color:${t.headerText}`,
+      footerStyle: `display:flex;justify-content:space-between;padding-top:12px;border-top:1px solid ${t.border};font-size:9.5px;color:${t.headerText};letter-spacing:0.03em`,
+
+      coverWrapStyle: `display:flex;flex-direction:column;align-items:center;text-align:center;width:100%;min-height:9.6in;justify-content:center;break-after:page;box-sizing:border-box`,
+      logoChipStyle: `display:flex;align-items:center;justify-content:center;margin-bottom:30px`,
+      coverLogo1Style: `height:82px;width:auto;display:${show1};margin:0 auto`,
+      coverLogo2Style: `height:82px;width:auto;display:${show2};margin:0 auto`,
+      coverEyebrowStyle: `${body};font-size:12.5px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${t.accent};margin-bottom:20px`,
+      h1Style: `${heading};color:${t.heading};font-size:32px;font-weight:700;line-height:1.25;margin:0 auto 22px;letter-spacing:-0.01em;max-width:6.2in`,
+      coverRuleStyle: `width:56px;height:4px;background:${t.accent};margin:0 auto 24px;border-radius:2px`,
+      coverSubtitleStyle: `${body};font-size:14.5px;color:${t.coverMuted};margin:0 0 40px;text-wrap:pretty;line-height:1.65;max-width:5.6in`,
+      coverMetaGridStyle: `display:grid;grid-template-columns:repeat(2,1fr);gap:28px 40px;border-top:1px solid ${t.border};padding-top:22px;width:100%;max-width:6.2in;margin:0 auto`,
+      coverMetaLabelStyle: `${body};font-size:10px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:${t.coverMuted};margin-bottom:6px;text-align:center`,
+      coverMetaValueStyle: `${heading};font-size:13.5px;font-weight:600;color:${t.heading};text-align:center`,
+
+      h2Style: `${heading};font-size:17px;font-weight:700;display:flex;align-items:center;gap:12px;margin:34px 0 14px`,
+      h3Style: `${heading};font-size:13px;font-weight:700;color:${t.accent};margin:22px 0 8px`,
+      numBadgeStyle: `font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;color:${t.accentContrast};background:${t.accent};border-radius:3px;padding:3px 8px;letter-spacing:0.02em`,
+
+      pStyle: `${body};font-size:13.5px;color:${t.text};margin:0 0 14px;text-wrap:pretty`,
+      liBoldStyle: `color:${t.heading}`,
+
+      highlightBoxStyle: `background:${t.accent};border-radius:6px;padding:18px 22px;margin:6px 0 22px;break-inside:avoid`,
+      highlightLabelStyle: `font-family:'Space Grotesk',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${t.accentContrast};opacity:0.75;margin-bottom:7px`,
+      highlightTextStyle: `${heading};color:${t.accentContrast};font-size:15px;font-weight:600;line-height:1.4;margin:0`,
+
+      calloutStyle: `display:flex;gap:14px;background:${t.surface};border-radius:4px;padding:16px 18px;margin:8px 0 22px;break-inside:avoid`,
+      calloutBarStyle: `width:3px;flex:none;background:${t.accent};border-radius:2px`,
+      calloutLabelStyle: `${heading};font-size:10.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${t.accent};margin-bottom:5px`,
+      calloutTextStyle: `${body};font-size:12.5px;color:${t.text};margin:0`,
+
+      tableStyle: `width:100%;border-collapse:collapse;margin:10px 0 26px;font-size:12.5px`,
+      thStyle: `text-align:left;${body};font-weight:600;color:${t.muted};font-size:10.5px;letter-spacing:0.05em;text-transform:uppercase;padding:0 14px 10px 0;border-bottom:2px solid ${t.border}`,
+      tdStyle: `${body};color:${t.text};padding:11px 14px 11px 0;border-bottom:1px solid ${t.border}`,
+      tdStyleLast: `${body};color:${t.text};padding:11px 14px 0 0`,
+      tdStyleLabel: `${heading};font-weight:600;font-size:12.5px;color:${t.heading};padding:11px 14px 11px 0;border-bottom:1px solid ${t.border}`,
+      tdStyleLabelLast: `${heading};font-weight:600;font-size:12.5px;color:${t.heading};padding:11px 14px 0 0`,
+
+      smallTableStyle: `width:100%;border-collapse:collapse;margin:10px 0 22px;font-size:10px`,
+      thStyleSmall: `text-align:left;${body};font-weight:600;color:${t.muted};font-size:8.5px;letter-spacing:0.05em;text-transform:uppercase;padding:0 12px 6px 0;border-bottom:1px solid ${t.border}`,
+      tdStyleSmall: `${body};color:${t.muted};padding:6px 12px 6px 0;border-bottom:1px solid ${t.border}`,
+      tdStyleSmallLast: `${body};color:${t.muted};padding:6px 12px 0 0`,
+      tdStyleLabelSmall: `${heading};font-weight:600;font-size:10px;color:${t.text};padding:6px 12px 6px 0;border-bottom:1px solid ${t.border}`,
+      tdStyleLabelSmallLast: `${heading};font-weight:600;font-size:10px;color:${t.text};padding:6px 12px 0 0`,
+
+      acceptBreakStyle: `break-before:page`,
+      signGridStyle: `display:grid;grid-template-columns:1fr 1fr;gap:32px;margin:20px 0 8px;break-inside:avoid`,
+      signColStyle: `border-top:1px solid ${t.border};padding-top:16px`,
+      signLabelStyle: `${heading};font-size:12px;font-weight:700;color:${t.heading};margin-bottom:34px`,
+      signLineStyle: `${body};font-size:11.5px;color:${t.muted};border-top:1px solid ${t.border};padding-top:6px;margin-top:26px`,
+      signDateLineStyle: `${body};font-size:11.5px;color:${t.muted};border-top:1px solid ${t.border};padding-top:6px;margin-top:14px`,
+      signSignatureLineStyle: `${body};font-size:11.5px;color:${t.muted};border-top:1px solid ${t.border};padding-top:6px;margin-top:64px`,
+
+      linkStyle: `color:${t.accent};text-decoration:underline;text-underline-offset:2px;font-weight:500`,
+      closingBoxStyle: `border-top:1px solid ${t.border};padding-top:18px;margin-top:24px`,
+      closingStyle: `${body};font-size:12.5px;color:${t.muted};margin:0`,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

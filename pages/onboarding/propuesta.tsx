@@ -1,5 +1,5 @@
-import OnboardingAiDocWorkspace from '@/components/onboarding/OnboardingAiDocWorkspace'
+import OnboardingProposalWorkspace from '@/components/onboarding/OnboardingProposalWorkspace'
 
 export default function PropuestaPage() {
-  return <OnboardingAiDocWorkspace kind="proposal" />
+  return <OnboardingProposalWorkspace />
 }

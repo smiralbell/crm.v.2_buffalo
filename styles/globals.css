@@ -5,6 +5,7 @@
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+  overscroll-behavior: contain;
 }
 
 .hide-scrollbar::-webkit-scrollbar {

@@ -18,6 +18,7 @@ import {
 } from './brmComponents'
 import { paletteToCssVars, stripEmojis, type BuffaloThemeName } from './buffaloTheme'
 import { BUFFALO_REPORT_CSS } from './buffaloReportCss'
+import { splitProposalPageChunks } from '@/lib/onboarding/proposal-brm'
 
 export type BuffaloReportData = {
   title: string
@@ -28,6 +29,14 @@ export type BuffaloReportData = {
   meta?: unknown
 }
 
+export type BuffaloDocCoverMeta = { label: string; value: string }
+
+export type BuffaloDocCover = {
+  eyebrow?: string
+  subtitle?: string
+  meta?: BuffaloDocCoverMeta[]
+}
+
 type Props = {
   report: BuffaloReportData
   client?: { name?: string | null; company?: string | null }
@@ -35,6 +44,9 @@ type Props = {
   logo?: 'logo1' | 'logo2'
   className?: string
   id?: string
+  /** 'proposal' centra la portada y usa meta personalizada (plantilla documentos Buffalo). */
+  kind?: 'report' | 'proposal'
+  cover?: BuffaloDocCover
 }
 
 const MONTHS_ES = [
@@ -123,9 +135,10 @@ function BuffaloMarkdown({ body }: { body: string }) {
 }
 
 function BrandLogo({ variant }: { variant: 'cover' | 'header' }) {
-  const [failed, setFailed] = useState(false)
+  const [srcIndex, setSrcIndex] = useState(0)
+  const sources = ['/buffalo-docs/assets/logo1-trim.png', '/retencion/logo1-trim.png']
   const cls = variant === 'cover' ? 'bf-cover-logo' : 'bf-header-logo'
-  if (failed) {
+  if (srcIndex >= sources.length) {
     return (
       <span
         className="buffalo-heading"
@@ -143,16 +156,48 @@ function BrandLogo({ variant }: { variant: 'cover' | 'header' }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="/retencion/logo1-trim.png"
+      src={sources[srcIndex]}
       alt="Buffalo AI"
       className={cls}
-      onError={() => setFailed(true)}
+      onError={() => setSrcIndex((i) => i + 1)}
     />
   )
 }
 
+function PageHeader({ title }: { title: string }) {
+  return (
+    <div className="bf-flow-header">
+      <BrandLogo variant="header" />
+      <span className="bf-header-title">{title}</span>
+    </div>
+  )
+}
+
+function PageFooter({
+  left,
+  pageLabel,
+}: {
+  left: string
+  pageLabel: string
+}) {
+  return (
+    <div className="bf-flow-footer">
+      <span>{left}</span>
+      <span>{pageLabel}</span>
+    </div>
+  )
+}
+
 const BuffaloReport = forwardRef<HTMLDivElement, Props>(function BuffaloReport(
-  { report, client, theme = 'light', className, id = 'buffalo-report' },
+  {
+    report,
+    client,
+    theme = 'light',
+    className,
+    id = 'buffalo-report',
+    kind = 'report',
+    cover,
+  },
   ref
 ) {
   const { sections } = useMemo(() => splitSections(report.content), [report.content])
@@ -160,14 +205,69 @@ const BuffaloReport = forwardRef<HTMLDivElement, Props>(function BuffaloReport(
 
   const per = periodLabel(report.month, report.year)
   const clientName = stripEmojis(client?.company || client?.name || 'Cliente')
-  const eyebrow =
+  const defaultEyebrow =
     report.audience === 'client'
       ? 'Informe de mantenimiento'
       : 'Informe interno de retención'
   const confidencialidad = report.audience === 'client' ? 'Cliente' : 'Uso interno'
-  const docTitle = cleanTitle(report.title) || `Informe ${per}`
+  const docTitle = cleanTitle(report.title) || (kind === 'proposal' ? 'Propuesta' : `Informe ${per}`)
+  const eyebrow = cover?.eyebrow || (kind === 'proposal' ? 'Propuesta de proyecto' : defaultEyebrow)
+  const subtitle =
+    cover?.subtitle ||
+    (kind === 'proposal' ? `${clientName} · Buffalo AI` : `${clientName} · ${per}`)
+  const metaItems: BuffaloDocCoverMeta[] =
+    cover?.meta && cover.meta.length > 0
+      ? cover.meta
+      : kind === 'proposal'
+        ? [
+            { label: 'Cliente', value: clientName },
+            { label: 'Proveedor', value: 'Buffalo AI' },
+            { label: 'Fecha', value: per },
+            { label: 'Validez', value: '30 días naturales' },
+          ]
+        : [
+            { label: 'Cliente', value: clientName },
+            { label: 'Periodo', value: per },
+            { label: 'Autor', value: 'Equipo Buffalo' },
+            { label: 'Confidencialidad', value: confidencialidad },
+          ]
 
   const pad = (n: number) => String(n).padStart(2, '0')
+  const isProposal = kind === 'proposal'
+  const headerTitle = isProposal
+    ? `Propuesta · ${clientName} × Buffalo AI`
+    : docTitle
+  const footerLeft = isProposal ? 'Documento confidencial' : 'Confidencial · Uso interno'
+
+  const proposalPages = useMemo(() => {
+    if (!isProposal) return [] as { sections: Section[] }[]
+    const chunks = splitProposalPageChunks(report.content)
+    if (chunks.length === 0) return [{ sections: [] as Section[] }]
+    let counter = 0
+    return chunks.map((chunk) => {
+      const { sections: raw } = splitSections(chunk)
+      const sections = raw.map((s) => {
+        if (s.number == null) return s
+        counter += 1
+        return { ...s, number: counter }
+      })
+      return { sections }
+    })
+  }, [isProposal, report.content])
+
+  const totalPages = 1 + Math.max(proposalPages.length, 1)
+
+  const renderSection = (s: Section, key: string | number) => (
+    <Fragment key={key}>
+      {(s.title || s.number != null) && (
+        <h2 className="bf-h2" data-block="section">
+          {s.number != null && <span className="bf-numbadge">{pad(s.number)}</span>}
+          {s.title}
+        </h2>
+      )}
+      <BuffaloMarkdown body={s.body} />
+    </Fragment>
+  )
 
   return (
     <>
@@ -187,51 +287,55 @@ const BuffaloReport = forwardRef<HTMLDivElement, Props>(function BuffaloReport(
         className={`buffalo-doc ${className || ''}`.trim()}
         style={styleVars}
         data-theme={theme}
+        data-kind={kind}
       >
-        {/* Portada: una página completa, centrada */}
+        {/* Portada: bloque centrado (logo + título + meta), como la plantilla Buffalo */}
         <section className="buffalo-cover">
-          <BrandLogo variant="cover" />
-          <p className="bf-eyebrow">{eyebrow}</p>
-          <h1 className="bf-h1 buffalo-heading">{docTitle}</h1>
-          <div className="bf-rule" />
-          <p className="bf-subtitle">
-            {clientName} · {per}
-          </p>
-          <div className="bf-meta-grid">
-            <div>
-              <p className="bf-meta-label">Cliente</p>
-              <p className="bf-meta-value">{clientName}</p>
-            </div>
-            <div>
-              <p className="bf-meta-label">Periodo</p>
-              <p className="bf-meta-value">{per}</p>
-            </div>
-            <div>
-              <p className="bf-meta-label">Autor</p>
-              <p className="bf-meta-value">Equipo Buffalo</p>
-            </div>
-            <div>
-              <p className="bf-meta-label">Confidencialidad</p>
-              <p className="bf-meta-value">{confidencialidad}</p>
+          <div className="bf-cover-stack">
+            <BrandLogo variant="cover" />
+            <p className="bf-eyebrow">{eyebrow}</p>
+            <h1 className="bf-h1 buffalo-heading">{docTitle}</h1>
+            <div className="bf-rule" />
+            {subtitle ? <p className="bf-subtitle">{subtitle}</p> : null}
+            <div className="bf-meta-grid">
+              {metaItems.map((m) => (
+                <div key={`${m.label}-${m.value}`}>
+                  <p className="bf-meta-label">{m.label}</p>
+                  <p className="bf-meta-value">{m.value}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
-        {/* Contenido: flujo continuo (sin salto por sección, sin altura fija).
-            El header/footer de marca se dibuja como texto vectorial al exportar. */}
-        <div className="bf-flow">
-          {sections.map((s, i) => (
-            <Fragment key={i}>
-              {(s.title || s.number != null) && (
-                <h2 className="bf-h2" data-block="section">
-                  {s.number != null && <span className="bf-numbadge">{pad(s.number)}</span>}
-                  {s.title}
-                </h2>
-              )}
-              <BuffaloMarkdown body={s.body} />
-            </Fragment>
-          ))}
-        </div>
+        {isProposal ? (
+          /* Propuesta: flujo continuo por defecto; :::pagebreak parte en hojas */
+          proposalPages.map((page, i) => {
+            const pageNum = i + 2
+            return (
+              <section key={i} className="bf-page">
+                <PageHeader title={headerTitle} />
+                <div className="bf-page-body">
+                  {page.sections.length === 0 ? (
+                    <p>Sin contenido todavía.</p>
+                  ) : (
+                    page.sections.map((s, j) => renderSection(s, `${i}-${j}`))
+                  )}
+                </div>
+                <PageFooter
+                  left={footerLeft}
+                  pageLabel={`${pad(pageNum)} / ${pad(totalPages)}`}
+                />
+              </section>
+            )
+          })
+        ) : (
+          <div className="bf-flow">
+            <PageHeader title={headerTitle} />
+            {sections.map((s, i) => renderSection(s, i))}
+            <PageFooter left={footerLeft} pageLabel="Buffalo AI · agenciabuffalo.es" />
+          </div>
+        )}
       </div>
     </>
   )

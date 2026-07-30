@@ -1,0 +1,296 @@
+/* Plantilla CONTRATO/Anexo Buffalo — scoped under .buffalo-annex */
+
+.buffalo-annex {
+  --paper: #ffffff;
+  --ink: #111111;
+  --ink-2: #2b2b2b;
+  --muted: #7a7a7a;
+  --rule: #111111;
+  --watermark: #111111;
+  --wm-opacity: 0.05;
+  --font-body: 'IBM Plex Sans', Arial, Helvetica, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --page-w: 210mm;
+  --page-h: 297mm;
+  --page-pad-x: 22mm;
+  --page-pad-y: 22mm;
+  --body-size: 11pt;
+  --body-leading: 1.6;
+
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--body-size);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.buffalo-annex .annex-workspace {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.buffalo-annex .page {
+  width: var(--page-w);
+  min-height: var(--page-h);
+  height: auto;
+  background: var(--paper);
+  color: var(--ink);
+  position: relative;
+  overflow: visible;
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 18px 40px -10px rgba(0, 0, 0, 0.12);
+  isolation: isolate;
+}
+
+.buffalo-annex .wm {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+  color: var(--watermark);
+  opacity: var(--wm-opacity);
+}
+
+.buffalo-annex .wm-single {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.buffalo-annex .wm-single span {
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: 340px;
+  letter-spacing: -0.04em;
+  line-height: 0.85;
+  transform: rotate(-28deg);
+  white-space: nowrap;
+}
+
+.buffalo-annex .page-inner {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-height: var(--page-h);
+  height: auto;
+  padding: var(--page-pad-y) var(--page-pad-x) 36mm;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.buffalo-annex .doc-foot {
+  position: absolute;
+  left: var(--page-pad-x);
+  right: var(--page-pad-x);
+  bottom: var(--page-pad-y);
+  margin: 0;
+  padding-top: 3mm;
+  border-top: 0.5px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--paper);
+}
+
+.buffalo-annex .doc-foot b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.buffalo-annex .doc-title {
+  font-weight: 800;
+  font-size: 26pt;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  margin: 0 0 6mm;
+  text-transform: uppercase;
+  text-wrap: balance;
+  text-align: center;
+}
+
+.buffalo-annex .doc-date {
+  font-size: 11pt;
+  color: var(--ink);
+  margin: 0 0 8mm;
+  text-align: center;
+}
+
+.buffalo-annex hr.rule {
+  border: 0;
+  border-top: 0.5px solid var(--ink);
+  margin: 0 0 10mm;
+}
+
+.buffalo-annex h2.section {
+  font-weight: 800;
+  font-size: 14pt;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  margin: 0 0 6mm;
+  line-height: 1.1;
+}
+
+.buffalo-annex h3.clause {
+  font-weight: 700;
+  font-size: 11pt;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 7mm 0 3mm;
+  line-height: 1.25;
+}
+
+.buffalo-annex h3.clause.is-first {
+  margin-top: 0;
+}
+
+.buffalo-annex p.body {
+  margin: 0 0 4mm;
+  line-height: var(--body-leading);
+  color: var(--ink);
+  text-align: left;
+  hyphens: none;
+  text-wrap: pretty;
+}
+
+.buffalo-annex p.body b,
+.buffalo-annex p.body strong {
+  font-weight: 600;
+}
+
+.buffalo-annex ol.alpha {
+  margin: 1.5mm 0 4mm;
+  padding-left: 7mm;
+}
+
+.buffalo-annex ol.alpha li {
+  margin: 0 0 1.05mm;
+  line-height: var(--body-leading);
+  padding-left: 1mm;
+}
+
+.buffalo-annex ol.alpha li::marker {
+  content: counter(list-item, lower-alpha) ') ';
+}
+
+.buffalo-annex ol.list {
+  margin: 2mm 0 4mm;
+  padding: 0 0 0 6mm;
+}
+
+.buffalo-annex ol.list li {
+  margin: 0 0 2mm;
+  line-height: var(--body-leading);
+}
+
+.buffalo-annex ul.dash {
+  list-style: none;
+  margin: 1.5mm 0 4mm;
+  padding: 0;
+}
+
+.buffalo-annex ul.dash li {
+  padding-left: 6mm;
+  text-indent: -6mm;
+  margin: 0 0 1.4mm;
+  line-height: var(--body-leading);
+}
+
+.buffalo-annex p.sublabel {
+  font-weight: 600;
+  margin: 3mm 0 1.5mm;
+}
+
+.buffalo-annex p.body.amount {
+  font-weight: 600;
+  font-size: 12pt;
+}
+
+.buffalo-annex .ins {
+  color: #c00000;
+}
+
+.buffalo-annex .ins p.body,
+.buffalo-annex .ins p.sublabel,
+.buffalo-annex .ins ul.dash li,
+.buffalo-annex .ins ol.list li,
+.buffalo-annex .ins h3.clause {
+  color: #c00000;
+}
+
+.buffalo-annex .ins p.body b,
+.buffalo-annex .ins p.sublabel b {
+  color: #c00000;
+}
+
+.buffalo-annex .conformity-note {
+  margin-top: 10mm;
+  font-size: 9.5pt;
+  color: var(--muted);
+}
+
+.buffalo-annex .signatures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18mm;
+  margin-top: 1mm;
+}
+
+.buffalo-annex .sig-line {
+  border-top: 0.5px solid var(--ink);
+  padding-top: 2.5mm;
+  margin-top: 30mm;
+}
+
+.buffalo-annex .sig .who {
+  font-weight: 600;
+  font-size: 11pt;
+}
+
+.buffalo-annex .sig .role {
+  font-size: 10pt;
+  color: var(--ink-2);
+  margin-top: 0.5mm;
+}
+
+.buffalo-annex .sig .dni {
+  font-family: var(--font-mono);
+  font-size: 9.5pt;
+  color: var(--muted);
+  margin-top: 1mm;
+}
+
+.buffalo-annex .role-label {
+  font-size: 10pt;
+  color: var(--ink-2);
+}
+
+@media print {
+  .buffalo-annex .annex-workspace {
+    gap: 0;
+  }
+  .buffalo-annex .page {
+    box-shadow: none;
+    width: 210mm;
+    min-height: 297mm;
+    height: auto;
+    page-break-after: always;
+    break-after: page;
+    overflow: visible;
+  }
+  .buffalo-annex .page:last-child {
+    page-break-after: auto;
+  }
+}

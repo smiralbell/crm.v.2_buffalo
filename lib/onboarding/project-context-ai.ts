@@ -150,7 +150,7 @@ Responde SOLO con el texto de la definición, sin preámbulos ni comillas.`
   return text.replace(/^```(?:markdown|md|text)?\s*/i, '').replace(/\s*```$/i, '').trim()
 }
 
-/** Genera borrador de propuesta comercial a partir de contexto + definición. */
+/** Genera borrador de propuesta comercial (BRM / plantilla Buffalo) a partir de contexto + definición. */
 export async function generateProposalFromContext(input: {
   context: string
   definition: string
@@ -167,19 +167,9 @@ export async function generateProposalFromContext(input: {
     throw new Error('Necesitas contexto o definición del proyecto para generar la propuesta')
   }
 
-  const system = `Eres comercial senior de Buffalo AI. Redactas propuestas comerciales claras en español.
+  const { PROPOSAL_GENERATE_SYSTEM } = await import('@/lib/onboarding/proposal-prompt')
 
-Estructura sugerida (adapta si falta info; no inventes cifras ni compromisos):
-1. Portada / título
-2. Entendimiento del cliente y del problema
-3. Objetivos
-4. Solución propuesta (alcance)
-5. Enfoque / fases
-6. Entregables
-7. Inversión (solo si hay cifras en el input; si no, deja “A definir”)
-8. Próximos pasos
-
-Tono profesional, directo, sin relleno. Usa markdown. No uses emojis.`
+  const system = PROPOSAL_GENERATE_SYSTEM
 
   const user = [
     input.projectName ? `Proyecto: ${input.projectName}` : null,
@@ -189,7 +179,7 @@ Tono profesional, directo, sin relleno. Usa markdown. No uses emojis.`
     input.setupFee != null && input.setupFee > 0 ? `Setup (€): ${input.setupFee}` : null,
     input.monthlyFee != null && input.monthlyFee > 0 ? `Mensualidad (€): ${input.monthlyFee}` : null,
     input.extraInstructions?.trim()
-      ? `Instrucciones extra del comercial:\n${input.extraInstructions.trim()}`
+      ? `Instrucciones del comercial (prioridad):\n${input.extraInstructions.trim()}`
       : null,
     '---',
     'DEFINICIÓN DEL PROYECTO:',
@@ -206,12 +196,93 @@ Tono profesional, directo, sin relleno. Usa markdown. No uses emojis.`
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
-    { temperature: 0.35, maxTokens: 4000 }
+    { temperature: 0.35, maxTokens: 6000 }
   )
 
   const text = String(raw || '').trim()
   if (!text) throw new Error('La IA no devolvió una propuesta')
   return text.replace(/^```(?:markdown|md)?\s*/i, '').replace(/\s*```$/i, '').trim()
+}
+
+/** Itera la propuesta con una instrucción de chat (editor quirúrgico de documento). */
+export async function reviseProposalWithChat(input: {
+  draft: string
+  instruction: string
+  context?: string | null
+  definition?: string | null
+  projectName?: string | null
+  clientName?: string | null
+  clientCompany?: string | null
+  setupFee?: number | null
+  monthlyFee?: number | null
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+}): Promise<{ content: string; note: string; theme?: 'green' | 'light' | 'dark' }> {
+  const instruction = input.instruction.trim()
+  if (!instruction) throw new Error('Instrucción vacía')
+
+  const { formatSectionMapForEditor } = await import('@/lib/onboarding/proposal-brm')
+  const { PROPOSAL_EDIT_SYSTEM } = await import('@/lib/onboarding/proposal-prompt')
+  const { parseJsonFromModelOutput } = await import('@/lib/openrouter')
+
+  const sectionMap = formatSectionMapForEditor(input.draft || '')
+
+  const system = PROPOSAL_EDIT_SYSTEM
+
+  const meta = [
+    input.projectName ? `Proyecto: ${input.projectName}` : null,
+    input.clientCompany || input.clientName
+      ? `Cliente: ${[input.clientCompany, input.clientName].filter(Boolean).join(' · ')}`
+      : null,
+    input.setupFee != null && input.setupFee > 0 ? `Setup (€): ${input.setupFee}` : null,
+    input.monthlyFee != null && input.monthlyFee > 0 ? `Mensualidad (€): ${input.monthlyFee}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+    { role: 'system', content: system },
+  ]
+  for (const m of (input.history || []).slice(-6)) {
+    messages.push({ role: m.role, content: m.content })
+  }
+  messages.push({
+    role: 'user',
+    content: [
+      meta ? `METADATOS:\n${meta}` : null,
+      `MAPA DE SECCIONES (usa estos índices para "punto N"):\n${sectionMap}`,
+      `DOCUMENTO ACTUAL (BRM) — cópialo y aplica SOLO el cambio pedido:\n${input.draft || '(vacío — genera una propuesta completa en BRM)'}`,
+      `─────\nINSTRUCCIÓN DE EDICIÓN:\n${instruction}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+  })
+
+  const raw = await openRouterChatCompletion(messages, { temperature: 0.12, maxTokens: 8000 })
+  let parsed: { content?: string; note?: string; theme?: string }
+  try {
+    parsed = parseJsonFromModelOutput(raw) as { content?: string; note?: string; theme?: string }
+  } catch {
+    const cleaned = String(raw || '')
+      .replace(/^```(?:markdown|md|json)?\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim()
+    if (!cleaned) throw new Error('La IA no devolvió una propuesta')
+    return { content: cleaned, note: 'Documento actualizado' }
+  }
+
+  const content = String(parsed.content || '').trim()
+  if (!content) throw new Error('La IA no devolvió contenido')
+  const themeRaw = String(parsed.theme || '').toLowerCase()
+  const theme =
+    themeRaw === 'green' || themeRaw === 'light' || themeRaw === 'dark'
+      ? (themeRaw as 'green' | 'light' | 'dark')
+      : undefined
+
+  return {
+    content: content.replace(/^```(?:markdown|md)?\s*/i, '').replace(/\s*```$/i, '').trim(),
+    note: String(parsed.note || 'Documento actualizado').trim(),
+    theme,
+  }
 }
 
 export type OnboardingDocKind = 'proposal' | 'contract' | 'pre_kickoff'

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="./assets/all-faces.css">
+  <style>
+    body { margin: 0; }
+    a { color: inherit; }
+    a:hover { opacity: 0.7; }
+    doc-page:not(:defined) { visibility: hidden; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  </style>
+  <script src="./doc-page.js"></script>
+</helmet>
+
+<doc-page size="a4" margin="0.9in" style="{{ pageFontStyle }}">
+
+  <div slot="header" style="{{ headerStyle }}">
+    <div style="{{ logoChipSmStyle }}"><img src="./assets/logo1-trim.png" style="{{ headerLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ headerLogo2Style }}" /></div>
+    <span style="{{ pageHeaderTitleStyle }}">Proposta &middot; Avecla Reality &times; Buffalo AI</span>
+  </div>
+  <div slot="footer" style="{{ footerStyle }}">
+    <span>Documento confidencial</span>
+    <span>Buffalo AI &middot; agenciabuffalo.es</span>
+  </div>
+
+  <div style="{{ pageBleedStyle }}">
+  <div style="{{ coverWrapStyle }}">
+    <div style="{{ logoChipStyle }}"><img src="./assets/logo1-trim.png" style="{{ coverLogo1Style }}" /><img src="./assets/logo2-trim.png" style="{{ coverLogo2Style }}" /></div>
+    <div style="{{ coverEyebrowStyle }}">Propuesta comercial</div>
+    <h1 style="{{ h1Style }}">Automatización de captación y atención de leads residenciales</h1>
+    <div style="{{ coverRuleStyle }}"></div>
+    <p style="{{ coverSubtitleStyle }}">Un sistema completo e integrado de IA para captar y convertir leads en tiempo real.</p>
+    <div style="{{ coverMetaGridStyle }}">
+      <div><div style="{{ coverMetaLabelStyle }}">Cliente</div><div style="{{ coverMetaValueStyle }}">Avecla Reality</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Preparado por</div><div style="{{ coverMetaValueStyle }}">Buffalo AI</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Fecha</div><div style="{{ coverMetaValueStyle }}">Julio 2026</div></div>
+      <div><div style="{{ coverMetaLabelStyle }}">Versión</div><div style="{{ coverMetaValueStyle }}">2.0</div></div>
+    </div>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">01</span>Introducción</h2>
+  <div style="{{ h3Style }}">Una oportunidad para ganar eficiencia y escalar la captación</div>
+  <p style="{{ pStyle }}"><b style="{{ liBoldStyle }}">Carga operativa manual y poco escalable.</b> Tras analizar la operativa real, actualmente el equipo dedica entre 37 minutos y 1 hora diaria a responder y filtrar consultas de Instagram. Además, dos personas invierten aproximadamente 1 hora y media diaria cada una en contactar con leads y realizar seguimientos.</p>
+  <p style="{{ pStyle }}">En total, el equipo destina aproximadamente entre 3 horas y media y 4 horas diarias a tareas operativas y repetitivas que reducen el tiempo disponible para actividades de mayor valor, como realizar visitas, preparar operaciones, cerrar acuerdos y reforzar la relación con los clientes.</p>
+  <p style="{{ pStyle }}">El volumen puede variar significativamente según el rendimiento de cada publicación. Por ello, el objetivo del sistema no es únicamente reducir la carga actual, sino permitir que Avecla Realty pueda aumentar su captación sin que el trabajo operativo crezca en la misma proporción.</p>
+  <div style="{{ calloutStyle }}">
+    <div style="{{ calloutBarStyle }}"></div>
+    <div><div style="{{ calloutLabelStyle }}">Nuestra solución</div><p style="{{ calloutTextStyle }}">Un sistema conectado de tres piezas. Buffalo pone la ejecución, configuración y criterio técnico. Avecla Reality pone el conocimiento del mercado, validación del tono y criterios de cualificación. Juntos, escalamos sin ampliar plantilla.</p></div>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">02</span>Objetivo del proyecto</h2>
+  <div style="{{ h3Style }}">Un ecosistema completo de captación y gestión residencial</div>
+  <ul style="{{ plainUlStyle }}">
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Los comentarios, mensajes y leads de Instagram se gestionan manualmente, sin detección automática ni priorización.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Los contactos se registran uno a uno en el sistema, generando carga administrativa, riesgo de errores, duplicados y pérdida de información.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Aunque suelen responder el mismo día, la atención no siempre es inmediata, provocando pérdida de oportunidades frente a competidores.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Fuera del horario comercial (9:00&ndash;18:30) no existe atención continua; los leads que llegan a las 19:00 o el fin de semana quedan desatendidos 12&ndash;48 horas.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">El seguimiento por WhatsApp cuando un lead no responde se realiza manualmente, sin recordatorios automáticos ni secuencias de re-engagement.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">No existe un sistema centralizado que visualice conversaciones, estado de leads, rendimiento del equipo y métricas de conversión en tiempo real.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">HabitatSoft recibe contactos poco cualificados, incompletos o no preparados para avanzar comercialmente, saturando a los comerciales.</span></li>
+  </ul>
+
+  <table style="{{ tableStyle }}">
+    <thead><tr><th style="{{ thStyle }}">Fase</th><th style="{{ thStyle }}">Qué hace</th></tr></thead>
+    <tbody>
+      <tr><td style="{{ tdStyleLabel }}">Fase 1</td><td style="{{ tdStyle }}">Instagram responde y captura el contacto automáticamente.</td></tr>
+      <tr><td style="{{ tdStyleLabel }}">Fase 2</td><td style="{{ tdStyle }}">WhatsApp precalifica y filtra según criterios comerciales.</td></tr>
+      <tr><td style="{{ tdStyleLabelLast }}">App centralizada</td><td style="{{ tdStyleLast }}">Todo visible; a HabitatSoft solo llegan leads cualificados.</td></tr>
+    </tbody>
+  </table>
+
+  <div style="{{ highlightBoxStyle }}">
+    <div style="{{ highlightLabelStyle }}">Resultado deseado</div>
+    <p style="{{ highlightTextStyle }}">Menos carga operativa, más velocidad de respuesta y pipeline limpio, sin ampliar plantilla. Registrar en HabitatSoft solo leads que merecen tiempo comercial.</p>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">03</span>Alcance de servicios</h2>
+  <p style="{{ pStyle }}">Tres piezas, un solo sistema: todo lo necesario para captar y no perder leads residenciales.</p>
+
+  <div style="{{ h3Style }}">Fase 1 &middot; Automatización de Instagram y captación</div>
+  <ul style="{{ plainUlStyle }}">
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Detección automática de comentarios de interés (&ldquo;precio&rdquo;, &ldquo;me interesa&rdquo;, &ldquo;&iquest;sigue disponible?&rdquo;).</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Respuesta pública inmediata al comentario.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Mensaje privado automático para pedir nombre y teléfono.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Redirección a WhatsApp con enlace personalizado y primer mensaje.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Asociación del contacto con la propiedad concreta de interés.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Seguimiento automático cuando no responden.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Configuración del flujo, tono de marca y pruebas de puesta en marcha.</span></li>
+  </ul>
+
+  <div style="{{ h3Style }}">Fase 2 &middot; Agente de WhatsApp y precalificación</div>
+  <ul style="{{ plainUlStyle }}">
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Agente de WhatsApp 24/7 (dentro y fuera de horario comercial).</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Detección de idioma automática (castellano, catalán, inglés).</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Respuestas a consultas frecuentes: precio, ubicación, metros, habitaciones, disponibilidad, visita.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Precalificación diferenciada para compra y alquiler.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Clasificación automática (cualificado, pendiente, no cualificado, visita, requiere humano).</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Secuencias de seguimiento cuando el contacto deja de responder.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Escalado a comercial o tarea de llamada cuando haga falta.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Integración: registro en la app centralizada y envío a HabitatSoft solo de leads cualificados.</span></li>
+  </ul>
+
+  <div style="{{ h3Style }}">App centralizada &middot; Visibilidad y control (Fase 3)</div>
+  <ul style="{{ plainUlStyle }}">
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Panel con contactos, historial de conversación y resumen generado por IA.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Estado del lead, canal, idioma, propiedad de interés y próxima acción.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Apartado de incidencias para que el equipo registre fallos, mejoras y dudas operativas.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Métricas clave: conversaciones, leads por canal, cualificados, tiempo de respuesta.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Puesta en marcha y formación breve al equipo.</span></li>
+  </ul>
+  <div style="{{ calloutStyle }}">
+    <div style="{{ calloutBarStyle }}"></div>
+    <div><div style="{{ calloutLabelStyle }}">Resultado esperado</div><p style="{{ calloutTextStyle }}">El equipo deja de cazar comentarios. Cada interesado se atiende al instante. Los comerciales reciben oportunidades con información. HabitatSoft solo tiene leads cualificados.</p></div>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">04</span>Inversión</h2>
+  <table style="{{ tableStyle }}">
+    <thead><tr><th style="{{ thStyle }}">Concepto</th><th style="{{ thStyle }}">Inversión</th></tr></thead>
+    <tbody>
+      <tr><td style="{{ tdStyle }}">Auditoría y arquitectura inicial</td><td style="{{ tdStyle }}">Incluida sin coste</td></tr>
+      <tr><td style="{{ tdStyle }}">Fase 1 &middot; Instagram y captación</td><td style="{{ tdStyle }}">800 &euro;</td></tr>
+      <tr><td style="{{ tdStyle }}">Fase 2 &middot; Agente de WhatsApp y precalificación</td><td style="{{ tdStyle }}">2.000 &euro;</td></tr>
+      <tr><td style="{{ tdStyle }}">Aplicación centralizada con métricas</td><td style="{{ tdStyle }}">750 &euro;</td></tr>
+      <tr><td style="{{ tdStyleLabel }}">Subtotal implementación</td><td style="{{ tdStyleLabel }}">3.550 &euro;</td></tr>
+      <tr><td style="{{ tdStyle }}">Descuento por pago único anticipado</td><td style="{{ tdStyle }}">&minus;200 &euro;</td></tr>
+      <tr><td style="{{ tdStyleLabelLast }}">Total implementación con pago único</td><td style="{{ tdStyleLabelLast }}">3.350 &euro; + IVA</td></tr>
+    </tbody>
+  </table>
+
+  <div style="{{ h3Style }}">Modalidades de pago</div>
+  <ul style="{{ plainUlStyle }}">
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Pago único anticipado:</b> 3.350 &euro; + IVA, aplicando un descuento comercial de 200 &euro;.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Pago fraccionado:</b> dos pagos de 1.775 &euro; + IVA. En esta modalidad no se aplicará el descuento por pago único, por lo que el importe total de la implementación será de 3.550 &euro; + IVA.</span></li>
+  </ul>
+
+  <div style="{{ h3Style }}">Cuota mensual vinculada al volumen</div>
+  <p style="{{ pStyle }}">La cuota mensual inicial será de <b style="{{ liBoldStyle }}">450 &euro; + IVA</b>, incluyendo el mantenimiento, soporte, infraestructura, revisión y optimización del sistema. Esta cuota se mantendrá mientras el sistema gestione hasta 1.999 conversaciones mensuales.</p>
+  <p style="{{ pStyle }}">Cuando el volumen alcance las 2.000 conversaciones mensuales, la cuota pasará a ser de <b style="{{ liBoldStyle }}">750 &euro; + IVA</b> al mes, reflejando el incremento en el uso, infraestructura, seguimiento y carga operativa del sistema.</p>
+
+  <table style="{{ tableStyle }}">
+    <thead><tr><th style="{{ thStyle }}">Conversaciones mensuales gestionadas</th><th style="{{ thStyle }}">Cuota mensual</th></tr></thead>
+    <tbody>
+      <tr><td style="{{ tdStyle }}">Hasta 1.999 conversaciones</td><td style="{{ tdStyle }}">450 &euro; + IVA</td></tr>
+      <tr><td style="{{ tdStyleLast }}">A partir de 2.000 conversaciones</td><td style="{{ tdStyleLast }}">750 &euro; + IVA</td></tr>
+    </tbody>
+  </table>
+
+  <div style="{{ calloutStyle }}">
+    <div style="{{ calloutBarStyle }}"></div>
+    <div><div style="{{ calloutLabelStyle }}">Qué cuenta como conversación</div><p style="{{ calloutTextStyle }}">Se contabilizará como conversación cada contacto único gestionado por el sistema durante el mes, independientemente del número de mensajes intercambiados. No se contabilizarán pruebas internas, duplicados, spam ni contactos no válidos.</p></div>
+  </div>
+  <p style="{{ pStyle }}">La mensualidad comenzará únicamente cuando el sistema haya sido validado conjuntamente y activado en producción. Durante el periodo de desarrollo y pruebas no se cobrará ninguna cuota mensual.</p>
+  <p style="{{ closingStyle }}">No incluye: desarrollos de nuevos flujos no contemplados en el alcance inicial. Compromiso mínimo de 3 meses; después, renovación mensual con 15 días de preaviso.</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">05</span>Responsabilidades</h2>
+  <div style="{{ respGridStyle }}">
+    <div>
+      <div style="{{ h3Style }}">Avecla Reality</div>
+      <ul style="{{ plainUlStyle }}">
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Facilitar accesos: Instagram, WhatsApp, HabitatSoft y datos de propiedades.</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Validar tono, FAQs y criterios de cualificación (compra/alquiler).</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Mantener actualizado el inventario.</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Dar feedback ágil en fases de prueba.</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Nombrar interlocutor interno para decisiones rápidas.</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Usar apartado de incidencias para reportar problemas.</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Poner método de pago en las plataformas necesarias para activar el sistema.</span></li>
+      </ul>
+    </div>
+    <div>
+      <div style="{{ h3Style }}">Buffalo AI</div>
+      <ul style="{{ plainUlStyle }}">
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Diseñar, configurar y poner en marcha Fase 1, 2 y App.</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Entrenar y ajustar el agente con vuestro criterio.</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Integrar registro selectivo en HabitatSoft.</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Medir uso y proponer mejoras continuas.</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Atender incidencias según plazos de mensualidad.</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Ser interlocutor único del proyecto.</span></li>
+        <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}">Documentar funcionamiento para el equipo.</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">06</span>Condiciones</h2>
+  <ul style="{{ plainUlStyle }}">
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Sin garantía de cifras.</b> No prometemos número fijo de leads, visitas o ventas. Compromiso: sistema profesional, medible y en mejora continua.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Los datos son vuestros.</b> Conversaciones, leads, cuentas y HabitatSoft siguen siendo de vuestra propiedad.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Permanencia.</b> Compromiso mínimo 3 meses; después, renovación mensual con 15 días de preaviso.</span></li>
+    <li style="{{ plainLiStyle }}"><span style="{{ bulletDotStyle }}"></span><span style="{{ plainLiTextStyle }}"><b style="{{ liBoldStyle }}">Transparencia.</b> Acceso a app, métricas reales e informe mensual de rendimiento.</span></li>
+  </ul>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">07</span>Próximos pasos</h2>
+  <p style="{{ pStyle }}">Cómo lo ponemos en marcha, paso a paso, desde la firma.</p>
+  <ol style="{{ olStyle }}">
+    <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">1</span><span style="{{ stepTextStyle }}">Aceptación de propuesta, firma del contrato de servicios y abono de la puesta en marcha.</span></li>
+    <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">2</span><span style="{{ stepTextStyle }}">Onboarding: accesos, inventario, FAQs y configuración en HabitatSoft.</span></li>
+    <li style="{{ stepRowStyle }}"><span style="{{ stepBadgeStyle }}">3</span><span style="{{ stepTextStyle }}">Desarrollo en paralelo de las 3 fases: Fase 1, Fase 2 y App Centralizada se desarrollarán simultáneamente. Estimamos que, si todo va según lo previsto, el sistema estará terminado en 3&ndash;4 semanas para validar con el cliente.</span></li>
+    <li style="{{ stepRowLastStyle }}"><span style="{{ stepBadgeStyle }}">4</span><span style="{{ stepTextStyle }}">Primera revisión de conversaciones reales, ajustes y arranque de mensualidad.</span></li>
+  </ol>
+  <p style="{{ closingStyle }}">Llamada corta para resolver cualquier duda (viernes a las 9:30).</p>
+
+  <h2 style="{{ h2Style }}"><span style="{{ numBadgeStyle }}">08</span>Cierre</h2>
+  <p style="{{ pStyle }}">Este proyecto no es &ldquo;montar un chatbot&rdquo;. Es construir un sistema propio de captación y atención residencial: Instagram no se enfría, WhatsApp no se satura y HabitatSoft no se llena de ruido.</p>
+  <p style="{{ pStyle }}">Buffalo pone estructura, IA y ejecución. Avecla Reality pone conocimiento del mercado y validación comercial. Con eso hay base para trabajar juntos y escalar sin sumar horas al equipo.</p>
+  <div style="{{ highlightBoxStyle }}">
+    <div style="{{ highlightLabelStyle }}">Acompañamos la operación a largo plazo</div>
+    <p style="{{ highlightTextStyle }}">Gracias por la confianza. Quedamos a la espera de vuestra validación para arrancar.</p>
+  </div>
+
+  <div style="{{ signGridStyle }}">
+    <div style="{{ signColStyle }}">
+      <div style="{{ signLabelStyle }}">Avecla Reality</div>
+      <div style="{{ signDateLineStyle }}">Data</div>
+      <div style="{{ signSignatureLineStyle }}">Firma</div>
+    </div>
+    <div style="{{ signColStyle }}">
+      <div style="{{ signLabelStyle }}">Buffalo AI</div>
+      <div style="{{ signDateLineStyle }}">Data</div>
+      <div style="{{ signSignatureLineStyle }}">Firma</div>
+    </div>
+  </div>
+
+  <div style="{{ closingBoxStyle }}">
+    <p style="{{ closingStyle }}">Buffalo AI &middot; <a href="#" style="{{ linkStyle }}">agenciabuffalo.es</a></p>
+  </div>
+  </div>
+</doc-page>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;light&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;,&quot;green&quot;],&quot;tsType&quot;:&quot;'light'|'dark'|'green'&quot;},&quot;logo&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;logo4&quot;,&quot;options&quot;:[&quot;logo1&quot;,&quot;logo2&quot;,&quot;logo3&quot;,&quot;logo4&quot;],&quot;tsType&quot;:&quot;'logo1'|'logo2'|'logo3'|'logo4'&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'green';
+    const palettes = {
+      light: {
+        bg: '#ffffff', surface: '#eef7f4', surface2: '#e3f1ec', text: '#17211e', muted: '#56655f',
+        heading: '#0d211b', accent: '#00a084', accentContrast: '#ffffff',
+        border: '#dcece5', headerText: '#56655f', coverMuted: 'rgba(23,33,30,0.62)',
+      },
+      dark: {
+        bg: '#0b1412', surface: '#121e1a', surface2: '#16241f', text: '#eaf3ef', muted: '#93a39c',
+        heading: '#ffffff', accent: '#17c79e', accentContrast: '#06140f',
+        border: '#22322c', headerText: '#93a39c', coverMuted: 'rgba(255,255,255,0.6)',
+      },
+      green: {
+        bg: '#123524', surface: '#153a27', surface2: '#194330', text: '#eaf5ee', muted: '#a9c9b5',
+        heading: '#ffffff', accent: '#7fd9a6', accentContrast: '#123524',
+        border: 'rgba(255,255,255,0.16)', headerText: '#a9c9b5', coverMuted: 'rgba(255,255,255,0.6)',
+      },
+    };
+    const t = palettes[theme] || palettes.green;
+    const heading = `font-family:'Space Grotesk',sans-serif;color:${t.heading}`;
+    const body = `font-family:'Inter',sans-serif;color:${t.text}`;
+
+    const logoChoice = this.props.logo ?? 'logo4';
+    const combos = {
+      logo1: { cover: '1', header: '1' }, logo2: { cover: '2', header: '2' },
+      logo3: { cover: '1', header: '2' }, logo4: { cover: '2', header: '1' },
+    };
+    const combo = combos[logoChoice] || combos.logo4;
+    const show1 = combo.cover === '1' ? 'block' : 'none';
+    const show2 = combo.cover === '2' ? 'block' : 'none';
+    const hshow1 = combo.header === '1' ? 'block' : 'none';
+    const hshow2 = combo.header === '2' ? 'block' : 'none';
+
+    return {
+      pageFontStyle: `${body};font-size:13.5px;line-height:1.7`,
+      pageBleedStyle: `background:${t.bg};margin:-0.9in;padding:0.9in;display:block`,
+
+      headerStyle: `display:flex;justify-content:space-between;align-items:center;gap:24px;padding-bottom:12px;border-bottom:1px solid ${t.border};margin-bottom:0`,
+      logoChipSmStyle: `flex:none;display:flex;align-items:center;justify-content:center`,
+      headerLogo1Style: `height:19px;width:auto;display:${hshow1}`,
+      headerLogo2Style: `height:19px;width:auto;display:${hshow2}`,
+      pageHeaderTitleStyle: `${body};font-size:10.5px;color:${t.headerText}`,
+      footerStyle: `display:flex;justify-content:space-between;padding-top:12px;border-top:1px solid ${t.border};font-size:9.5px;color:${t.headerText};letter-spacing:0.03em`,
+
+      coverWrapStyle: `display:flex;flex-direction:column;align-items:center;text-align:center;width:100%;min-height:9.6in;justify-content:center;break-after:page;box-sizing:border-box`,
+      logoChipStyle: `display:flex;align-items:center;justify-content:center;margin-bottom:30px`,
+      coverLogo1Style: `height:82px;width:auto;display:${show1};margin:0 auto`,
+      coverLogo2Style: `height:82px;width:auto;display:${show2};margin:0 auto`,
+      coverEyebrowStyle: `${body};font-size:12.5px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:${t.accent};margin-bottom:20px`,
+      h1Style: `${heading};color:${t.heading};font-size:32px;font-weight:700;line-height:1.25;margin:0 auto 22px;letter-spacing:-0.01em;max-width:6.2in`,
+      coverRuleStyle: `width:56px;height:4px;background:${t.accent};margin:0 auto 24px;border-radius:2px`,
+      coverSubtitleStyle: `${body};font-size:14.5px;color:${t.coverMuted};margin:0 0 40px;text-wrap:pretty;line-height:1.65;max-width:5.6in`,
+      coverMetaGridStyle: `display:grid;grid-template-columns:repeat(2,1fr);gap:28px 40px;border-top:1px solid ${t.border};padding-top:22px;width:100%;max-width:6.2in;margin:0 auto`,
+      coverMetaLabelStyle: `${body};font-size:10px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:${t.coverMuted};margin-bottom:6px;text-align:center`,
+      coverMetaValueStyle: `${heading};font-size:13.5px;font-weight:600;color:${t.heading};text-align:center`,
+
+      h2Style: `${heading};font-size:17px;font-weight:700;display:flex;align-items:center;gap:12px;margin:34px 0 14px`,
+      h3Style: `${heading};font-size:13px;font-weight:700;color:${t.accent};margin:22px 0 8px`,
+      numBadgeStyle: `font-family:'Space Grotesk',sans-serif;font-size:10.5px;font-weight:700;color:${t.accentContrast};background:${t.accent};border-radius:3px;padding:3px 8px;letter-spacing:0.02em`,
+
+      pStyle: `${body};font-size:13.5px;color:${t.text};margin:0 0 14px;text-wrap:pretty`,
+      liBoldStyle: `color:${t.heading}`,
+
+      plainUlStyle: `list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:7px`,
+      plainLiStyle: `display:flex;gap:10px;align-items:flex-start`,
+      bulletDotStyle: `flex:none;width:5px;height:5px;border-radius:50%;background:${t.accent};margin-top:7px`,
+      plainLiTextStyle: `${body};font-size:13px;color:${t.text};flex:1;min-width:0`,
+
+      respGridStyle: `display:grid;grid-template-columns:1fr 1fr;gap:32px`,
+
+      olStyle: `list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:8px`,
+      stepRowStyle: `display:flex;gap:12px;align-items:flex-start;padding-bottom:8px;border-bottom:1px solid ${t.border}`,
+      stepRowLastStyle: `display:flex;gap:12px;align-items:flex-start`,
+      stepBadgeStyle: `flex:none;width:20px;height:20px;border-radius:50%;border:1.5px solid ${t.accent};color:${t.accent};font-family:'Space Grotesk',sans-serif;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center`,
+      stepTextStyle: `${body};font-size:13px;color:${t.text};padding-top:1px`,
+
+      highlightBoxStyle: `background:${t.accent};border-radius:6px;padding:18px 22px;margin:6px 0 22px;break-inside:avoid`,
+      highlightLabelStyle: `font-family:'Space Grotesk',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${t.accentContrast};opacity:0.75;margin-bottom:7px`,
+      highlightTextStyle: `${heading};color:${t.accentContrast};font-size:15px;font-weight:600;line-height:1.4;margin:0`,
+
+      calloutStyle: `display:flex;gap:14px;background:${t.surface};border-radius:4px;padding:16px 18px;margin:8px 0 22px;break-inside:avoid`,
+      calloutBarStyle: `width:3px;flex:none;background:${t.accent};border-radius:2px`,
+      calloutLabelStyle: `${heading};font-size:10.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${t.accent};margin-bottom:5px`,
+      calloutTextStyle: `${body};font-size:12.5px;color:${t.text};margin:0`,
+
+      tableStyle: `width:100%;border-collapse:collapse;margin:10px 0 26px;font-size:12.5px`,
+      thStyle: `text-align:left;${body};font-weight:600;color:${t.muted};font-size:10.5px;letter-spacing:0.05em;text-transform:uppercase;padding:0 14px 10px 0;border-bottom:2px solid ${t.border}`,
+      tdStyle: `${body};color:${t.text};padding:11px 14px 11px 0;border-bottom:1px solid ${t.border}`,
+      tdStyleLast: `${body};color:${t.text};padding:11px 14px 0 0`,
+      tdStyleLabel: `${heading};font-weight:600;font-size:12.5px;color:${t.heading};padding:11px 14px 11px 0;border-bottom:1px solid ${t.border}`,
+      tdStyleLabelLast: `${heading};font-weight:600;font-size:12.5px;color:${t.heading};padding:11px 14px 0 0`,
+
+      signGridStyle: `display:grid;grid-template-columns:1fr 1fr;gap:32px;margin:20px 0 8px;break-inside:avoid`,
+      signColStyle: `border-top:1px solid ${t.border};padding-top:16px`,
+      signLabelStyle: `${heading};font-size:12px;font-weight:700;color:${t.heading};margin-bottom:34px`,
+      signDateLineStyle: `${body};font-size:11.5px;color:${t.muted};border-top:1px solid ${t.border};padding-top:6px;margin-top:14px`,
+      signSignatureLineStyle: `${body};font-size:11.5px;color:${t.muted};border-top:1px solid ${t.border};padding-top:6px;margin-top:64px`,
+
+      linkStyle: `color:${t.accent};text-decoration:underline;text-underline-offset:2px;font-weight:500`,
+      closingBoxStyle: `border-top:1px solid ${t.border};padding-top:18px;margin-top:24px`,
+      closingStyle: `${body};font-size:12.5px;color:${t.muted};margin:0 0 6px`,
+    };
+  }
+}
+
+</script>
+</body>
+</html>
