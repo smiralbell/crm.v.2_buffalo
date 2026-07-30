@@ -254,7 +254,7 @@ export function sanitizeAiTurn(
       })
     }
     const gated = gateQuestionAgainstPrematureSolution(audit, {
-      id: next.question.id,
+      id: next.question.id || `tmp_${fk || 'q'}`,
       field_key: fk || '',
       question: next.question.text,
       why: next.question.reason || '',
