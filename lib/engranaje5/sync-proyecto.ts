@@ -170,5 +170,19 @@ export async function syncProyectoFromLead(input: SyncProyectoInput) {
     console.error('[sync-proyecto] pipeline PROPUESTA CREADA', e)
   }
 
+  try {
+    const { logCrmActivity } = await import('@/lib/crm/activities')
+    await logCrmActivity({
+      contactId: lead.contact_id,
+      leadId: lead.id,
+      kind: 'onboarding',
+      title: 'Proyecto de onboarding creado',
+      body: proyecto.name || null,
+      meta: { proyecto_id: proyecto.id, service_type: proyecto.service_type },
+    })
+  } catch (e) {
+    console.error('[sync-proyecto] crm activity', e)
+  }
+
   return { skipped: false as const, proyecto, created: true as const }
 }

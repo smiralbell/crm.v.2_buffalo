@@ -18,6 +18,7 @@ import { isAuditConfiguracion } from '@/lib/onboarding/audit/config-detect'
 import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
 import OnboardingDocumentActions from '@/components/onboarding/OnboardingDocumentActions'
 import OnboardingInvoicesThread from '@/components/onboarding/OnboardingInvoicesThread'
+import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
 
 interface Props {
   lead: {
@@ -645,6 +646,14 @@ export default function ProyectoDetailPage({ lead }: Props) {
               </dl>
             </section>
           </div>
+
+          {/* Historial CRM */}
+          <CrmActivityTimeline
+            contactId={lead.contact?.id ?? null}
+            leadId={lead.id}
+            title="Historial del cliente"
+            subtitle="Llamadas, notas, documentos y onboarding de este proyecto"
+          />
 
           {/* Meetings */}
           <LeadMeetingsPanel leadId={lead.id} />

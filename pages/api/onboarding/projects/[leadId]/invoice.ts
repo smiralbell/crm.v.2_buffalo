@@ -4,6 +4,7 @@ import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import { mergeLeadConfig } from '@/lib/onboarding/project-context-ai'
+import { logCrmActivity } from '@/lib/crm/activities'
 
 type LinkedInvoice = {
   id: number
@@ -44,7 +45,7 @@ async function nextInvoiceNumber(): Promise<string> {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
 
     const leadId = parseInt(String(req.query.leadId), 10)
     if (!Number.isFinite(leadId) || leadId <= 0) {
@@ -56,6 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       include: {
         contact: {
           select: {
+            id: true,
             nombre: true,
             email: true,
             empresa: true,
@@ -198,6 +200,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await prisma.lead.update({
         where: { id: leadId },
         data: { configuracion: encoded },
+      })
+
+      await logCrmActivity({
+        contactId: lead.contact?.id ?? lead.contact_id,
+        leadId,
+        kind: 'document',
+        title: `Factura creada · ${invoice.invoice_number}`,
+        body: `Total ${Number(invoice.total).toLocaleString('es-ES', {
+          style: 'currency',
+          currency: 'EUR',
+        })}`,
+        meta: { invoice_id: invoice.id, invoice_number: invoice.invoice_number },
+        createdBy: user.email,
       })
 
       return res.status(201).json({

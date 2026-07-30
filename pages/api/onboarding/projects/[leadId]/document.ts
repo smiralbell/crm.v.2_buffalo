@@ -9,6 +9,7 @@ import {
   mergeLeadConfig,
 } from '@/lib/onboarding/project-context-ai'
 import { generateContractAnnex } from '@/lib/onboarding/contract-annex-ai'
+import { logCrmActivity } from '@/lib/crm/activities'
 
 const bodySchema = z.object({
   kind: z.enum(['proposal', 'contract', 'pre_kickoff']),
@@ -27,9 +28,15 @@ function draftKey(kind: 'proposal' | 'contract' | 'pre_kickoff') {
   return 'pre_kickoff_draft' as const
 }
 
+function docLabel(kind: 'proposal' | 'contract' | 'pre_kickoff') {
+  if (kind === 'proposal') return 'Propuesta'
+  if (kind === 'contract') return 'Contrato'
+  return 'Pre-kickoff'
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
 
     const leadId = parseInt(String(req.query.leadId), 10)
     if (!Number.isFinite(leadId) || leadId <= 0) {
@@ -46,6 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       include: {
         contact: {
           select: {
+            id: true,
             nombre: true,
             empresa: true,
             cif: true,
@@ -58,9 +66,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const cfg = parseConfiguradorConfig(lead.configuracion)
     const key = draftKey(body.kind)
+    const label = docLabel(body.kind)
 
     if (body.save_only) {
       const draft = (body.draft || '').trim()
+      const prevStatus =
+        body.kind === 'proposal'
+          ? cfg?.proposal_status
+          : body.kind === 'contract'
+            ? cfg?.contract_status
+            : null
+      const nextStatus =
+        body.kind === 'proposal'
+          ? body.proposal_status || 'draft'
+          : body.kind === 'contract'
+            ? body.contract_status || 'draft'
+            : null
       const statusPatch =
         body.kind === 'proposal' && body.proposal_status
           ? {
@@ -89,6 +110,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         where: { id: leadId },
         data: { configuracion: encoded },
       })
+
+      if (nextStatus === 'sent' && prevStatus !== 'sent') {
+        await logCrmActivity({
+          contactId: lead.contact?.id ?? lead.contact_id,
+          leadId,
+          kind: 'document',
+          title: `${label} marcada como enviada`,
+          body: null,
+          meta: { doc_kind: body.kind, status: 'sent' },
+          createdBy: user.email,
+        })
+      }
+
       return res.status(200).json({
         ok: true,
         kind: body.kind,
@@ -128,6 +162,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       extraInstructions: body.instructions || null,
     }
 
+    const hadDraft = Boolean((cfg?.[key] || '').trim())
     const draft =
       body.kind === 'proposal'
         ? await generateProposalFromContext(meta)
@@ -158,6 +193,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await prisma.lead.update({
       where: { id: leadId },
       data: { configuracion: encoded },
+    })
+
+    await logCrmActivity({
+      contactId: lead.contact?.id ?? lead.contact_id,
+      leadId,
+      kind: 'document',
+      title: hadDraft ? `${label} regenerada` : `${label} creada`,
+      body: body.instructions?.trim() || null,
+      meta: { doc_kind: body.kind },
+      createdBy: user.email,
     })
 
     return res.status(200).json({

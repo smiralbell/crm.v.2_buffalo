@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { ArrowLeft, Edit } from 'lucide-react'
+import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
 
 interface ContactDetailProps {
   contact: {
@@ -204,6 +205,12 @@ export default function ContactDetail({ contact, leads }: ContactDetailProps) {
             </CardContent>
           </Card>
         </div>
+
+        <CrmActivityTimeline
+          contactId={contact.id}
+          title="Historial del contacto"
+          subtitle="Llamadas, notas, reuniones, documentos y onboarding"
+        />
 
         {/* Leads Asociados */}
         <Card>

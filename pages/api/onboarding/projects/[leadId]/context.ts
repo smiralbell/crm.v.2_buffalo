@@ -10,6 +10,7 @@ import {
   mergeLeadConfig,
   stripCrmSourcesBlock,
 } from '@/lib/onboarding/project-context-ai'
+import { logCrmActivity } from '@/lib/crm/activities'
 
 const bodySchema = z.object({
   /** Texto manual del comercial (notas, lo hablado antes de la reunión, etc.) */
@@ -25,7 +26,7 @@ const bodySchema = z.object({
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
 
     const leadId = parseInt(String(req.query.leadId), 10)
     if (!Number.isFinite(leadId) || leadId <= 0) {
@@ -40,7 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
       include: {
-        contact: { select: { nombre: true, empresa: true } },
+        contact: { select: { id: true, nombre: true, empresa: true } },
       },
     })
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
@@ -92,6 +93,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // La definición visible del proyecto también vive en notas (compat UI)
         ...(definition ? { notas: definition } : {}),
       },
+    })
+
+    await logCrmActivity({
+      contactId: lead.contact?.id ?? lead.contact_id,
+      leadId,
+      kind: 'onboarding',
+      title: body.skip_ai
+        ? 'Contexto del proyecto actualizado'
+        : 'Contexto y definición del proyecto actualizados',
+      body: manual ? (manual.length > 280 ? `${manual.slice(0, 277)}…` : manual) : null,
+      meta: { definition_updated: !body.skip_ai },
+      createdBy: user.email,
     })
 
     return res.status(200).json({

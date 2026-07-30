@@ -34,6 +34,7 @@ model Contact {
   messages           Message[]
   tasks              Task[]
   meetingRecordings  MeetingRecording[]
+  activities         CrmActivity[]
 
   @@map("contacts")
 }
@@ -62,10 +63,32 @@ model Lead {
   tasks              Task[]
   meetingRecordings  MeetingRecording[]
   invoices           Invoice[]
+  activities         CrmActivity[]
 
   @@index([contact_id])
   @@index([estado])
   @@map("leads")
+}
+
+// Historial unificado del CRM (notas manuales + eventos de sistema).
+model CrmActivity {
+  id         BigInt   @id @default(autoincrement())
+  contact_id Int
+  lead_id    Int?
+  kind       String
+  title      String
+  body       String?  @db.Text
+  meta       Json?
+  created_by String?
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+  contact    Contact  @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+  lead       Lead?    @relation(fields: [lead_id], references: [id], onDelete: SetNull)
+
+  @@index([contact_id, created_at])
+  @@index([lead_id, created_at])
+  @@index([kind])
+  @@map("crm_activities")
 }
 
 // Modelo Message - estructura existente

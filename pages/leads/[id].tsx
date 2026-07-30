@@ -1,6 +1,6 @@
 import { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
@@ -18,9 +18,6 @@ import {
   Edit,
   Euro,
   FileText,
-  History,
-  MessageSquare,
-  Rocket,
   Save,
   StickyNote,
   User,
@@ -28,12 +25,12 @@ import {
 } from 'lucide-react'
 import EditLeadDialog from '@/components/EditLeadDialog'
 import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
+import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
 import {
   getLeadDetailBundle,
   type LeadAlert,
   type LeadDetailBundle,
 } from '@/lib/leads/lead-detail-bundle'
-import type { PipelineTimelineItem } from '@/lib/pipelines/card-context.types'
 import { cn } from '@/lib/utils'
 
 interface LeadDetailProps {
@@ -146,36 +143,6 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-sm text-gray-900 text-right">{value}</span>
     </div>
   )
-}
-
-function formatDateShort(iso: string) {
-  try {
-    return new Date(iso).toLocaleString('es-ES', {
-      day: '2-digit',
-      month: 'short',
-      year: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  } catch {
-    return iso
-  }
-}
-
-function timelineIcon(kind: PipelineTimelineItem['kind']) {
-  switch (kind) {
-    case 'meeting_booked':
-    case 'meeting_done':
-      return Calendar
-    case 'project':
-      return Rocket
-    case 'channel':
-      return MessageSquare
-    case 'capture':
-      return ClipboardList
-    default:
-      return History
-  }
 }
 
 function alertIcon(kind: LeadAlert['kind']) {
@@ -321,55 +288,6 @@ function LeadContextEditor({
           className="rounded-xl text-sm leading-relaxed resize-y min-h-[140px]"
         />
         {error && <p className="text-xs text-red-600">{error}</p>}
-      </CardContent>
-    </Card>
-  )
-}
-
-function LeadHistory({ timeline }: { timeline: PipelineTimelineItem[] }) {
-  const sorted = useMemo(
-    () =>
-      [...timeline].sort(
-        (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
-      ),
-    [timeline]
-  )
-
-  return (
-    <Card className="shadow-sm border-gray-200">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-          <History className="h-4 w-4" />
-          Historial del lead
-        </CardTitle>
-        <p className="text-xs text-gray-500 mt-1">
-          Entrada, canales, reuniones y proyecto
-        </p>
-      </CardHeader>
-      <CardContent>
-        {sorted.length === 0 ? (
-          <p className="text-sm text-gray-400 py-4 text-center">
-            Aún no hay eventos en el historial
-          </p>
-        ) : (
-          <ol className="relative space-y-0 border-l border-gray-200 ml-2">
-            {sorted.map((item) => {
-              const Icon = timelineIcon(item.kind)
-              return (
-                <li key={item.id} className="relative pl-5 pb-4 last:pb-0">
-                  <span className="absolute -left-1.5 top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white ring-2 ring-gray-200">
-                    <Icon className="h-2.5 w-2.5 text-gray-500" />
-                  </span>
-                  <p className="text-sm font-medium text-gray-900 leading-snug">{item.title}</p>
-                  {item.detail && (
-                    <p className="text-xs text-gray-600 mt-0.5 leading-snug">{item.detail}</p>
-                  )}
-                  <p className="text-[11px] text-gray-400 mt-1">{formatDateShort(item.at)}</p>
-                </li>
-              )
-            })}
-          </ol>
-        )}
       </CardContent>
     </Card>
   )
@@ -653,7 +571,13 @@ export default function LeadDetail({ lead, bundle }: LeadDetailProps) {
           </Card>
         )}
 
-        <LeadHistory timeline={bundle.timeline} />
+        <CrmActivityTimeline
+          contactId={lead.contact?.id ?? null}
+          leadId={lead.id}
+          derived={bundle.timeline}
+          title="Historial del lead"
+          subtitle="Entrada, reuniones, documentos, onboarding y notas manuales"
+        />
 
         <LeadMeetingsPanel leadId={lead.id} />
 

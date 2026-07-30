@@ -13,10 +13,7 @@ import {
   Calendar,
   User,
   ExternalLink,
-  History,
   FolderKanban,
-  Radio,
-  Video,
   BookOpen,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -27,8 +24,8 @@ import type { PipelineStageRow } from '@/lib/pipelines/stages'
 import type {
   PipelineCardContext,
   PipelineProjectContext,
-  PipelineTimelineItem,
 } from '@/lib/pipelines/card-context.types'
+import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
 
 export { BUFFALO_STAGE_COLORS }
 
@@ -70,28 +67,6 @@ function formatDateTime(dateStr: string) {
     hour: '2-digit',
     minute: '2-digit',
   })
-}
-
-function formatDateShort(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('es-ES', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
-}
-
-function timelineIcon(kind: PipelineTimelineItem['kind']) {
-  switch (kind) {
-    case 'meeting_booked':
-    case 'meeting_done':
-      return Video
-    case 'project':
-      return FolderKanban
-    case 'channel':
-      return Radio
-    default:
-      return History
-  }
 }
 
 function formatMoney(val: number) {
@@ -651,37 +626,20 @@ export default function PipelineCardDrawer({
           {/* Lead history */}
           {!isColdCallPipeline && (
             <div className="px-6 pb-5">
-              <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
-                <History className="h-3.5 w-3.5" />
-                <span className="font-semibold uppercase tracking-wider">Historial del lead</span>
-              </div>
               {contextLoading && !context ? (
                 <div className="space-y-2">
                   <div className="h-10 rounded-lg bg-gray-50 animate-pulse" />
                   <div className="h-10 rounded-lg bg-gray-50 animate-pulse" />
                 </div>
-              ) : context?.timeline?.length ? (
-                <ol className="relative space-y-0 border-l border-gray-200 ml-2">
-                  {context.timeline.map((item) => {
-                    const Icon = timelineIcon(item.kind)
-                    return (
-                      <li key={item.id} className="relative pl-5 pb-4 last:pb-0">
-                        <span className="absolute -left-1.5 top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white ring-2 ring-gray-200">
-                          <Icon className="h-2.5 w-2.5 text-gray-500" />
-                        </span>
-                        <p className="text-sm font-medium text-gray-900 leading-snug">
-                          {item.title}
-                        </p>
-                        {item.detail && (
-                          <p className="text-xs text-gray-600 mt-0.5 leading-snug">{item.detail}</p>
-                        )}
-                        <p className="text-[11px] text-gray-400 mt-1">{formatDateShort(item.at)}</p>
-                      </li>
-                    )
-                  })}
-                </ol>
               ) : (
-                <p className="text-sm text-gray-500">Aún no hay eventos en el historial.</p>
+                <CrmActivityTimeline
+                  contactId={context?.contact_id ?? parseInt(card.entity_id, 10)}
+                  leadId={context?.lead_id ?? null}
+                  derived={context?.timeline ?? []}
+                  title="Historial del lead"
+                  subtitle="Entrada, reuniones, documentos y notas"
+                  compact
+                />
               )}
             </div>
           )}
