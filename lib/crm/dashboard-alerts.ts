@@ -34,7 +34,7 @@ async function loadManualAlerts(): Promise<DashboardAlertItem[]> {
   const alerts = await listOpenAlerts({ limit: 80 })
   if (alerts.length === 0) return []
 
-  const contactIds = [...new Set(alerts.map((a) => a.contact_id))]
+  const contactIds = Array.from(new Set(alerts.map((a) => a.contact_id)))
   const contacts = await prisma.contact.findMany({
     where: { id: { in: contactIds } },
     select: {
