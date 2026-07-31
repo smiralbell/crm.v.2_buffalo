@@ -313,8 +313,6 @@ async function downloadPdfFromSheets(
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        letterRendering: true,
-        foreignObjectRendering: false,
         onclone: (_doc, cloned) => {
           const node = cloned as HTMLElement
           node.style.boxShadow = 'none'
