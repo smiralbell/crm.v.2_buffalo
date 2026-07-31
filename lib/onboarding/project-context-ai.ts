@@ -204,10 +204,15 @@ export async function generateProposalFromContext(input: {
 
   const text = String(raw || '').trim()
   if (!text) throw new Error('La IA no devolvió una propuesta')
-  return text.replace(/^```(?:markdown|md)?\s*/i, '').replace(/\s*```$/i, '').trim()
+  const cleaned = text.replace(/^```(?:markdown|md)?\s*/i, '').replace(/\s*```$/i, '').trim()
+  const { polishProposalDraft } = await import('@/lib/onboarding/proposal-brm')
+  return polishProposalDraft(cleaned, {
+    clientName: input.clientName,
+    clientCompany: input.clientCompany,
+  })
 }
 
-/** Itera la propuesta con una instrucción de chat (editor quirúrgico de documento). */
+/** Itera la propuesta con una instrucción de chat (editor por parches). */
 export async function reviseProposalWithChat(input: {
   draft: string
   instruction: string
@@ -219,17 +224,120 @@ export async function reviseProposalWithChat(input: {
   setupFee?: number | null
   monthlyFee?: number | null
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
-}): Promise<{ content: string; note: string; theme?: 'green' | 'light' | 'dark' }> {
+}): Promise<{
+  content: string
+  note: string
+  theme?: 'green' | 'light' | 'dark'
+  stats?: import('@/lib/onboarding/proposal-verify').ProposalDiffStats
+  intentSatisfied?: boolean
+}> {
   const instruction = input.instruction.trim()
   if (!instruction) throw new Error('Instrucción vacía')
 
+  const before = (input.draft || '').replace(/\r\n/g, '\n').trim()
+  const polishOpts = {
+    clientName: input.clientName,
+    clientCompany: input.clientCompany,
+  }
+
   const { formatSectionMapForEditor } = await import('@/lib/onboarding/proposal-brm')
-  const { PROPOSAL_EDIT_SYSTEM } = await import('@/lib/onboarding/proposal-prompt')
+  const { applyProposalPatches, tryLocalPatches } = await import(
+    '@/lib/onboarding/proposal-patches'
+  )
+  type ProposalPatch = import('@/lib/onboarding/proposal-patches').ProposalPatch
+  type ProposalTheme = import('@/lib/onboarding/proposal-patches').ProposalTheme
+  const { classifyProposalSkill, formatSkillForPrompt } = await import(
+    '@/lib/onboarding/proposal-skills'
+  )
+  const { buildProposalEditSystem } = await import('@/lib/onboarding/proposal-prompt')
   const { parseJsonFromModelOutput } = await import('@/lib/openrouter')
+  const { diffProposalStats, resolveEditorNote } = await import(
+    '@/lib/onboarding/proposal-verify'
+  )
+  type ProposalDiffStats = import('@/lib/onboarding/proposal-verify').ProposalDiffStats
 
-  const sectionMap = formatSectionMapForEditor(input.draft || '')
+  const finish = (
+    after: string,
+    note: string,
+    theme?: ProposalTheme
+  ): {
+    content: string
+    note: string
+    theme?: ProposalTheme
+    stats?: ProposalDiffStats
+    intentSatisfied?: boolean
+  } => {
+    const next = after.trim()
+    if (!next || next === before) {
+      return {
+        content: before,
+        note:
+          note && /no pude|sin cambio|no encontr/i.test(note)
+            ? note
+            : 'No pude aplicar el cambio. Sé más concreto o pega el fragmento exacto a editar.',
+        stats: diffProposalStats(before, before),
+        intentSatisfied: false,
+      }
+    }
+    const stats = diffProposalStats(before, next)
+    const resolved = resolveEditorNote({
+      instruction,
+      modelNote: note,
+      stats,
+    })
+    return {
+      content: next,
+      note: resolved.note.trim() || 'Cambio aplicado',
+      theme,
+      stats: resolved.stats,
+      intentSatisfied: resolved.satisfied,
+    }
+  }
 
-  const system = PROPOSAL_EDIT_SYSTEM
+  // 1) Atajos locales
+  const local = tryLocalPatches(instruction, polishOpts)
+  if (local) {
+    const { draft, applied, errors, theme } = applyProposalPatches(before, local, polishOpts)
+    if (theme && applied > 0 && draft.trim() === before) {
+      return {
+        content: before,
+        note: `Tema cambiado a ${theme}.`,
+        theme,
+      }
+    }
+    if (applied > 0 && draft.trim() !== before) {
+      const ops = new Set(local.map((p) => p.op))
+      const pageModePatch = local.find((p) => p.op === 'set_page_mode') as
+        | { op: 'set_page_mode'; mode: 'flow' | 'sections' }
+        | undefined
+      const note = ops.has('ensure_section_pagebreaks')
+        ? 'He puesto un salto de página entre cada punto (cada uno en su hoja).'
+        : pageModePatch?.mode === 'flow' || ops.has('remove_pagebreaks')
+          ? 'He quitado los saltos entre puntos: van seguidos en la misma hoja.'
+          : pageModePatch?.mode === 'sections'
+            ? 'Cada punto vuelve a ir en su propia hoja.'
+            : ops.has('compact_blank_lines')
+              ? 'He compactado las líneas en blanco.'
+              : local[0]?.op === 'shorten_cover'
+                ? 'He acortado la descripción de la portada.'
+                : local[0]?.op === 'ensure_signatures'
+                  ? 'He reestructurado la sección de aceptación y firmas.'
+                  : local[0]?.op === 'set_theme'
+                    ? `Tema cambiado a ${local[0].theme}.`
+                    : local[0]?.op === 'replace_text'
+                      ? 'He sustituido el texto indicado.'
+                      : 'Cambio aplicado.'
+      return finish(draft, note, theme)
+    }
+    void errors
+  }
+
+  // 2) IA → patches
+  const skillId = classifyProposalSkill(instruction)
+  const skillBlock = formatSkillForPrompt(skillId)
+  const system = buildProposalEditSystem(skillBlock)
+  const sectionMap = formatSectionMapForEditor(before)
+  const wantsFullDoc = skillId === 'language' || skillId === 'regenerate'
 
   const meta = [
     input.projectName ? `Proyecto: ${input.projectName}` : null,
@@ -253,39 +361,91 @@ export async function reviseProposalWithChat(input: {
     content: [
       meta ? `METADATOS:\n${meta}` : null,
       `MAPA DE SECCIONES (usa estos índices para "punto N"):\n${sectionMap}`,
-      `DOCUMENTO ACTUAL (BRM) — cópialo y aplica SOLO el cambio pedido:\n${input.draft || '(vacío — genera una propuesta completa en BRM)'}`,
-      `─────\nINSTRUCCIÓN DE EDICIÓN:\n${instruction}`,
+      wantsFullDoc
+        ? `DOCUMENTO ACTUAL (BRM) — para replace_doc conserva estructura y traduce/regenera:\n${before || '(vacío)'}`
+        : `DOCUMENTO ACTUAL (BRM) — NO lo devuelvas entero; usa patches:\n${before || '(vacío — usa replace_doc para generar)'}`,
+      `─────\nINSTRUCCIÓN:\n${instruction}`,
+      'Responde con { "note", "patches": [...] }. Preferible patches cortos.',
     ]
       .filter(Boolean)
       .join('\n\n'),
   })
 
-  const raw = await openRouterChatCompletion(messages, { temperature: 0.12, maxTokens: 8000 })
-  let parsed: { content?: string; note?: string; theme?: string }
+  const raw = await openRouterChatCompletion(messages, {
+    temperature: 0.12,
+    maxTokens: wantsFullDoc ? 16000 : 6000,
+  })
+
+  let parsed: {
+    note?: string
+    patches?: ProposalPatch[]
+    content?: string
+    theme?: string
+  }
   try {
-    parsed = parseJsonFromModelOutput(raw) as { content?: string; note?: string; theme?: string }
+    parsed = parseJsonFromModelOutput(raw) as typeof parsed
   } catch {
+    // Si la IA devolvió BRM crudo (fallback legacy)
     const cleaned = String(raw || '')
       .replace(/^```(?:markdown|md|json)?\s*/i, '')
       .replace(/\s*```$/i, '')
       .trim()
-    if (!cleaned) throw new Error('La IA no devolvió una propuesta')
-    return { content: cleaned, note: 'Documento actualizado' }
+    if (cleaned.startsWith('#') && cleaned !== before) {
+      return finish(cleaned, 'Documento actualizado')
+    }
+    return finish(
+      before,
+      'No pude leer la respuesta. Prueba pegando el texto exacto y la orden (ej. «cámbialo por …»).'
+    )
   }
 
-  const content = String(parsed.content || '').trim()
-  if (!content) throw new Error('La IA no devolvió contenido')
   const themeRaw = String(parsed.theme || '').toLowerCase()
-  const theme =
+  let theme: ProposalTheme | undefined =
     themeRaw === 'green' || themeRaw === 'light' || themeRaw === 'dark'
-      ? (themeRaw as 'green' | 'light' | 'dark')
+      ? (themeRaw as ProposalTheme)
       : undefined
 
-  return {
-    content: content.replace(/^```(?:markdown|md)?\s*/i, '').replace(/\s*```$/i, '').trim(),
-    note: String(parsed.note || 'Documento actualizado').trim(),
-    theme,
+  if (Array.isArray(parsed.patches) && parsed.patches.length > 0) {
+    const { draft, applied, errors, theme: patchTheme } = applyProposalPatches(
+      before,
+      parsed.patches,
+      polishOpts
+    )
+    if (patchTheme) theme = patchTheme
+    if (applied > 0 && draft.trim() !== before) {
+      return finish(
+        draft,
+        String(parsed.note || `Aplicados ${applied} cambio(s)`).trim(),
+        theme
+      )
+    }
+    // Si patches fallaron pero hay content completo
+    const full = String(parsed.content || '').trim()
+    if (full && full !== before) {
+      return finish(full, String(parsed.note || 'Documento actualizado').trim(), theme)
+    }
+    return finish(
+      before,
+      errors[0] ||
+        'No pude aplicar el cambio. Pega el fragmento exacto y di qué hacer (cambiar / ampliar / acortar).'
+    )
   }
+
+  // Fallback: content completo (regen/traducción o modelos viejos)
+  const full = String(parsed.content || '').trim()
+  if (full && full !== before) {
+    return finish(full, String(parsed.note || 'Documento actualizado').trim(), theme)
+  }
+
+  // Solo tema
+  if (theme && (!full || full === before)) {
+    return { content: before, note: String(parsed.note || `Tema ${theme}`).trim(), theme }
+  }
+
+  return finish(
+    before,
+    'Sin cambios detectados. Sé más concreto o pega el texto a editar.'
+  )
 }
 
 export type OnboardingDocKind = 'proposal' | 'contract' | 'pre_kickoff'

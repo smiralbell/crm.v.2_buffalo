@@ -91,6 +91,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       note: result.note,
       theme: result.theme || null,
       proposal_status: 'draft',
+      stats: result.stats ?? null,
+      intentSatisfied: result.intentSatisfied ?? null,
     })
   } catch (error) {
     if (error instanceof z.ZodError) {
