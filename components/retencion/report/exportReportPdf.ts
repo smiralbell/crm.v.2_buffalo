@@ -5,6 +5,7 @@
  * preservando portada + cada .bf-page con header/footer.
  * Fallback: ventana de impresión del navegador.
  */
+import type { jsPDF } from 'jspdf'
 import { BUFFALO_REPORT_CSS } from './buffaloReportCss'
 import {
   downloadTextFile,
@@ -220,8 +221,7 @@ ${bodyHtml}
 
 /** Añade un canvas al PDF; si es más alto que la página, lo parte en trozos. */
 function addCanvasToPdf(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  pdf: any,
+  pdf: jsPDF,
   canvas: HTMLCanvasElement,
   pageW: number,
   pageH: number,
