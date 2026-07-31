@@ -133,7 +133,7 @@ export function diffProposalStats(before: string, after: string): ProposalDiffSt
     chartsAfter: countMatches(b, CHART_OPEN_RE),
     tablesBefore: countTables(a),
     tablesAfter: countTables(b),
-    sectionsTouched: [...new Set(sectionsTouched)],
+    sectionsTouched: Array.from(new Set(sectionsTouched)),
     pagebreaksDelta: countMatches(b, PAGEBREAK_RE) - countMatches(a, PAGEBREAK_RE),
     chartTypesBefore,
     chartTypesAfter,

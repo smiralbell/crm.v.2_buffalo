@@ -318,8 +318,8 @@ async function downloadPdfFromSheets(
           node.style.boxShadow = 'none'
           node.style.borderRadius = '0'
           node.style.transform = 'none'
-          node.style.webkitFontSmoothing = 'antialiased'
-          node.style.textRendering = 'geometricPrecision'
+          node.style.setProperty('-webkit-font-smoothing', 'antialiased')
+          node.style.setProperty('text-rendering', 'geometricPrecision')
           // Badges / números: evitar recortes por letter-spacing o overflow
           node.querySelectorAll<HTMLElement>('.bf-numbadge, .bf-kpi-value, .bf-meta-value').forEach((n) => {
             n.style.letterSpacing = '0.02em'
