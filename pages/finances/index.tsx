@@ -1,6 +1,6 @@
 import { GetServerSideProps } from 'next'
 import dynamic from 'next/dynamic'
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
 import { query } from '@/lib/db'
@@ -14,8 +14,6 @@ import AnnualGoalCard from '@/components/finances/AnnualGoalCard'
 import RecurringExpensesPanel from '@/components/finances/RecurringExpensesPanel'
 import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
 import ChannelCostsEditor from '@/components/leads/ChannelCostsEditor'
-import PeriodInsightCard from '@/components/finances/PeriodInsightCard'
-import { buildPeriodInsights } from '@/lib/finance/kpi-details'
 import { computeOpsRecurringMonthlyAvg } from '@/lib/finance/ops-recurring-burn'
 
 const CashFlowChart = dynamic(() => import('@/components/finances/CashFlowChart'), { ssr: false })
@@ -26,8 +24,6 @@ import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
-  ArrowUp,
-  ArrowDown,
   Loader2,
   Landmark,
   FileText,
@@ -314,7 +310,6 @@ export default function FinancesDashboard({
   dateRange: initialDateRange,
   stats,
   overviewKpis,
-  fiscalMeta,
   runway,
   bankConnection: initialBankConnection,
   initialAiAnalysis,
@@ -332,20 +327,6 @@ export default function FinancesDashboard({
   const [syncDebug, setSyncDebug] = useState<Record<string, unknown> | null>(null)
   const [executive, setExecutive] = useState<ExecutiveSummary | null>(null)
   const [loadingExecutive, setLoadingExecutive] = useState(true)
-  const [transactions, setTransactions] = useState<Array<{
-    id: string
-    date: string
-    amount: number
-    description: string
-    balance: number | null
-    account_name: string
-    iban: string
-  }>>([])
-  const [loadingTransactions, setLoadingTransactions] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
-  const [transactionTotal, setTransactionTotal] = useState(0)
-  const observerTarget = useRef<HTMLDivElement>(null)
 
   const runSync = useCallback(async (reloadAfter = false) => {
     setSyncing(true)
@@ -562,65 +543,6 @@ export default function FinancesDashboard({
     }
   }
 
-  // Cargar movimientos iniciales y cuando cambie el rango de fechas
-  useEffect(() => {
-    setOffset(0)
-    setHasMore(true)
-    loadTransactions(0)
-  }, [dateRange])
-
-  const loadTransactions = useCallback(async (currentOffset: number) => {
-    if (loadingTransactions) return
-    if (currentOffset > 0 && !hasMore) return
-
-    setLoadingTransactions(true)
-    try {
-      let url = `/api/finance/recent-transactions?limit=25&offset=${currentOffset}`
-      url += `&start_date=${format(dateRange.start, 'yyyy-MM-dd')}&end_date=${format(dateRange.end, 'yyyy-MM-dd')}`
-      
-      const response = await fetch(url)
-      const data = await response.json()
-      
-      if (response.ok) {
-        if (currentOffset === 0) {
-          setTransactions(data.transactions)
-        } else {
-          setTransactions(prev => [...prev, ...data.transactions])
-        }
-        setHasMore(data.hasMore)
-        setTransactionTotal(data.total ?? 0)
-        setOffset(currentOffset + data.transactions.length)
-      }
-    } catch (error) {
-      console.error('Error loading transactions:', error)
-    } finally {
-      setLoadingTransactions(false)
-    }
-  }, [loadingTransactions, hasMore, dateRange])
-
-  // Infinite scroll con Intersection Observer
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingTransactions) {
-          loadTransactions(offset)
-        }
-      },
-      { threshold: 0.1 }
-    )
-
-    const currentTarget = observerTarget.current
-    if (currentTarget) {
-      observer.observe(currentTarget)
-    }
-
-    return () => {
-      if (currentTarget) {
-        observer.unobserve(currentTarget)
-      }
-    }
-  }, [hasMore, loadingTransactions, offset, loadTransactions])
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-ES', {
       style: 'currency',
@@ -631,25 +553,9 @@ export default function FinancesDashboard({
 
   const handlePeriodChange = (range: PeriodRange, _preset: PeriodPresetId) => {
     setDateRange(range)
-    setOffset(0)
-    setHasMore(true)
     const params = periodToQuery(range)
     router.push(`/finances?start=${params.start}&end=${params.end}`)
   }
-
-  const periodInsights = useMemo(() => {
-    const periodDaysCount = Math.max(
-      1,
-      Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24)) + 1
-    )
-    return buildPeriodInsights({
-      ...stats,
-      periodDays: periodDaysCount,
-      corporateTaxPercent: fiscalMeta.corporate_tax_percent,
-      hasIvaData: overviewKpis.has_iva_data,
-      fiscalGross: fiscalMeta.fiscal_gross,
-    })
-  }, [stats, dateRange, fiscalMeta, overviewKpis.has_iva_data])
 
   const periodQuery = periodToQuery(dateRange)
   const periodQs = `start=${periodQuery.start}&end=${periodQuery.end}`
@@ -924,98 +830,9 @@ export default function FinancesDashboard({
           </>
         ) : null}
 
-        {/* 4. Historial de movimientos */}
-        <Card className="border border-gray-200 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">
-              Historial de movimientos
-              {transactionTotal > 0 && (
-                <span className="text-sm font-normal text-gray-500 ml-2">
-                  ({transactionTotal} en el período · scroll para ver más)
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {transactions.length === 0 && !loadingTransactions ? (
-              <div className="text-center py-12 text-gray-500">
-                No hay movimientos disponibles
-              </div>
-            ) : (
-              <div className="overflow-x-auto -mx-2 sm:mx-0">
-              <div className="space-y-2 min-w-[520px] px-2 sm:px-0">
-                <div className="flex items-center justify-between pb-2 border-b border-gray-200 font-semibold text-sm text-gray-600">
-                  <div className="flex-1">Movimiento</div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right min-w-[100px]">Importe</div>
-                    <div className="text-right min-w-[100px]">Saldo</div>
-                  </div>
-                </div>
-                {transactions.map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="flex items-center justify-between py-3 px-4 border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-shrink-0">
-                          {transaction.amount >= 0 ? (
-                            <ArrowUp className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <ArrowDown className="h-4 w-4 text-red-600" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">
-                            {transaction.description || '-'}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <p className="text-xs text-gray-500">
-                              {format(new Date(transaction.date), 'dd/MM/yyyy')}
-                            </p>
-                            {transaction.account_name && (
-                              <>
-                                <span className="text-gray-300">•</span>
-                                <p className="text-xs text-gray-500 truncate">
-                                  {transaction.account_name}
-                                </p>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 shrink-0">
-                      <div
-                        className={`text-right font-semibold tabular-nums min-w-[100px] ${
-                          transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'
-                        }`}
-                      >
-                        {transaction.amount >= 0 ? '+' : ''}
-                        {formatCurrency(transaction.amount)}
-                      </div>
-                      <div className="text-right font-medium text-gray-700 min-w-[100px]">
-                        {transaction.balance !== null && transaction.balance !== undefined
-                          ? formatCurrency(transaction.balance)
-                          : '-'}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <div ref={observerTarget} className="h-10 flex items-center justify-center py-4">
-                  {loadingTransactions && (
-                    <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-                  )}
-                </div>
-              </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         {executive ? (
           <>
-            {/* 5. Conciliación facturado vs cobrado */}
+            {/* Conciliación facturado vs cobrado */}
             <Card className="border border-gray-200 shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-semibold text-gray-900">
@@ -1030,7 +847,7 @@ export default function FinancesDashboard({
               </CardContent>
             </Card>
 
-            {/* 6. MRR (una sola vez) + KPIs no duplicados */}
+            {/* MRR + KPIs */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               {executive.kpi_cards.map((card) => (
                 <FinanceKpiCard key={card.id} card={card} />
@@ -1049,19 +866,7 @@ export default function FinancesDashboard({
               </CardContent>
             </Card>
 
-            {/* 7. Estimaciones fiscales (no caja) */}
-            <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-3">
-                Estimaciones fiscales · período
-              </p>
-              <div className="grid gap-4 md:grid-cols-3">
-                {periodInsights.map((insight) => (
-                  <PeriodInsightCard key={insight.label} insight={insight} />
-                ))}
-              </div>
-            </div>
-
-            {/* 8. Objetivo / alertas / IA */}
+            {/* Objetivo / alertas / IA */}
             <AnnualGoalCard goal={executive.annual_goal} />
 
             <div className="grid gap-4 lg:grid-cols-2">

@@ -127,3 +127,125 @@ export function ChecklistItem(props: AnyProps) {
     </div>
   )
 }
+
+/* Bubble ----------------------------------------------------------------- */
+
+export function Bubble(props: AnyProps) {
+  const tone = (str(props.tone) || str(props.type) || 'accent').toLowerCase()
+  const variant =
+    tone === 'warn' || tone === 'soft' || tone === 'muted' || tone === 'accent' ? tone : 'accent'
+  const title = str(props.title)
+  return (
+    <div className={`bf-bubble ${variant}`} data-brm="bubble">
+      {title ? <p className="bf-bubble-title">{title}</p> : null}
+      <div className="bf-bubble-body">{props.children}</div>
+    </div>
+  )
+}
+
+/* Cards ------------------------------------------------------------------ */
+
+export function Cards(props: AnyProps) {
+  const cols = str(props.columns) || str(props.cols) || '2'
+  const n = Math.min(4, Math.max(1, parseInt(cols, 10) || 2))
+  return (
+    <div className={`bf-cards cols-${n}`} data-brm="cards">
+      {props.children}
+    </div>
+  )
+}
+
+export function Card(props: AnyProps) {
+  const title = str(props.title)
+  const badge = str(props.badge)
+  const tone = (str(props.tone) || 'default').toLowerCase()
+  const cls = tone === 'accent' || tone === 'warn' ? tone : 'default'
+  return (
+    <div className={`bf-card ${cls}`} data-brm="card">
+      {(title || badge) && (
+        <div className="bf-card-head">
+          {title ? <p className="bf-card-title">{title}</p> : <span />}
+          {badge ? <span className="bf-card-badge">{badge}</span> : null}
+        </div>
+      )}
+      <div className="bf-card-body">{props.children}</div>
+    </div>
+  )
+}
+
+/* Table wrap (GFM + :::table) ------------------------------------------- */
+
+export function StyledTable(props: AnyProps) {
+  const variant = (str(props.variant) || str(props.type) || 'default').toLowerCase()
+  const v =
+    variant === 'compare' ||
+    variant === 'pricing' ||
+    variant === 'striped' ||
+    variant === 'cards'
+      ? variant
+      : 'default'
+  return (
+    <div className={`bf-table-wrap ${v}`} data-brm="table">
+      {props.children}
+    </div>
+  )
+}
+
+/* Signatures (aceptación) ----------------------------------------------- */
+
+export function Signatures(props: AnyProps) {
+  const client = str(props.client) || 'Cliente'
+  const clientCif = str(props.client_cif) || str(props.client_nif)
+  const clientAddress = str(props.client_address)
+  const clientPhone = str(props.client_phone)
+  const provider = str(props.provider) || 'Buffalo IA Global Digital Solutions, S.L.'
+  const providerCif = str(props.provider_cif) || 'B22944599'
+  const providerAddress =
+    str(props.provider_address) || 'C/ Provença 474, esc B, entr. 2ª, 08025 Barcelona'
+  const providerPhone = str(props.provider_phone) || '658 571 087'
+
+  return (
+    <div className="bf-signatures">
+      <div className="bf-sig-parties">
+        <div className="bf-sig-card">
+          <p className="bf-sig-label">Cliente</p>
+          <p className="bf-sig-name">{client}</p>
+          {clientCif ? <p className="bf-sig-meta">NIF / CIF · {clientCif}</p> : null}
+          {clientAddress ? <p className="bf-sig-meta">{clientAddress}</p> : null}
+          {clientPhone ? <p className="bf-sig-meta">{clientPhone}</p> : null}
+        </div>
+        <div className="bf-sig-card">
+          <p className="bf-sig-label">Proveedor</p>
+          <p className="bf-sig-name">{provider}</p>
+          <p className="bf-sig-meta">CIF · {providerCif}</p>
+          <p className="bf-sig-meta">{providerAddress}</p>
+          <p className="bf-sig-meta">{providerPhone}</p>
+        </div>
+      </div>
+      <div className="bf-sig-lines">
+        <div className="bf-sig-block">
+          <p className="bf-sig-label">Por el cliente</p>
+          <div className="bf-sig-row">
+            <span>Fecha</span>
+            <span className="bf-sig-line" />
+          </div>
+          <div className="bf-sig-row tall">
+            <span>Firma</span>
+            <span className="bf-sig-line" />
+          </div>
+        </div>
+        <div className="bf-sig-block">
+          <p className="bf-sig-label">Por Buffalo AI</p>
+          <div className="bf-sig-row">
+            <span>Fecha</span>
+            <span className="bf-sig-line" />
+          </div>
+          <div className="bf-sig-row tall">
+            <span>Firma</span>
+            <span className="bf-sig-line" />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

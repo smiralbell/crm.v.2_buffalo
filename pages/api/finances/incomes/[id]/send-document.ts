@@ -1,18 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import formidable from 'formidable'
 import fs from 'fs'
-import FormData from 'form-data'
-import fetch from 'node-fetch'
 import { requireAuthAPI } from '@/lib/auth'
 import { query } from '@/lib/db'
 import { createPlaceholderNotePdfBuffer } from '@/lib/pdf/placeholder-note-pdf'
+import { uploadInvoiceToDrive } from '@/lib/integrations/google/drive-invoices'
 
 export const config = {
   api: { bodyParser: false },
 }
-
-const EMITIDAS_WEBHOOK_URL =
-  'https://n8n.agenciabuffalo.es/webhook/0a19bd04-25b5-4f9a-b4f9-9037a7e02996'
 
 function parseForm(req: NextApiRequest) {
   return new Promise<{ fields: formidable.Fields; files: formidable.Files }>((resolve, reject) => {
@@ -74,7 +70,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date).slice(0, 10)
     const yearMonth = dateStr.slice(0, 7)
     const concept = row.description || `COBRO-${bankTransactionId.slice(0, 8)}`
-    const total = Number(row.amount)
 
     let fileBuffer: Buffer
     let fileName: string
@@ -90,40 +85,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       contentType = 'application/pdf'
     }
 
-    const formData = new FormData()
-    formData.append('pdf', fileBuffer, {
-      filename: fileName,
-      contentType,
+    const driveResult = await uploadInvoiceToDrive({
+      tipo: 'emitidas',
+      yearMonth,
+      fileName,
+      buffer: fileBuffer,
+      mimeType: contentType,
     })
-    formData.append('bank_transaction_id', bankTransactionId)
-    formData.append('concept', concept)
-    formData.append('date', dateStr)
-    formData.append('total_amount', total.toFixed(2))
-    formData.append('no_invoice', 'true')
-    formData.append('no_crm_link', 'true')
-    if (note) formData.append('note', note)
-
-    const webhookUrl =
-      `${EMITIDAS_WEBHOOK_URL}?pdf_filename=${encodeURIComponent(fileName)}` +
-      `&invoice_id=${encodeURIComponent(bankTransactionId)}` +
-      `&invoice_number=${encodeURIComponent(concept)}` +
-      `&year_month=${encodeURIComponent(yearMonth)}` +
-      `&type=emitida&no_invoice=true&no_crm_link=true` +
-      (note ? `&note=${encodeURIComponent(note)}` : '')
-
-    const webhookResponse = await fetch(webhookUrl, {
-      method: 'POST',
-      body: formData,
-      headers: formData.getHeaders(),
-    })
-
-    if (!webhookResponse.ok) {
-      const errorText = await webhookResponse.text().catch(() => '')
-      return res.status(502).json({
-        error: 'No se pudo enviar el documento a Drive vía n8n',
-        details: errorText.substring(0, 200),
-      })
-    }
 
     await query(`UPDATE bank_transactions SET is_reconciled = true WHERE id = $1`, [
       bankTransactionId,
@@ -131,10 +99,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       success: true,
-      message: 'Cobro conciliado sin vincular factura del CRM',
+      message: 'Cobro conciliado y documento subido a Google Drive',
+      drive: driveResult,
     })
   } catch (error) {
     console.error('[ERROR] send external income document:', error)
-    return res.status(500).json({ error: 'Error interno del servidor' })
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'Error interno del servidor',
+    })
   }
 }

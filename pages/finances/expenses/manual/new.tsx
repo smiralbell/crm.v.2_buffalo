@@ -94,9 +94,16 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
     const totalAmount = baseAmount + ivaAmount - irpfAmount
 
     try {
-      // 1) Enviar la factura al webhook externo
+      // 1) Subir la factura a Google Drive (carpeta del mes)
       const uploadData = new FormData()
-      uploadData.append('file', file)
+      const yearMonth = formData.date
+        ? formData.date.substring(0, 7)
+        : new Date().toISOString().substring(0, 7)
+      uploadData.append('pdf', file)
+      uploadData.append('tipo', 'gastos')
+      uploadData.append('year_month', yearMonth)
+      uploadData.append('invoice_number', formData.name || `gasto_${formData.date}`)
+      uploadData.append('pdf_filename', file.name)
       uploadData.append('concept', formData.name)
       uploadData.append('date', formData.date)
       uploadData.append('base_amount', String(baseAmount))
@@ -104,16 +111,17 @@ export default function NewExpense({ concepts }: NewExpenseProps) {
       uploadData.append('irpf_amount', String(irpfAmount))
       uploadData.append('total_amount', String(totalAmount))
 
-      const uploadRes = await fetch(
-        'https://n8n.agenciabuffalo.es/webhook/c102607d-57a2-43fe-a8c1-55f2e24fc5c0',
-        {
-          method: 'POST',
-          body: uploadData,
-        }
-      )
+      const uploadRes = await fetch('/api/finances/drive/upload', {
+        method: 'POST',
+        body: uploadData,
+      })
 
       if (!uploadRes.ok) {
-        setError('No se ha podido enviar la factura al sistema externo.')
+        const errBody = await uploadRes.json().catch(() => ({}))
+        setError(
+          (errBody as { error?: string }).error ||
+            'No se ha podido subir la factura a Google Drive.'
+        )
         setLoading(false)
         return
       }

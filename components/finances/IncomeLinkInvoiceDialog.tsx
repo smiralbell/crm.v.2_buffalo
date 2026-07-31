@@ -266,7 +266,7 @@ export default function IncomeLinkInvoiceDialog({
                     onChange={(e) => setExternalFile(e.target.files?.[0] || null)}
                   />
                   <p className="text-xs text-slate-500">
-                    Si no subes archivo, se generará un PDF con tu nota para Drive vía n8n.
+                    Si no subes archivo, se generará un PDF con tu nota para Google Drive.
                   </p>
                 </div>
                 <Textarea

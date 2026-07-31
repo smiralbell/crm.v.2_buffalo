@@ -19,6 +19,7 @@ import type { BuffaloThemeName } from '@/components/retencion/report/buffaloThem
 import {
   formatProposalDate,
   parseProposalDraft,
+  softPolishProposalDraft,
 } from '@/lib/onboarding/proposal-brm'
 import { useDraftHistory } from '@/lib/onboarding/use-draft-history'
 import { cn } from '@/lib/utils'
@@ -52,7 +53,16 @@ export default function OnboardingProposalWorkspace() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
 
-  const parsed = useMemo(() => parseProposalDraft(draft), [draft])
+  // Preview: polish blando (firmas rotas / subtítulo absurdo), sin pisar ediciones.
+  const displayDraft = useMemo(
+    () =>
+      softPolishProposalDraft(draft, {
+        clientName: meta.clientName,
+        clientCompany: meta.clientCompany,
+      }),
+    [draft, meta.clientName, meta.clientCompany]
+  )
+  const parsed = useMemo(() => parseProposalDraft(displayDraft), [displayDraft])
   const now = useMemo(() => new Date(), [])
   const clientLabel = meta.clientCompany || meta.clientName || 'Cliente'
 
@@ -260,13 +270,20 @@ export default function OnboardingProposalWorkspace() {
       if (data.theme === 'green' || data.theme === 'light' || data.theme === 'dark') {
         setTheme(data.theme)
       }
+      const serverNote = String(data.note || '').trim()
+      const themeOnly =
+        !changed &&
+        (data.theme === 'green' || data.theme === 'light' || data.theme === 'dark')
       setMessages([
         ...nextMessages,
         {
           role: 'assistant',
-          content: changed
-            ? `${data.note || 'Documento actualizado'} · Guardado como borrador`
-            : data.note || 'Sin cambios en la previsualización.',
+          content: themeOnly
+            ? `${serverNote || `Tema ${data.theme}`} · Guardado`
+            : changed
+              ? `${serverNote || 'Documento actualizado'} · Guardado como borrador`
+              : serverNote ||
+                'Sin cambios en la previsualización. Sé más concreto o pega el fragmento a editar.',
         },
       ])
     } catch (e) {
@@ -288,8 +305,9 @@ export default function OnboardingProposalWorkspace() {
         docTitle: parsed.title || meta.name || 'Propuesta',
         audience: 'client',
       })
+      flashOk('PDF descargado')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo abrir la impresión')
+      setError(e instanceof Error ? e.message : 'No se pudo generar el PDF')
     }
   }
 
@@ -367,7 +385,7 @@ export default function OnboardingProposalWorkspace() {
               className="inline-flex h-9 items-center gap-1.5 rounded-full border border-zinc-200 px-3.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40"
             >
               <Printer className="h-3.5 w-3.5" />
-              PDF
+              Descargar PDF
             </button>
             <button
               type="button"
@@ -472,7 +490,8 @@ export default function OnboardingProposalWorkspace() {
                   className="proposal-preview-soft"
                   report={{
                     title: parsed.title || meta.name || 'Propuesta',
-                    content: parsed.content || draft,
+                    // Cuerpo completo (incluye <!-- bf:page-mode:… --> para el paginado)
+                    content: parsed.content || displayDraft,
                     audience: 'client',
                     year: now.getFullYear(),
                     month: now.getMonth() + 1,

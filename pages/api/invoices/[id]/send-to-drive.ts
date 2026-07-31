@@ -6,11 +6,8 @@ import { pdf } from '@react-pdf/renderer'
 import { InvoicePDF } from '@/components/InvoicePDF'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
-import FormData from 'form-data'
-import fetch from 'node-fetch'
 import { createPlaceholderNotePdfBuffer } from '@/lib/pdf/placeholder-note-pdf'
-
-const WEBHOOK_URL = 'https://n8n.agenciabuffalo.es/webhook/0a19bd04-25b5-4f9a-b4f9-9037a7e02996'
+import { uploadInvoiceToDrive } from '@/lib/integrations/google/drive-invoices'
 
 export default async function handler(
   req: NextApiRequest,
@@ -98,67 +95,21 @@ export default async function handler(
     pdfFileName = `factura_${invoice.invoice_number}.pdf`
     }
 
-    // Preparar FormData para enviar el PDF y los datos
-    const formData = new FormData()
-    
-    // Añadir el PDF como archivo
-    formData.append('pdf', pdfBuffer, {
-      filename: pdfFileName,
-      contentType: 'application/pdf',
-    })
-    
-    // Añadir todos los datos de la factura
-    formData.append('id', invoice.id.toString())
-    formData.append('invoice_number', invoice.invoice_number)
-    formData.append('client_name', invoice.client_name)
-    if (invoice.client_company_name) formData.append('client_company_name', invoice.client_company_name)
-    if (invoice.client_email) formData.append('client_email', invoice.client_email)
-    if (invoice.client_address) formData.append('client_address', invoice.client_address)
-    if (invoice.client_tax_id) formData.append('client_tax_id', invoice.client_tax_id)
-    if (invoice.company_name) formData.append('company_name', invoice.company_name)
-    if (invoice.company_address) formData.append('company_address', invoice.company_address)
-    formData.append('issue_date', invoice.issue_date.toISOString().split('T')[0])
-    if (invoice.due_date) formData.append('due_date', invoice.due_date.toISOString().split('T')[0])
-    formData.append('subtotal', Number(invoice.subtotal).toFixed(2))
-    formData.append('iva', Number(invoice.iva).toFixed(2))
-    formData.append('total', Number(invoice.total).toFixed(2))
-    formData.append('status', invoice.status)
-    formData.append('services', JSON.stringify(invoice.services || []))
-    formData.append('created_at', invoice.created_at.toISOString())
-    formData.append('updated_at', invoice.updated_at.toISOString())
-    if (usePlaceholderPdf) {
-      formData.append('no_invoice', 'true')
-      if (noInvoiceNote) formData.append('note', noInvoiceNote)
-    }
-
-    // Enviar al webhook en modo POST con FormData (incluye el PDF)
     try {
-      // Solo loguear en desarrollo
+      const yearMonth = invoice.issue_date.toISOString().substring(0, 7)
+
       if (process.env.NODE_ENV === 'development') {
-        console.log('[INFO] Enviando factura al webhook:', invoice.invoice_number)
+        console.log('[INFO] Subiendo factura a Drive:', invoice.invoice_number, yearMonth)
       }
 
-      // Extraer año y mes de la fecha de emisión (formato: aaaa-mm)
-      const yearMonth = invoice.issue_date.toISOString().substring(0, 7) // YYYY-MM
-
-      // Añadir el nombre del archivo, año-mes, tipo y otros datos como parámetros en la URL
-      const webhookUrlWithParams =
-        `${WEBHOOK_URL}?pdf_filename=${encodeURIComponent(pdfFileName)}&invoice_id=${invoice.id}&invoice_number=${encodeURIComponent(invoice.invoice_number)}&year_month=${yearMonth}&type=emitida` +
-        (usePlaceholderPdf ? `&no_invoice=true${noInvoiceNote ? `&note=${encodeURIComponent(noInvoiceNote)}` : ''}` : '')
-
-      const webhookResponse = await fetch(webhookUrlWithParams, {
-        method: 'POST',
-        body: formData,
-        headers: formData.getHeaders(),
+      const driveResult = await uploadInvoiceToDrive({
+        tipo: 'emitidas',
+        yearMonth,
+        fileName: pdfFileName,
+        buffer: pdfBuffer,
+        mimeType: 'application/pdf',
       })
 
-      if (!webhookResponse.ok) {
-        const errorText = await webhookResponse.text().catch(() => 'No se pudo leer la respuesta del webhook')
-        console.error(`[ERROR] Webhook error ${webhookResponse.status}`)
-        throw new Error(`El webhook respondió con estado ${webhookResponse.status}. ${errorText.substring(0, 200)}`)
-      }
-
-      // Actualizar el estado en la base de datos
       await prisma.invoice.update({
         where: { id },
         data: { sent_to_drive: true },
@@ -167,12 +118,16 @@ export default async function handler(
       return res.status(200).json({
         success: true,
         message: 'Factura enviada a Google Drive correctamente',
+        drive: driveResult,
       })
-    } catch (webhookError) {
-      console.error('[ERROR] Error al enviar al webhook:', webhookError instanceof Error ? webhookError.message : 'Error desconocido')
+    } catch (driveError) {
+      console.error(
+        '[ERROR] Error al subir a Drive:',
+        driveError instanceof Error ? driveError.message : 'Error desconocido'
+      )
       return res.status(500).json({
-        error: 'Error al enviar la factura al webhook',
-        details: webhookError instanceof Error ? webhookError.message : 'Error desconocido',
+        error: 'Error al enviar la factura a Google Drive',
+        details: driveError instanceof Error ? driveError.message : 'Error desconocido',
       })
     }
   } catch (error) {

@@ -5,7 +5,8 @@ import { detectSemaforo, stripEmojis } from './buffaloTheme'
  * árbol: quita emojis de los textos y detecta el semáforo (Verde/Ámbar/Rojo) al
  * inicio de un callout para convertirlo en una píldora de color.
  *
- * BRM soportado: kpi-grid, kpi, callout, highlight, roi, checklist.
+ * BRM soportado: kpi-grid, kpi, callout, highlight, roi, checklist, chart,
+ * signatures, bubble, cards, card, table.
  */
 
 const KNOWN = new Set([
@@ -16,6 +17,11 @@ const KNOWN = new Set([
   'roi',
   'checklist',
   'chart',
+  'signatures',
+  'bubble',
+  'cards',
+  'card',
+  'table',
 ])
 
 type MdNode = {
@@ -58,6 +64,10 @@ function walk(node: MdNode) {
       if (name === 'checklist') normalizeChecklist(node)
       if (name === 'callout') normalizeCallout(node)
       if (name === 'chart') normalizeChart(node)
+      if (name === 'signatures') normalizeSignatures(node)
+      if (name === 'cards') normalizeCards(node)
+      if (name === 'table') normalizeTable(node)
+      if (name === 'bubble') normalizeBubble(node)
     }
   }
 
@@ -99,6 +109,109 @@ function normalizeCallout(node: MdNode) {
   const data = (node.data = node.data || {})
   data.hProperties = { ...(data.hProperties || {}), 'data-semaforo': level }
   firstText.value = firstText.value.slice(m[0].length)
+}
+
+/** Burbuja: propaga tone/title desde attrs. */
+function normalizeBubble(node: MdNode) {
+  const data = (node.data = node.data || {})
+  data.hName = 'bf-bubble'
+  data.hProperties = { ...(data.hProperties || {}), 'data-brm': 'bubble' }
+}
+
+/**
+ * :::cards — agrupa ### Título + cuerpo en bf-card, o respeta :::card anidados.
+ */
+function normalizeCards(node: MdNode) {
+  const data = (node.data = node.data || {})
+  data.hName = 'bf-cards'
+  const cols =
+    (data.hProperties?.columns as string) ||
+    (data.hProperties?.cols as string) ||
+    '2'
+  data.hProperties = { ...(data.hProperties || {}), columns: String(cols), 'data-brm': 'cards' }
+
+  const children = node.children || []
+  const hasNestedCards = children.some(
+    (c) =>
+      (c.type === 'containerDirective' || c.type === 'leafDirective') && c.name === 'card'
+  )
+  if (hasNestedCards) return
+
+  const cards: MdNode[] = []
+  let current: MdNode | null = null
+
+  const flush = () => {
+    if (current) cards.push(current)
+    current = null
+  }
+
+  for (const child of children) {
+    if (child.type === 'heading' && (child as MdNode & { depth?: number }).depth === 3) {
+      flush()
+      const title = nodeText(child).trim()
+      current = {
+        type: 'containerDirective',
+        name: 'card',
+        data: {
+          hName: 'bf-card',
+          hProperties: { title, 'data-brm': 'card' },
+        },
+        children: [],
+      }
+      continue
+    }
+    if (!current) {
+      // Contenido antes del primer ### → una card sin título
+      current = {
+        type: 'containerDirective',
+        name: 'card',
+        data: {
+          hName: 'bf-card',
+          hProperties: { 'data-brm': 'card' },
+        },
+        children: [],
+      }
+    }
+    current.children = current.children || []
+    current.children.push(child)
+  }
+  flush()
+
+  if (cards.length > 0) node.children = cards
+}
+
+/** :::table — envuelve la tabla GFM con variante visual. */
+function normalizeTable(node: MdNode) {
+  const data = (node.data = node.data || {})
+  const variant =
+    String(data.hProperties?.variant || data.hProperties?.type || 'default').toLowerCase()
+  data.hName = 'bf-table'
+  data.hProperties = {
+    ...(data.hProperties || {}),
+    variant,
+    'data-brm': 'table',
+  }
+}
+
+/** Parsea `key: value` del cuerpo de :::signatures a props HTML. */
+function normalizeSignatures(node: MdNode) {
+  // Los hijos suelen ser párrafos; unir con \n para no pegar "client:…provider:…"
+  const lines: string[] = []
+  for (const child of node.children || []) {
+    const t = nodeText(child).trim()
+    if (t) lines.push(...t.split('\n').map((l) => l.trim()).filter(Boolean))
+  }
+  const attrs: Record<string, string> = {
+    ...((node.data?.hProperties as Record<string, string>) || {}),
+  }
+  for (const line of lines) {
+    const m = /^([a-z_]+)\s*:\s*(.+)$/i.exec(line)
+    if (m) attrs[m[1].toLowerCase()] = m[2].trim()
+  }
+  node.children = []
+  const data = (node.data = node.data || {})
+  data.hName = 'bf-signatures'
+  data.hProperties = { ...attrs, 'data-brm': 'signatures' }
 }
 
 /** Extrae texto plano de un nodo mdast (concatena hijos de texto). */

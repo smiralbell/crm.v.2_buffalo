@@ -40,9 +40,19 @@ export function collectDocumentCss(): string {
     .join('\n')
 }
 
+type OpenPrintOpts = {
+  /** Espera tipografías/imágenes antes de imprimir */
+  waitForReady?: (doc: Document) => Promise<void>
+  /** Delay extra tras ready (ms) */
+  delayMs?: number
+}
+
 /** Abre una ventana con HTML y lanza el diálogo de impresión (Guardar como PDF). */
-export async function openHtmlPrintWindow(html: string): Promise<void> {
-  const win = window.open('', '_blank', 'width=900,height=1160')
+export async function openHtmlPrintWindow(
+  html: string,
+  opts: OpenPrintOpts = {}
+): Promise<void> {
+  const win = window.open('', '_blank', 'width=920,height=1200')
   if (!win) {
     throw new Error('El navegador bloqueó la ventana. Permite las ventanas emergentes.')
   }
@@ -52,17 +62,25 @@ export async function openHtmlPrintWindow(html: string): Promise<void> {
 
   const triggerPrint = async () => {
     try {
-      if (win.document.fonts?.ready) await win.document.fonts.ready
+      if (opts.waitForReady) {
+        await opts.waitForReady(win.document)
+      } else if (win.document.fonts?.ready) {
+        await win.document.fonts.ready
+      }
     } catch {
       /* ignore */
     }
+    const delay = opts.delayMs ?? 400
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay))
     win.focus()
     win.print()
   }
 
   if (win.document.readyState === 'complete') {
-    setTimeout(() => void triggerPrint(), 350)
+    void triggerPrint()
   } else {
-    win.onload = () => setTimeout(() => void triggerPrint(), 350)
+    win.onload = () => {
+      void triggerPrint()
+    }
   }
 }

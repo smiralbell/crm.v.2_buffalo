@@ -1,6 +1,15 @@
 'use client'
 
-import { Fragment, forwardRef, useMemo, useState, type ComponentType } from 'react'
+import {
+  Fragment,
+  createContext,
+  forwardRef,
+  useContext,
+  useMemo,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from 'react'
 import Head from 'next/head'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -15,6 +24,11 @@ import {
   Checklist,
   ChecklistItem,
   BuffaloChart,
+  Signatures,
+  Bubble,
+  Cards,
+  Card,
+  StyledTable,
 } from './brmComponents'
 import { paletteToCssVars, stripEmojis, type BuffaloThemeName } from './buffaloTheme'
 import { BUFFALO_REPORT_CSS } from './buffaloReportCss'
@@ -121,6 +135,32 @@ const MD_COMPONENTS: Record<string, ComponentType<Record<string, unknown>>> = {
   'bf-checklist': Checklist,
   'bf-checklist-item': ChecklistItem,
   'bf-chart': BuffaloChart,
+  'bf-signatures': Signatures,
+  'bf-bubble': Bubble,
+  'bf-cards': Cards,
+  'bf-card': Card,
+  'bf-table': BfTableRoot,
+  table: MarkdownTable,
+}
+
+const TableWrapCtx = createContext(false)
+
+function BfTableRoot(props: Record<string, unknown> & { children?: ReactNode }) {
+  return (
+    <TableWrapCtx.Provider value={true}>
+      <StyledTable {...props} />
+    </TableWrapCtx.Provider>
+  )
+}
+
+function MarkdownTable(props: Record<string, unknown> & { children?: ReactNode }) {
+  const insideStyled = useContext(TableWrapCtx)
+  if (insideStyled) return <table>{props.children}</table>
+  return (
+    <div className="bf-table-wrap default" data-brm="table">
+      <table>{props.children}</table>
+    </div>
+  )
 }
 
 function BuffaloMarkdown({ body }: { body: string }) {
@@ -296,7 +336,18 @@ const BuffaloReport = forwardRef<HTMLDivElement, Props>(function BuffaloReport(
             <p className="bf-eyebrow">{eyebrow}</p>
             <h1 className="bf-h1 buffalo-heading">{docTitle}</h1>
             <div className="bf-rule" />
-            {subtitle ? <p className="bf-subtitle">{subtitle}</p> : null}
+            {subtitle ? (
+              <div className="bf-subtitle">
+                {subtitle
+                  .split(/\n\s*\n/)
+                  .map((p) => p.trim())
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((p, i) => (
+                    <p key={i}>{p.replace(/\n+/g, ' ')}</p>
+                  ))}
+              </div>
+            ) : null}
             <div className="bf-meta-grid">
               {metaItems.map((m) => (
                 <div key={`${m.label}-${m.value}`}>
@@ -309,11 +360,11 @@ const BuffaloReport = forwardRef<HTMLDivElement, Props>(function BuffaloReport(
         </section>
 
         {isProposal ? (
-          /* Propuesta: flujo continuo por defecto; :::pagebreak parte en hojas */
+          /* Propuesta: una hoja por sección/pagebreak, siempre con header + footer */
           proposalPages.map((page, i) => {
             const pageNum = i + 2
             return (
-              <section key={i} className="bf-page">
+              <section key={i} className="bf-page" data-page={pageNum}>
                 <PageHeader title={headerTitle} />
                 <div className="bf-page-body">
                   {page.sections.length === 0 ? (

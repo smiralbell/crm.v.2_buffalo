@@ -634,7 +634,7 @@ export default function ExpensesPage({
 
       const expenseId = data.expense?.id ?? data.id
 
-      // 2) Enviar la factura (o PDF en blanco con nota) al webhook de n8n
+      // 2) Subir la factura (o PDF placeholder) a Google Drive (nativo, sin n8n)
       const uploadData = new FormData()
       const note = uploadNoInvoiceNote.trim()
       const pdfFile = uploadHasInvoice
@@ -645,42 +645,36 @@ export default function ExpensesPage({
             { type: 'application/pdf' }
           )
 
+      const filename =
+        pdfFile.name || `gasto_${uploadConcept || 'sin_concepto'}_${uploadDate || ''}.pdf`
+      const yearMonth = uploadDate
+        ? uploadDate.substring(0, 7)
+        : new Date().toISOString().substring(0, 7)
+
       uploadData.append('pdf', pdfFile)
+      uploadData.append('tipo', 'gastos')
+      uploadData.append('year_month', yearMonth)
+      uploadData.append('invoice_number', uploadConcept || `GASTO-${expenseId}`)
+      uploadData.append('pdf_filename', filename)
       uploadData.append('concept', uploadConcept)
       uploadData.append('date', uploadDate)
-      uploadData.append('base_amount', String(baseAmount))
-      uploadData.append('iva_amount', String(ivaAmount))
-      uploadData.append('total_amount', String(totalAmount))
       if (!uploadHasInvoice) {
         uploadData.append('no_invoice', 'true')
         uploadData.append('note', note)
       }
 
-      const filename =
-        pdfFile.name || `gasto_${uploadConcept || 'sin_concepto'}_${uploadDate || ''}.pdf`
-      const yearMonth = uploadDate ? uploadDate.substring(0, 7) : new Date().toISOString().substring(0, 7)
-
-      const webhookUrlWithParams =
-        `https://n8n.agenciabuffalo.es/webhook/c102607d-57a2-43fe-a8c1-55f2e24fc5c0` +
-        `?pdf_filename=${encodeURIComponent(filename)}` +
-        `&invoice_id=${encodeURIComponent(String(expenseId))}` +
-        `&invoice_number=${encodeURIComponent(uploadConcept || `GASTO-${expenseId}`)}` +
-        `&year_month=${encodeURIComponent(yearMonth)}` +
-        `&type=gasto` +
-        (uploadHasInvoice ? '' : `&no_invoice=true&note=${encodeURIComponent(note)}`)
-
       try {
-        const uploadRes = await fetch(webhookUrlWithParams, {
+        const uploadRes = await fetch('/api/finances/drive/upload', {
           method: 'POST',
           body: uploadData,
         })
 
         if (!uploadRes.ok) {
-          // No bloqueamos al usuario; solo dejamos constancia en consola
-          console.error('Error enviando factura de gasto al webhook', uploadRes.status)
+          const errBody = await uploadRes.json().catch(() => ({}))
+          console.error('Error subiendo factura de gasto a Drive', uploadRes.status, errBody)
         }
-      } catch (webhookError) {
-        console.error('Error de red al llamar al webhook de gastos', webhookError)
+      } catch (driveError) {
+        console.error('Error de red al subir gasto a Drive', driveError)
       }
 
       // Marcar el gasto bancario como trabajado (verde) en memoria
@@ -1252,7 +1246,7 @@ export default function ExpensesPage({
                       }}
                     />
                     <p className="text-xs text-gray-500">
-                      Sube el PDF o imagen de la factura. Se enviará automáticamente a Drive vía n8n.
+                      Sube el PDF o imagen de la factura. Se enviará automáticamente a Google Drive.
                     </p>
                   </div>
                 ) : (
