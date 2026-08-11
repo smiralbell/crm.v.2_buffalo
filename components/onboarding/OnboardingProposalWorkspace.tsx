@@ -13,6 +13,7 @@ import {
   Send,
   Undo2,
   Redo2,
+  Square,
 } from 'lucide-react'
 import BuffaloReport from '@/components/retencion/report/BuffaloReport'
 import type { BuffaloThemeName } from '@/components/retencion/report/buffaloTheme'
@@ -22,6 +23,7 @@ import {
   softPolishProposalDraft,
 } from '@/lib/onboarding/proposal-brm'
 import { useDraftHistory } from '@/lib/onboarding/use-draft-history'
+import { parseSseBuffer, type ProposalAgentEvent } from '@/lib/onboarding/proposal-agent-events'
 import { cn } from '@/lib/utils'
 
 type ChatMessage = {
@@ -58,11 +60,14 @@ const QUICK_CHIPS: Array<{ label: string; instruction: string }> = [
 ]
 
 /**
- * Texto de espera honesto. La IA tarda de verdad (una sección ~20 s, el documento
- * entero bastante más) y un «Actualizando…» mudo parece un cuelgue. Mostramos el
- * tiempo real y qué está pasando, sin barras de progreso falsas.
+ * Texto de espera: progreso real del stream si hay; si no, cronómetro honesto.
  */
-function waitingHint(seconds: number, isFullGeneration: boolean): string {
+function waitingHint(
+  seconds: number,
+  isFullGeneration: boolean,
+  progressLabel?: string | null
+): string {
+  if (progressLabel) return progressLabel
   if (isFullGeneration) {
     if (seconds < 15) return 'Redactando el documento completo con el contexto del cliente.'
     if (seconds < 45) return 'Son 13 secciones: esto suele tardar entre 40 y 90 segundos.'
@@ -72,6 +77,24 @@ function waitingHint(seconds: number, isFullGeneration: boolean): string {
   if (seconds < 30) return 'Escribiendo el cambio. Lo normal son 15-40 segundos.'
   if (seconds < 75) return 'Es un cambio grande y toca varias secciones. Sigue en marcha.'
   return 'Tarda más de lo habitual, pero no se ha colgado. No recargues la página.'
+}
+
+function formatStreamProgress(ev: ProposalAgentEvent, elapsedSec: number): string | null {
+  if (ev.type === 'start') {
+    return `Arrancando · ${ev.model} · ${ev.skills.join(', ') || 'general'}`
+  }
+  if (ev.type === 'tool') {
+    const target = ev.target ? ` · ${ev.target}` : ''
+    return `${ev.name}${target} · ${elapsedSec}s`
+  }
+  if (ev.type === 'progress') {
+    const label = ev.label ? ` · ${ev.label}` : ''
+    return `${ev.done}/${ev.total}${label} · ${elapsedSec}s`
+  }
+  if (ev.type === 'retry') {
+    return `${ev.reason} · ${elapsedSec}s`
+  }
+  return null
 }
 
 function formatStatsLine(stats: {
@@ -113,6 +136,8 @@ export default function OnboardingProposalWorkspace() {
   const [markingSent, setMarkingSent] = useState(false)
   const [sending, setSending] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  const [streamHint, setStreamHint] = useState<string | null>(null)
+  const chatAbortRef = useRef<AbortController | null>(null)
   const [error, setError] = useState('')
   const [okMsg, setOkMsg] = useState('')
   const [theme, setTheme] = useState<BuffaloThemeName>('green')
@@ -326,9 +351,12 @@ export default function OnboardingProposalWorkspace() {
     if (!text || sending || !Number.isFinite(leadId) || leadId <= 0) return
     setSending(true)
     setError('')
+    setStreamHint(null)
     const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: text }]
     setMessages(nextMessages)
     setInput('')
+    const ac = new AbortController()
+    chatAbortRef.current = ac
     try {
       if (!draft.trim()) {
         await generate(text)
@@ -341,18 +369,84 @@ export default function OnboardingProposalWorkspace() {
         ])
         return
       }
+
       const res = await fetch(`/api/onboarding/projects/${leadId}/proposal-chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        },
         body: JSON.stringify({
           instruction: text,
           draft,
           messages: messages.slice(-8),
           save: true,
         }),
+        signal: ac.signal,
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Error editando la propuesta')
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(
+          (data as { error?: string }).error || `Error editando la propuesta (${res.status})`
+        )
+      }
+
+      const contentType = String(res.headers.get('content-type') || '')
+      let data: {
+        content?: string
+        note?: string
+        theme?: string
+        stats?: Parameters<typeof formatStatsLine>[0]
+        intentSatisfied?: boolean | null
+      } = {}
+
+      if (contentType.includes('text/event-stream') && res.body) {
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let doneEvent: Extract<ProposalAgentEvent, { type: 'done' }> | null = null
+        let errorMessage: string | null = null
+        const startedAt = Date.now()
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const parsed = parseSseBuffer(buffer)
+          buffer = parsed.rest
+          for (const ev of parsed.events) {
+            const sec = Math.round((Date.now() - startedAt) / 1000)
+            const hint = formatStreamProgress(ev, sec)
+            if (hint) setStreamHint(hint)
+            if (ev.type === 'done') doneEvent = ev
+            if (ev.type === 'error') errorMessage = ev.message
+          }
+        }
+
+        if (errorMessage && !doneEvent) {
+          if (/cancelado/i.test(errorMessage)) {
+            setStreamHint(null)
+            setMessages(nextMessages)
+            return
+          }
+          throw new Error(errorMessage)
+        }
+        if (!doneEvent) {
+          throw new Error('La respuesta del editor se cortó sin resultado')
+        }
+        data = {
+          content: doneEvent.content,
+          note: doneEvent.note,
+          theme: doneEvent.theme || undefined,
+          stats: doneEvent.stats || undefined,
+          intentSatisfied: doneEvent.intentSatisfied ?? null,
+        }
+      } else {
+        // Fallback JSON (consumidores antiguos / proxy sin SSE)
+        data = await res.json().catch(() => ({}))
+      }
+
       const nextDraft = typeof data.content === 'string' ? data.content : draft
       const changed = commitDraft(nextDraft)
       setStatus('draft')
@@ -381,11 +475,21 @@ export default function OnboardingProposalWorkspace() {
         },
       ])
     } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        setMessages(nextMessages)
+        return
+      }
       setError(e instanceof Error ? e.message : 'Error en el chat')
       setMessages(nextMessages)
     } finally {
+      chatAbortRef.current = null
+      setStreamHint(null)
       setSending(false)
     }
+  }
+
+  const stopChat = () => {
+    chatAbortRef.current?.abort()
   }
 
   const printPdf = async () => {
@@ -650,8 +754,18 @@ export default function OnboardingProposalWorkspace() {
                       <span className="tabular-nums text-zinc-400">{elapsed}s</span>
                     </div>
                     <div className="mt-1 text-[11px] leading-4 text-zinc-400">
-                      {waitingHint(elapsed, generating && !draft)}
+                      {waitingHint(elapsed, generating && !draft, streamHint)}
                     </div>
+                    {sending && !generating ? (
+                      <button
+                        type="button"
+                        onClick={stopChat}
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
+                      >
+                        <Square className="h-2.5 w-2.5 fill-current" />
+                        Detener
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               )}

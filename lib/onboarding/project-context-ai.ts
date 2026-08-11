@@ -232,6 +232,8 @@ export async function reviseProposalWithChat(input: {
   monthlyFee?: number | null
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
   lastTurn?: import('@/lib/onboarding/proposal-memory').ProposalTurnMemory | null
+  onEvent?: import('@/lib/onboarding/proposal-agent').ProposalAgentEmit
+  signal?: AbortSignal
 }): Promise<{
   content: string
   note: string
@@ -239,6 +241,7 @@ export async function reviseProposalWithChat(input: {
   stats?: import('@/lib/onboarding/proposal-verify').ProposalDiffStats
   intentSatisfied?: boolean
   turnMemory?: import('@/lib/onboarding/proposal-memory').ProposalTurnMemory
+  cancelled?: boolean
 }> {
   const { runProposalAgent } = await import('@/lib/onboarding/proposal-agent')
   const result = await runProposalAgent({
@@ -253,6 +256,8 @@ export async function reviseProposalWithChat(input: {
     monthlyFee: input.monthlyFee,
     history: input.history,
     lastTurn: input.lastTurn,
+    onEvent: input.onEvent,
+    signal: input.signal,
   })
   return {
     content: result.content,
@@ -261,6 +266,7 @@ export async function reviseProposalWithChat(input: {
     stats: result.stats,
     intentSatisfied: result.intentSatisfied,
     turnMemory: result.turnMemory,
+    cancelled: result.cancelled,
   }
 }
 

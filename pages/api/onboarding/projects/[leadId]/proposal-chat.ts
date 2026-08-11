@@ -9,6 +9,19 @@ import {
 } from '@/lib/onboarding/project-context-ai'
 import type { ProposalTurnMemory } from '@/lib/onboarding/proposal-memory'
 import type { ProposalDiffStats } from '@/lib/onboarding/proposal-verify'
+import {
+  formatSseFrame,
+} from '@/lib/onboarding/proposal-agent-events'
+import { writeProposalChatSse } from '@/lib/onboarding/proposal-chat-sse'
+
+export const config = {
+  api: {
+    // El body puede ser grande (draft BRM); el stream de respuesta no usa bodyParser stream.
+    bodyParser: {
+      sizeLimit: '2mb',
+    },
+  },
+}
 
 const bodySchema = z.object({
   instruction: z.string().min(1).max(4000),
@@ -45,6 +58,15 @@ function toTurnMemory(raw: unknown): ProposalTurnMemory | null {
     stats: t.stats as ProposalDiffStats,
     satisfied: Boolean(t.satisfied),
   }
+}
+
+function wantsSse(req: NextApiRequest): boolean {
+  const accept = String(req.headers.accept || '')
+  return accept.includes('text/event-stream')
+}
+
+function writeSseError(res: NextApiResponse, message: string): void {
+  res.write(formatSseFrame({ type: 'error', message }))
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -85,7 +107,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     `
     const p = proyectoRows[0]
 
-    const result = await reviseProposalWithChat({
+    const agentInput = {
       draft: currentDraft,
       instruction: body.instruction,
       context,
@@ -97,9 +119,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       monthlyFee: p?.monthly_fee_eur ?? null,
       history: body.messages,
       lastTurn,
-    })
+    }
 
-    if (body.save) {
+    const persistResult = async (result: {
+      content: string
+      turnMemory?: ProposalTurnMemory | null
+    }) => {
       const { encoded } = mergeLeadConfig(lead.configuracion, {
         proposal_draft: result.content,
         proposal_status: 'draft',
@@ -118,6 +143,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await prisma.lead.update({
         where: { id: leadId },
         data: { configuracion: encoded },
+      })
+    }
+
+    // ── SSE ──────────────────────────────────────────────────────────
+    if (wantsSse(req)) {
+      res.status(200)
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+      res.setHeader('Cache-Control', 'no-cache, no-transform')
+      res.setHeader('Connection', 'keep-alive')
+      res.setHeader('X-Accel-Buffering', 'no')
+      const flushHeaders = (res as NextApiResponse & { flushHeaders?: () => void }).flushHeaders
+      if (typeof flushHeaders === 'function') flushHeaders.call(res)
+
+      const ac = new AbortController()
+      const onClose = () => {
+        if (!res.writableEnded) ac.abort()
+      }
+      req.on('close', onClose)
+
+      try {
+        await writeProposalChatSse({
+          res,
+          signal: ac.signal,
+          shouldSave: body.save !== false,
+          persist: persistResult,
+          run: (onEvent, signal) =>
+            reviseProposalWithChat({
+              ...agentInput,
+              onEvent,
+              signal,
+            }),
+        })
+      } finally {
+        req.removeListener('close', onClose)
+        if (!res.writableEnded) res.end()
+      }
+      return
+    }
+
+    // ── JSON clásico (compat) ────────────────────────────────────────
+    const result = await reviseProposalWithChat(agentInput)
+
+    if (body.save) {
+      await persistResult({
+        content: result.content,
+        turnMemory: result.turnMemory,
       })
     }
 
@@ -143,8 +214,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return
     }
     console.error('[onboarding/projects/proposal-chat]', error)
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Error editando la propuesta',
-    })
+    if (!res.headersSent) {
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : 'Error editando la propuesta',
+      })
+    }
+    if (!res.writableEnded) {
+      try {
+        writeSseError(
+          res,
+          error instanceof Error ? error.message : 'Error editando la propuesta'
+        )
+      } catch {
+        // ignore
+      }
+      res.end()
+    }
   }
 }

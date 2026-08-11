@@ -18,6 +18,7 @@ import {
   classifyProposalSkills,
   formatSkillsForPrompt,
   proposalSkillsModelTier,
+  type ProposalSkillId,
 } from '@/lib/onboarding/proposal-skills'
 import { buildProposalEditSystem } from '@/lib/onboarding/proposal-prompt'
 import { formatSectionMapForEditor } from '@/lib/onboarding/proposal-brm'
@@ -37,6 +38,11 @@ import {
   runProposalTool,
   type ProposalToolState,
 } from '@/lib/onboarding/proposal-tools'
+import {
+  throwIfAborted,
+  toolCallTarget,
+  type ProposalAgentEvent,
+} from '@/lib/onboarding/proposal-agent-events'
 
 const AGENT_RULES = `════════════════════════
 MODO AGENTE (herramientas)
@@ -62,10 +68,21 @@ export type ProposalAgentResult = {
   intentSatisfied?: boolean
   turnMemory: ProposalTurnMemory
   toolsUsed: string[]
+  cancelled?: boolean
 }
+
+export type ProposalAgentEmit = (event: ProposalAgentEvent) => void
 
 function emptyStats(draft: string): ProposalDiffStats {
   return diffProposalStats(draft, draft)
+}
+
+function emitSafe(emit: ProposalAgentEmit | undefined, event: ProposalAgentEvent): void {
+  try {
+    emit?.(event)
+  } catch {
+    // el stream no debe tumbar el agente
+  }
 }
 
 export async function runProposalAgent(input: {
@@ -80,6 +97,8 @@ export async function runProposalAgent(input: {
   monthlyFee?: number | null
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
   lastTurn?: ProposalTurnMemory | null
+  onEvent?: ProposalAgentEmit
+  signal?: AbortSignal
 }): Promise<ProposalAgentResult> {
   const started = Date.now()
   const before = (input.draft || '').replace(/\r\n/g, '\n').trim()
@@ -87,18 +106,37 @@ export async function runProposalAgent(input: {
     clientName: input.clientName,
     clientCompany: input.clientCompany,
   }
+  const emit = input.onEvent
+  const signal = input.signal
 
   let instruction = input.instruction.trim()
   if (!instruction) throw new Error('Instrucción vacía')
+
+  throwIfAborted(signal)
 
   if (isFeedbackOnly(instruction)) {
     if (input.lastTurn) {
       instruction = buildFeedbackRelaunch(input.lastTurn, instruction)
     } else {
       const stats = emptyStats(before)
+      const note =
+        'Dime qué cambio concreto quieres (punto, sección o pega el fragmento). No tengo el turno anterior anclado.'
+      emitSafe(emit, {
+        type: 'start',
+        skills: ['general'],
+        model: 'fast',
+      })
+      emitSafe(emit, {
+        type: 'done',
+        content: before,
+        note,
+        theme: null,
+        stats,
+        intentSatisfied: false,
+      })
       return {
         content: before,
-        note: 'Dime qué cambio concreto quieres (punto, sección o pega el fragmento). No tengo el turno anterior anclado.',
+        note,
         stats,
         intentSatisfied: false,
         toolsUsed: [],
@@ -134,13 +172,24 @@ export async function runProposalAgent(input: {
     if (applied.applied > 0) {
       draft = applied.draft
       if (applied.theme) theme = applied.theme
-      for (const p of local) toolsUsed.push(`local:${p.op}`)
+      for (const p of local) {
+        toolsUsed.push(`local:${p.op}`)
+        emitSafe(emit, { type: 'tool', name: `local:${p.op}`, target: p.op })
+      }
     }
   }
+
+  throwIfAborted(signal)
 
   // Solo atajos locales si cubren al 100% (sin redacción / diseño / contenido)
   const localOnly = Boolean(local?.length) && !instructionNeedsAgent(instruction)
   if (localOnly) {
+    const skills: ProposalSkillId[] = classifyProposalSkills(instruction)
+    emitSafe(emit, {
+      type: 'start',
+      skills,
+      model: proposalSkillsModelTier(skills),
+    })
     const stats = diffProposalStats(before, draft)
     const ops = new Set(local!.map((p) => p.op))
     let modelNote = 'Cambio estructural aplicado.'
@@ -169,8 +218,7 @@ export async function runProposalAgent(input: {
       modelNote,
       stats,
     })
-    const satisfied =
-      resolved.satisfied || draft !== before || Boolean(theme)
+    const satisfied = resolved.satisfied || draft !== before || Boolean(theme)
     const turnMemory: ProposalTurnMemory = {
       instruction: input.instruction,
       tools: toolsUsed,
@@ -185,6 +233,14 @@ export async function runProposalAgent(input: {
       satisfied,
       mode: 'local-only',
     })
+    emitSafe(emit, {
+      type: 'done',
+      content: draft,
+      note: resolved.note,
+      theme: theme || null,
+      stats,
+      intentSatisfied: satisfied,
+    })
     return {
       content: draft,
       note: resolved.note,
@@ -196,15 +252,18 @@ export async function runProposalAgent(input: {
     }
   }
 
-  // 2) Bucle agéntico (también tras atajos parciales: p. ej. quitar saltos + ampliar)
+  // 2) Bucle agéntico
   const skills = classifyProposalSkills(instruction)
   const skillBlock = formatSkillsForPrompt(skills)
   const system = `${buildProposalEditSystem(skillBlock)}\n\n${AGENT_RULES}`
   const sectionMap = formatSectionMapForEditor(draft)
-  const model = resolveModel(proposalSkillsModelTier(skills))
+  const modelTier = proposalSkillsModelTier(skills)
+  const model = resolveModel(modelTier)
   const toolSpecs = getProposalToolSpecs()
   const wantsFullDoc = skills.includes('language') || skills.includes('regenerate')
   const maxTokens = wantsFullDoc ? 32000 : 8000
+
+  emitSafe(emit, { type: 'start', skills, model: modelTier })
 
   const state: ProposalToolState = {
     draft,
@@ -244,7 +303,33 @@ export async function runProposalAgent(input: {
   let verifyRetries = 0
   const maxVerifyRetries = 2
 
+  const runToolBatch = async (
+    toolCalls: Array<{ id: string; name: string; arguments: unknown }>
+  ) => {
+    for (const tc of toolCalls) {
+      throwIfAborted(signal)
+      if (toolCallCount >= maxToolCalls) break
+      toolCallCount += 1
+      toolsUsed.push(tc.name)
+      const target = toolCallTarget(tc.name, tc.arguments)
+      emitSafe(emit, { type: 'tool', name: tc.name, target })
+      emitSafe(emit, {
+        type: 'progress',
+        done: toolCallCount,
+        total: maxToolCalls,
+        label: target || tc.name,
+      })
+      const result = await runProposalTool(tc.name, tc.arguments, state)
+      messages.push({
+        role: 'tool',
+        tool_call_id: tc.id,
+        content: JSON.stringify(result),
+      })
+    }
+  }
+
   while (modelTurns < maxModelTurns && Date.now() - started < maxMs) {
+    throwIfAborted(signal)
     modelTurns += 1
     const turn = await openRouterToolTurn(messages, toolSpecs, {
       model,
@@ -257,17 +342,7 @@ export async function runProposalAgent(input: {
       break
     }
 
-    for (const tc of turn.toolCalls) {
-      if (toolCallCount >= maxToolCalls) break
-      toolCallCount += 1
-      toolsUsed.push(tc.name)
-      const result = await runProposalTool(tc.name, tc.arguments, state)
-      messages.push({
-        role: 'tool',
-        tool_call_id: tc.id,
-        content: JSON.stringify(result),
-      })
-    }
+    await runToolBatch(turn.toolCalls)
 
     if (toolCallCount >= maxToolCalls) break
 
@@ -291,10 +366,14 @@ export async function runProposalAgent(input: {
     Date.now() - started < maxMs &&
     toolCallCount < maxToolCalls
   ) {
+    throwIfAborted(signal)
     verifyRetries += 1
+    const reason =
+      verify.reason || 'la ampliación fue insuficiente, reintentando'
+    emitSafe(emit, { type: 'retry', reason })
     messages.push({
       role: 'user',
-      content: `VERIFICACIÓN FALLIDA: ${verify.reason || 'el cambio no cumple la intención'}. wordsDelta=${stats.wordsDelta}. Hazlo de verdad ahora (rewrite_section_freeform si hace falta), sección por sección.`,
+      content: `VERIFICACIÓN FALLIDA: ${reason}. wordsDelta=${stats.wordsDelta}. Hazlo de verdad ahora (rewrite_section_freeform si hace falta), sección por sección.`,
     })
     modelTurns += 1
     const turn = await openRouterToolTurn(messages, toolSpecs, {
@@ -304,22 +383,14 @@ export async function runProposalAgent(input: {
     })
     messages.push(turn.assistantMessage)
     if (!turn.toolCalls.length) break
-    for (const tc of turn.toolCalls) {
-      if (toolCallCount >= maxToolCalls) break
-      toolCallCount += 1
-      toolsUsed.push(tc.name)
-      const result = await runProposalTool(tc.name, tc.arguments, state)
-      messages.push({
-        role: 'tool',
-        tool_call_id: tc.id,
-        content: JSON.stringify(result),
-      })
-    }
+    await runToolBatch(turn.toolCalls)
     draft = state.draft
     theme = state.theme || theme
     stats = diffProposalStats(before, draft)
     verify = verifyIntent(instruction, stats)
   }
+
+  throwIfAborted(signal)
 
   const resolved = resolveEditorNote({
     instruction,
@@ -345,8 +416,18 @@ export async function runProposalAgent(input: {
     ms: Date.now() - started,
   })
 
+  const content = draft.trim() || before
+  emitSafe(emit, {
+    type: 'done',
+    content,
+    note: resolved.note,
+    theme: theme || null,
+    stats,
+    intentSatisfied: resolved.satisfied,
+  })
+
   return {
-    content: draft.trim() || before,
+    content,
     note: resolved.note,
     theme,
     stats,
