@@ -4,6 +4,18 @@ type MultimodalPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } }
 
+/** Modelo rápido (parches triviales) vs heavy (generación / docs completos). */
+export function resolveModel(tier: 'fast' | 'heavy'): string {
+  if (tier === 'heavy') {
+    return (
+      process.env.OPENROUTER_MODEL_HEAVY ||
+      process.env.DEMO_OPENROUTER_MODEL ||
+      '~anthropic/claude-sonnet-latest'
+    )
+  }
+  return process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'
+}
+
 function openRouterHeaders(): Record<string, string> {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) throw new Error('OPENROUTER_API_KEY no está configurada')
@@ -102,14 +114,20 @@ export async function openRouterDescribeImage(
 
 export async function openRouterChatCompletion(
   messages: ChatMessage[],
-  options?: { model?: string; temperature?: number; maxTokens?: number }
+  options?: {
+    model?: string
+    temperature?: number
+    maxTokens?: number
+    /** Si true, fuerza response_format json_object (OpenAI-compatible). */
+    json?: boolean
+  }
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY no está configurada')
   }
 
-  const model = options?.model || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'
+  const model = options?.model || resolveModel('fast')
   const siteUrl = process.env.OPENROUTER_HTTP_REFERER || process.env.NEXT_PUBLIC_BASE_URL || ''
 
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -125,6 +143,7 @@ export async function openRouterChatCompletion(
       messages,
       temperature: options?.temperature ?? 0.3,
       ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {}),
+      ...(options?.json ? { response_format: { type: 'json_object' } } : {}),
     }),
   })
 

@@ -24,8 +24,67 @@ import {
 import { useDraftHistory } from '@/lib/onboarding/use-draft-history'
 import { cn } from '@/lib/utils'
 
-type ChatMessage = { role: 'user' | 'assistant'; content: string }
+type ChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+  statsLine?: string
+  intentSatisfied?: boolean | null
+}
 type ProposalStatus = 'draft' | 'sent'
+
+const QUICK_CHIPS: Array<{ label: string; instruction: string }> = [
+  {
+    label: 'Ampliar todo',
+    instruction: 'Extiende mucho más cada punto: más párrafos, más desglose y más contenido en todas las secciones.',
+  },
+  {
+    label: 'Más tablas y desgloses',
+    instruction:
+      'Cada punto es demasiado corto. Añade más tablas, más desgloses, más subapartados y más contenido en todo el documento.',
+  },
+  {
+    label: 'Gráfico de proyección',
+    instruction:
+      'Añade un gráfico de proyección ilustrativa sin Buffalo vs con Buffalo (evolución temporal) en la sección de ROI o retorno, con hipótesis claras.',
+  },
+  {
+    label: 'Traducir a catalán',
+    instruction: 'Cambia todo el documento a catalán manteniendo la sintaxis BRM y la estructura.',
+  },
+  {
+    label: 'Regenerar',
+    instruction: 'Regenera toda la propuesta completa a partir del contexto del cliente, con todas las secciones ACCIÓ bien desarrolladas.',
+  },
+]
+
+function formatStatsLine(stats: {
+  wordsDelta?: number
+  tablesAfter?: number
+  tablesBefore?: number
+  chartsAfter?: number
+  chartsBefore?: number
+  sectionsTouched?: string[]
+} | null | undefined): string | undefined {
+  if (!stats) return undefined
+  const parts: string[] = []
+  if (typeof stats.wordsDelta === 'number' && stats.wordsDelta !== 0) {
+    const w = stats.wordsDelta > 0 ? `+${stats.wordsDelta}` : String(stats.wordsDelta)
+    parts.push(`${w} palabras`)
+  }
+  const tablesDelta = (stats.tablesAfter ?? 0) - (stats.tablesBefore ?? 0)
+  if (tablesDelta !== 0) {
+    parts.push(`${tablesDelta > 0 ? '+' : ''}${tablesDelta} tabla${Math.abs(tablesDelta) === 1 ? '' : 's'}`)
+  } else if ((stats.tablesAfter ?? 0) > 0 && (stats.wordsDelta ?? 0) !== 0) {
+    // no-op
+  }
+  const chartsDelta = (stats.chartsAfter ?? 0) - (stats.chartsBefore ?? 0)
+  if (chartsDelta !== 0) {
+    parts.push(`${chartsDelta > 0 ? '+' : ''}${chartsDelta} gráfico${Math.abs(chartsDelta) === 1 ? '' : 's'}`)
+  }
+  const nSec = stats.sectionsTouched?.length ?? 0
+  if (nSec > 0) parts.push(`${nSec} sección${nSec === 1 ? '' : 'es'}`)
+  return parts.length ? parts.join(' · ') : undefined
+}
 
 export default function OnboardingProposalWorkspace() {
   const router = useRouter()
@@ -274,6 +333,9 @@ export default function OnboardingProposalWorkspace() {
       const themeOnly =
         !changed &&
         (data.theme === 'green' || data.theme === 'light' || data.theme === 'dark')
+      const statsLine = formatStatsLine(data.stats)
+      const intentSatisfied =
+        typeof data.intentSatisfied === 'boolean' ? data.intentSatisfied : null
       setMessages([
         ...nextMessages,
         {
@@ -284,6 +346,8 @@ export default function OnboardingProposalWorkspace() {
               ? `${serverNote || 'Documento actualizado'} · Guardado como borrador`
               : serverNote ||
                 'Sin cambios en la previsualización. Sé más concreto o pega el fragmento a editar.',
+          statsLine,
+          intentSatisfied,
         },
       ])
     } catch (e) {
@@ -527,10 +591,22 @@ export default function OnboardingProposalWorkspace() {
                       'max-w-[90%] whitespace-pre-wrap rounded-3xl px-3.5 py-2.5 text-[13px] leading-6',
                       m.role === 'user'
                         ? 'bg-zinc-900 text-white'
-                        : 'bg-zinc-100 text-zinc-800'
+                        : m.intentSatisfied === false
+                          ? 'border border-amber-300 bg-amber-50 text-zinc-800'
+                          : 'bg-zinc-100 text-zinc-800'
                     )}
                   >
                     {m.content}
+                    {m.role === 'assistant' && m.statsLine ? (
+                      <div
+                        className={cn(
+                          'mt-1.5 text-[11px] leading-4',
+                          m.intentSatisfied === false ? 'text-amber-700/80' : 'text-zinc-500'
+                        )}
+                      >
+                        {m.statsLine}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -552,6 +628,19 @@ export default function OnboardingProposalWorkspace() {
                 void sendChat(input)
               }}
             >
+              <div className="mb-2 flex flex-wrap gap-1.5 px-0.5">
+                {QUICK_CHIPS.map((chip) => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    disabled={sending || generating}
+                    onClick={() => setInput(chip.instruction)}
+                    className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-[11px] text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-40"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
               <div className="flex items-end gap-2 rounded-3xl border border-zinc-200 bg-zinc-50 p-2.5 focus-within:border-zinc-300 focus-within:bg-white">
                 <textarea
                   value={input}

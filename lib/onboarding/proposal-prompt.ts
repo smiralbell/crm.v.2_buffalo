@@ -7,8 +7,10 @@
  * - PROPOSAL_BRM_SYNTAX     → formato de la plantilla visual
  * - PROPOSAL_GENERATE_SYSTEM → prompt al pulsar «Generar con IA»
  * - PROPOSAL_EDIT_SYSTEM     → prompt del chat editor (parches)
- * - buildProposalEditSystem  → EDIT + skill activa
+ * - buildProposalEditSystem  → EDIT + catálogo + skill activa
  */
+
+import { PROPOSAL_DESIGN_CATALOG } from '@/lib/onboarding/proposal-design-catalog'
 
 /** Sintaxis BRM que la plantilla visual sabe renderizar. */
 export const PROPOSAL_BRM_SYNTAX = `────────────────────────
@@ -59,10 +61,27 @@ Texto en burbuja.
 Texto del callout.
 :::
   · type ∈ accent / warn.
+  · Semáforo: empieza el cuerpo con "Verde:", "Ámbar:" o "Rojo:" → píldora de color.
 
 - Caja destacada (una frase potente):
 :::highlight
 Frase destacada en la barra de acento.
+:::
+
+- KPIs en fila:
+:::kpi-grid
+:::kpi{value="48h" label="Primera demo" trend="flat"}
+:::
+:::
+
+- Checklist:
+:::checklist
+- [x] Hecho
+- [ ] Pendiente
+:::
+
+- ROI económico (5 métricas):
+:::roi{baseline="…" buffalo="…" saving="…" payback="…" roi="…"}
 :::
 
 - Gráfico SVG (plantilla Buffalo — NO uses imagen ni HTML):
@@ -88,9 +107,10 @@ Frase destacada en la barra de acento.
   · En edición: solo añade/quita pagebreaks si lo piden.
 
 Reglas: cierra SIEMPRE los ":::" que abras. No inventes cifras ni compromisos.
-Si piden diseño/tabla bonita/burbuja/cards/gráfico: usa los bloques de arriba (no markdown plano).
+Si piden diseño/tabla bonita/burbuja/cards/gráfico/ROI/KPIs: usa los bloques de arriba (no markdown plano).
 Idioma: por defecto español de España; si el comercial o el contexto del cliente piden catalán/inglés,
 traduce/reescribe TODO el documento en ese idioma manteniendo la sintaxis BRM.`
+
 
 /** Estructura comercial tipo ACCIÓ (obligatoria en generación). */
 export const PROPOSAL_ACCI_STRUCTURE = `════════════════════════
@@ -244,14 +264,16 @@ H) replace_doc — SOLO si piden regenerar/traducir TODO el documento
 5. Portada fea / subtítulo largo → shorten_cover (o set_subtitle si dan el texto nuevo).
 6. Firmas mal → ensure_signatures (nunca tablas markdown).
 7. Idioma / regenerar todo → replace_doc con documento completo y pagebreaks + :::signatures.
-8. Diseño / tabla / burbuja / cards / gráfico / “más visual” → usa :::table, :::cards, :::bubble, :::callout, :::highlight, :::chart (nunca tablas GFM planas ni inventes imágenes si piden gráfico).
+8. Diseño / tabla / burbuja / cards / gráfico / ROI / KPIs / “más visual” → usa :::table, :::cards, :::bubble, :::callout, :::highlight, :::chart, :::roi, :::kpi-grid, :::checklist (nunca tablas GFM planas ni inventes imágenes si piden gráfico).
 9. Si no encuentras el match exacto, usa el fragmento más distintivo (40–120 chars).
-10. No inventes cifras ni compromisos nuevos.
+10. No inventes cifras ni compromisos nuevos. Usa el CONTEXTO DEL CLIENTE del mensaje de usuario.
 11. note = 1 frase concreta de qué cambiaste.`
 
-/** Construye el system prompt del editor con la skill activa inyectada. */
+/** Construye el system prompt del editor: BRM + catálogo completo + skill activa. */
 export function buildProposalEditSystem(skillBlock: string): string {
   return `${PROPOSAL_EDIT_SYSTEM}
+
+${PROPOSAL_DESIGN_CATALOG}
 
 ${skillBlock}`
 }

@@ -1,4 +1,4 @@
-import { openRouterChatCompletion } from '@/lib/openrouter'
+import { openRouterChatCompletion, resolveModel } from '@/lib/openrouter'
 import type { ConfiguradorConfig } from '@/lib/engranaje5/types'
 import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import { getAuditByLeadId } from '@/lib/onboarding/audit/store'
@@ -199,7 +199,7 @@ export async function generateProposalFromContext(input: {
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
-    { temperature: 0.4, maxTokens: 12000 }
+    { temperature: 0.4, maxTokens: 16000, model: resolveModel('heavy') }
   )
 
   const text = String(raw || '').trim()
@@ -253,6 +253,9 @@ export async function reviseProposalWithChat(input: {
   const { parseJsonFromModelOutput } = await import('@/lib/openrouter')
   const { diffProposalStats, resolveEditorNote } = await import(
     '@/lib/onboarding/proposal-verify'
+  )
+  const { buildProposalContextPack } = await import(
+    '@/lib/onboarding/proposal-context-pack'
   )
   type ProposalDiffStats = import('@/lib/onboarding/proposal-verify').ProposalDiffStats
 
@@ -339,16 +342,15 @@ export async function reviseProposalWithChat(input: {
   const sectionMap = formatSectionMapForEditor(before)
   const wantsFullDoc = skillId === 'language' || skillId === 'regenerate'
 
-  const meta = [
-    input.projectName ? `Proyecto: ${input.projectName}` : null,
-    input.clientCompany || input.clientName
-      ? `Cliente: ${[input.clientCompany, input.clientName].filter(Boolean).join(' · ')}`
-      : null,
-    input.setupFee != null && input.setupFee > 0 ? `Setup (€): ${input.setupFee}` : null,
-    input.monthlyFee != null && input.monthlyFee > 0 ? `Mensualidad (€): ${input.monthlyFee}` : null,
-  ]
-    .filter(Boolean)
-    .join('\n')
+  const contextPack = buildProposalContextPack({
+    definition: input.definition,
+    context: input.context,
+    projectName: input.projectName,
+    clientName: input.clientName,
+    clientCompany: input.clientCompany,
+    setupFee: input.setupFee,
+    monthlyFee: input.monthlyFee,
+  })
 
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
     { role: 'system', content: system },
@@ -359,13 +361,13 @@ export async function reviseProposalWithChat(input: {
   messages.push({
     role: 'user',
     content: [
-      meta ? `METADATOS:\n${meta}` : null,
+      `CONTEXTO DEL CLIENTE (fuente de verdad para ampliar contenido):\n${contextPack.block}`,
       `MAPA DE SECCIONES (usa estos índices para "punto N"):\n${sectionMap}`,
       wantsFullDoc
         ? `DOCUMENTO ACTUAL (BRM) — para replace_doc conserva estructura y traduce/regenera:\n${before || '(vacío)'}`
         : `DOCUMENTO ACTUAL (BRM) — NO lo devuelvas entero; usa patches:\n${before || '(vacío — usa replace_doc para generar)'}`,
       `─────\nINSTRUCCIÓN:\n${instruction}`,
-      'Responde con { "note", "patches": [...] }. Preferible patches cortos.',
+      'Responde con JSON: { "note", "patches": [...] }. Preferible patches cortos. Al ampliar, usa el CONTEXTO DEL CLIENTE (no inventes).',
     ]
       .filter(Boolean)
       .join('\n\n'),
@@ -373,7 +375,9 @@ export async function reviseProposalWithChat(input: {
 
   const raw = await openRouterChatCompletion(messages, {
     temperature: 0.12,
-    maxTokens: wantsFullDoc ? 16000 : 6000,
+    maxTokens: wantsFullDoc ? 32000 : 16000,
+    model: resolveModel(wantsFullDoc ? 'heavy' : 'fast'),
+    json: true,
   })
 
   let parsed: {

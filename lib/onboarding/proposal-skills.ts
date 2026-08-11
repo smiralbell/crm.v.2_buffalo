@@ -3,8 +3,6 @@
  * No son subagentes: se inyectan en el system prompt del chat.
  */
 
-import { PROPOSAL_DESIGN_CATALOG } from '@/lib/onboarding/proposal-design-catalog'
-
 export type ProposalSkillId =
   | 'cover'
   | 'acceptance'
@@ -190,15 +188,13 @@ export function classifyProposalSkill(instruction: string): ProposalSkillId {
   return 'general'
 }
 
-/** Bloque de skill para inyectar en el system prompt. */
+/** Bloque de skill para inyectar en el system prompt (el catálogo va siempre vía buildProposalEditSystem). */
 export function formatSkillForPrompt(skillId: ProposalSkillId): string {
   const s = PROPOSAL_SKILLS[skillId]
-  const extra =
-    skillId === 'design' || skillId === 'chart' ? `\n\n${PROPOSAL_DESIGN_CATALOG}` : ''
   return `════════════════════════
 SKILL ACTIVA: ${s.name} (${s.id})
 ════════════════════════
 Cuándo: ${s.when}
 Cómo: ${s.how}
-Ops preferidas: ${s.preferredOps.join(', ')}${extra}`
+Ops preferidas: ${s.preferredOps.join(', ')}`
 }

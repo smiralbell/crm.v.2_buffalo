@@ -24,6 +24,9 @@ const KNOWN = new Set([
   'table',
 ])
 
+/** Directivas BRM que el renderer convierte a componentes (sin pagebreak estructural). */
+export const BRM_RENDERER_DIRECTIVES: readonly string[] = Array.from(KNOWN).sort()
+
 type MdNode = {
   type: string
   name?: string

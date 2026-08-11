@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { classifyProposalSkill, formatSkillForPrompt } from './proposal-skills'
+import { buildProposalEditSystem } from './proposal-prompt'
+import { PROPOSAL_DESIGN_CATALOG } from './proposal-design-catalog'
+import { BRM_RENDERER_DIRECTIVES } from '@/components/retencion/report/remarkBuffaloDirectives'
 
 describe('classifyProposalSkill — chart', () => {
   it('detecta pedidos de gráfico', () => {
@@ -23,10 +26,28 @@ describe('classifyProposalSkill — chart', () => {
 })
 
 describe('formatSkillForPrompt — chart', () => {
-  it('inyecta el catálogo de diseño (incluye :::chart)', () => {
+  it('activa la skill de gráficos (el catálogo va en buildProposalEditSystem)', () => {
     const block = formatSkillForPrompt('chart')
     expect(block).toMatch(/SKILL ACTIVA: Gráficos/)
-    expect(block).toMatch(/:::chart/)
-    expect(block).toMatch(/barcompare|donut|pie/)
+    expect(block).toMatch(/:::chart|insertar|gráfico/i)
+  })
+})
+
+describe('buildProposalEditSystem — catálogo siempre presente', () => {
+  it('inyecta el catálogo completo aunque la skill no sea design', () => {
+    const system = buildProposalEditSystem(formatSkillForPrompt('section_edit'))
+    expect(system).toContain(PROPOSAL_DESIGN_CATALOG.slice(0, 40))
+    expect(system).toMatch(/:::chart/)
+    expect(system).toMatch(/:::roi/)
+    expect(system).toMatch(/:::kpi-grid/)
+  })
+})
+
+describe('catálogo vs renderer', () => {
+  it('documenta en el catálogo todas las directivas del renderer', () => {
+    const catalog = PROPOSAL_DESIGN_CATALOG.toLowerCase()
+    const missing = BRM_RENDERER_DIRECTIVES.filter((d) => !catalog.includes(`:::${d}`) && !catalog.includes(d))
+    // "card" aparece como :::card anidado / mención; "kpi" como :::kpi
+    expect(missing, `Faltan en catálogo: ${missing.join(', ')}`).toEqual([])
   })
 })
