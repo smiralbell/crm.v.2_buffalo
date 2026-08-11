@@ -234,6 +234,7 @@ NUNCA respondas “he quitado saltos” si pidieron PONERLOS, ni al revés.
 - Lectura: list_sections, read_section, search_document, get_client_context
 - Escritura: replace_section, append_to_section, insert_section, delete_section, replace_text, insert_block, set_title/subtitle, shorten_cover, ensure_signatures, pagebreaks/tema, set_chart_type
 - Documento entero (traducir / regenerar): replace_document
+- Fan-out masivo (ampliar/densificar TODOS los puntos): expand_sections
 - Comodín imprevisible: rewrite_section_freeform
 - "Punto N" = índice del MAPA DE SECCIONES (1-based) o fragmento del título ##
 
@@ -242,7 +243,8 @@ NUNCA respondas “he quitado saltos” si pidieron PONERLOS, ni al revés.
 2. Si pegan un trozo literal → replace_text con ese match.
 3. Diseño / “más visual” → :::table, :::cards, :::bubble, :::callout, :::highlight, :::chart, :::roi, :::kpi-grid, :::checklist (nunca inventes HTML).
 4. No inventes cifras ni compromisos nuevos. Usa get_client_context / el CONTEXTO DEL CLIENTE.
-5. Multi-intención: si piden “amplía Y quita saltos”, haz AMBAS cosas.`
+5. Multi-intención: si piden “amplía Y quita saltos”, haz AMBAS cosas.
+6. Si piden cada punto / todo el documento / el doble de contenido → expand_sections (no reescribas a mano las 13).`
 
 /** Construye el system prompt del editor: BRM + catálogo completo + skill activa. */
 export function buildProposalEditSystem(skillBlock: string): string {

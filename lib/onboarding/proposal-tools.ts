@@ -21,6 +21,9 @@ export type ProposalToolState = {
   contextPack: ProposalContextPack
   polishOpts: ProposalPatchOpts
   theme?: ProposalTheme
+  /** Progreso SSE (fan-out). */
+  onProgress?: (info: { done: number; total: number; label: string }) => void
+  signal?: AbortSignal
 }
 
 export type ToolResult = {
@@ -618,21 +621,85 @@ const tools: ProposalToolDef[] = [
     spec: {
       name: 'expand_sections',
       description:
-        'Fan-out masivo (fase posterior). Por ahora: expande sección a sección con rewrite_section_freeform.',
+        'Fan-out masivo: reescribe VARIAS o TODAS las secciones en paralelo (ampliar / densificar / condensar). Úsala cuando pidan «cada punto», «todo el documento», «el doble de contenido» o «más tablas en todo».',
       parameters: {
         type: 'object',
         properties: {
-          sections: { type: 'array', items: { oneOf: [{ type: 'number' }, { type: 'string' }] } },
+          sections: {
+            type: 'array',
+            items: { oneOf: [{ type: 'number' }, { type: 'string' }] },
+            description: 'Índices o títulos. Si se omite, todas las secciones ampliables.',
+          },
           target_words: { type: 'number' },
+          action: {
+            type: 'string',
+            enum: ['expand', 'enrich', 'condense'],
+            description: 'expand=más prosa; enrich=+bloques visuales; condense=-40%',
+          },
+          must_include: { type: 'string' },
         },
         additionalProperties: false,
       },
     },
-    run: () => ({
-      ok: false,
-      error: 'expand_sections aún no está disponible como fan-out paralelo',
-      hint: 'Usa list_sections y luego rewrite_section_freeform o replace_section en cada una',
-    }),
+    run: async (args, state) => {
+      const parsed = z
+        .object({
+          sections: z.array(z.union([z.number(), z.string()])).optional(),
+          target_words: z.number().optional(),
+          action: z.enum(['expand', 'enrich', 'condense']).optional(),
+          must_include: z.string().optional(),
+        })
+        .safeParse(args ?? {})
+      if (!parsed.success) return zodFail(parsed.error)
+
+      const { detectBulkScope, runBulkSectionEdit } = await import(
+        '@/lib/onboarding/proposal-bulk'
+      )
+      const detected = detectBulkScope(
+        parsed.data.action
+          ? `${parsed.data.action} cada punto`
+          : 'extiende cada punto'
+      )
+      const action = parsed.data.action || detected?.action || 'expand'
+      const sectionNums = (parsed.data.sections || [])
+        .map((s) => {
+          if (typeof s === 'number') return s
+          if (/^\d+$/.test(s)) return parseInt(s, 10)
+          const found = findSectionBody(state.draft, s)
+          return found?.index
+        })
+        .filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
+
+      const before = state.draft
+      const result = await runBulkSectionEdit({
+        draft: state.draft,
+        instruction: `bulk:${action}`,
+        contextPackBlock: state.contextPack.block,
+        scope:
+          sectionNums.length > 0
+            ? { bulk: true, scope: 'listed', sections: sectionNums, action }
+            : { bulk: true, scope: 'all_sections', action },
+        polishOpts: state.polishOpts,
+        mustInclude: parsed.data.must_include,
+        signal: state.signal,
+        onProgress: state.onProgress,
+      })
+      state.draft = result.draft
+      return {
+        ...observeWrite(before, result.draft, {
+          sectionsTouched: result.sectionsTouched,
+          data: {
+            okCount: result.okCount,
+            failCount: result.failCount,
+            total: result.total,
+            note: result.note,
+            action,
+            target_words: parsed.data.target_words ?? null,
+          },
+        }),
+        preview: result.note,
+      }
+    },
   },
   {
     spec: {

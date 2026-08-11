@@ -39,6 +39,10 @@ import {
   type ProposalToolState,
 } from '@/lib/onboarding/proposal-tools'
 import {
+  detectBulkScope,
+  runBulkSectionEdit,
+} from '@/lib/onboarding/proposal-bulk'
+import {
   throwIfAborted,
   toolCallTarget,
   type ProposalAgentEvent,
@@ -58,6 +62,7 @@ Eres el editor de propuestas de Buffalo. Tienes herramientas.
 - Lo que SÍ controlas: contenido BRM, bloques ::: , saltos, tema, títulos.
 - Lo que NO controlas (plantilla visual): tipografías, logo, márgenes, colores exactos — dilo y ofrece la alternativa BRM más cercana.
 - Traducir / regenerar TODO → replace_document (una sola llamada con el BRM completo).
+- Ampliar / densificar TODOS los puntos → expand_sections (fan-out). No intentes hacerlo sección a sección a mano.
 - Cuando termines, responde con un breve texto sin más tool calls.`
 
 export type ProposalAgentResult = {
@@ -252,7 +257,102 @@ export async function runProposalAgent(input: {
     }
   }
 
-  // 2) Bucle agéntico
+  // 2) Fan-out masivo si la instrucción lo pide (pasos 4/5/15)
+  const bulk = detectBulkScope(instruction)
+  if (bulk) {
+    throwIfAborted(signal)
+    const bulkSkills = classifyProposalSkills(instruction)
+    const bulkTier = proposalSkillsModelTier(bulkSkills)
+    emitSafe(emit, { type: 'start', skills: bulkSkills, model: bulkTier })
+    emitSafe(emit, {
+      type: 'tool',
+      name: 'expand_sections',
+      target:
+        bulk.scope === 'all_sections' ? 'todas' : (bulk.sections || []).join(','),
+    })
+    toolsUsed.push('expand_sections')
+
+    try {
+      const bulkResult = await runBulkSectionEdit({
+        draft,
+        instruction,
+        contextPackBlock: contextPack.block,
+        scope: bulk,
+        polishOpts,
+        signal,
+        onProgress: (info) => {
+          emitSafe(emit, {
+            type: 'progress',
+            done: info.done,
+            total: info.total,
+            label: info.label,
+          })
+        },
+      })
+      draft = bulkResult.draft
+      const stats = diffProposalStats(before, draft)
+      const verify = verifyIntent(instruction, stats)
+      if (
+        verify.satisfied ||
+        stats.wordsDelta >= 800 ||
+        (bulk.action === 'condense' && stats.wordsDelta <= -200)
+      ) {
+        const resolved = resolveEditorNote({
+          instruction,
+          modelNote: bulkResult.note,
+          stats,
+        })
+        const turnMemory: ProposalTurnMemory = {
+          instruction: input.instruction,
+          tools: toolsUsed,
+          sections: stats.sectionsTouched,
+          stats,
+          satisfied: resolved.satisfied || bulkResult.okCount > 0,
+        }
+        console.info('[proposal-agent]', {
+          instruction: input.instruction.slice(0, 100),
+          tools: toolsUsed,
+          mode: 'bulk',
+          okCount: bulkResult.okCount,
+          total: bulkResult.total,
+          wordsDelta: stats.wordsDelta,
+          satisfied: turnMemory.satisfied,
+          ms: Date.now() - started,
+        })
+        emitSafe(emit, {
+          type: 'done',
+          content: draft.trim() || before,
+          note: bulkResult.note || resolved.note,
+          theme: theme || null,
+          stats,
+          intentSatisfied: turnMemory.satisfied,
+        })
+        return {
+          content: draft.trim() || before,
+          note: bulkResult.note || resolved.note,
+          theme,
+          stats,
+          intentSatisfied: turnMemory.satisfied,
+          turnMemory,
+          toolsUsed,
+        }
+      }
+    } catch (e) {
+      if (
+        e instanceof Error &&
+        (e.name === 'AbortError' || e.message === 'Aborted')
+      ) {
+        throw e
+      }
+      console.warn('[proposal-agent] bulk falló, sigue con tools', e)
+      emitSafe(emit, {
+        type: 'retry',
+        reason: 'el fan-out falló parcialmente, reintentando con herramientas',
+      })
+    }
+  }
+
+  // 3) Bucle agéntico (también tras atajos parciales / bulk parcial)
   const skills = classifyProposalSkills(instruction)
   const skillBlock = formatSkillsForPrompt(skills)
   const system = `${buildProposalEditSystem(skillBlock)}\n\n${AGENT_RULES}`
@@ -263,13 +363,24 @@ export async function runProposalAgent(input: {
   const wantsFullDoc = skills.includes('language') || skills.includes('regenerate')
   const maxTokens = wantsFullDoc ? 32000 : 8000
 
-  emitSafe(emit, { type: 'start', skills, model: modelTier })
+  if (!bulk) {
+    emitSafe(emit, { type: 'start', skills, model: modelTier })
+  }
 
   const state: ProposalToolState = {
     draft,
     contextPack,
     polishOpts,
     theme,
+    signal,
+    onProgress: (info) => {
+      emitSafe(emit, {
+        type: 'progress',
+        done: info.done,
+        total: info.total,
+        label: info.label,
+      })
+    },
   }
 
   const messages: ORMessage[] = [{ role: 'system', content: system }]
@@ -288,6 +399,9 @@ export async function runProposalAgent(input: {
         : null,
       wantsFullDoc
         ? 'Esta instrucción pide documento entero: usa replace_document con el BRM completo.'
+        : null,
+      bulk
+        ? '(Si el fan-out quedó corto, usa expand_sections otra vez o rewrite_section_freeform en las secciones flojas.)'
         : null,
       'Usa herramientas. Cuando hayas terminado, responde sin tool calls.',
     ]

@@ -48,8 +48,10 @@ NUNCA dejes tablas markdown para firmas.`,
     how: `Usa replace_section / append_to_section / replace_text / insert_section / delete_section.
 "Punto N" = índice del MAPA DE SECCIONES.
 Si pegan un fragmento literal → replace_text con match = fragmento.
-Al ampliar: 1–3 párrafos bien escritos, no regeneres el resto del documento.`,
+Al ampliar UN punto: 1–3 párrafos bien escritos, no regeneres el resto.
+Si piden CADA punto / TODO el documento / el doble de contenido → expand_sections (fan-out).`,
     preferredOps: [
+      'expand_sections',
       'replace_section',
       'append_to_section',
       'replace_text',
