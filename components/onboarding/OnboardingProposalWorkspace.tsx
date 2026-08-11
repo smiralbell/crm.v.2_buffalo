@@ -57,6 +57,23 @@ const QUICK_CHIPS: Array<{ label: string; instruction: string }> = [
   },
 ]
 
+/**
+ * Texto de espera honesto. La IA tarda de verdad (una sección ~20 s, el documento
+ * entero bastante más) y un «Actualizando…» mudo parece un cuelgue. Mostramos el
+ * tiempo real y qué está pasando, sin barras de progreso falsas.
+ */
+function waitingHint(seconds: number, isFullGeneration: boolean): string {
+  if (isFullGeneration) {
+    if (seconds < 15) return 'Redactando el documento completo con el contexto del cliente.'
+    if (seconds < 45) return 'Son 13 secciones: esto suele tardar entre 40 y 90 segundos.'
+    return 'Sigue trabajando. No recargues la página o perderás el resultado.'
+  }
+  if (seconds < 10) return 'Leyendo el documento y el contexto del cliente.'
+  if (seconds < 30) return 'Escribiendo el cambio. Lo normal son 15-40 segundos.'
+  if (seconds < 75) return 'Es un cambio grande y toca varias secciones. Sigue en marcha.'
+  return 'Tarda más de lo habitual, pero no se ha colgado. No recargues la página.'
+}
+
 function formatStatsLine(stats: {
   wordsDelta?: number
   tablesAfter?: number
@@ -74,8 +91,6 @@ function formatStatsLine(stats: {
   const tablesDelta = (stats.tablesAfter ?? 0) - (stats.tablesBefore ?? 0)
   if (tablesDelta !== 0) {
     parts.push(`${tablesDelta > 0 ? '+' : ''}${tablesDelta} tabla${Math.abs(tablesDelta) === 1 ? '' : 's'}`)
-  } else if ((stats.tablesAfter ?? 0) > 0 && (stats.wordsDelta ?? 0) !== 0) {
-    // no-op
   }
   const chartsDelta = (stats.chartsAfter ?? 0) - (stats.chartsBefore ?? 0)
   if (chartsDelta !== 0) {
@@ -97,6 +112,7 @@ export default function OnboardingProposalWorkspace() {
   const [saving, setSaving] = useState(false)
   const [markingSent, setMarkingSent] = useState(false)
   const [sending, setSending] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState('')
   const [okMsg, setOkMsg] = useState('')
   const [theme, setTheme] = useState<BuffaloThemeName>('green')
@@ -171,6 +187,20 @@ export default function OnboardingProposalWorkspace() {
       behavior: 'smooth',
     })
   }, [messages, sending])
+
+  // Cronómetro real mientras la IA trabaja (evita la sensación de cuelgue).
+  useEffect(() => {
+    if (!sending && !generating) {
+      setElapsed(0)
+      return
+    }
+    setElapsed(0)
+    const startedAt = Date.now()
+    const id = window.setInterval(() => {
+      setElapsed(Math.round((Date.now() - startedAt) / 1000))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [sending, generating])
 
   const flashOk = (msg: string) => {
     setOkMsg(msg)
@@ -613,9 +643,15 @@ export default function OnboardingProposalWorkspace() {
 
               {(sending || generating) && (
                 <div className="flex justify-start">
-                  <div className="flex items-center gap-2 rounded-3xl bg-zinc-100 px-3.5 py-2.5 text-[13px] text-zinc-500">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    {generating && !draft ? 'Generando…' : 'Actualizando…'}
+                  <div className="max-w-[90%] rounded-3xl bg-zinc-100 px-3.5 py-2.5 text-[13px] text-zinc-500">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      {generating && !draft ? 'Generando la propuesta' : 'Aplicando el cambio'}
+                      <span className="tabular-nums text-zinc-400">{elapsed}s</span>
+                    </div>
+                    <div className="mt-1 text-[11px] leading-4 text-zinc-400">
+                      {waitingHint(elapsed, generating && !draft)}
+                    </div>
                   </div>
                 </div>
               )}

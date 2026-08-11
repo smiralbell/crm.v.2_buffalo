@@ -321,7 +321,9 @@ Cada integración exige variables de entorno (ver artículo siguiente). Los webh
 
 ## IA
 
-- \`OPENROUTER_API_KEY\`, \`OPENROUTER_MODEL\`
+- \`OPENROUTER_API_KEY\`, \`OPENROUTER_MODEL\` — modelo rápido (cambios estructurales)
+- \`OPENROUTER_MODEL_HEAVY\` — modelo bueno: genera propuestas y redacta en el chat editor
+  (ampliar, rediseñar, gráficos, traducir). Si falta, el código usa un valor por defecto.
 - \`DEMO_*\`, \`RETENCION_OPENROUTER_MODEL\`
 
 ## Google

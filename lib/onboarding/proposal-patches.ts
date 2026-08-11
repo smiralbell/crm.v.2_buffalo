@@ -571,7 +571,31 @@ export function applyProposalPatches(
 }
 
 /**
- * Atajos locales sin IA para instrucciones muy claras.
+ * True si la instrucción aún necesita el agente (redacción / diseño / contenido),
+ * aunque haya atajos locales (p. ej. quitar saltos + ampliar).
+ */
+export function instructionNeedsAgent(instruction: string): boolean {
+  const n = normalizeText(instruction)
+  if (
+    /amplia|extiende|desarrolla|densifica|mas contenido|mas parrafos|mas desglose|mas puntos|el doble|llena todo|traduce|regenera|reescribe todo|grafico|grafica|chart|tabla|burbuja|cards?|callout|highlight|anade un punto|roi|auditoria|reunion|pregunta.?respuesta|freeform/.test(
+      n
+    )
+  ) {
+    return true
+  }
+  // Punto N / cambiar contenido (no solo saltos)
+  if (/punto \d|apartado \d|seccion \d/.test(n) && !/salto|pagebreak|pagina/.test(n)) {
+    return true
+  }
+  if (/cambia|reescribe|mejora|corrige/.test(n) && !/salto|pagebreak|portada|firma|tema/.test(n)) {
+    return true
+  }
+  return false
+}
+
+/**
+ * Atajos locales sin IA. Puede devolver VARIOS parches (multi-intención).
+ * Si también hace falta el agente, el caller aplica estos y sigue con la IA.
  */
 export function tryLocalPatches(
   instruction: string,
@@ -580,14 +604,16 @@ export function tryLocalPatches(
   const raw = instruction.trim()
   if (!raw) return null
   const n = normalizeText(raw)
+  const patches: ProposalPatch[] = []
 
   // Tema
   if (/\btema\b/.test(n) || /\btheme\b/.test(n) || /\boscuro\b|\bclaro\b|\bverde\b/.test(n)) {
-    if (/\boscuro\b|\bdark\b/.test(n)) return [{ op: 'set_theme', theme: 'dark' }]
-    if (/\bclaro\b|\blight\b|\bblanco\b/.test(n) && !/\boscuro\b/.test(n)) {
-      return [{ op: 'set_theme', theme: 'light' }]
+    if (/\boscuro\b|\bdark\b/.test(n)) patches.push({ op: 'set_theme', theme: 'dark' })
+    else if (/\bclaro\b|\blight\b|\bblanco\b/.test(n) && !/\boscuro\b/.test(n)) {
+      patches.push({ op: 'set_theme', theme: 'light' })
+    } else if (/\bverde\b|\bgreen\b/.test(n)) {
+      patches.push({ op: 'set_theme', theme: 'green' })
     }
-    if (/\bverde\b|\bgreen\b/.test(n)) return [{ op: 'set_theme', theme: 'green' }]
   }
 
   // Portada / subtítulo
@@ -598,7 +624,7 @@ export function tryLocalPatches(
     /(portada|subtitulo|subtitol|descripcion).{0,40}(acorta|corta|reduce|feo|largo)/.test(n) ||
     /arregla(r)? (la )?portada/.test(n)
   ) {
-    return [{ op: 'shorten_cover' }]
+    patches.push({ op: 'shorten_cover' })
   }
 
   // Firmas / aceptación
@@ -608,7 +634,7 @@ export function tryLocalPatches(
     ) ||
     /(firma|aceptacion|acceptacio|signatures).{0,40}(mal|feo|rota|arregla|reestructura)/.test(n)
   ) {
-    return [{ op: 'ensure_signatures' }]
+    patches.push({ op: 'ensure_signatures' })
   }
 
   // Compactar líneas en blanco (no confundir con salto de página)
@@ -616,10 +642,10 @@ export function tryLocalPatches(
     /salto(s)? de linea|lineas en blanco|mas compacto|menos espacio|quita(r)? (las )?lineas/.test(n) &&
     !/\bsalto(s)? de pagina\b|\bpagebreak\b|\bentre punto/.test(n)
   ) {
-    return [{ op: 'compact_blank_lines' }]
+    patches.push({ op: 'compact_blank_lines' })
   }
 
-  // ── Paginado: solo si hablan de saltos/páginas/puntos (polaridad PONER vs QUITAR) ──
+  // ── Paginado: polaridad PONER vs QUITAR ──
   const talksPageBreaks =
     /\b(salto|saltos|pagebreak|page break)s?\b/.test(n) ||
     /entre (punto|puntos|seccion|secciones|apartado)/.test(n) ||
@@ -638,45 +664,43 @@ export function tryLocalPatches(
       /\b(juntos|seguidos|todo seguido)\b/.test(n) ||
       /todo (en )?(una|la misma) (sola )?pagina/.test(n)
 
+    // "cada punto en su página" solo cuenta como PONER si no hay verbo de quitar
     const wantsAddBreaks =
-      /\b(pon|poner|ponme|anade|anadir|anademe|mete|meteme|inserta|insertame|haz|hazme|separa|separar|separame)\b/.test(
+      !wantsRemoveBreaks &&
+      (/\b(pon|poner|ponme|anade|anadir|anademe|mete|meteme|inserta|insertame|haz|hazme|separa|separar|separame)\b/.test(
         n
       ) ||
-      /\bcon saltos?\b/.test(n) ||
-      /cada (punto|seccion|apartado).{0,40}(pagina|hoja)/.test(n) ||
-      /un (punto|seccion) por (pagina|hoja)/.test(n) ||
-      /salta(r)? (de pagina )?entre/.test(n)
+        /\bcon saltos?\b/.test(n) ||
+        /cada (punto|seccion|apartado).{0,40}(pagina|hoja)/.test(n) ||
+        /un (punto|seccion) por (pagina|hoja)/.test(n) ||
+        /salta(r)? (de pagina )?entre/.test(n))
 
-    // AÑADIR (prioridad si hay verbo de añadir y no de quitar)
-    if (wantsAddBreaks && !wantsRemoveBreaks) {
-      return [{ op: 'ensure_section_pagebreaks' }]
-    }
-    // QUITAR
-    if (wantsRemoveBreaks && !wantsAddBreaks) {
-      return [{ op: 'set_page_mode', mode: 'flow' }, { op: 'remove_pagebreaks' }]
-    }
-    // Ambiguo con ambas señales: "no … salto" gana quitar; "pon … salto" gana añadir
-    if (/\bno\b.{0,25}\bsalto|\bsin salto/.test(n)) {
-      return [{ op: 'set_page_mode', mode: 'flow' }, { op: 'remove_pagebreaks' }]
-    }
-    if (/\b(pon|anade|mete|haz|separa)\b.{0,40}\bsalto/.test(n)) {
-      return [{ op: 'ensure_section_pagebreaks' }]
+    if (wantsAddBreaks) {
+      patches.push({ op: 'ensure_section_pagebreaks' })
+    } else if (wantsRemoveBreaks) {
+      patches.push({ op: 'set_page_mode', mode: 'flow' }, { op: 'remove_pagebreaks' })
+    } else if (/\bno\b.{0,25}\bsalto|\bsin salto/.test(n)) {
+      patches.push({ op: 'set_page_mode', mode: 'flow' }, { op: 'remove_pagebreaks' })
+    } else if (/\b(pon|anade|mete|haz|separa)\b.{0,40}\bsalto/.test(n)) {
+      patches.push({ op: 'ensure_section_pagebreaks' })
     }
   }
 
-  // "cambia X por Y" / "sustituye X por Y"
-  const replaceM =
-    raw.match(
-      /(?:cambia|sustituye|reemplaza)\s+["«“]?([\s\S]{8,400}?)["»”]?\s+por\s+["«“]?([\s\S]{1,800}?)["»”]?\s*$/i
-    ) ||
-    raw.match(
-      /(?:cambia|sustituye|reemplaza)\s+([\s\S]{8,200}?)\s+por\s+([\s\S]{1,400})$/i
-    )
-  if (replaceM) {
-    const match = replaceM[1].trim().replace(/^["«“]|["»”]$/g, '')
-    const withText = replaceM[2].trim().replace(/^["«“]|["»”]$/g, '')
-    if (match.length >= 8 && withText.length >= 1) {
-      return [{ op: 'replace_text', match, with: withText }]
+  // "cambia X por Y" — solo si no hay otra intención de contenido masiva
+  if (!instructionNeedsAgent(raw) || patches.length === 0) {
+    const replaceM =
+      raw.match(
+        /(?:cambia|sustituye|reemplaza)\s+["«“]?([\s\S]{8,400}?)["»”]?\s+por\s+["«“]?([\s\S]{1,800}?)["»”]?\s*$/i
+      ) ||
+      raw.match(
+        /(?:cambia|sustituye|reemplaza)\s+([\s\S]{8,200}?)\s+por\s+([\s\S]{1,400})$/i
+      )
+    if (replaceM) {
+      const match = replaceM[1].trim().replace(/^["«“]|["»”]$/g, '')
+      const withText = replaceM[2].trim().replace(/^["«“]|["»”]$/g, '')
+      if (match.length >= 8 && withText.length >= 1) {
+        patches.push({ op: 'replace_text', match, with: withText })
+      }
     }
   }
 
@@ -685,9 +709,9 @@ export function tryLocalPatches(
     /(?:titulo|título)\s*(?:de la portada)?\s*(?:a|=|:)\s*["«“]?(.+?)["»”]?\s*$/i
   )
   if (titleM && /pon|cambia|nuevo|actualiza|set/i.test(raw)) {
-    return [{ op: 'set_title', value: titleM[1].trim() }]
+    patches.push({ op: 'set_title', value: titleM[1].trim() })
   }
 
   void opts
-  return null
+  return patches.length > 0 ? patches : null
 }

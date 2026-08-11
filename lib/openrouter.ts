@@ -4,14 +4,16 @@ type MultimodalPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } }
 
-/** Modelo rápido (parches triviales) vs heavy (generación / docs completos). */
+/**
+ * Modelo rápido (cambios estructurales: saltos de página, portada, firmas)
+ * vs heavy (todo lo que implique REDACTAR: ampliar, rediseñar, traducir, generar).
+ *
+ * OJO: el fallback de `heavy` NO debe encadenar con DEMO_OPENROUTER_MODEL — si
+ * alguien pone ahí un modelo barato, el tier heavy se degradaría en silencio.
+ */
 export function resolveModel(tier: 'fast' | 'heavy'): string {
   if (tier === 'heavy') {
-    return (
-      process.env.OPENROUTER_MODEL_HEAVY ||
-      process.env.DEMO_OPENROUTER_MODEL ||
-      '~anthropic/claude-sonnet-latest'
-    )
+    return process.env.OPENROUTER_MODEL_HEAVY || '~anthropic/claude-sonnet-latest'
   }
   return process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'
 }
@@ -236,5 +238,131 @@ export function parseJsonFromModelOutput(raw: string): unknown {
     }
     throw new Error('No se pudo parsear JSON de la respuesta del modelo')
   }
+}
+
+/* ── Tool calling (OpenAI-compatible / OpenRouter) ───────────────────── */
+
+export type ORTool = {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+export type ORToolCall = { id: string; name: string; arguments: unknown }
+
+export type ORMessage =
+  | {
+      role: 'system' | 'user'
+      content: string
+    }
+  | {
+      role: 'assistant'
+      content: string | null
+      tool_calls?: Array<{
+        id: string
+        type: 'function'
+        function: { name: string; arguments: string }
+      }>
+    }
+  | {
+      role: 'tool'
+      tool_call_id: string
+      content: string
+    }
+
+type OpenRouterToolChoiceMessage = {
+  role?: string
+  content?: string | null
+  tool_calls?: Array<{
+    id?: string
+    type?: string
+    function?: { name?: string; arguments?: string }
+  }>
+}
+
+/**
+ * Un turno de chat con herramientas. No ejecuta tools: solo parsea la respuesta.
+ * Los argumentos inválidos se dejan como string crudo; el caller valida con Zod.
+ */
+export async function openRouterToolTurn(
+  messages: ORMessage[],
+  tools: ORTool[],
+  options?: { model?: string; temperature?: number; maxTokens?: number }
+): Promise<{ text: string; toolCalls: ORToolCall[]; assistantMessage: ORMessage }> {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY no está configurada')
+
+  const model = options?.model || resolveModel('heavy')
+  const siteUrl = process.env.OPENROUTER_HTTP_REFERER || process.env.NEXT_PUBLIC_BASE_URL || ''
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      ...(siteUrl ? { 'HTTP-Referer': siteUrl } : {}),
+      'X-OpenRouter-Title': 'Buffalo CRM - proposal agent',
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: options?.temperature ?? 0.2,
+      ...(options?.maxTokens ? { max_tokens: options.maxTokens } : {}),
+      tools: tools.map((t) => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+        },
+      })),
+      tool_choice: 'auto',
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    throw new Error(`OpenRouter tools ${res.status}: ${errText.slice(0, 500)}`)
+  }
+
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: OpenRouterToolChoiceMessage }>
+  }
+  const msg = data.choices?.[0]?.message
+  if (!msg) throw new Error('Respuesta OpenRouter tools sin mensaje')
+
+  const toolCalls: ORToolCall[] = []
+  for (const tc of msg.tool_calls || []) {
+    const id = tc.id || `call_${toolCalls.length}`
+    const name = tc.function?.name || ''
+    const rawArgs = tc.function?.arguments || '{}'
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(rawArgs)
+    } catch {
+      parsed = { __raw: rawArgs, __parseError: true }
+    }
+    if (name) toolCalls.push({ id, name, arguments: parsed })
+  }
+
+  const text = typeof msg.content === 'string' ? msg.content : ''
+  const assistantMessage: ORMessage = {
+    role: 'assistant',
+    content: text || null,
+    ...(msg.tool_calls?.length
+      ? {
+          tool_calls: (msg.tool_calls || []).map((tc, i) => ({
+            id: tc.id || `call_${i}`,
+            type: 'function' as const,
+            function: {
+              name: tc.function?.name || '',
+              arguments: tc.function?.arguments || '{}',
+            },
+          })),
+        }
+      : {}),
+  }
+
+  return { text, toolCalls, assistantMessage }
 }
 

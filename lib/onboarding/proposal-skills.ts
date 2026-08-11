@@ -109,17 +109,17 @@ No uses tablas markdown planas ni listas feas si hay un bloque BRM mejor.`,
     id: 'language',
     name: 'Idioma',
     when: 'Traducir / pasar a catalán / inglés / otro idioma todo el documento.',
-    how: `Usa replace_doc con la propuesta COMPLETA traducida, manteniendo sintaxis BRM (#, ##, :::, pagebreaks, signatures).
+    how: `Usa la herramienta replace_document con la propuesta COMPLETA traducida, manteniendo sintaxis BRM (#, ##, :::, pagebreaks, signatures).
 No inventes secciones nuevas ni cifras.`,
-    preferredOps: ['replace_doc'],
+    preferredOps: ['replace_document'],
   },
   regenerate: {
     id: 'regenerate',
     name: 'Regenerar',
     when: 'Reescribe todo, regenera, hazla de nuevo, como ACCIÓ, propuesta completa.',
-    how: `Usa replace_doc con una propuesta comercial completa multi-sección (estructura ACCIÓ).
+    how: `Usa replace_document con una propuesta comercial completa multi-sección (estructura ACCIÓ).
 Incluye pagebreaks y :::signatures al final.`,
-    preferredOps: ['replace_doc'],
+    preferredOps: ['replace_document'],
   },
   general: {
     id: 'general',
@@ -131,61 +131,103 @@ Si es ambiguo, aplica el cambio más pequeño y acláralo en note.`,
   },
 }
 
-/** Clasificador por keywords (sin llamada extra a la IA). */
-export function classifyProposalSkill(instruction: string): ProposalSkillId {
+/** Clasificador multi-intención: acumula todos los matches (sin return temprano). */
+export function classifyProposalSkills(instruction: string): ProposalSkillId[] {
   const n = instruction
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
 
+  const found: ProposalSkillId[] = []
+  const add = (id: ProposalSkillId) => {
+    if (!found.includes(id)) found.push(id)
+  }
+
+  // Orden de prioridad: regenerate > language > cover > acceptance > chart > design > layout > section_edit > general
   if (
     /reescribe todo|regenera|hazla de nuevo|como accio|propuesta completa|desde cero/.test(n)
   ) {
-    return 'regenerate'
+    add('regenerate')
   }
   if (
     /pasala a|traduce|en catalan|en ingles|en english|a catalan|a ingles|idioma/.test(n)
   ) {
-    return 'language'
+    add('language')
   }
   if (
     /portada|subtitulo|subtitol|descripcion de la portada|titulo de la propuesta/.test(n) &&
-    !/punto \d|seccion \d|apartado \d/.test(n) &&
-    !/tabla|burbuja|card|dise[nñ]o|callout|highlight/.test(n)
+    !/punto \d|seccion \d|apartado \d/.test(n)
   ) {
-    return 'cover'
+    add('cover')
   }
-  if (/firma|aceptacion|acceptacio|signatures|signatura/.test(n) && !/tabla|burbuja|dise[nñ]o/.test(n)) {
-    return 'acceptance'
+  if (/firma|aceptacion|acceptacio|signatures|signatura/.test(n)) {
+    add('acceptance')
   }
-  // Gráficos antes que design genérico (solape con "visual" / "comparativa")
   if (
     /\b(grafico|grafica|graficos|graficas|chart|charts)\b/.test(n) ||
     /evolucion visual|representa(lo|r)? visual|en (un )?grafico|diagrama de barras|barras compar|donut|pie chart/.test(
       n
     )
   ) {
-    return 'chart'
+    add('chart')
   }
-  // Diseño visual antes que section_edit genérico
+  // "más tablas" en contexto de densificar todo → section_edit + design, no solo design
+  const densifyAll =
+    /(cada punto|todos los puntos|todo el documento|todas las secciones|el doble|mas contenido|llena todo|muy cortos)/.test(
+      n
+    )
   if (
     /tabla|burbuja|bubble|cards?|tarjetas?|callout|highlight|kpi|checklist|dise[nñ]o|visual|bonit|maqueta|estilo|comparativ|mas chulo|mas mono|sosa/.test(
       n
     )
   ) {
-    return 'design'
+    add('design')
+    if (densifyAll) add('section_edit')
   }
   if (
-    /pagebreak|salto de pagina|salto entre|entre punto|tema (verde|claro|oscuro)|compacto|mas junto|todo seguido|puntos? seguidos|una (sola )?pagina/.test(
+    /pagebreak|salto de pagina|salto entre|entre punto|tema (verde|claro|oscuro)|compacto|mas junto|todo seguido|puntos? seguidos|una (sola )?pagina|quita.{0,20}saltos|pon.{0,20}saltos/.test(
       n
     )
   ) {
-    return 'layout'
+    add('layout')
   }
-  if (/punto \d|apartado \d|seccion \d|amplia|acorta|reescribe|anade|quita|cambia/.test(n)) {
-    return 'section_edit'
+  if (
+    /punto \d|apartado \d|seccion \d|amplia|extiende|acorta|reescribe|anade|quita|cambia|desarrolla|densifica|mas parrafos|mas desglose/.test(
+      n
+    )
+  ) {
+    add('section_edit')
   }
-  return 'general'
+
+  if (found.length === 0) add('general')
+  return found
+}
+
+/** Wrapper compat: primera skill del array multi. */
+export function classifyProposalSkill(instruction: string): ProposalSkillId {
+  return classifyProposalSkills(instruction)[0] || 'general'
+}
+
+/**
+ * Qué modelo necesita el conjunto de skills (heavy gana si alguna lo pide).
+ */
+export function proposalSkillsModelTier(skillIds: ProposalSkillId[]): 'fast' | 'heavy' {
+  return skillIds.some((id) => proposalSkillModelTier(id) === 'heavy') ? 'heavy' : 'fast'
+}
+
+/**
+ * Qué modelo necesita cada skill.
+ *
+ * `fast` SOLO para cambios estructurales donde el modelo elige una op determinista
+ * y no redacta nada (saltos de página, tema, acortar portada, firmas).
+ * Todo lo que implique ESCRIBIR PROSA va con el modelo bueno: es justo donde el
+ * mini se quedaba corto («amplía el punto 4» devolvía una frase).
+ * `general` → heavy a propósito: es el cajón de sastre de lo imprevisible.
+ */
+export function proposalSkillModelTier(skillId: ProposalSkillId): 'fast' | 'heavy' {
+  return skillId === 'layout' || skillId === 'cover' || skillId === 'acceptance'
+    ? 'fast'
+    : 'heavy'
 }
 
 /** Bloque de skill para inyectar en el system prompt (el catálogo va siempre vía buildProposalEditSystem). */
@@ -197,4 +239,10 @@ SKILL ACTIVA: ${s.name} (${s.id})
 Cuándo: ${s.when}
 Cómo: ${s.how}
 Ops preferidas: ${s.preferredOps.join(', ')}`
+}
+
+/** Concatena varias skills (catálogo NO se duplica: va en buildProposalEditSystem). */
+export function formatSkillsForPrompt(skillIds: ProposalSkillId[]): string {
+  const ids = skillIds.length ? skillIds : (['general'] as ProposalSkillId[])
+  return ids.map((id) => formatSkillForPrompt(id)).join('\n\n')
 }

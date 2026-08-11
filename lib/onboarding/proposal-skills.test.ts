@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { classifyProposalSkill, formatSkillForPrompt } from './proposal-skills'
+import {
+  classifyProposalSkill,
+  formatSkillForPrompt,
+  proposalSkillModelTier,
+} from './proposal-skills'
 import { buildProposalEditSystem } from './proposal-prompt'
 import { PROPOSAL_DESIGN_CATALOG } from './proposal-design-catalog'
 import { BRM_RENDERER_DIRECTIVES } from '@/components/retencion/report/remarkBuffaloDirectives'
@@ -44,10 +48,30 @@ describe('buildProposalEditSystem — catálogo siempre presente', () => {
 })
 
 describe('catálogo vs renderer', () => {
+  // Guardián: si alguien añade una directiva al renderer y no la documenta, la IA
+  // nunca la usará. Exigimos la forma ":::nombre" — un `includes(nombre)` suelto
+  // pasaría por subcadena ("card" dentro de "cards") y no probaría nada.
   it('documenta en el catálogo todas las directivas del renderer', () => {
     const catalog = PROPOSAL_DESIGN_CATALOG.toLowerCase()
-    const missing = BRM_RENDERER_DIRECTIVES.filter((d) => !catalog.includes(`:::${d}`) && !catalog.includes(d))
-    // "card" aparece como :::card anidado / mención; "kpi" como :::kpi
+    const missing = BRM_RENDERER_DIRECTIVES.filter((d) => !catalog.includes(`:::${d}`))
     expect(missing, `Faltan en catálogo: ${missing.join(', ')}`).toEqual([])
+  })
+})
+
+describe('proposalSkillModelTier', () => {
+  it('usa el modelo bueno para todo lo que implique redactar', () => {
+    for (const id of ['section_edit', 'design', 'chart', 'language', 'regenerate'] as const) {
+      expect(proposalSkillModelTier(id), id).toBe('heavy')
+    }
+  })
+
+  it('reserva el rápido para cambios estructurales', () => {
+    for (const id of ['layout', 'cover', 'acceptance'] as const) {
+      expect(proposalSkillModelTier(id), id).toBe('fast')
+    }
+  })
+
+  it('trata lo imprevisible (general) como redacción', () => {
+    expect(proposalSkillModelTier('general')).toBe('heavy')
   })
 })

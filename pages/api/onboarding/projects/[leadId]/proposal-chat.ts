@@ -7,6 +7,8 @@ import {
   mergeLeadConfig,
   reviseProposalWithChat,
 } from '@/lib/onboarding/project-context-ai'
+import type { ProposalTurnMemory } from '@/lib/onboarding/proposal-memory'
+import type { ProposalDiffStats } from '@/lib/onboarding/proposal-verify'
 
 const bodySchema = z.object({
   instruction: z.string().min(1).max(4000),
@@ -23,6 +25,27 @@ const bodySchema = z.object({
   /** Si true, guarda el resultado en proposal_draft */
   save: z.boolean().optional().default(true),
 })
+
+function toTurnMemory(raw: unknown): ProposalTurnMemory | null {
+  if (!raw || typeof raw !== 'object') return null
+  const t = raw as {
+    instruction?: unknown
+    tools?: unknown
+    sections?: unknown
+    stats?: unknown
+    satisfied?: unknown
+  }
+  if (typeof t.instruction !== 'string' || !t.stats || typeof t.stats !== 'object') {
+    return null
+  }
+  return {
+    instruction: t.instruction,
+    tools: Array.isArray(t.tools) ? t.tools.map(String) : [],
+    sections: Array.isArray(t.sections) ? t.sections.map(String) : [],
+    stats: t.stats as ProposalDiffStats,
+    satisfied: Boolean(t.satisfied),
+  }
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -48,6 +71,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const context = (cfg?.project_context || '').trim()
     const definition = (cfg?.description || lead.notas || '').trim()
     const currentDraft = (body.draft ?? cfg?.proposal_draft ?? '').trim()
+    const lastTurn = toTurnMemory(cfg?.proposal_last_turn)
 
     const proyectoRows = await prisma.$queryRaw<
       { name: string; setup_fee_eur: number | null; monthly_fee_eur: number | null }[]
@@ -72,12 +96,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       setupFee: p?.setup_fee_eur ?? (lead.valor != null ? Number(lead.valor) : null),
       monthlyFee: p?.monthly_fee_eur ?? null,
       history: body.messages,
+      lastTurn,
     })
 
     if (body.save) {
       const { encoded } = mergeLeadConfig(lead.configuracion, {
         proposal_draft: result.content,
         proposal_status: 'draft',
+        ...(result.turnMemory
+          ? {
+              proposal_last_turn: {
+                instruction: result.turnMemory.instruction,
+                tools: result.turnMemory.tools,
+                sections: result.turnMemory.sections,
+                stats: result.turnMemory.stats,
+                satisfied: result.turnMemory.satisfied,
+              },
+            }
+          : {}),
       })
       await prisma.lead.update({
         where: { id: leadId },

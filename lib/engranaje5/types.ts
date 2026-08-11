@@ -54,6 +54,30 @@ export interface ConfiguradorConfig {
   proposal_status?: 'draft' | 'sent'
   /** ISO cuando se marcó como enviada */
   proposal_sent_at?: string
+  /**
+   * Memoria del último turno del editor de propuestas (feedback "lo veo igual").
+   * JSON embebido en configuracion base64 — sin migración.
+   */
+  proposal_last_turn?: {
+    instruction: string
+    tools: string[]
+    sections: string[]
+    stats: {
+      charsDelta: number
+      wordsDelta: number
+      sectionsBefore: number
+      sectionsAfter: number
+      chartsBefore: number
+      chartsAfter: number
+      tablesBefore: number
+      tablesAfter: number
+      sectionsTouched: string[]
+      pagebreaksDelta: number
+      chartTypesBefore: string[]
+      chartTypesAfter: string[]
+    }
+    satisfied: boolean
+  }
   /** Borrador de contrato (Anexo I JSON) generado con IA */
   contract_draft?: string
   /** Estado del contrato: borrador o enviado al cliente */

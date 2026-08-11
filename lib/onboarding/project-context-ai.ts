@@ -168,16 +168,26 @@ export async function generateProposalFromContext(input: {
   }
 
   const { PROPOSAL_GENERATE_SYSTEM } = await import('@/lib/onboarding/proposal-prompt')
+  const { buildProposalContextPack } = await import(
+    '@/lib/onboarding/proposal-context-pack'
+  )
 
   const system = PROPOSAL_GENERATE_SYSTEM
 
+  // Mismo pack que el editor: presupuesto de caracteres y recorte por párrafos, para
+  // que una auditoría larga + 12 reuniones no desborden la ventana de contexto.
+  const contextPack = buildProposalContextPack({
+    definition,
+    context,
+    projectName: input.projectName,
+    clientName: input.clientName,
+    clientCompany: input.clientCompany,
+    setupFee: input.setupFee,
+    monthlyFee: input.monthlyFee,
+    maxChars: 40_000,
+  })
+
   const user = [
-    input.projectName ? `Proyecto: ${input.projectName}` : null,
-    input.clientCompany || input.clientName
-      ? `Cliente: ${[input.clientCompany, input.clientName].filter(Boolean).join(' · ')}`
-      : null,
-    input.setupFee != null && input.setupFee > 0 ? `Setup (€): ${input.setupFee}` : null,
-    input.monthlyFee != null && input.monthlyFee > 0 ? `Mensualidad (€): ${input.monthlyFee}` : null,
     input.extraInstructions?.trim()
       ? `Instrucciones del comercial (prioridad):\n${input.extraInstructions.trim()}`
       : null,
@@ -185,11 +195,8 @@ export async function generateProposalFromContext(input: {
     'OBJETIVO DEL DOCUMENTO:',
     'Genera una PROPUESTA COMERCIAL COMPLETA multi-sección (estilo ACCIÓ / plantilla Buffalo), NO un resumen corto ni un chat. Debe incluir todas las secciones obligatorias del system prompt, con prosa desarrollada, alternativas A/B si aplica, tabla económica, RGPD, mantenimiento, calendario, recomendación y aceptación.',
     '---',
-    'DEFINICIÓN DEL PROYECTO:',
-    definition || '(vacía)',
-    '---',
-    'CONTEXTO / AUDITORÍA (fuente — úsala para anclar el texto al cliente real):',
-    context || '(vacío)',
+    'CONTEXTO DEL CLIENTE (fuente — úsalo para anclar TODO el texto al cliente real):',
+    contextPack.block,
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -212,7 +219,7 @@ export async function generateProposalFromContext(input: {
   })
 }
 
-/** Itera la propuesta con una instrucción de chat (editor por parches). */
+/** Itera la propuesta con el agente de edición (herramientas + verificación). */
 export async function reviseProposalWithChat(input: {
   draft: string
   instruction: string
@@ -224,232 +231,37 @@ export async function reviseProposalWithChat(input: {
   setupFee?: number | null
   monthlyFee?: number | null
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
+  lastTurn?: import('@/lib/onboarding/proposal-memory').ProposalTurnMemory | null
 }): Promise<{
   content: string
   note: string
   theme?: 'green' | 'light' | 'dark'
   stats?: import('@/lib/onboarding/proposal-verify').ProposalDiffStats
   intentSatisfied?: boolean
+  turnMemory?: import('@/lib/onboarding/proposal-memory').ProposalTurnMemory
 }> {
-  const instruction = input.instruction.trim()
-  if (!instruction) throw new Error('Instrucción vacía')
-
-  const before = (input.draft || '').replace(/\r\n/g, '\n').trim()
-  const polishOpts = {
-    clientName: input.clientName,
-    clientCompany: input.clientCompany,
-  }
-
-  const { formatSectionMapForEditor } = await import('@/lib/onboarding/proposal-brm')
-  const { applyProposalPatches, tryLocalPatches } = await import(
-    '@/lib/onboarding/proposal-patches'
-  )
-  type ProposalPatch = import('@/lib/onboarding/proposal-patches').ProposalPatch
-  type ProposalTheme = import('@/lib/onboarding/proposal-patches').ProposalTheme
-  const { classifyProposalSkill, formatSkillForPrompt } = await import(
-    '@/lib/onboarding/proposal-skills'
-  )
-  const { buildProposalEditSystem } = await import('@/lib/onboarding/proposal-prompt')
-  const { parseJsonFromModelOutput } = await import('@/lib/openrouter')
-  const { diffProposalStats, resolveEditorNote } = await import(
-    '@/lib/onboarding/proposal-verify'
-  )
-  const { buildProposalContextPack } = await import(
-    '@/lib/onboarding/proposal-context-pack'
-  )
-  type ProposalDiffStats = import('@/lib/onboarding/proposal-verify').ProposalDiffStats
-
-  const finish = (
-    after: string,
-    note: string,
-    theme?: ProposalTheme
-  ): {
-    content: string
-    note: string
-    theme?: ProposalTheme
-    stats?: ProposalDiffStats
-    intentSatisfied?: boolean
-  } => {
-    const next = after.trim()
-    if (!next || next === before) {
-      return {
-        content: before,
-        note:
-          note && /no pude|sin cambio|no encontr/i.test(note)
-            ? note
-            : 'No pude aplicar el cambio. Sé más concreto o pega el fragmento exacto a editar.',
-        stats: diffProposalStats(before, before),
-        intentSatisfied: false,
-      }
-    }
-    const stats = diffProposalStats(before, next)
-    const resolved = resolveEditorNote({
-      instruction,
-      modelNote: note,
-      stats,
-    })
-    return {
-      content: next,
-      note: resolved.note.trim() || 'Cambio aplicado',
-      theme,
-      stats: resolved.stats,
-      intentSatisfied: resolved.satisfied,
-    }
-  }
-
-  // 1) Atajos locales
-  const local = tryLocalPatches(instruction, polishOpts)
-  if (local) {
-    const { draft, applied, errors, theme } = applyProposalPatches(before, local, polishOpts)
-    if (theme && applied > 0 && draft.trim() === before) {
-      return {
-        content: before,
-        note: `Tema cambiado a ${theme}.`,
-        theme,
-      }
-    }
-    if (applied > 0 && draft.trim() !== before) {
-      const ops = new Set(local.map((p) => p.op))
-      const pageModePatch = local.find((p) => p.op === 'set_page_mode') as
-        | { op: 'set_page_mode'; mode: 'flow' | 'sections' }
-        | undefined
-      const note = ops.has('ensure_section_pagebreaks')
-        ? 'He puesto un salto de página entre cada punto (cada uno en su hoja).'
-        : pageModePatch?.mode === 'flow' || ops.has('remove_pagebreaks')
-          ? 'He quitado los saltos entre puntos: van seguidos en la misma hoja.'
-          : pageModePatch?.mode === 'sections'
-            ? 'Cada punto vuelve a ir en su propia hoja.'
-            : ops.has('compact_blank_lines')
-              ? 'He compactado las líneas en blanco.'
-              : local[0]?.op === 'shorten_cover'
-                ? 'He acortado la descripción de la portada.'
-                : local[0]?.op === 'ensure_signatures'
-                  ? 'He reestructurado la sección de aceptación y firmas.'
-                  : local[0]?.op === 'set_theme'
-                    ? `Tema cambiado a ${local[0].theme}.`
-                    : local[0]?.op === 'replace_text'
-                      ? 'He sustituido el texto indicado.'
-                      : 'Cambio aplicado.'
-      return finish(draft, note, theme)
-    }
-    void errors
-  }
-
-  // 2) IA → patches
-  const skillId = classifyProposalSkill(instruction)
-  const skillBlock = formatSkillForPrompt(skillId)
-  const system = buildProposalEditSystem(skillBlock)
-  const sectionMap = formatSectionMapForEditor(before)
-  const wantsFullDoc = skillId === 'language' || skillId === 'regenerate'
-
-  const contextPack = buildProposalContextPack({
-    definition: input.definition,
+  const { runProposalAgent } = await import('@/lib/onboarding/proposal-agent')
+  const result = await runProposalAgent({
+    draft: input.draft,
+    instruction: input.instruction,
     context: input.context,
+    definition: input.definition,
     projectName: input.projectName,
     clientName: input.clientName,
     clientCompany: input.clientCompany,
     setupFee: input.setupFee,
     monthlyFee: input.monthlyFee,
+    history: input.history,
+    lastTurn: input.lastTurn,
   })
-
-  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-    { role: 'system', content: system },
-  ]
-  for (const m of (input.history || []).slice(-6)) {
-    messages.push({ role: m.role, content: m.content })
+  return {
+    content: result.content,
+    note: result.note,
+    theme: result.theme,
+    stats: result.stats,
+    intentSatisfied: result.intentSatisfied,
+    turnMemory: result.turnMemory,
   }
-  messages.push({
-    role: 'user',
-    content: [
-      `CONTEXTO DEL CLIENTE (fuente de verdad para ampliar contenido):\n${contextPack.block}`,
-      `MAPA DE SECCIONES (usa estos índices para "punto N"):\n${sectionMap}`,
-      wantsFullDoc
-        ? `DOCUMENTO ACTUAL (BRM) — para replace_doc conserva estructura y traduce/regenera:\n${before || '(vacío)'}`
-        : `DOCUMENTO ACTUAL (BRM) — NO lo devuelvas entero; usa patches:\n${before || '(vacío — usa replace_doc para generar)'}`,
-      `─────\nINSTRUCCIÓN:\n${instruction}`,
-      'Responde con JSON: { "note", "patches": [...] }. Preferible patches cortos. Al ampliar, usa el CONTEXTO DEL CLIENTE (no inventes).',
-    ]
-      .filter(Boolean)
-      .join('\n\n'),
-  })
-
-  const raw = await openRouterChatCompletion(messages, {
-    temperature: 0.12,
-    maxTokens: wantsFullDoc ? 32000 : 16000,
-    model: resolveModel(wantsFullDoc ? 'heavy' : 'fast'),
-    json: true,
-  })
-
-  let parsed: {
-    note?: string
-    patches?: ProposalPatch[]
-    content?: string
-    theme?: string
-  }
-  try {
-    parsed = parseJsonFromModelOutput(raw) as typeof parsed
-  } catch {
-    // Si la IA devolvió BRM crudo (fallback legacy)
-    const cleaned = String(raw || '')
-      .replace(/^```(?:markdown|md|json)?\s*/i, '')
-      .replace(/\s*```$/i, '')
-      .trim()
-    if (cleaned.startsWith('#') && cleaned !== before) {
-      return finish(cleaned, 'Documento actualizado')
-    }
-    return finish(
-      before,
-      'No pude leer la respuesta. Prueba pegando el texto exacto y la orden (ej. «cámbialo por …»).'
-    )
-  }
-
-  const themeRaw = String(parsed.theme || '').toLowerCase()
-  let theme: ProposalTheme | undefined =
-    themeRaw === 'green' || themeRaw === 'light' || themeRaw === 'dark'
-      ? (themeRaw as ProposalTheme)
-      : undefined
-
-  if (Array.isArray(parsed.patches) && parsed.patches.length > 0) {
-    const { draft, applied, errors, theme: patchTheme } = applyProposalPatches(
-      before,
-      parsed.patches,
-      polishOpts
-    )
-    if (patchTheme) theme = patchTheme
-    if (applied > 0 && draft.trim() !== before) {
-      return finish(
-        draft,
-        String(parsed.note || `Aplicados ${applied} cambio(s)`).trim(),
-        theme
-      )
-    }
-    // Si patches fallaron pero hay content completo
-    const full = String(parsed.content || '').trim()
-    if (full && full !== before) {
-      return finish(full, String(parsed.note || 'Documento actualizado').trim(), theme)
-    }
-    return finish(
-      before,
-      errors[0] ||
-        'No pude aplicar el cambio. Pega el fragmento exacto y di qué hacer (cambiar / ampliar / acortar).'
-    )
-  }
-
-  // Fallback: content completo (regen/traducción o modelos viejos)
-  const full = String(parsed.content || '').trim()
-  if (full && full !== before) {
-    return finish(full, String(parsed.note || 'Documento actualizado').trim(), theme)
-  }
-
-  // Solo tema
-  if (theme && (!full || full === before)) {
-    return { content: before, note: String(parsed.note || `Tema ${theme}`).trim(), theme }
-  }
-
-  return finish(
-    before,
-    'Sin cambios detectados. Sé más concreto o pega el texto a editar.'
-  )
 }
 
 export type OnboardingDocKind = 'proposal' | 'contract' | 'pre_kickoff'
