@@ -117,6 +117,8 @@ describe('proposal-tools', () => {
     expect(names).toContain('rewrite_section_freeform')
     expect(names).toContain('replace_document')
     expect(names).toContain('set_chart_type')
+    expect(names).toContain('insert_scenario_chart')
+    expect(names).toContain('expand_sections')
   })
 
   it('list_sections y read_section', async () => {

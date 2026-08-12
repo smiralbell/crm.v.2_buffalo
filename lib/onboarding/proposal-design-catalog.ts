@@ -75,7 +75,9 @@ El cliente habla con un sistema entrenado en su conocimiento, no con un chatbot 
 | Resolución | 2100 | 600 |
 :::
   · type ∈ line | area | bar | barcompare | donut | pie
-  · Nunca en portada. Cifras del contexto o etiquetadas "Ilustrativo".
+  · Nunca en portada.
+  · Cifras reales: solo del contexto.
+  · Proyección ilustrativa: title "Proyección ilustrativa" + nota de hipótesis; herramientas set_chart_type / insert_scenario_chart.
 
 10) Firmas (solo en ## Aceptación)
 :::signatures

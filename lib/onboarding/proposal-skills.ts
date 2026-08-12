@@ -85,14 +85,20 @@ NUNCA inviertas poner/quitar.`,
   chart: {
     id: 'chart',
     name: 'Gráficos',
-    when: 'Gráfico, gráfica, chart, evolución visual, representar números, barras, donut, pie, comparar visualmente cifras.',
-    how: `Inserta un bloque :::chart{type="..." title="..."} con tabla GFM dentro (col1 = categoría, resto = series).
-Usa replace_section / append_to_section / insert_section — NUNCA en la portada.
+    when: 'Gráfico, gráfica, chart, evolución visual, representar números, barras, donut, pie, comparar visualmente cifras, proyección, sin Buffalo vs con Buffalo.',
+    how: `Usa las herramientas especializadas:
+- set_chart_type({ section, type }) — cambia SOLO el type= de un :::chart existente (arregla "quiero temporal en vez de barras").
+- insert_scenario_chart({ section, chartType, … }) — inserta proyección ilustrativa sin/con Buffalo con divergencia creciente y nota de hipótesis. replaceExisting=true sustituye :::chart/:::table previos.
 Tipos: line/area (evolución), bar/barcompare (categorías), donut/pie (reparto).
-Cifras SOLO del contexto, metadatos o auditoría. Si no hay datos reales, usa valores de ejemplo
-con title o nota "Ilustrativo" — NUNCA los presentes como reales.
-No inventes ROI/payback: si piden economía sin cifras, dilo en note y usa "A definir" o ilustrativo.`,
-    preferredOps: ['append_to_section', 'replace_section', 'insert_section'],
+CIFRAS REALES: solo del contexto/auditoría. NUNCA las inventes ni las presentes como históricas.
+PROYECCIÓN ILUSTRATIVA (permitida): title con "Proyección ilustrativa" + nota de hipótesis bajo el gráfico.
+Si piden "en vez de tabla un gráfico" → insert_scenario_chart con replaceExisting o set_chart_type si ya hay chart.`,
+    preferredOps: [
+      'set_chart_type',
+      'insert_scenario_chart',
+      'append_to_section',
+      'replace_section',
+    ],
   },
   design: {
     id: 'design',

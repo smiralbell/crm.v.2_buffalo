@@ -15,6 +15,14 @@ import {
 import { listProposalSections } from '@/lib/onboarding/proposal-brm'
 import { extractSectionBodies } from '@/lib/onboarding/proposal-verify'
 import type { ProposalContextPack } from '@/lib/onboarding/proposal-context-pack'
+import {
+  buildChartBlock,
+  buildScenarioSeries,
+  DEFAULT_SCENARIO_NOTE,
+  insertScenarioChartInBody,
+  setChartTypeInBody,
+  type ChartType,
+} from '@/lib/onboarding/proposal-data-tools'
 
 export type ProposalToolState = {
   draft: string
@@ -595,25 +603,14 @@ const tools: ProposalToolDef[] = [
           hint: 'Usa insert_block o rewrite_section_freeform',
         }
       }
-      const nextBody = found.body.replace(
-        /:::chart\{([^}]*)\}/i,
-        (_m, attrs: string) => {
-          let a = String(attrs)
-          if (/\btype\s*=/.test(a)) {
-            a = a.replace(/\btype\s*=\s*["']?[a-z]+["']?/i, `type="${parsed.data.type}"`)
-          } else {
-            a = `type="${parsed.data.type}" ${a}`.trim()
-          }
-          return `:::chart{${a}}`
-        }
-      )
-      if (nextBody === found.body) {
-        return { ok: false, error: 'No pude cambiar el type del chart' }
+      const nextBody = setChartTypeInBody(found.body, parsed.data.type)
+      if (!nextBody.ok) {
+        return { ok: false, error: nextBody.error, hint: 'Usa insert_scenario_chart' }
       }
       return applyOne(state, {
         op: 'replace_section',
         section: found.index,
-        body: nextBody,
+        body: nextBody.body,
       })
     },
   },
@@ -704,21 +701,95 @@ const tools: ProposalToolDef[] = [
   {
     spec: {
       name: 'insert_scenario_chart',
-      description: 'Inserta gráfico de proyección (fase posterior). Usa rewrite_section_freeform mientras tanto.',
+      description:
+        'Inserta (o sustituye) un gráfico de proyección ilustrativa Sin Buffalo vs Con Buffalo con divergencia creciente y nota de hipótesis. Usa replaceExisting para cambiar una tabla/chart previo.',
       parameters: {
         type: 'object',
         properties: {
           section: { oneOf: [{ type: 'number' }, { type: 'string' }] },
-          chartType: { type: 'string' },
+          chartType: {
+            type: 'string',
+            enum: ['line', 'area', 'bar', 'barcompare', 'donut', 'pie'],
+          },
+          title: { type: 'string' },
+          periods: { type: 'number' },
+          baseline: { type: 'number' },
+          baselineGrowthPct: { type: 'number' },
+          upliftPct: { type: 'number' },
+          note: { type: 'string' },
+          replaceExisting: { type: 'boolean' },
+          periodLabel: { type: 'string' },
         },
-        additionalProperties: true,
+        required: ['section'],
+        additionalProperties: false,
       },
     },
-    run: () => ({
-      ok: false,
-      error: 'insert_scenario_chart llegará en la fase de gráficos',
-      hint: 'Usa rewrite_section_freeform pidiendo :::chart type=line con proyección ilustrativa y nota de hipótesis',
-    }),
+    run: (args, state) => {
+      const parsed = z
+        .object({
+          section: sectionRef,
+          chartType: z
+            .enum(['line', 'area', 'bar', 'barcompare', 'donut', 'pie'])
+            .optional(),
+          title: z.string().optional(),
+          periods: z.number().optional(),
+          baseline: z.number().optional(),
+          baselineGrowthPct: z.number().optional(),
+          upliftPct: z.number().optional(),
+          note: z.string().optional(),
+          replaceExisting: z.boolean().optional(),
+          periodLabel: z.string().optional(),
+        })
+        .safeParse(args)
+      if (!parsed.success) return zodFail(parsed.error)
+      const found = findSectionBody(state.draft, parsed.data.section)
+      if (!found) {
+        return { ok: false, error: 'Sección no encontrada', hint: 'list_sections' }
+      }
+
+      const chartType = (parsed.data.chartType || 'line') as ChartType
+      const series = buildScenarioSeries({
+        periods: parsed.data.periods ?? 6,
+        periodLabel: parsed.data.periodLabel || 'Mes',
+        baseline: parsed.data.baseline ?? 100,
+        baselineGrowthPct: parsed.data.baselineGrowthPct ?? 3,
+        upliftPct: parsed.data.upliftPct ?? 25,
+      })
+      const title =
+        parsed.data.title?.trim() ||
+        'Proyección ilustrativa: sin Buffalo vs con Buffalo'
+      const note = parsed.data.note?.trim() || DEFAULT_SCENARIO_NOTE
+      let chartBlock: string
+      try {
+        chartBlock = buildChartBlock({
+          type: chartType,
+          title,
+          columns: series.columns,
+          rows: series.rows,
+          note,
+        })
+      } catch (e) {
+        return {
+          ok: false,
+          error: e instanceof Error ? e.message : 'Error construyendo chart',
+        }
+      }
+
+      const nextBody = insertScenarioChartInBody(found.body, chartBlock, {
+        replaceExisting: parsed.data.replaceExisting !== false,
+        position: 'end',
+      })
+      console.info('[proposal-tools] insert_scenario_chart', {
+        section: found.title,
+        type: chartType,
+        periods: series.rows.length,
+      })
+      return applyOne(state, {
+        op: 'replace_section',
+        section: found.index,
+        body: nextBody,
+      })
+    },
   },
   {
     spec: {

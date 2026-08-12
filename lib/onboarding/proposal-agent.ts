@@ -63,6 +63,7 @@ Eres el editor de propuestas de Buffalo. Tienes herramientas.
 - Lo que NO controlas (plantilla visual): tipografías, logo, márgenes, colores exactos — dilo y ofrece la alternativa BRM más cercana.
 - Traducir / regenerar TODO → replace_document (una sola llamada con el BRM completo).
 - Ampliar / densificar TODOS los puntos → expand_sections (fan-out). No intentes hacerlo sección a sección a mano.
+- Gráfico temporal / cambiar tipo → set_chart_type. Sin Buffalo vs con Buffalo → insert_scenario_chart.
 - Cuando termines, responde con un breve texto sin más tool calls.`
 
 export type ProposalAgentResult = {

@@ -97,8 +97,16 @@ Frase destacada en la barra de acento.
     – Evolución temporal (meses, fases) → line o area
     – Comparar categorías / escenarios → bar o barcompare (varias series)
     – Reparto o porcentajes (cuotas, mix) → donut o pie
-  · NUNCA en la portada. Inserta en la sección ## pertinente (replace_section / append_to_section).
-  · Cifras: solo las del contexto/metadatos. Si son orientativas, etiqueta "Ilustrativo" en el title o en una nota; NUNCA las presentes como reales inventadas.
+  · NUNCA en la portada. Inserta en la sección ## pertinente.
+  · CIFRAS REALES / HISTÓRICAS: solo las del contexto, auditoría o metadatos. Prohibido inventarlas.
+  · PROYECCIÓN ILUSTRATIVA (permitida y distinta de inventar datos):
+    – Cuando pidan “sin Buffalo vs con Buffalo”, crecimiento, proyección o escenario.
+    – El title DEBE decir "Proyección ilustrativa" (o similar).
+    – Bajo el gráfico, una nota en cursiva con las hipótesis
+      (*"Escenario basado en una mejora del 25%…; a validar con datos del cliente"*).
+    – Usa las herramientas set_chart_type / insert_scenario_chart (no aritmética a mano).
+    – NUNCA presentes esas cifras como históricas o contractuales.
+  · Herramientas: set_chart_type (solo cambia type=) · insert_scenario_chart (series con divergencia creciente).
 
 - Salto de página (diseño comercial):
 :::pagebreak
@@ -106,7 +114,7 @@ Frase destacada en la barra de acento.
   · En generación de propuesta COMERCIAL usa pagebreaks entre bloques lógicos (como la plantilla ACCIÓ): portada → arranque, conocimiento/UX, alternativas, legal/implantación, mantenimiento/calendario/precios, recomendación/aceptación.
   · En edición: solo añade/quita pagebreaks si lo piden.
 
-Reglas: cierra SIEMPRE los ":::" que abras. No inventes cifras ni compromisos.
+Reglas: cierra SIEMPRE los ":::" que abras. No inventes cifras históricas ni compromisos contractuales. La proyección ilustrativa (etiquetada) sí está permitida.
 Si piden diseño/tabla bonita/burbuja/cards/gráfico/ROI/KPIs: usa los bloques de arriba (no markdown plano).
 Idioma: por defecto español de España; si el comercial o el contexto del cliente piden catalán/inglés,
 traduce/reescribe TODO el documento en ese idioma manteniendo la sintaxis BRM.`
@@ -232,7 +240,7 @@ NUNCA respondas “he quitado saltos” si pidieron PONERLOS, ni al revés.
 
 ── HERRAMIENTAS CLAVE ──
 - Lectura: list_sections, read_section, search_document, get_client_context
-- Escritura: replace_section, append_to_section, insert_section, delete_section, replace_text, insert_block, set_title/subtitle, shorten_cover, ensure_signatures, pagebreaks/tema, set_chart_type
+- Escritura: replace_section, append_to_section, insert_section, delete_section, replace_text, insert_block, set_title/subtitle, shorten_cover, ensure_signatures, pagebreaks/tema, set_chart_type, insert_scenario_chart
 - Documento entero (traducir / regenerar): replace_document
 - Fan-out masivo (ampliar/densificar TODOS los puntos): expand_sections
 - Comodín imprevisible: rewrite_section_freeform
@@ -242,9 +250,10 @@ NUNCA respondas “he quitado saltos” si pidieron PONERLOS, ni al revés.
 1. Quirúrgico: no reescribas lo no pedido.
 2. Si pegan un trozo literal → replace_text con ese match.
 3. Diseño / “más visual” → :::table, :::cards, :::bubble, :::callout, :::highlight, :::chart, :::roi, :::kpi-grid, :::checklist (nunca inventes HTML).
-4. No inventes cifras ni compromisos nuevos. Usa get_client_context / el CONTEXTO DEL CLIENTE.
+4. No inventes cifras históricas ni compromisos. Proyección ilustrativa etiquetada sí (insert_scenario_chart).
 5. Multi-intención: si piden “amplía Y quita saltos”, haz AMBAS cosas.
-6. Si piden cada punto / todo el documento / el doble de contenido → expand_sections (no reescribas a mano las 13).`
+6. Si piden cada punto / todo el documento / el doble de contenido → expand_sections (no reescribas a mano las 13).
+7. “Gráfico temporal / line” → set_chart_type. “Sin Buffalo vs con Buffalo” → insert_scenario_chart.`
 
 /** Construye el system prompt del editor: BRM + catálogo completo + skill activa. */
 export function buildProposalEditSystem(skillBlock: string): string {
