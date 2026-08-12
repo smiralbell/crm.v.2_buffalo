@@ -404,6 +404,20 @@ export default function OnboardingAuditPage() {
 
   return (
     <Layout>
+      <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        La auditoría estructurada queda en modo lectura. El flujo activo es el{' '}
+        <a
+          className="font-medium underline underline-offset-2"
+          href={
+            Number.isFinite(leadId) && leadId > 0
+              ? `/onboarding/notas?lead=${leadId}${nombre ? `&nombre=${encodeURIComponent(nombre)}` : ''}${empresa ? `&empresa=${encodeURIComponent(empresa)}` : ''}`
+              : '/onboarding'
+          }
+        >
+          cuaderno de reuniones
+        </a>
+        . El histórico de auditorías se conserva.
+      </div>
       <div className="flex flex-col h-[calc(100vh-5.5rem)] min-h-[640px] -mx-1">
         {/* Top bar */}
         <div className="shrink-0 rounded-[1.75rem] bg-white/80 backdrop-blur-xl ring-1 ring-zinc-200/70 px-4 py-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">

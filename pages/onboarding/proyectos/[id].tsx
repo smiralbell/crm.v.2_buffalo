@@ -222,7 +222,7 @@ export default function ProyectoDetailPage({ lead }: Props) {
     if (lead.contact?.nombre) p.set('nombre', lead.contact.nombre)
     if (lead.contact?.empresa) p.set('empresa', lead.contact.empresa)
     if (lead.contact?.email) p.set('email', lead.contact.email)
-    return `/onboarding/audit?${p.toString()}`
+    return `/onboarding/notas?${p.toString()}`
   }, [lead])
 
   const hasEconomics =
@@ -293,9 +293,7 @@ export default function ProyectoDetailPage({ lead }: Props) {
                 className="inline-flex items-center gap-2 px-4 h-10 text-sm font-medium rounded-xl bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
               >
                 <PlayCircle className="h-4 w-4" />
-                {isAuditConfiguracion(lead.configuracion)
-                  ? 'Reanudar auditoría'
-                  : 'Iniciar auditoría'}
+                Abrir cuaderno de reuniones
               </Link>
               {!esBuffalo ? (
                 <button

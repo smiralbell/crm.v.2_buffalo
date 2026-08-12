@@ -64,7 +64,7 @@ function auditResumeUrl(lead: Lead): string {
   if (lead.contact?.nombre) params.set('nombre', lead.contact.nombre)
   if (lead.contact?.empresa) params.set('empresa', lead.contact.empresa)
   if (lead.contact?.email) params.set('email', lead.contact.email)
-  return `/onboarding/audit?${params.toString()}`
+  return `/onboarding/notas?${params.toString()}`
 }
 
 function resolveProjectFees(
@@ -344,7 +344,7 @@ export default function OnboardingPage() {
 
     if (kind === 'audit' || kind === 'custom') {
       if (kind === 'audit') {
-        router.push(`/onboarding/audit?${params.toString()}`)
+        router.push(`/onboarding/notas?${params.toString()}`)
         return
       }
       router.push(`/onboarding/custom?${params.toString()}`)
@@ -480,7 +480,7 @@ export default function OnboardingPage() {
                     onClick={() => void handleConfigure(selected, undefined, undefined, undefined, 'audit')}
                     className="px-4 h-10 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition-colors"
                   >
-                    Auditoría
+                    Cuaderno
                   </button>
                   <button
                     onClick={() => void handleConfigure(selected, undefined, undefined, undefined, 'custom')}
@@ -908,16 +908,10 @@ export default function OnboardingPage() {
                           type="button"
                           onClick={() => router.push(auditResumeUrl(lead))}
                           className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
-                          title={
-                            isAuditConfiguracion(lead.configuracion)
-                              ? 'Continuar la auditoría con el copiloto'
-                              : 'Empezar auditoría con el copiloto'
-                          }
+                          title="Abrir el cuaderno de reuniones"
                         >
                           <PlayCircle className="h-3.5 w-3.5" />
-                          {isAuditConfiguracion(lead.configuracion)
-                            ? 'Reanudar auditoría'
-                            : 'Iniciar auditoría'}
+                          Abrir cuaderno
                         </button>
                         {buffaloFlags[lead.id] ? (
                           <button
@@ -1025,16 +1019,10 @@ export default function OnboardingPage() {
                             type="button"
                             onClick={() => router.push(auditResumeUrl(lead))}
                             className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-semibold bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
-                            title={
-                              isAuditConfiguracion(lead.configuracion)
-                                ? 'Continuar la auditoría con el copiloto'
-                                : 'Empezar auditoría con el copiloto'
-                            }
+                            title="Abrir el cuaderno de reuniones"
                           >
                             <PlayCircle className="h-3.5 w-3.5" />
-                            {isAuditConfiguracion(lead.configuracion)
-                              ? 'Reanudar auditoría'
-                              : 'Iniciar auditoría'}
+                            Abrir cuaderno
                           </button>
                           {buffaloFlags[lead.id] ? (
                             <button

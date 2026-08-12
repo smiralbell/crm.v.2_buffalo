@@ -4,6 +4,12 @@ import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import { getAuditByLeadId } from '@/lib/onboarding/audit/store'
 import { buildProposalPayload } from '@/lib/onboarding/audit/proposal'
 import { listMeetingsForLead } from '@/lib/integrations/fireflies/store'
+import {
+  getResearch,
+  listNotes,
+  notesToContextBlock,
+  researchToContextBlock,
+} from '@/lib/onboarding/notes/store'
 
 export function encodeConfiguradorConfig(cfg: ConfiguradorConfig): string {
   return Buffer.from(JSON.stringify(cfg), 'utf8').toString('base64')
@@ -23,18 +29,43 @@ export function mergeLeadConfig(
   return { cfg, encoded: encodeConfiguradorConfig(cfg) }
 }
 
-/** Fuentes CRM (auditoría + reuniones) para enriquecer el contexto. */
+/**
+ * Fuentes CRM para enriquecer el contexto.
+ * Orden: notas → research → auditoría (solo si no hay notas) → Fireflies.
+ */
 export async function buildCrmContextSources(leadId: number): Promise<string> {
   const parts: string[] = []
+  let hasNotes = false
 
   try {
-    const audit = await getAuditByLeadId(leadId)
-    if (audit) {
-      const payload = buildProposalPayload(audit)
-      parts.push('## Auditoría Buffalo (copiloto)\n' + payload.brief)
+    const notes = await listNotes(leadId)
+    const block = notesToContextBlock(notes)
+    if (block) {
+      hasNotes = true
+      parts.push(block)
     }
   } catch {
     /* best-effort */
+  }
+
+  try {
+    const research = await getResearch(leadId)
+    const block = researchToContextBlock(research)
+    if (block) parts.push(block)
+  } catch {
+    /* best-effort */
+  }
+
+  if (!hasNotes) {
+    try {
+      const audit = await getAuditByLeadId(leadId)
+      if (audit) {
+        const payload = buildProposalPayload(audit)
+        parts.push('## Auditoría Buffalo (copiloto)\n' + payload.brief)
+      }
+    } catch {
+      /* best-effort */
+    }
   }
 
   try {

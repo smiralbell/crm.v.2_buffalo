@@ -216,7 +216,7 @@ export default function ConfigurePage() {
     if (pipeline) params.set('pipeline', pipeline)
     if (card) params.set('card', card)
     if (effectiveMode === 'audit') {
-      router.replace(`/onboarding/audit?${params.toString()}`)
+      router.replace(`/onboarding/notas?${params.toString()}`)
       return
     }
     router.replace(`/onboarding/custom?${params.toString()}`)
@@ -616,10 +616,10 @@ export default function ConfigurePage() {
           >
             <div className="flex items-center gap-2 mb-3">
               <ClipboardList className="h-5 w-5 text-gray-800" />
-              <span className="text-base font-semibold text-gray-900">Auditoría</span>
+              <span className="text-base font-semibold text-gray-900">Cuaderno de reuniones</span>
             </div>
             <p className="text-sm text-gray-500 leading-relaxed">
-              Diagnóstico e informe Buffalo. Brief + IA para propuesta, contrato y factura.
+              Notas libres con copiloto de huecos. Brief + IA para propuesta, contrato y factura.
             </p>
           </button>
           <button
