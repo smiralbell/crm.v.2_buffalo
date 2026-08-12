@@ -90,9 +90,11 @@ export function atTokenAtCaret(
   return { start: caret - m[1].length - 1, query: m[1] }
 }
 
+export type AtajoIcon = 'search' | 'message' | 'check' | 'calendar'
+
 export type Atajo = {
   id: string
-  ico: string
+  icon: AtajoIcon
   n: string
   h: string
 }
@@ -100,25 +102,25 @@ export type Atajo = {
 export const ATAJOS: Atajo[] = [
   {
     id: 'investigar',
-    ico: '🔍',
+    icon: 'search',
     n: 'Investigar cliente',
     h: 'Pega su web y saca una ficha de quiénes son',
   },
   {
     id: 'pregunta',
-    ico: '❓',
+    icon: 'message',
     n: 'Pregunta del copiloto',
     h: 'Inserta la siguiente pregunta sugerida',
   },
   {
     id: 'accion',
-    ico: '✅',
+    icon: 'check',
     n: 'Acción pendiente',
     h: 'Marca un to-do dentro de la nota',
   },
   {
     id: 'fecha',
-    ico: '📅',
+    icon: 'calendar',
     n: 'Fecha de hoy',
     h: 'Inserta la fecha',
   },

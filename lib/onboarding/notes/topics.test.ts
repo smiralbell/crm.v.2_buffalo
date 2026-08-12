@@ -68,6 +68,30 @@ describe('ui-helpers', () => {
   })
 })
 
+describe('researchToNoteText shape', () => {
+  it('prioriza quiénes son / oferta sin fuentes ni ganchos', async () => {
+    const { researchToNoteText } = await import('./scrape')
+    const text = researchToNoteText({
+      url: 'https://clinicavall.com',
+      host: 'clinicavall.com',
+      nombre: 'Clínica Vall',
+      sector: 'Salud',
+      hace: 'Centro médico privado en Barcelona.',
+      servicios: ['Traumatología', 'Fisio'],
+      senales: ['Cita online'],
+      ganchos: ['pregunta que no debe salir'],
+      fuentes: ['https://clinicavall.com'],
+      origen: 'scraping',
+      at: new Date().toISOString(),
+    })
+    expect(text).toMatch(/QUIÉNES SON/)
+    expect(text).toMatch(/QUÉ OFRECEN/)
+    expect(text).toMatch(/Traumatología/)
+    expect(text).not.toMatch(/Fuentes/)
+    expect(text).not.toMatch(/pregunta que no debe salir/)
+  })
+})
+
 describe('notesToContextBlock', () => {
   it('formatea notas no vacías', () => {
     const notes: ProjectNote[] = [

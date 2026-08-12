@@ -7,6 +7,12 @@ import {
   useRef,
   useState,
 } from 'react'
+import {
+  Search,
+  MessageCircleQuestion,
+  CheckSquare,
+  CalendarDays,
+} from 'lucide-react'
 import type {
   ProjectNote,
   ProjectResearch,
@@ -24,7 +30,16 @@ import {
   labelDate,
   typeLabel,
   wordCount,
+  type AtajoIcon,
 } from '@/lib/onboarding/notes/ui-helpers'
+
+function AtajoIconView({ icon }: { icon: AtajoIcon }) {
+  const props = { strokeWidth: 2, 'aria-hidden': true as const }
+  if (icon === 'search') return <Search {...props} />
+  if (icon === 'message') return <MessageCircleQuestion {...props} />
+  if (icon === 'check') return <CheckSquare {...props} />
+  return <CalendarDays {...props} />
+}
 
 type Props = {
   leadId: number
@@ -76,6 +91,7 @@ export default function NotebookWorkspace({
   const [atPos, setAtPos] = useState<{ left: number; top: number } | null>(null)
   const [applyingDef, setApplyingDef] = useState(false)
   const [draftingDef, setDraftingDef] = useState(false)
+  const [insightsLoading, setInsightsLoading] = useState(false)
 
   const taRef = useRef<HTMLTextAreaElement>(null)
   const hlRef = useRef<HTMLDivElement>(null)
@@ -459,6 +475,60 @@ export default function NotebookWorkspace({
     toast,
   ])
 
+  const openInsights = useCallback(
+    async (kind: 'context' | 'diagnosis') => {
+      setInsightsLoading(true)
+      setPanel({
+        title: kind === 'context' ? 'Contexto del proyecto' : 'Diagnóstico',
+        sub:
+          kind === 'context'
+            ? 'La IA sintetiza de qué trata el proyecto a partir de todas las notas.'
+            : 'Lectura crítica de lo que sabes y lo que aún desbloquea la propuesta.',
+        html: `<div style="padding:28px;text-align:center;color:var(--muted);font-size:12.5px">Analizando el cuaderno…</div>`,
+        plain: '',
+      })
+      try {
+        const res = await fetch(
+          `/api/onboarding/projects/${leadId}/notes-insights`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kind }),
+          }
+        )
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'No se pudo generar')
+        if (kind === 'context') {
+          const txt = String(data.context || '')
+          setPanel({
+            title: 'Contexto del proyecto',
+            sub:
+              data.source === 'llm'
+                ? 'Síntesis de la IA a partir de tus notas. Esto es lo que debería alimentar la propuesta.'
+                : 'Resumen provisional (faltan notas o la IA no respondió).',
+            html: `<div style="white-space:pre-wrap;font-size:13px;line-height:1.65;color:var(--ink-2)">${txt
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')}</div>`,
+            plain: txt,
+          })
+        } else {
+          setPanel({
+            title: 'Diagnóstico de conocimiento',
+            sub: 'Qué tan listo estás para redactar y qué preguntar ahora.',
+            html: String(data.diagnosis_html || ''),
+            plain: String(data.diagnosis_plain || ''),
+          })
+        }
+      } catch (e) {
+        setPanel(null)
+        toast(e instanceof Error ? e.message : 'Error al analizar')
+      } finally {
+        setInsightsLoading(false)
+      }
+    },
+    [leadId, toast]
+  )
+
   const buildContexto = useCallback(() => {
     const partes: string[] = []
     partes.push(
@@ -503,80 +573,6 @@ export default function NotebookWorkspace({
     }
     return partes.join('\n\n─────\n\n')
   }, [clientLabel, projectTitle, research, notes, coveredSet])
-
-  const buildDiagnosticoHtml = useCallback(() => {
-    const cubiertosT = TOPICS.filter((t) => coveredSet.has(t.id))
-    const faltan = TOPICS.filter((t) => !coveredSet.has(t.id))
-    const reuniones = notes.filter(
-      (n) => n.type !== 'definicion' && n.body.trim()
-    )
-    const palabras = reuniones.reduce((a, n) => a + wordCount(n.body), 0)
-    const def = notes.find((n) => n.type === 'definicion')
-    const defPalabras = def ? wordCount(def.body) : 0
-    const listo =
-      faltan.length <= 3 && palabras >= 200 && defPalabras >= 80
-    const semaforo = listo
-      ? (['#047857', 'Listo para redactar la propuesta'] as const)
-      : faltan.length <= 6
-        ? (['#b45309', 'Va bien, pero faltan cosas importantes'] as const)
-        : (['#b91c1c', 'Demasiados huecos: no redactes la propuesta todavía'] as const)
-
-    const bloque = (titulo: string, cuerpo: string) =>
-      `<div class="d-row"><div class="d-k" style="color:var(--muted)">${titulo}</div>
-       <div class="d-v" style="color:var(--ink-2)">${cuerpo}</div></div>`
-
-    return `
-    <div style="padding:12px 14px;border-radius:14px;background:${semaforo[0]}12;
-                border:1px solid ${semaforo[0]}44;margin-bottom:14px">
-      <strong style="color:${semaforo[0]};font-size:13px">${semaforo[1]}</strong>
-      <div style="font-size:11.5px;color:var(--muted);margin-top:4px">
-        ${coveredSet.size} de ${TOPICS.length} temas cubiertos ·
-        ${palabras} palabras de notas ·
-        definición ${defPalabras ? defPalabras + ' palabras' : 'sin escribir'}
-      </div>
-    </div>
-    ${bloque(
-      'Qué sabemos (' + cubiertosT.length + ')',
-      cubiertosT.length
-        ? '<ul>' + cubiertosT.map((t) => `<li>${t.label}</li>`).join('') + '</ul>'
-        : 'Nada todavía.'
-    )}
-    ${bloque(
-      'Qué falta preguntar (' + faltan.length + ')',
-      faltan.length
-        ? '<ul>' +
-            faltan
-              .map(
-                (t) =>
-                  `<li><strong>${t.label}</strong> — ${t.q[0]}</li>`
-              )
-              .join('') +
-            '</ul>'
-        : 'Nada: has cubierto todo el guion.'
-    )}
-    ${bloque(
-      'De dónde sale lo que sabemos',
-      '<ul>' +
-        (research
-          ? `<li>Web del cliente (${research.data?.origen || 'scraping'})</li>`
-          : '<li>Sin investigación de su web</li>') +
-        reuniones
-          .map(
-            (n) =>
-              `<li>${n.title || 'Nota'} · ${wordCount(n.body)} palabras</li>`
-          )
-          .join('') +
-        '</ul>'
-    )}
-    ${bloque(
-      'Riesgo',
-      faltan.length > 6
-        ? 'Con tantos huecos, la propuesta saldría genérica y el cliente lo notará.'
-        : defPalabras < 80
-          ? 'Falta la definición del proyecto: es lo que alimenta la propuesta.'
-          : 'Cobertura suficiente. Revisa que las cifras estén confirmadas por el cliente.'
-    )}`
-  }, [coveredSet, notes, research])
 
   const applyDefinitionToCrm = useCallback(async () => {
     const def = notes.find((n) => n.type === 'definicion')
@@ -695,34 +691,16 @@ export default function NotebookWorkspace({
           <button
             type="button"
             className="btn"
-            onClick={() => {
-              const txt = buildContexto()
-              setPanel({
-                title: 'Contexto del proyecto',
-                sub: 'Esto es exactamente lo que recibiría la IA para redactar la propuesta. Ni más, ni menos.',
-                html: `<pre style="white-space:pre-wrap;font-size:11.5px;line-height:1.6;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink-2)">${txt
-                  .replace(/&/g, '&amp;')
-                  .replace(/</g, '&lt;')}</pre>`,
-                plain: txt,
-              })
-            }}
+            disabled={insightsLoading}
+            onClick={() => void openInsights('context')}
           >
-            Ver contexto
+            {insightsLoading ? 'Analizando…' : 'Ver contexto'}
           </button>
           <button
             type="button"
             className="btn"
-            onClick={() => {
-              const faltan = TOPICS.filter((t) => !coveredSet.has(t.id))
-              setPanel({
-                title: 'Diagnóstico de conocimiento',
-                sub: 'Qué sabes del cliente, de dónde lo sabes y qué te falta antes de redactar.',
-                html: buildDiagnosticoHtml(),
-                plain:
-                  'Faltan por preguntar:\n' +
-                  faltan.map((t) => '- ' + t.label + ': ' + t.q[0]).join('\n'),
-              })
-            }}
+            disabled={insightsLoading}
+            onClick={() => void openInsights('diagnosis')}
           >
             Diagnóstico
           </button>
@@ -1032,29 +1010,33 @@ export default function NotebookWorkspace({
                 </button>
                 <div className={`dossier-body${dossierOpen ? ' on' : ''}`}>
                   <div className="d-row">
-                    <div className="d-k">Qué hacen</div>
+                    <div className="d-k">Quiénes son</div>
                     <div className="d-v">{research.data.hace}</div>
                   </div>
-                  <div className="d-row">
-                    <div className="d-k">Servicios detectados</div>
-                    <div className="d-v">
-                      <ul>
-                        {(research.data.servicios || []).map((s) => (
-                          <li key={s}>{s}</li>
-                        ))}
-                      </ul>
+                  {(research.data.servicios || []).length ? (
+                    <div className="d-row">
+                      <div className="d-k">Qué ofrecen</div>
+                      <div className="d-v">
+                        <ul>
+                          {research.data.servicios.map((s) => (
+                            <li key={s}>{s}</li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
-                  </div>
-                  <div className="d-row">
-                    <div className="d-k">Señales digitales</div>
-                    <div className="d-v">
-                      <ul>
-                        {(research.data.senales || []).map((s) => (
-                          <li key={s}>{s}</li>
-                        ))}
-                      </ul>
+                  ) : null}
+                  {(research.data.senales || []).length ? (
+                    <div className="d-row">
+                      <div className="d-k">En la web se ve</div>
+                      <div className="d-v">
+                        <ul>
+                          {research.data.senales.slice(0, 6).map((s) => (
+                            <li key={s}>{s}</li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
                   <div className="d-acts">
                     <button
                       type="button"
@@ -1067,7 +1049,7 @@ export default function NotebookWorkspace({
                         toast('Insertada otra vez en la nota')
                       }}
                     >
-                      Insertar de nuevo en la nota
+                      Insertar en la nota
                     </button>
                     <button
                       type="button"
@@ -1114,12 +1096,6 @@ export default function NotebookWorkspace({
                       }`}
                       style={{ animationDelay: `${i * 22}ms` }}
                     >
-                      <div className="top">
-                        <span className="tag">
-                          {item.tipo === 'hueco' ? 'sin tocar · ' : ''}
-                          {item.tema}
-                        </span>
-                      </div>
                       <div className="text">{item.texto}</div>
                       <div className="acts">
                         <button
@@ -1129,7 +1105,7 @@ export default function NotebookWorkspace({
                             toast('Añadido a la nota')
                           }}
                         >
-                          Apuntar en la nota
+                          Apuntar
                         </button>
                         <button
                           type="button"
@@ -1147,9 +1123,7 @@ export default function NotebookWorkspace({
               </div>
             </div>
             <div className="hint-foot">
-              Las preguntas se actualizan solas según escribes. Las{' '}
-              <strong style={{ color: 'var(--amber)' }}>ámbar</strong> son
-              huecos: temas que aún no has tocado.
+              Preguntas afiladas según tus notas. En ámbar: lo que aún no has tocado.
             </div>
           </aside>
         </div>
@@ -1175,7 +1149,9 @@ export default function NotebookWorkspace({
                 runAtajo(a.id)
               }}
             >
-              <span className="at-ico">{a.ico}</span>
+              <span className="at-ico">
+                <AtajoIconView icon={a.icon} />
+              </span>
               <span>
                 <span className="n">{a.n}</span>
                 <span className="h">{a.h}</span>

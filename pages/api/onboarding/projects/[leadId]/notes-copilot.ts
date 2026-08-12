@@ -85,14 +85,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           [
             {
               role: 'system',
-              content: `Eres el copiloto de descubrimiento de Buffalo AI en reuniones comerciales.
-Guion de temas (cubre huecos primero):
+              content: `Eres el copiloto de descubrimiento de Buffalo AI en reuniones comerciales de alto nivel.
+Tu trabajo: proponer las mejores preguntas posibles — concretas, afiladas, que desbloqueen precio, alcance o decisión.
+Guion de temas (prioridad a huecos):
 ${formatTopicsForPrompt()}
+
+Reglas de calidad:
+- Máximo 8 preguntas. Solo las TOP. Nada genérico ni de manual.
+- Cada pregunta debe anclarse a algo dicho en las notas (cifra, herramienta, persona, canal) cuando exista.
+- Prefiere una pregunta brutalmente clara a tres mediocres.
+- Tono de reunión real: directo, profesional, en español.
+- No inventes hechos del cliente.
 
 Devuelve SOLO JSON:
 { "cubiertos": ["volumen","canales",...],
-  "preguntas": [{ "tema":"...", "tipo":"hueco|profundizar|web|contexto", "texto":"...", "porque":"..." }] }
-Máximo 12 preguntas. Prioriza huecos. No inventes hechos del cliente.`,
+  "preguntas": [{ "tema":"...", "tipo":"hueco|profundizar|web|contexto", "texto":"...", "porque":"..." }] }`,
             },
             {
               role: 'user',
@@ -114,7 +121,7 @@ Máximo 12 preguntas. Prioriza huecos. No inventes hechos del cliente.`,
           cubiertos = parsed.cubiertos.map(String)
         }
         if (Array.isArray(parsed.preguntas) && parsed.preguntas.length) {
-          preguntas = parsed.preguntas.slice(0, 12).map((p) => ({
+          preguntas = parsed.preguntas.slice(0, 8).map((p) => ({
             tema: String(p.tema || 'Tema'),
             tipo:
               p.tipo === 'profundizar' || p.tipo === 'web' || p.tipo === 'contexto'
@@ -130,7 +137,7 @@ Máximo 12 preguntas. Prioriza huecos. No inventes hechos del cliente.`,
       console.warn('[notes-copilot] fallback heurístico', e)
     }
 
-    const payload = { cubiertos, preguntas, source, topics_total: 14 }
+    const payload = { cubiertos, preguntas: preguntas.slice(0, 8), source, topics_total: 14 }
     cache.set(hash, { at: Date.now(), payload })
     return res.status(200).json({ ok: true, cached: false, ...payload })
   } catch (error) {

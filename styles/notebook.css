@@ -151,10 +151,15 @@
 .notebook-app .note-text::placeholder { color: #d4d4d8; }
   /* El bloque verde de @investigar, dentro de la nota */
 .notebook-app .hl-res {
-    display: block; background: var(--accent-soft);
-    box-shadow: -6px 0 0 var(--accent-soft), 6px 0 0 var(--accent-soft),
-                inset 3px 0 0 var(--accent);
-    border-radius: 3px;
+    display: block;
+    background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+    box-shadow:
+      -8px 0 0 #ecfdf5,
+      8px 0 0 #ecfdf5,
+      inset 4px 0 0 var(--accent),
+      0 1px 0 rgba(4, 120, 87, 0.08);
+    border-radius: 10px;
+    color: transparent;
   }
 
 .notebook-app .def-actions {
@@ -201,7 +206,8 @@
     color: var(--muted-2);
   }
   .q.gap .tag { color: var(--amber); }
-  .q .text { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+  .q .text { font-size: 13px; line-height: 1.55; color: var(--ink-2); font-weight: 500; }
+  .q.gap .text { color: #78350f; }
   /* Siempre visibles: ocultarlos hasta el hover los hacÃ­a indescubribles. */
   .q .acts { display: flex; gap: 6px; margin-top: 9px; }
   .q .acts button {
@@ -251,10 +257,12 @@
   }
   .at-item.sel { background: #f4f4f5; }
   .at-ico {
-    width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
-    display: grid; place-items: center; font-size: 13px;
+    width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+    display: grid; place-items: center;
     background: var(--accent-soft); border: 1px solid var(--accent-line);
+    color: var(--accent);
   }
+  .at-ico svg { width: 14px; height: 14px; }
   .at-item .n { font-size: 12.5px; font-weight: 500; color: var(--ink); line-height: 1.3; }
   .at-item .h { font-size: 10.5px; color: var(--muted-2); margin-top: 1px; line-height: 1.3; }
   .at-empty { padding: 14px 12px; font-size: 11.5px; color: var(--muted-2); text-align: center; }

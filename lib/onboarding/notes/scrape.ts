@@ -388,12 +388,12 @@ async function llmEnrich(d: ResearchDraft): Promise<LlmEnrichResult | null> {
   if (!process.env.OPENROUTER_API_KEY) return null
 
   const model = resolveModel('heavy')
-  const system = `Eres analista comercial de Buffalo AI (agencia de automatización e IA).
+  const system = `Eres analista comercial de Buffalo AI.
 Recibes datos REALES scrapeados de la web de un cliente potencial.
-Devuelve SOLO JSON: { "sector": "...", "hace": "una frase", "ganchos": ["...", "...", "..."] }
-- "hace": qué hace la empresa, en una frase, sin marketing.
-- "ganchos": 3 preguntas concretas para la reunión, basadas SOLO en lo que se ve en los datos.
-  Nada genérico. Cita algo concreto de su web en cada una.
+Devuelve SOLO JSON:
+{ "sector": "...", "hace": "2-3 frases claras: quiénes son y qué hacen, sin marketing", "ganchos": ["...","...","..."] }
+- "hace": resumen humano y concreto (quiénes son + actividad). Sin claim vacíos.
+- "ganchos": 3 preguntas de reunión ancladas a lo visto (se usan en el copiloto, no en la ficha).
 - No inventes datos que no estén.`
   const user = JSON.stringify(d, null, 1).slice(0, 12000)
 
@@ -543,20 +543,26 @@ export async function researchUrl(
   return toScrapedResearch(d)
 }
 
-/** Formato exacto del bloque ┌ │ └ para insertar en la nota. */
+/** Formato visual limpio del bloque ┌ │ └ para insertar en la nota. */
 export function researchToNoteText(data: ScrapedResearch): string {
   const li = (s: string) => `│ ${s}`
+  const blank = () => `│`
+  const bullets = (items: string[], empty = '—') =>
+    items.length ? items.map((s) => li(`· ${s}`)) : [li(`· ${empty}`)]
+
   return [
-    `${RES_ABRE} INVESTIGACIÓN · ${data.nombre} · ${data.host}`,
-    li(`Sector: ${data.sector}`),
-    li(`Qué hacen: ${data.hace}`),
-    li(`Servicios: ${data.servicios.join(', ')}`),
-    li(`Señales: ${data.senales.join(' · ')}`),
-    li(''),
-    li('Para preguntar en la reunión:'),
-    ...data.ganchos.map((g) => li(`  · ${g}`)),
-    li(''),
-    li(`Fuentes: ${data.fuentes.join('  ')}`),
-    `${RES_CIERRA} ${data.origen} · ${new Date(data.at).toLocaleString('es-ES')}`,
+    `${RES_ABRE}  ${data.nombre}`,
+    li(data.host + (data.sector ? `  ·  ${data.sector}` : '')),
+    blank(),
+    li('QUIÉNES SON'),
+    li(data.hace || 'Sin descripción clara en la web.'),
+    blank(),
+    li('QUÉ OFRECEN'),
+    ...bullets(data.servicios || [], 'Sin servicios claros'),
+    blank(),
+    li('EN LA WEB SE VE'),
+    ...bullets((data.senales || []).slice(0, 6), 'Pocas señales digitales'),
+    blank(),
+    `${RES_CIERRA}  Ficha web`,
   ].join('\n')
 }
