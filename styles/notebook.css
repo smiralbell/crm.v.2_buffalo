@@ -1,0 +1,331 @@
+/* Cuaderno de reuniones — scoped under .notebook-app */
+.notebook-app {
+  --bg: #f4f4f5;
+  --panel: #ffffff;
+  --line: #e4e4e7;
+  --line-soft: #f0f0f1;
+  --ink: #18181b;
+  --ink-2: #3f3f46;
+  --muted: #71717a;
+  --muted-2: #a1a1aa;
+  --accent: #047857;
+  --accent-soft: #ecfdf5;
+  --accent-line: #a7f3d0;
+  --amber: #b45309;
+  --amber-soft: #fffbeb;
+  --amber-line: #fde68a;
+  --radius: 22px;
+  height: 100%;
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  box-sizing: border-box;
+}
+.notebook-app *, .notebook-app *::before, .notebook-app *::after { box-sizing: border-box; }
+.notebook-app button { font: inherit; color: inherit; cursor: pointer; background: none; border: none; }
+.notebook-app textarea { font: inherit; }
+
+.notebook-app .app { display: flex; flex-direction: column; height: 100%; padding: 12px; gap: 12px; }
+
+  /* â”€â”€ Cabecera â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.notebook-app .topbar {
+    flex-shrink: 0; display: flex; align-items: center; gap: 16px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 12px 18px;
+  }
+.notebook-app .topbar h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.notebook-app .topbar h1 span { font-weight: 500; color: var(--ink-2); }
+.notebook-app .topbar .sub { margin-top: 2px; font-size: 11px; color: var(--muted-2); }
+.notebook-app .topbar .spacer { flex: 1; }
+.notebook-app .btn {
+    height: 34px; padding: 0 14px; border-radius: 999px;
+    border: 1px solid var(--line); font-size: 12px; font-weight: 500;
+    color: var(--ink-2); display: inline-flex; align-items: center; gap: 7px;
+    transition: background .12s, border-color .12s;
+  }
+.notebook-app .btn:hover { background: #fafafa; border-color: #d4d4d8; }
+.notebook-app .btn-dark { background: var(--ink); color: #fff; border-color: var(--ink); }
+.notebook-app .btn-dark:hover { background: #27272a; border-color: #27272a; }
+.notebook-app .badge {
+    font-size: 10.5px; padding: 3px 9px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line);
+    font-weight: 500;
+  }
+
+  /* â”€â”€ Rejilla â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.notebook-app .grid {
+    flex: 1; min-height: 0; display: grid; gap: 12px;
+    grid-template-columns: 244px minmax(0, 1fr) 336px;
+  }
+.notebook-app .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); display: flex; flex-direction: column;
+    min-height: 0; overflow: hidden;
+  }
+.notebook-app .panel-head {
+    flex-shrink: 0; padding: 15px 16px 10px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+.notebook-app .panel-title {
+    font-size: 10.5px; font-weight: 600; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--muted-2);
+  }
+.notebook-app .scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.notebook-app .scroll::-webkit-scrollbar { width: 8px; }
+.notebook-app .scroll::-webkit-scrollbar-thumb { background: #e4e4e7; border-radius: 99px; }
+.notebook-app .scroll::-webkit-scrollbar-track { background: transparent; }
+
+  /* â”€â”€ Sidebar de notas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.notebook-app .note-group { padding: 2px 8px 8px; }
+.notebook-app .note-group-label {
+    font-size: 10.5px; color: var(--muted-2); padding: 8px 8px 5px; font-weight: 500;
+  }
+.notebook-app .note-item {
+    width: 100%; text-align: left; padding: 9px 10px; border-radius: 13px;
+    display: block; transition: background .12s; margin-bottom: 1px;
+  }
+.notebook-app .note-item:hover { background: #fafafa; }
+.notebook-app .note-item.active { background: #f4f4f5; }
+.notebook-app .note-item .t {
+    font-size: 12.5px; font-weight: 500; color: var(--ink); display: block;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35;
+  }
+.notebook-app .note-item .d {
+    font-size: 10.5px; color: var(--muted-2); margin-top: 2px;
+    display: flex; align-items: center; gap: 6px;
+  }
+.notebook-app .dot { width: 5px; height: 5px; border-radius: 99px; background: var(--muted-2); flex-shrink: 0; }
+.notebook-app .dot.reunion { background: #3b82f6; }
+.notebook-app .dot.definicion { background: var(--accent); }
+.notebook-app .dot.libre { background: var(--muted-2); }
+.notebook-app .new-note {
+    margin: 4px 12px 12px; padding: 9px; border-radius: 13px;
+    border: 1px dashed #d4d4d8; width: calc(100% - 24px);
+    font-size: 12px; color: var(--muted); text-align: center;
+  }
+.notebook-app .new-note:hover { border-color: var(--muted-2); color: var(--ink-2); background: #fafafa; }
+
+  /* â”€â”€ Editor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.notebook-app .editor-head { padding: 18px 30px 0; flex-shrink: 0; }
+.notebook-app .note-title {
+    width: 100%; border: none; outline: none; font-size: 21px; font-weight: 600;
+    letter-spacing: -0.02em; color: var(--ink); background: none; padding: 0; font-family: inherit;
+  }
+.notebook-app .note-title::placeholder { color: #d4d4d8; }
+.notebook-app .note-meta {
+    display: flex; align-items: center; gap: 10px; margin-top: 9px;
+    font-size: 11.5px; color: var(--muted-2); flex-wrap: wrap;
+  }
+.notebook-app .type-pick { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; }
+.notebook-app .type-pick button {
+    font-size: 11px; padding: 3px 10px; border-radius: 999px; color: var(--muted);
+  }
+.notebook-app .type-pick button.on { background: var(--ink); color: #fff; }
+.notebook-app .save-state { display: inline-flex; align-items: center; gap: 5px; }
+.notebook-app .editor-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 30px 30px; }
+
+  /* El textarea va ENCIMA de una capa que pinta los bloques de investigaciÃ³n.
+     Ambas capas deben tener exactamente la misma tipografÃ­a y ancho o el
+     resaltado se desalinea del texto. */
+.notebook-app .note-wrap { position: relative; min-height: 100%; }
+.notebook-app .note-text, .notebook-app .note-hl {
+    width: 100%; font-size: 14.5px; line-height: 1.75; font-family: inherit;
+    padding: 0; margin: 0; border: none;
+    white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;
+  }
+.notebook-app .note-hl {
+    position: absolute; inset: 0; z-index: 0;
+    color: transparent; pointer-events: none; user-select: none;
+  }
+.notebook-app .note-text {
+    position: relative; z-index: 1; min-height: 100%;
+    outline: none; resize: none; color: var(--ink-2); background: transparent;
+    /* Sin scroll interno: crece con el contenido y scrollea .editor-body.
+       Si el textarea tuviera barra propia, le robarÃ­a ~15px de ancho y el
+       texto partirÃ­a antes que en la capa de color â†’ resaltado desalineado. */
+    overflow: hidden;
+  }
+.notebook-app .note-text::placeholder { color: #d4d4d8; }
+  /* El bloque verde de @investigar, dentro de la nota */
+.notebook-app .hl-res {
+    display: block; background: var(--accent-soft);
+    box-shadow: -6px 0 0 var(--accent-soft), 6px 0 0 var(--accent-soft),
+                inset 3px 0 0 var(--accent);
+    border-radius: 3px;
+  }
+
+.notebook-app .def-actions {
+    margin: 0 30px 14px; padding: 13px 15px; border-radius: 16px;
+    background: var(--accent-soft); border: 1px solid var(--accent-line);
+    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  }
+.notebook-app .def-actions p { margin: 0; font-size: 11.5px; color: #065f46; line-height: 1.5; flex: 1; }
+.notebook-app .btn-accent {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+    height: 30px; font-size: 11.5px; white-space: nowrap;
+  }
+.notebook-app .btn-accent:hover { background: #036b4d; border-color: #036b4d; }
+
+  /* â”€â”€ Copiloto â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.notebook-app .thinking { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--muted-2); }
+.notebook-app .pulse { width: 6px; height: 6px; border-radius: 99px; background: var(--accent); animation: p 1.1s ease-in-out infinite; }
+  @keyframes p { 0%,100% { opacity:.25; transform: scale(.8);} 50% { opacity:1; transform: scale(1);} }
+
+  .coverage { padding: 0 14px 12px; display: flex; flex-wrap: wrap; gap: 5px; flex-shrink: 0; }
+  .chip {
+    font-size: 10.5px; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted-2); background: #fcfcfc;
+  }
+  .chip.on {
+    background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line);
+  }
+  .coverage-bar { padding: 0 16px 12px; flex-shrink: 0; }
+  .bar { height: 4px; border-radius: 99px; background: var(--line-soft); overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--accent); transition: width .5s cubic-bezier(.4,0,.2,1); }
+  .bar-label { font-size: 10.5px; color: var(--muted-2); margin-top: 7px; display: flex; justify-content: space-between; }
+
+  .q-list { padding: 0 12px 14px; }
+  .q {
+    border: 1px solid var(--line); border-radius: 15px; padding: 11px 12px;
+    margin-bottom: 7px; background: #fff;
+    animation: in .32s cubic-bezier(.4,0,.2,1) both;
+  }
+  @keyframes in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+  .q.gap { border-color: var(--amber-line); background: var(--amber-soft); }
+  .q .top { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+  .q .tag {
+    font-size: 9.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--muted-2);
+  }
+  .q.gap .tag { color: var(--amber); }
+  .q .text { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+  /* Siempre visibles: ocultarlos hasta el hover los hacÃ­a indescubribles. */
+  .q .acts { display: flex; gap: 6px; margin-top: 9px; }
+  .q .acts button {
+    font-size: 10.5px; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); background: #fff;
+  }
+  .q .acts button:hover { border-color: var(--muted-2); color: var(--ink-2); }
+  .empty { padding: 30px 20px; text-align: center; color: var(--muted-2); font-size: 12px; line-height: 1.6; }
+
+  .hint-foot {
+    flex-shrink: 0; border-top: 1px solid var(--line-soft); padding: 11px 16px;
+    font-size: 10.5px; color: var(--muted-2); line-height: 1.5;
+  }
+
+  .toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(70px);
+    background: var(--ink); color: #fff; font-size: 12.5px; padding: 10px 18px;
+    border-radius: 999px; opacity: 0; transition: all .28s cubic-bezier(.4,0,.2,1); pointer-events: none;
+  }
+  .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* BotÃ³n visible para los atajos: el "@" a secas no se descubre solo */
+  .at-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--accent-line); background: var(--accent-soft);
+    color: var(--accent); border-radius: 999px; padding: 3px 10px;
+    font-size: 11px; font-weight: 500; margin-left: auto;
+  }
+  .at-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .at-btn-sign { font-weight: 700; font-size: 12px; }
+
+  /* â”€â”€ MenÃº @ (estilo Cursor) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  .at-menu {
+    position: fixed; z-index: 60; width: 292px; padding: 5px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 15px; box-shadow: 0 12px 34px rgba(0,0,0,.13), 0 2px 6px rgba(0,0,0,.05);
+    display: none;
+  }
+  .at-menu.on { display: block; animation: in .13s ease-out both; }
+  .at-head {
+    font-size: 9.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--muted-2); padding: 7px 10px 5px;
+  }
+  .at-item {
+    width: 100%; text-align: left; display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 11px;
+  }
+  .at-item.sel { background: #f4f4f5; }
+  .at-ico {
+    width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
+    display: grid; place-items: center; font-size: 13px;
+    background: var(--accent-soft); border: 1px solid var(--accent-line);
+  }
+  .at-item .n { font-size: 12.5px; font-weight: 500; color: var(--ink); line-height: 1.3; }
+  .at-item .h { font-size: 10.5px; color: var(--muted-2); margin-top: 1px; line-height: 1.3; }
+  .at-empty { padding: 14px 12px; font-size: 11.5px; color: var(--muted-2); text-align: center; }
+
+  /* â”€â”€ Modal de investigaciÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  .veil {
+    position: fixed; inset: 0; z-index: 70; background: rgba(24,24,27,.32);
+    display: none; place-items: center; padding: 20px;
+  }
+  .veil.on { display: grid; }
+  .modal {
+    width: 100%; max-width: 468px; background: var(--panel);
+    border-radius: var(--radius); border: 1px solid var(--line);
+    box-shadow: 0 22px 60px rgba(0,0,0,.2); padding: 22px; animation: in .18s ease-out both;
+  }
+  .modal h3 { margin: 0 0 5px; font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .modal p.sub { margin: 0 0 15px; font-size: 12px; color: var(--muted); line-height: 1.55; }
+  .url-in {
+    width: 100%; height: 40px; padding: 0 13px; border-radius: 12px;
+    border: 1px solid var(--line); font-size: 13.5px; outline: none; font-family: inherit;
+    color: var(--ink); background: #fcfcfc;
+  }
+  .url-in:focus { border-color: var(--accent); background: #fff; }
+  .modal-foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px; }
+  .steps { margin-top: 15px; display: none; }
+  .steps.on { display: block; }
+  .step {
+    display: flex; align-items: center; gap: 9px; font-size: 12px;
+    color: var(--muted-2); padding: 4px 0;
+  }
+  .step.done { color: var(--ink-2); }
+  .step .mk { width: 14px; text-align: center; font-size: 11px; }
+  .step.done .mk { color: var(--accent); }
+
+  /* â”€â”€ Ficha del cliente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  .dossier {
+    margin: 0 12px 10px; border: 1px solid var(--accent-line); background: var(--accent-soft);
+    border-radius: 15px; overflow: hidden; flex-shrink: 0;
+  }
+  .dossier-head {
+    width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px; text-align: left;
+  }
+  .dossier-head .nm { font-size: 12.5px; font-weight: 600; color: #065f46; flex: 1; line-height: 1.3; }
+  .dossier-head .cv { font-size: 10.5px; color: var(--accent); }
+  .dossier-body { padding: 0 12px 12px; display: none; }
+  .dossier-body.on { display: block; }
+  .d-row { margin-bottom: 9px; }
+  .d-row:last-child { margin-bottom: 0; }
+  .d-k {
+    font-size: 9.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 3px;
+  }
+  .d-v { font-size: 11.5px; color: #064e3b; line-height: 1.55; }
+  .d-v ul { margin: 0; padding-left: 15px; }
+  .d-v li { margin-bottom: 2px; }
+  .d-src { font-size: 10px; color: #059669; word-break: break-all; }
+  .sim {
+    font-size: 9px; padding: 2px 6px; border-radius: 99px; background: #fff;
+    border: 1px solid var(--accent-line); color: var(--accent); font-weight: 600;
+    letter-spacing: .04em; text-transform: uppercase;
+  }
+  .d-acts { display: flex; gap: 6px; margin-top: 11px; flex-wrap: wrap; }
+  .d-acts button {
+    font-size: 10.5px; padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--accent-line); color: var(--accent); background: #fff;
+  }
+  .d-acts button:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .q.web { border-color: #bfdbfe; background: #eff6ff; }
+  .q.web .tag { color: #1d4ed8; }
+
+  @media (max-width: 1180px) {
+    .grid { grid-template-columns: 210px minmax(0,1fr) 300px; }
+  }
