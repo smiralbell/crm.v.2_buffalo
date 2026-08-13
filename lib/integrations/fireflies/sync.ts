@@ -9,7 +9,8 @@ import {
   startedAtFromTranscript,
   type FirefliesTranscript,
 } from '@/lib/integrations/fireflies/client'
-import { matchLeadFromParticipants } from '@/lib/integrations/fireflies/match'
+import { matchCrmFromParticipants } from '@/lib/integrations/fireflies/match'
+import { routeFirefliesMeeting } from '@/lib/integrations/fireflies/route-meeting'
 import {
   getMeetingByFirefliesId,
   toMeetingDto,
@@ -19,7 +20,7 @@ import {
 
 export async function ingestFirefliesTranscript(
   t: FirefliesTranscript,
-  opts?: { forceRematch?: boolean }
+  opts?: { forceRematch?: boolean; skipRoute?: boolean }
 ): Promise<MeetingRecordingRow> {
   const participants = extractParticipants(t)
   const existing = await getMeetingByFirefliesId(t.id)
@@ -32,16 +33,28 @@ export async function ingestFirefliesTranscript(
   const shouldMatch =
     opts?.forceRematch ||
     !existing?.lead_id ||
-    existing.status === 'pending_match'
+    existing.status === 'pending_match' ||
+    (!existing?.contact_id && existing.status !== 'ignored')
 
   if (shouldMatch && existing?.status !== 'ignored') {
-    const match = await matchLeadFromParticipants(participants)
-    if (match) {
+    const match = await matchCrmFromParticipants(participants)
+    if (match.kind === 'lead') {
       leadId = match.leadId
       contactId = match.contactId
       status = 'matched'
-      matchReason = match.reason
-    } else if (!existing?.lead_id) {
+      matchReason = `email:${match.email}`
+    } else if (match.kind === 'contact_only') {
+      leadId = null
+      contactId = match.contactId
+      status = 'matched'
+      matchReason = `contact_only:${match.email}`
+    } else if (match.kind === 'ambiguous_leads') {
+      // Deja pending; el router usa IA y asigna
+      leadId = null
+      contactId = match.hits.find((h) => h.contactId)?.contactId ?? null
+      status = 'pending_match'
+      matchReason = `ambiguous:${match.leadIds.join(',')}`
+    } else if (!existing?.lead_id && !existing?.contact_id) {
       leadId = null
       contactId = null
       status = 'pending_match'
@@ -49,7 +62,7 @@ export async function ingestFirefliesTranscript(
     }
   }
 
-  return upsertMeetingRecording({
+  const row = await upsertMeetingRecording({
     firefliesId: t.id,
     title: t.title,
     meetingLink: t.meeting_link,
@@ -69,6 +82,30 @@ export async function ingestFirefliesTranscript(
     status,
     matchReason,
   })
+
+  if (!opts?.skipRoute && row.status !== 'ignored') {
+    try {
+      const routed = await routeFirefliesMeeting(row)
+      console.log(
+        '[fireflies/sync] routed',
+        JSON.stringify({
+          fireflies_id: row.fireflies_id,
+          action: routed.action,
+          leadId: routed.leadId,
+          contactId: routed.contactId,
+          noteId: routed.noteId,
+          reason: routed.reason,
+        })
+      )
+      // Releer por si el router actualizó lead/contact/status
+      const refreshed = await getMeetingByFirefliesId(t.id)
+      return refreshed || row
+    } catch (e) {
+      console.error('[fireflies/sync] route error', e)
+    }
+  }
+
+  return row
 }
 
 export async function syncFirefliesMeetingById(meetingId: string): Promise<MeetingRecordingRow> {
@@ -96,7 +133,7 @@ export async function syncRecentFirefliesMeetings(limit = 20): Promise<{
   for (const t of list) {
     const row = await ingestFirefliesTranscript(t)
     meetings.push(row)
-    if (row.lead_id) matched += 1
+    if (row.lead_id || row.contact_id) matched += 1
   }
   return {
     synced: meetings.length,

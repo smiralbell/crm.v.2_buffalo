@@ -1,6 +1,38 @@
 import { prisma } from '@/lib/prisma'
 import type { FirefliesParticipant } from '@/lib/integrations/fireflies/client'
 
+export type CrmMatchHit = {
+  contactId: number
+  leadId: number | null
+  email: string
+  empresa: string | null
+  nombre: string | null
+}
+
+export type CrmMatchResult =
+  | {
+      kind: 'none'
+    }
+  | {
+      kind: 'contact_only'
+      contactId: number
+      email: string
+      hits: CrmMatchHit[]
+    }
+  | {
+      kind: 'lead'
+      leadId: number
+      contactId: number
+      email: string
+      hits: CrmMatchHit[]
+    }
+  | {
+      kind: 'ambiguous_leads'
+      hits: CrmMatchHit[]
+      leadIds: number[]
+    }
+
+/** @deprecated Prefer matchCrmFromParticipants */
 export type LeadMatchResult = {
   leadId: number
   contactId: number
@@ -57,14 +89,16 @@ export function clientEmailsFromParticipants(participants: FirefliesParticipant[
 }
 
 /**
- * Empareja reunión → lead por email de participantes externos.
- * Si hay varios leads distintos, no asigna (queda pending_match).
+ * Empareja reunión → contacto / lead por email de participantes externos.
+ * - Solo contacto (sin lead) → contact_only
+ * - Un lead → lead
+ * - Varios leads distintos → ambiguous_leads (IA decide después)
  */
-export async function matchLeadFromParticipants(
+export async function matchCrmFromParticipants(
   participants: FirefliesParticipant[]
-): Promise<LeadMatchResult> {
+): Promise<CrmMatchResult> {
   const emails = clientEmailsFromParticipants(participants)
-  if (emails.length === 0) return null
+  if (emails.length === 0) return { kind: 'none' }
 
   const contacts = await prisma.contact.findMany({
     where: {
@@ -77,26 +111,68 @@ export async function matchLeadFromParticipants(
     },
   })
 
-  const hits: { leadId: number; contactId: number; email: string }[] = []
+  const hits: CrmMatchHit[] = []
   for (const ct of contacts) {
     const email = normEmail(ct.email)
-    const lead = ct.leads[0]
-    if (!email || !lead) continue
-    hits.push({ leadId: lead.id, contactId: ct.id, email })
+    if (!email) continue
+    const lead = ct.leads[0] || null
+    hits.push({
+      contactId: ct.id,
+      leadId: lead?.id ?? null,
+      email,
+      empresa: ct.empresa ?? null,
+      nombre: ct.nombre ?? null,
+    })
   }
 
-  if (hits.length === 0) return null
+  if (hits.length === 0) return { kind: 'none' }
 
-  const uniqueLeadIds = Array.from(new Set(hits.map((h) => h.leadId)))
-  if (uniqueLeadIds.length > 1) {
-    return null
+  const leadHits = hits.filter((h) => h.leadId != null) as Array<
+    CrmMatchHit & { leadId: number }
+  >
+  const uniqueLeadIds = Array.from(new Set(leadHits.map((h) => h.leadId)))
+
+  if (uniqueLeadIds.length === 0) {
+    const primary = hits[0]
+    return {
+      kind: 'contact_only',
+      contactId: primary.contactId,
+      email: primary.email,
+      hits,
+    }
   }
 
-  const hit = hits[0]
+  if (uniqueLeadIds.length === 1) {
+    const hit = leadHits[0]
+    return {
+      kind: 'lead',
+      leadId: hit.leadId,
+      contactId: hit.contactId,
+      email: hit.email,
+      hits,
+    }
+  }
+
   return {
-    leadId: hit.leadId,
-    contactId: hit.contactId,
-    email: hit.email,
-    reason: `email:${hit.email}`,
+    kind: 'ambiguous_leads',
+    hits,
+    leadIds: uniqueLeadIds,
+  }
+}
+
+/**
+ * Empareja reunión → lead por email (compat).
+ * Contactos sin lead y ambigüedad → null (pending_match).
+ */
+export async function matchLeadFromParticipants(
+  participants: FirefliesParticipant[]
+): Promise<LeadMatchResult> {
+  const m = await matchCrmFromParticipants(participants)
+  if (m.kind !== 'lead') return null
+  return {
+    leadId: m.leadId,
+    contactId: m.contactId,
+    email: m.email,
+    reason: `email:${m.email}`,
   }
 }

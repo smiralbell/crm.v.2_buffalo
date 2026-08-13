@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { ArrowLeft, Edit } from 'lucide-react'
 import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
+import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
 
 interface ContactDetailProps {
   contact: {
@@ -206,10 +207,12 @@ export default function ContactDetail({ contact, leads }: ContactDetailProps) {
           </Card>
         </div>
 
+        <LeadMeetingsPanel contactId={contact.id} />
+
         <CrmActivityTimeline
           contactId={contact.id}
           title="Historial del contacto"
-          subtitle="Llamadas, notas, reuniones, documentos y onboarding"
+          subtitle="Llamadas, notas, reuniones Fireflies, documentos y onboarding"
         />
 
         {/* Leads Asociados */}

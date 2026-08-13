@@ -265,12 +265,27 @@ export async function listMeetingsForLead(leadId: number): Promise<MeetingRecord
   return rows.map(mapRow)
 }
 
+export async function listMeetingsForContact(
+  contactId: number
+): Promise<MeetingRecordingRow[]> {
+  await ensureMeetingRecordingsTable()
+  const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
+    `SELECT * FROM meeting_recordings
+     WHERE contact_id = $1
+     ORDER BY COALESCE(started_at, created_at) DESC`,
+    contactId
+  )
+  return rows.map(mapRow)
+}
+
 export async function listUnmatchedMeetings(limit = 50): Promise<MeetingRecordingRow[]> {
   await ensureMeetingRecordingsTable()
   const safe = Math.min(Math.max(limit, 1), 200)
+  // Solo pendientes reales (sin lead). Contact-only (matched + contact_id) no aparece aquí.
   const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
     `SELECT * FROM meeting_recordings
-     WHERE (status = 'pending_match' OR lead_id IS NULL) AND status <> 'ignored'
+     WHERE status = 'pending_match'
+       AND lead_id IS NULL
      ORDER BY COALESCE(started_at, created_at) DESC
      LIMIT $1`,
     safe

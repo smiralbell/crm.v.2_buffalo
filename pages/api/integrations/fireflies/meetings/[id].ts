@@ -58,7 +58,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
         const row = await linkMeetingToLead(id, lead.id, lead.contact_id, 'manual')
         if (!row) return res.status(404).json({ error: 'Reunión no encontrada' })
-        return res.status(200).json({ ok: true, meeting: toMeetingDto(row, false) })
+        const { routeAfterManualLink } = await import(
+          '@/lib/integrations/fireflies/route-meeting'
+        )
+        const routed = await routeAfterManualLink(row)
+        const refreshed = (await getMeetingById(id)) || row
+        return res.status(200).json({
+          ok: true,
+          meeting: toMeetingDto(refreshed, false),
+          routed,
+        })
       }
 
       return res.status(400).json({ error: 'action debe ser link | unlink | ignore' })

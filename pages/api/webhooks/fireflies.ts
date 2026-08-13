@@ -87,7 +87,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     logFf('synced', {
       fireflies_id: row.fireflies_id,
       lead_id: row.lead_id,
+      contact_id: row.contact_id,
       status: row.status,
+      match_reason: row.match_reason,
       has_transcript: Boolean(row.transcript),
       has_summary: Boolean(row.summary_overview),
     })

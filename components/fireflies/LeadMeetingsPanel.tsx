@@ -54,11 +54,13 @@ function fmtDuration(mins: number | null) {
   return rest ? `${h}h ${rest}m` : `${h}h`
 }
 
-type Props = {
-  leadId: number
-}
+type Props =
+  | { leadId: number; contactId?: never }
+  | { contactId: number; leadId?: never }
 
-export default function LeadMeetingsPanel({ leadId }: Props) {
+export default function LeadMeetingsPanel(props: Props) {
+  const leadId = 'leadId' in props ? props.leadId : undefined
+  const contactId = 'contactId' in props ? props.contactId : undefined
   const [meetings, setMeetings] = useState<MeetingDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -71,7 +73,10 @@ export default function LeadMeetingsPanel({ leadId }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/leads/${leadId}/meetings`)
+      const url = leadId
+        ? `/api/leads/${leadId}/meetings`
+        : `/api/contacts/${contactId}/meetings`
+      const res = await fetch(url)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error cargando reuniones')
       setMeetings(data.meetings || [])
@@ -80,7 +85,7 @@ export default function LeadMeetingsPanel({ leadId }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [leadId])
+  }, [leadId, contactId])
 
   useEffect(() => {
     void load()
@@ -154,7 +159,9 @@ export default function LeadMeetingsPanel({ leadId }: Props) {
         )}
         {!loading && !error && meetings.length === 0 && (
           <p className="text-sm text-gray-400 py-6 text-center">
-            Aún no hay reuniones de Fireflies vinculadas a este lead.
+            {leadId
+              ? 'Aún no hay reuniones de Fireflies vinculadas a este lead.'
+              : 'Aún no hay reuniones de Fireflies vinculadas a este contacto.'}
           </p>
         )}
         {!loading && !error && meetings.length > 0 && (
@@ -248,20 +255,22 @@ export default function LeadMeetingsPanel({ leadId }: Props) {
                                 </Button>
                               </a>
                             )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 text-xs text-gray-500"
-                              disabled={busyId === m.id}
-                              onClick={() => void unlink(m.id)}
-                            >
-                              {busyId === m.id ? (
-                                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                              ) : (
-                                <Unlink className="h-3.5 w-3.5 mr-1.5" />
-                              )}
-                              Desvincular
-                            </Button>
+                            {leadId ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-xs text-gray-500"
+                                disabled={busyId === m.id}
+                                onClick={() => void unlink(m.id)}
+                              >
+                                {busyId === m.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                ) : (
+                                  <Unlink className="h-3.5 w-3.5 mr-1.5" />
+                                )}
+                                Desvincular
+                              </Button>
+                            ) : null}
                           </div>
                         </>
                       )}
