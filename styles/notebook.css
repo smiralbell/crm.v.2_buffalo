@@ -32,28 +32,61 @@
 
   /* â”€â”€ Cabecera â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .notebook-app .topbar {
-    flex-shrink: 0; display: flex; align-items: center; gap: 16px;
+    flex-shrink: 0; display: flex; align-items: center; gap: 10px;
     background: var(--panel); border: 1px solid var(--line);
-    border-radius: var(--radius); padding: 12px 18px;
+    border-radius: var(--radius); padding: 10px 16px;
+    flex-wrap: wrap;
   }
 .notebook-app .topbar h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 .notebook-app .topbar h1 span { font-weight: 500; color: var(--ink-2); }
 .notebook-app .topbar .sub { margin-top: 2px; font-size: 11px; color: var(--muted-2); }
-.notebook-app .topbar .spacer { flex: 1; }
+.notebook-app .topbar .spacer { flex: 1; min-width: 8px; }
+.notebook-app .topbar-actions {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
 .notebook-app .btn {
     height: 34px; padding: 0 14px; border-radius: 999px;
     border: 1px solid var(--line); font-size: 12px; font-weight: 500;
     color: var(--ink-2); display: inline-flex; align-items: center; gap: 7px;
     transition: background .12s, border-color .12s;
+    white-space: nowrap; flex-shrink: 0; line-height: 1;
   }
 .notebook-app .btn:hover { background: #fafafa; border-color: #d4d4d8; }
+.notebook-app .btn:disabled { opacity: .55; cursor: default; }
 .notebook-app .btn-dark { background: var(--ink); color: #fff; border-color: var(--ink); }
 .notebook-app .btn-dark:hover { background: #27272a; border-color: #27272a; }
 .notebook-app .badge {
     font-size: 10.5px; padding: 3px 9px; border-radius: 999px;
     background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line);
-    font-weight: 500;
+    font-weight: 500; white-space: nowrap; flex-shrink: 0;
   }
+.notebook-app .docs-menu-wrap { position: relative; flex-shrink: 0; }
+.notebook-app .docs-menu {
+    position: absolute; right: 0; top: calc(100% + 8px); z-index: 50;
+    width: 280px; padding: 6px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 0 14px 36px rgba(0,0,0,.12), 0 2px 8px rgba(0,0,0,.05);
+    display: none;
+  }
+.notebook-app .docs-menu.on { display: block; animation: in .13s ease-out both; }
+.notebook-app .docs-menu .docs-head {
+    font-size: 9.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--muted-2); padding: 8px 10px 6px;
+  }
+.notebook-app .docs-item {
+    width: 100%; text-align: left; display: flex; align-items: flex-start; gap: 10px;
+    padding: 9px 10px; border-radius: 13px;
+  }
+.notebook-app .docs-item:hover { background: #f4f4f5; }
+.notebook-app .docs-item .docs-ico {
+    width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+    display: grid; place-items: center;
+    background: var(--accent-soft); border: 1px solid var(--accent-line); color: var(--accent);
+  }
+.notebook-app .docs-item .docs-ico svg { width: 15px; height: 15px; }
+.notebook-app .docs-item .n { font-size: 12.5px; font-weight: 600; color: var(--ink); line-height: 1.25; display: block; }
+.notebook-app .docs-item .h { font-size: 10.5px; color: var(--muted-2); margin-top: 2px; line-height: 1.35; display: block; }
 
   /* â”€â”€ Rejilla â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .notebook-app .grid {

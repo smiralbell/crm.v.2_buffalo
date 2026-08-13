@@ -2,12 +2,15 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import { deleteNote, getNote, updateNote } from '@/lib/onboarding/notes/store'
+import { syncNotebookContextLightweight } from '@/lib/onboarding/notes/sync-context'
 
 const patchSchema = z.object({
   note_date: z.string().optional(),
   type: z.enum(['reunion', 'libre', 'definicion']).optional(),
   title: z.string().max(500).optional(),
   body: z.string().max(500000).optional(),
+  /** Por defecto true: tras guardar, actualiza project_context sin IA */
+  sync_context: z.boolean().optional().default(true),
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -26,12 +29,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'PATCH') {
       const body = patchSchema.parse(req.body ?? {})
-      const note = await updateNote(noteId, body)
-      return res.status(200).json({ ok: true, note })
+      const { sync_context, ...patch } = body
+      const note = await updateNote(noteId, patch)
+      if (!note) return res.status(404).json({ error: 'Nota no encontrada' })
+
+      let contextSynced = false
+      if (sync_context !== false) {
+        try {
+          await syncNotebookContextLightweight({ leadId })
+          contextSynced = true
+        } catch (e) {
+          console.warn('[onboarding/notes] sync context failed', e)
+        }
+      }
+
+      return res.status(200).json({ ok: true, note, context_synced: contextSynced })
     }
 
     if (req.method === 'DELETE') {
       await deleteNote(noteId)
+      try {
+        await syncNotebookContextLightweight({ leadId, applyDefinition: false })
+      } catch (e) {
+        console.warn('[onboarding/notes] sync after delete failed', e)
+      }
       return res.status(200).json({ ok: true })
     }
 

@@ -10,6 +10,7 @@ import {
 } from '@/lib/onboarding/project-context-ai'
 import { generateContractAnnex } from '@/lib/onboarding/contract-annex-ai'
 import { logCrmActivity } from '@/lib/crm/activities'
+import { syncNotebookContextToLead } from '@/lib/onboarding/notes/sync-context'
 
 const bodySchema = z.object({
   kind: z.enum(['proposal', 'contract', 'pre_kickoff']),
@@ -138,8 +139,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    const context = (cfg?.project_context || '').trim()
-    const definition = (cfg?.description || lead.notas || '').trim()
+    const synced = await syncNotebookContextToLead({
+      leadId,
+      createdBy: user.email,
+      applyDefinition: false,
+      logActivity: false,
+    })
+    const context = synced.context.trim()
+    const definition =
+      (cfg?.description || lead.notas || synced.definition || '').trim()
     const proyectoRows = await prisma.$queryRaw<
       { name: string; setup_fee_eur: number | null; monthly_fee_eur: number | null; project_count: number }[]
     >`

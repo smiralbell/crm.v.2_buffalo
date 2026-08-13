@@ -16,7 +16,7 @@ const postSchema = z.object({
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
     const leadId = parseInt(String(req.query.leadId), 10)
     if (!Number.isFinite(leadId) || leadId <= 0) {
       return res.status(400).json({ error: 'leadId inválido' })
@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
-      select: { id: true },
+      select: { id: true, contact_id: true },
     })
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
 
@@ -53,6 +53,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       const data = scraped as ProjectResearchData
       const research = await saveResearch(leadId, String(data.url || body.url), data)
+      const { logCrmActivity } = await import('@/lib/crm/activities')
+      await logCrmActivity({
+        contactId: lead.contact_id,
+        leadId,
+        kind: 'onboarding',
+        title: 'Investigación web guardada en el cuaderno',
+        body: data.nombre || data.host || body.url,
+        meta: { source: 'notebook', research_url: research.url },
+        createdBy: user.email || user.name || String(user.id),
+      })
+      try {
+        const { syncNotebookContextLightweight } = await import(
+          '@/lib/onboarding/notes/sync-context'
+        )
+        await syncNotebookContextLightweight({ leadId, applyDefinition: false })
+      } catch (e) {
+        console.warn('[onboarding/research] sync context failed', e)
+      }
       return res.status(200).json({
         ok: true,
         research,

@@ -68,6 +68,25 @@ describe('ui-helpers', () => {
   })
 })
 
+describe('stripNotebookSections', () => {
+  it('quita notas e investigación y deja el resto', async () => {
+    const { stripNotebookSections } = await import('./sync-context')
+    const raw = `## Notas del cuaderno
+### A
+hola
+
+## Investigación web (scraping)
+Empresa: X
+
+## Reuniones Fireflies
+### Reunión 1`
+    const out = stripNotebookSections(raw)
+    expect(out).not.toMatch(/Notas del cuaderno/)
+    expect(out).not.toMatch(/Investigación web/)
+    expect(out).toMatch(/Reuniones Fireflies/)
+  })
+})
+
 describe('researchToNoteText shape', () => {
   it('prioriza quiénes son / oferta sin fuentes ni ganchos', async () => {
     const { researchToNoteText } = await import('./scrape')

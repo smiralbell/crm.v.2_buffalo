@@ -12,7 +12,13 @@ import {
   MessageCircleQuestion,
   CheckSquare,
   CalendarDays,
+  FileText,
+  ChevronDown,
 } from 'lucide-react'
+import {
+  ONBOARDING_DOC_ACTIONS,
+  openOnboardingDoc,
+} from '@/components/onboarding/OnboardingDocumentActions'
 import type {
   ProjectNote,
   ProjectResearch,
@@ -49,7 +55,8 @@ type Props = {
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
-const SAVE_MS = 800
+const SAVE_MS = 700
+const CONTEXT_HINT_MS = 2500
 const COPILOT_MS = 4000
 const COPILOT_MIN_GROWTH = 120
 
@@ -83,15 +90,19 @@ export default function NotebookWorkspace({
     sub: string
     html: string
     plain: string
-    confirmApply?: boolean
   } | null>(null)
   const [atOpen, setAtOpen] = useState(false)
   const [atSel, setAtSel] = useState(0)
   const [atQuery, setAtQuery] = useState('')
   const [atPos, setAtPos] = useState<{ left: number; top: number } | null>(null)
-  const [applyingDef, setApplyingDef] = useState(false)
   const [draftingDef, setDraftingDef] = useState(false)
-  const [insightsLoading, setInsightsLoading] = useState(false)
+  const [insightsLoading, setInsightsLoading] = useState<
+    null | 'context' | 'diagnosis'
+  >(null)
+  const [syncingDocs, setSyncingDocs] = useState(false)
+  const [docsMenuOpen, setDocsMenuOpen] = useState(false)
+  const [contextHint, setContextHint] = useState(false)
+  const docsMenuRef = useRef<HTMLDivElement>(null)
 
   const taRef = useRef<HTMLTextAreaElement>(null)
   const hlRef = useRef<HTMLDivElement>(null)
@@ -99,9 +110,14 @@ export default function NotebookWorkspace({
   const copilotTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastCopilotLen = useRef(0)
   const pendingPatch = useRef<Partial<ProjectNote> | null>(null)
+  const pendingNoteId = useRef<string | null>(null)
+  const flushSaveRef = useRef<() => Promise<void>>(async () => {})
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const contextHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const notesRef = useRef(notes)
   notesRef.current = notes
+  const currentIdRef = useRef(currentId)
+  currentIdRef.current = currentId
 
   const current = notes.find((n) => n.id === currentId) || null
   const coveredSet = useMemo(() => new Set(cubiertos), [cubiertos])
@@ -125,23 +141,29 @@ export default function NotebookWorkspace({
   }, [])
 
   const flushSave = useCallback(async () => {
-    const id = currentId
+    const id = pendingNoteId.current || currentIdRef.current
     const patch = pendingPatch.current
     if (!id || !patch) return
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
     pendingPatch.current = null
+    pendingNoteId.current = null
     setSaveState('saving')
     try {
+      const payload: Record<string, unknown> = { sync_context: true }
+      if (patch.title !== undefined) payload.title = patch.title
+      if (patch.body !== undefined) payload.body = patch.body
+      if (patch.type !== undefined) payload.type = patch.type
+      if (patch.note_date !== undefined) payload.note_date = patch.note_date
+
       const res = await fetch(
         `/api/onboarding/projects/${leadId}/notes/${id}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: patch.title,
-            body: patch.body,
-            type: patch.type,
-            note_date: patch.note_date,
-          }),
+          body: JSON.stringify(payload),
         }
       )
       const data = await res.json().catch(() => ({}))
@@ -153,20 +175,38 @@ export default function NotebookWorkspace({
       }
       setSavedAt(Date.now())
       setSaveState('saved')
+      if (data.context_synced) {
+        setContextHint(true)
+        if (contextHintTimer.current) clearTimeout(contextHintTimer.current)
+        contextHintTimer.current = setTimeout(
+          () => setContextHint(false),
+          CONTEXT_HINT_MS
+        )
+      }
     } catch (e) {
+      // Reencola el patch si falló para reintentar
+      pendingPatch.current = patch
+      pendingNoteId.current = id
       setSaveState('error')
       toast(e instanceof Error ? e.message : 'No se pudo guardar')
     }
-  }, [currentId, leadId, toast])
+  }, [leadId, toast])
+
+  flushSaveRef.current = flushSave
 
   const scheduleSave = useCallback(
-    (patch: Partial<ProjectNote>) => {
+    (noteId: string, patch: Partial<ProjectNote>) => {
+      if (pendingNoteId.current && pendingNoteId.current !== noteId) {
+        // Cambio de nota con cambios pendientes: vacía primero la anterior
+        void flushSaveRef.current()
+      }
+      pendingNoteId.current = noteId
       pendingPatch.current = { ...(pendingPatch.current || {}), ...patch }
       setSaveState('dirty')
       if (saveTimer.current) clearTimeout(saveTimer.current)
-      saveTimer.current = setTimeout(() => void flushSave(), SAVE_MS)
+      saveTimer.current = setTimeout(() => void flushSaveRef.current(), SAVE_MS)
     },
-    [flushSave]
+    []
   )
 
   const runCopilot = useCallback(
@@ -281,6 +321,35 @@ export default function NotebookWorkspace({
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
       if (copilotTimer.current) clearTimeout(copilotTimer.current)
+      if (contextHintTimer.current) clearTimeout(contextHintTimer.current)
+      void flushSaveRef.current()
+    }
+  }, [])
+
+  // Autoguardado al salir / cambiar de pestaña (estilo Word)
+  useEffect(() => {
+    const onHide = () => {
+      if (pendingPatch.current) void flushSaveRef.current()
+    }
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!pendingPatch.current) return
+      void flushSaveRef.current()
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        void flushSaveRef.current()
+      }
+    }
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('beforeunload', onBeforeUnload)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      window.removeEventListener('keydown', onKey)
     }
   }, [])
 
@@ -290,7 +359,7 @@ export default function NotebookWorkspace({
       setNotes((prev) =>
         prev.map((n) => (n.id === currentId ? { ...n, ...patch } : n))
       )
-      scheduleSave(patch)
+      scheduleSave(currentId, patch)
       if (opts?.copilot !== false && ('body' in patch || 'type' in patch)) {
         scheduleCopilot(false)
       }
@@ -475,19 +544,69 @@ export default function NotebookWorkspace({
     toast,
   ])
 
+  const ensureContextSynced = useCallback(async () => {
+    await flushSave()
+    const res = await fetch(`/api/onboarding/projects/${leadId}/notes-sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apply_definition: true }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || 'No se pudo sincronizar el contexto')
+  }, [flushSave, leadId])
+
+  const openDocShortcut = useCallback(
+    async (action: (typeof ONBOARDING_DOC_ACTIONS)[number]) => {
+      setSyncingDocs(true)
+      setDocsMenuOpen(false)
+      try {
+        await ensureContextSynced()
+        openOnboardingDoc(action.href(String(leadId)), action.windowName(String(leadId)))
+        toast(`Abriendo ${action.shortTitle.toLowerCase()}…`)
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'Error al abrir el documento')
+      } finally {
+        setSyncingDocs(false)
+      }
+    },
+    [ensureContextSynced, leadId, toast]
+  )
+
+  useEffect(() => {
+    if (!docsMenuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (!docsMenuRef.current?.contains(e.target as Node)) {
+        setDocsMenuOpen(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDocsMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [docsMenuOpen])
+
   const openInsights = useCallback(
     async (kind: 'context' | 'diagnosis') => {
-      setInsightsLoading(true)
+      const isContext = kind === 'context'
+      setInsightsLoading(kind)
       setPanel({
-        title: kind === 'context' ? 'Contexto del proyecto' : 'Diagnóstico',
-        sub:
-          kind === 'context'
-            ? 'La IA sintetiza de qué trata el proyecto a partir de todas las notas.'
-            : 'Lectura crítica de lo que sabes y lo que aún desbloquea la propuesta.',
-        html: `<div style="padding:28px;text-align:center;color:var(--muted);font-size:12.5px">Analizando el cuaderno…</div>`,
+        title: isContext ? 'Contexto del proyecto' : 'Diagnóstico',
+        sub: isContext
+          ? 'Contexto guardado del lead. Se amplía solo cuando guardas notas o investigación.'
+          : 'Se recalcula solo si el cuaderno ha cambiado desde la última vez.',
+        html: `<div style="padding:28px;text-align:center;color:var(--muted);font-size:12.5px">${
+          isContext ? 'Cargando contexto…' : 'Preparando diagnóstico…'
+        }</div>`,
         plain: '',
       })
       try {
+        // Asegura que el último autoguardado esté en el lead antes de leer
+        await flushSave()
         const res = await fetch(
           `/api/onboarding/projects/${leadId}/notes-insights`,
           {
@@ -497,15 +616,12 @@ export default function NotebookWorkspace({
           }
         )
         const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.error || 'No se pudo generar')
-        if (kind === 'context') {
+        if (!res.ok) throw new Error(data.error || 'No se pudo cargar')
+        if (isContext) {
           const txt = String(data.context || '')
           setPanel({
             title: 'Contexto del proyecto',
-            sub:
-              data.source === 'llm'
-                ? 'Síntesis de la IA a partir de tus notas. Esto es lo que debería alimentar la propuesta.'
-                : 'Resumen provisional (faltan notas o la IA no respondió).',
+            sub: 'Este es el contexto que alimenta propuesta, contrato y ficha del cliente. Se actualiza al guardar el cuaderno.',
             html: `<div style="white-space:pre-wrap;font-size:13px;line-height:1.65;color:var(--ink-2)">${txt
               .replace(/&/g, '&amp;')
               .replace(/</g, '&lt;')}</div>`,
@@ -514,92 +630,23 @@ export default function NotebookWorkspace({
         } else {
           setPanel({
             title: 'Diagnóstico de conocimiento',
-            sub: 'Qué tan listo estás para redactar y qué preguntar ahora.',
+            sub:
+              data.cached
+                ? 'Sin cambios en el cuaderno: mismo diagnóstico que la última vez.'
+                : 'Diagnóstico actualizado con las notas nuevas.',
             html: String(data.diagnosis_html || ''),
             plain: String(data.diagnosis_plain || ''),
           })
         }
       } catch (e) {
         setPanel(null)
-        toast(e instanceof Error ? e.message : 'Error al analizar')
+        toast(e instanceof Error ? e.message : 'Error al cargar')
       } finally {
-        setInsightsLoading(false)
+        setInsightsLoading(null)
       }
     },
-    [leadId, toast]
+    [leadId, toast, flushSave]
   )
-
-  const buildContexto = useCallback(() => {
-    const partes: string[] = []
-    partes.push(
-      `# CLIENTE\n${clientLabel}${projectTitle ? ' · ' + projectTitle : ''}`
-    )
-    if (research?.data) {
-      const r = research.data
-      partes.push(
-        `# INVESTIGACIÓN DE SU WEB (${r.origen || 'scraping'})\n` +
-          `Empresa: ${r.nombre}\n` +
-          `Sector: ${r.sector}\n` +
-          `Qué hacen: ${r.hace}\n` +
-          `Servicios: ${(r.servicios || []).join(', ')}\n` +
-          `Señales: ${(r.senales || []).join(' · ')}\n` +
-          `Fuentes: ${(r.fuentes || []).join(', ')}`
-      )
-    }
-    const def = notes.find((n) => n.type === 'definicion' && n.body.trim())
-    if (def) partes.push('# DEFINICIÓN DEL PROYECTO\n' + def.body.trim())
-    const reuniones = notes.filter(
-      (n) => n.type !== 'definicion' && n.body.trim()
-    )
-    if (reuniones.length) {
-      partes.push(
-        '# NOTAS DEL CUADERNO\n' +
-          reuniones
-            .map(
-              (n) =>
-                `## ${n.title || 'Sin título'} (${n.note_date})\n${n.body.trim()}`
-            )
-            .join('\n\n')
-      )
-    }
-    const faltan = TOPICS.filter((t) => !coveredSet.has(t.id)).map(
-      (t) => t.label
-    )
-    if (faltan.length) {
-      partes.push(
-        '# AÚN NO PREGUNTADO (no inventes esto)\n' +
-          faltan.map((f) => '- ' + f).join('\n')
-      )
-    }
-    return partes.join('\n\n─────\n\n')
-  }, [clientLabel, projectTitle, research, notes, coveredSet])
-
-  const applyDefinitionToCrm = useCallback(async () => {
-    const def = notes.find((n) => n.type === 'definicion')
-    if (!def?.body.trim()) {
-      toast('Primero escribe la nota de tipo «Definición»')
-      return
-    }
-    setApplyingDef(true)
-    try {
-      const res = await fetch(`/api/onboarding/projects/${leadId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_definition: def.body.trim(),
-          project_context: buildContexto(),
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'No se pudo guardar')
-      setPanel(null)
-      toast('Definición guardada en el proyecto')
-    } catch (e) {
-      toast(e instanceof Error ? e.message : 'Error al guardar definición')
-    } finally {
-      setApplyingDef(false)
-    }
-  }, [notes, leadId, buildContexto, toast])
 
   const draftDefinition = useCallback(async () => {
     setDraftingDef(true)
@@ -633,11 +680,12 @@ export default function NotebookWorkspace({
 
   const saveLabel = (() => {
     void saveTick
-    if (saveState === 'saving' || saveState === 'dirty') return 'Guardando…'
-    if (saveState === 'error') return 'No se pudo guardar'
-    if (!savedAt) return 'Guardado'
+    if (saveState === 'saving') return 'Guardando…'
+    if (saveState === 'dirty') return 'Autoguardando…'
+    if (saveState === 'error') return 'Error al guardar — Ctrl+S'
+    if (!savedAt) return 'Autoguardado'
     const seg = Math.round((Date.now() - savedAt) / 1000)
-    if (seg < 3) return 'Guardado'
+    if (seg < 4) return contextHint ? 'Guardado · contexto al día' : 'Guardado'
     if (seg < 60) return `Guardado hace ${seg}s`
     return `Guardado hace ${Math.round(seg / 60)} min`
   })()
@@ -684,55 +732,62 @@ export default function NotebookWorkspace({
             <div className="sub">Onboarding · Notas del proyecto</div>
           </div>
           <div className="spacer" />
-          <span className="badge">{notes.length} notas</span>
-          <span className="badge" title="Investigación web real vía scrape">
-            scraping real
-          </span>
-          <button
-            type="button"
-            className="btn"
-            disabled={insightsLoading}
-            onClick={() => void openInsights('context')}
-          >
-            {insightsLoading ? 'Analizando…' : 'Ver contexto'}
-          </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={insightsLoading}
-            onClick={() => void openInsights('diagnosis')}
-          >
-            Diagnóstico
-          </button>
-          <button
-            type="button"
-            className="btn btn-dark"
-            onClick={() => {
-              const def = notes.find((n) => n.type === 'definicion')
-              if (!def?.body.trim()) {
-                toast('Primero escribe la nota de tipo «Definición»')
-                const vacia = notes.find((n) => n.type === 'definicion')
-                if (vacia) setCurrentId(vacia.id)
-                return
-              }
-              setPanel({
-                title: 'Usar como definición del proyecto',
-                sub: 'Esto sobrescribe la definición del proyecto en el CRM (propuesta y contrato). Confirma antes de continuar.',
-                html: `<div style="padding:11px 13px;border-radius:12px;background:var(--accent-soft);border:1px solid var(--accent-line);font-size:11.5px;color:#065f46;margin-bottom:12px">
-                  Destino: <strong>${clientLabel} → campo «definición»</strong><br>
-                  ${wordCount(def.body)} palabras
-                </div>
-                <pre style="white-space:pre-wrap;font-size:11.5px;line-height:1.6;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink-2)">${def.body
-                  .trim()
-                  .replace(/&/g, '&amp;')
-                  .replace(/</g, '&lt;')}</pre>`,
-                plain: def.body.trim(),
-                confirmApply: true,
-              })
-            }}
-          >
-            Usar como definición del proyecto
-          </button>
+          <div className="topbar-actions">
+            <span className="badge">{notes.length} notas</span>
+            <button
+              type="button"
+              className="btn"
+              disabled={!!insightsLoading}
+              onClick={() => void openInsights('context')}
+            >
+              {insightsLoading === 'context' ? 'Abriendo…' : 'Ver contexto'}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={!!insightsLoading}
+              onClick={() => void openInsights('diagnosis')}
+            >
+              {insightsLoading === 'diagnosis' ? 'Analizando…' : 'Diagnóstico'}
+            </button>
+            <div className="docs-menu-wrap" ref={docsMenuRef}>
+              <button
+                type="button"
+                className="btn btn-dark"
+                disabled={syncingDocs || !!insightsLoading}
+                onClick={() => setDocsMenuOpen((v) => !v)}
+                aria-expanded={docsMenuOpen}
+                title="Atajo a propuesta, contrato, factura y pre-kick-off"
+              >
+                <FileText style={{ width: 14, height: 14 }} />
+                {syncingDocs ? 'Preparando…' : 'Crear documentación'}
+                <ChevronDown style={{ width: 14, height: 14, opacity: 0.85 }} />
+              </button>
+              <div className={`docs-menu${docsMenuOpen ? ' on' : ''}`}>
+                <div className="docs-head">Documentación del lead</div>
+                {ONBOARDING_DOC_ACTIONS.map((a) => {
+                  const Icon = a.icon
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className="docs-item"
+                      disabled={syncingDocs}
+                      onClick={() => void openDocShortcut(a)}
+                    >
+                      <span className="docs-ico">
+                        <Icon />
+                      </span>
+                      <span>
+                        <span className="n">{a.title}</span>
+                        <span className="h">{a.desc}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
         </header>
 
         <div className="grid">
@@ -828,11 +883,29 @@ export default function NotebookWorkspace({
                     <span
                       className="save-state"
                       style={
-                        saveState === 'error' ? { color: '#b91c1c' } : undefined
+                        saveState === 'error'
+                          ? { color: '#b91c1c' }
+                          : contextHint
+                            ? { color: 'var(--accent)' }
+                            : undefined
                       }
+                      title="Autoguardado ~0,7s. Ctrl+S para guardar ya. Cada guardado actualiza el contexto del lead (sin IA)."
                     >
                       {saveLabel}
                     </span>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ height: 26, fontSize: 10.5, padding: '0 10px' }}
+                      disabled={
+                        saveState === 'saving' ||
+                        (saveState !== 'dirty' && saveState !== 'error')
+                      }
+                      onClick={() => void flushSave()}
+                      title="Guardar ahora (Ctrl+S)"
+                    >
+                      Guardar
+                    </button>
                     <span>·</span>
                     <span>{wordCount(current.body)} palabras</span>
                     <button
@@ -865,10 +938,10 @@ export default function NotebookWorkspace({
                 {current.type === 'definicion' ? (
                   <div className="def-actions">
                     <p>
-                      <strong>Definición del proyecto.</strong> Esta es la
-                      página que alimenta la propuesta y el contrato. Puedes
-                      redactarla a mano o partir de lo que ya has apuntado en
-                      las notas de reunión.
+                      <strong>Definición del proyecto.</strong> Todas las notas
+                      del cuaderno alimentan ya el contexto y la definición.
+                      Aquí puedes pulir el texto oficial o redactarlo desde el
+                      resto de notas.
                     </p>
                     <button
                       type="button"
@@ -1255,24 +1328,13 @@ export default function NotebookWorkspace({
               >
                 Copiar
               </button>
-              {panel.confirmApply ? (
-                <button
-                  type="button"
-                  className="btn btn-accent"
-                  disabled={applyingDef}
-                  onClick={() => void applyDefinitionToCrm()}
-                >
-                  {applyingDef ? 'Guardando…' : 'Confirmar y guardar'}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-accent"
-                  onClick={() => setPanel(null)}
-                >
-                  Cerrar
-                </button>
-              )}
+              <button
+                type="button"
+                className="btn btn-accent"
+                onClick={() => setPanel(null)}
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         ) : null}

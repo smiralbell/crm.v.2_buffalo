@@ -102,6 +102,16 @@ export interface ConfiguradorConfig {
   payment_split?: '50_50' | '100_upfront'
   onboarding_notes?: string
   custom_questions?: ConfiguradorCustomQuestion[]
+  /**
+   * Caché del diagnóstico del cuaderno. Solo se regenera si cambia el hash
+   * (notas / research / reuniones).
+   */
+  notebook_diagnosis?: {
+    hash: string
+    html: string
+    plain: string
+    at: string
+  }
 }
 
 export type ProyectoServiceType =

@@ -8,11 +8,15 @@ import {
   parseJsonFromModelOutput,
   resolveModel,
 } from '@/lib/openrouter'
+import { mergeLeadConfig } from '@/lib/onboarding/project-context-ai'
 import { getResearch, listNotes } from '@/lib/onboarding/notes/store'
+import { syncNotebookContextLightweight } from '@/lib/onboarding/notes/sync-context'
 import { analyseNotesHeuristic, TOPICS } from '@/lib/onboarding/notes/topics'
 
 const bodySchema = z.object({
-  kind: z.enum(['context', 'diagnosis', 'both']).default('both'),
+  kind: z.enum(['context', 'diagnosis']).default('context'),
+  /** Fuerza regenerar el diagnóstico aunque el hash no haya cambiado */
+  force: z.boolean().optional(),
 })
 
 function esc(s: string): string {
@@ -22,34 +26,12 @@ function esc(s: string): string {
     .replace(/>/g, '&gt;')
 }
 
-function buildRawPack(input: {
-  clientLabel: string
-  projectTitle: string | null
-  notesText: string
-  research: Awaited<ReturnType<typeof getResearch>>
-  faltan: string[]
+function contentHash(input: {
+  notesUpdated: string
+  researchUpdated: string
+  notesLen: number
 }): string {
-  const parts: string[] = [
-    `# CLIENTE\n${input.clientLabel}${input.projectTitle ? ' · ' + input.projectTitle : ''}`,
-  ]
-  if (input.research?.data) {
-    const r = input.research.data
-    parts.push(
-      `# WEB\nEmpresa: ${r.nombre}\nSector: ${r.sector}\nQué hacen: ${r.hace}\nServicios: ${(r.servicios || []).join(', ')}`
-    )
-  }
-  if (input.notesText.trim()) parts.push(`# NOTAS\n${input.notesText.trim()}`)
-  if (input.faltan.length) {
-    parts.push(`# HUECOS\n${input.faltan.map((f) => `- ${f}`).join('\n')}`)
-  }
-  return parts.join('\n\n')
-}
-
-function fallbackContext(pack: string): string {
-  return (
-    pack ||
-    'Aún no hay notas suficientes para construir el contexto del proyecto.'
-  )
+  return `${input.notesLen}:${input.notesUpdated}:${input.researchUpdated}`
 }
 
 function fallbackDiagnosisHtml(input: {
@@ -57,7 +39,6 @@ function fallbackDiagnosisHtml(input: {
   faltan: string[]
   palabras: number
   defPalabras: number
-  summary?: string
 }): string {
   const listo =
     input.faltan.length <= 3 && input.palabras >= 200 && input.defPalabras >= 80
@@ -78,11 +59,6 @@ function fallbackDiagnosisHtml(input: {
         definición ${input.defPalabras ? input.defPalabras + ' palabras' : 'sin escribir'}
       </div>
     </div>
-    ${
-      input.summary
-        ? bloque('Lectura', `<p style="margin:0;line-height:1.55">${esc(input.summary)}</p>`)
-        : ''
-    }
     ${bloque(
       'Qué falta',
       input.faltan.length
@@ -114,10 +90,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const notes = await listNotes(leadId)
     const research = await getResearch(leadId)
     const cfg = parseConfiguradorConfig(lead.configuracion)
-    const clientLabel =
-      [lead.contact?.empresa, lead.contact?.nombre].filter(Boolean).join(' · ') ||
-      `Lead #${leadId}`
-    const projectTitle = cfg?.title || null
+    const hash = contentHash({
+      notesLen: notes.reduce((a, n) => a + n.body.length, 0),
+      notesUpdated: notes.map((n) => n.updated_at).join('|'),
+      researchUpdated: research?.updated_at || '',
+    })
+
+    // ── Contexto: ficha del lead, sin IA. Sync barato por si el save
+    //    aún no había reescrito project_context (misma salida si no hay cambios).
+    if (body.kind === 'context') {
+      const synced = await syncNotebookContextLightweight({ leadId })
+      const context = (synced.context || '').trim()
+      return res.status(200).json({
+        ok: true,
+        kind: 'context',
+        source: 'stored',
+        cached: true,
+        context:
+          context ||
+          'Aún no hay notas. Escribe en el cuaderno: el contexto se actualiza solo al guardar.',
+        content_hash: hash,
+      })
+    }
+
+    // ── Diagnóstico: caché por hash; IA solo si cambió el material ────
+    const cached = cfg?.notebook_diagnosis
+    if (
+      !body.force &&
+      cached?.hash === hash &&
+      cached.html?.trim() &&
+      cached.plain?.trim()
+    ) {
+      return res.status(200).json({
+        ok: true,
+        kind: 'diagnosis',
+        source: 'cached',
+        cached: true,
+        diagnosis_html: cached.html,
+        diagnosis_plain: cached.plain,
+        content_hash: hash,
+      })
+    }
 
     const notesText = notes
       .filter((n) => n.body.trim())
@@ -143,15 +156,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? def.body.trim().split(/\s+/).length
       : 0
 
-    const pack = buildRawPack({
-      clientLabel,
-      projectTitle,
-      notesText,
-      research,
-      faltan,
-    })
-
-    let context = fallbackContext(pack)
     let diagnosis_html = fallbackDiagnosisHtml({
       covered,
       faltan,
@@ -162,46 +166,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       'Faltan:\n' + faltan.map((f) => `- ${f}`).join('\n')
     let source: 'llm' | 'fallback' = 'fallback'
 
+    const clientLabel =
+      [lead.contact?.empresa, lead.contact?.nombre].filter(Boolean).join(' · ') ||
+      `Lead #${leadId}`
+    const projectTitle = cfg?.title || null
+    const pack = [
+      `# CLIENTE\n${clientLabel}${projectTitle ? ' · ' + projectTitle : ''}`,
+      research?.data
+        ? `# WEB\n${research.data.nombre}\n${research.data.hace}`
+        : null,
+      notesText ? `# NOTAS\n${notesText}` : null,
+      faltan.length ? `# HUECOS\n${faltan.map((f) => `- ${f}`).join('\n')}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+
     if (process.env.OPENROUTER_API_KEY && notesText.trim().length >= 40) {
       try {
-        const wantContext = body.kind === 'context' || body.kind === 'both'
-        const wantDiag = body.kind === 'diagnosis' || body.kind === 'both'
         const raw = await openRouterChatCompletion(
           [
             {
               role: 'system',
-              content: `Eres el analista comercial senior de Buffalo AI (automatización e IA para empresas).
-A partir de las notas de reunión, redactas claridad: de qué trata el proyecto y qué falta saber.
-
+              content: `Eres el analista comercial senior de Buffalo AI.
 Devuelve SOLO JSON:
 {
-  "contexto": "texto markdown claro (sin fences). Explica: quién es el cliente, qué problema tienen, qué se quiere construir, alcance tentativo, restricciones y cifras clave. Español profesional, 180-450 palabras. No inventes datos.",
   "diagnostico": {
     "headline": "frase corta de estado",
     "nivel": "listo|precaucion|bloqueado",
-    "lectura": "párrafo de 2-4 frases: qué tan sólido está el conocimiento y por qué",
-    "sabemos": ["hallazgos concretos ya confirmados"],
-    "falta": ["huecos críticos con impacto comercial"],
-    "preguntas_clave": ["3-5 preguntas top que desbloquearían la propuesta"],
-    "riesgo": "una frase de riesgo si se redacta ya"
+    "lectura": "párrafo de 2-4 frases",
+    "sabemos": ["hallazgos concretos"],
+    "falta": ["huecos críticos"],
+    "preguntas_clave": ["3-5 preguntas top"],
+    "riesgo": "una frase"
   }
 }
-Si no hay material, dilo con honestidad. No rellenes con genéricos.`,
+No inventes datos. Español profesional.`,
             },
             {
               role: 'user',
-              content: `CLIENTE: ${clientLabel}\nPROYECTO: ${projectTitle || '(sin título)'}\n\nMATERIAL:\n${pack.slice(0, 18000)}`,
+              content: `MATERIAL:\n${pack.slice(0, 18000)}`,
             },
           ],
           {
             model: resolveModel('heavy'),
             temperature: 0.35,
-            maxTokens: 3200,
+            maxTokens: 2200,
             json: true,
           }
         )
         const parsed = parseJsonFromModelOutput(raw) as {
-          contexto?: string
           diagnostico?: {
             headline?: string
             nivel?: string
@@ -212,14 +225,8 @@ Si no hay material, dilo con honestidad. No rellenes con genéricos.`,
             riesgo?: string
           }
         }
-
-        if (wantContext && parsed.contexto?.trim()) {
-          context = parsed.contexto.trim()
-          source = 'llm'
-        }
-
         const d = parsed.diagnostico
-        if (wantDiag && d) {
+        if (d) {
           const nivel = String(d.nivel || '')
           const color =
             nivel === 'listo'
@@ -266,16 +273,31 @@ Si no hay material, dilo con honestidad. No rellenes con genéricos.`,
           source = 'llm'
         }
       } catch (e) {
-        console.warn('[notes-insights] fallback', e)
+        console.warn('[notes-insights] diagnosis fallback', e)
       }
     }
 
+    const { encoded } = mergeLeadConfig(lead.configuracion, {
+      notebook_diagnosis: {
+        hash,
+        html: diagnosis_html,
+        plain: diagnosis_plain,
+        at: new Date().toISOString(),
+      },
+    })
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { configuracion: encoded },
+    })
+
     return res.status(200).json({
       ok: true,
+      kind: 'diagnosis',
       source,
-      context,
+      cached: false,
       diagnosis_html,
       diagnosis_plain,
+      content_hash: hash,
     })
   } catch (error) {
     if (error instanceof z.ZodError) {

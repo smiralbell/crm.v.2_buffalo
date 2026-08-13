@@ -396,8 +396,8 @@ export default function ProyectoDetailPage({ lead }: Props) {
                 Contexto
               </p>
               <p className="text-xs text-gray-400 mb-4">
-                Materia prima: auditoría, reuniones y notas. La definición de arriba es este contexto
-                redactado.
+                Materia prima del cuaderno, investigación web y reuniones. La
+                definición de arriba es este contexto redactado.
               </p>
               <div className="max-h-72 overflow-y-auto rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 space-y-2">
                 {project.projectContext.split('\n').filter(Boolean).map((line, i) => (
@@ -410,7 +410,26 @@ export default function ProyectoDetailPage({ lead }: Props) {
           )}
 
           {/* Documentos: propuesta, factura, contrato, pre-kick-off */}
-          <div className="rounded-2xl border border-gray-200 bg-white px-5 py-5 sm:px-6 sm:py-6">
+          <div
+            id="documentos"
+            className="rounded-2xl border border-gray-200 bg-white px-5 py-5 sm:px-6 sm:py-6 scroll-mt-6"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                  Documentación
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Se genera con el contexto del cuaderno, la definición y el historial del lead.
+                </p>
+              </div>
+              <Link
+                href={`/onboarding/notas?lead=${lead.id}`}
+                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 text-xs font-semibold hover:bg-emerald-100 transition-colors"
+              >
+                Abrir cuaderno
+              </Link>
+            </div>
             <OnboardingDocumentActions leadId={lead.id} />
           </div>
 

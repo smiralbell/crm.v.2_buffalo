@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const lead = await prisma.lead.findUnique({
       where: { id: leadId },
-      select: { id: true },
+      select: { id: true, contact_id: true },
     })
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
 
@@ -40,6 +40,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         body: body.body,
         created_by: user.email || user.name || String(user.id),
       })
+      const { logCrmActivity } = await import('@/lib/crm/activities')
+      await logCrmActivity({
+        contactId: lead.contact_id,
+        leadId,
+        kind: 'onboarding',
+        title: 'Nota creada en el cuaderno',
+        body:
+          note.title ||
+          (note.type === 'definicion'
+            ? 'Definición'
+            : note.type === 'libre'
+              ? 'Nota libre'
+              : 'Reunión'),
+        meta: { note_id: note.id, note_type: note.type, source: 'notebook' },
+        createdBy: user.email || user.name || String(user.id),
+      })
+      try {
+        const { syncNotebookContextLightweight } = await import(
+          '@/lib/onboarding/notes/sync-context'
+        )
+        await syncNotebookContextLightweight({ leadId })
+      } catch (e) {
+        console.warn('[onboarding/notes] sync on create failed', e)
+      }
       return res.status(201).json({ ok: true, note })
     }
 
