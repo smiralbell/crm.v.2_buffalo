@@ -1,5 +1,6 @@
 import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import type { ConfiguradorConfig } from '@/lib/engranaje5/types'
+import { sanitizeProjectTitle } from '@/lib/onboarding/format-project-summary'
 
 export interface ProjectViewData {
   cfg: ConfiguradorConfig | null
@@ -64,12 +65,21 @@ export function buildProjectViewData(
 
   const scopeItems = (cfg?.scope_items || []).map((s) => String(s).trim()).filter(Boolean)
 
-  let projectName = (cfg?.title || '').trim() || null
+  const rawTitle = (cfg?.title || '').trim() || null
+  let projectName = sanitizeProjectTitle(rawTitle)
   if (!projectName && services.length) {
     projectName = cfg?.pack ? 'Pack Voz + Chat' : services.join(' · ')
   }
 
   let projectDefinition = (cfg?.description || '').trim() || null
+  // Si la "definición" es en realidad la ficha web, no la uses como brief
+  if (
+    projectDefinition &&
+    /QUI[EÉ]NES SON|Ficha\s*web|[┌│]/.test(projectDefinition)
+  ) {
+    // Se deja: pickProjectSummaryText la limpia; no la borramos del todo
+    // porque puede llevar el brief pegado detrás.
+  }
   if (!projectDefinition && scopeItems.length) {
     projectDefinition = scopeItems.join('\n')
   }
@@ -80,7 +90,9 @@ export function buildProjectViewData(
       .filter((l) => l && !l.toLowerCase().startsWith('total setup') && !l.startsWith('audit_status:'))
       .slice(0, 8)
       .join('\n')
-    if (cleaned) projectDefinition = cleaned
+    if (cleaned && !/QUI[EÉ]NES SON|Ficha\s*web|[┌│]/.test(cleaned)) {
+      projectDefinition = cleaned
+    }
   }
 
   const projectContext = (cfg?.project_context || '').trim() || null

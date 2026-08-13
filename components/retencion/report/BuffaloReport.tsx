@@ -30,6 +30,7 @@ import {
   Card,
   StyledTable,
 } from './brmComponents'
+import { NumBadge } from './bfBadges'
 import { paletteToCssVars, stripEmojis, type BuffaloThemeName } from './buffaloTheme'
 import { BUFFALO_REPORT_CSS } from './buffaloReportCss'
 import { splitProposalPageChunks } from '@/lib/onboarding/proposal-brm'
@@ -301,7 +302,7 @@ const BuffaloReport = forwardRef<HTMLDivElement, Props>(function BuffaloReport(
     <Fragment key={key}>
       {(s.title || s.number != null) && (
         <h2 className="bf-h2" data-block="section">
-          {s.number != null && <span className="bf-numbadge">{pad(s.number)}</span>}
+          {s.number != null && <NumBadge value={s.number} />}
           {s.title}
         </h2>
       )}

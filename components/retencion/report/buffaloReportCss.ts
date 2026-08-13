@@ -127,7 +127,8 @@ export const BUFFALO_REPORT_CSS = `
   min-height: var(--bf-page-h);
   background: var(--bf-bg);
   color: var(--bf-text);
-  padding: 0.55in var(--bf-pad-x) 0.45in;
+  /* un pelín más de aire arriba: el PDF raster recorta a veces el header */
+  padding: 0.62in var(--bf-pad-x) 0.45in;
   box-shadow: 0 12px 40px rgba(0,0,0,0.1);
   font-family: 'Inter', sans-serif;
   display: flex;
@@ -136,6 +137,7 @@ export const BUFFALO_REPORT_CSS = `
   break-after: page;
   page-break-after: always;
   position: relative;
+  overflow: visible;
 }
 /* Propuesta: hoja A4 (mínimo) con header arriba y footer abajo — siempre visibles */
 .buffalo-doc[data-kind="proposal"] .bf-page {
@@ -150,20 +152,31 @@ export const BUFFALO_REPORT_CSS = `
 /* Encabezado y pie de página (plantilla) */
 .bf-flow-header {
   display: flex; align-items: center; justify-content: space-between; gap: 24px;
-  border-bottom: 1px solid var(--bf-border); padding-bottom: 10px; margin-bottom: 20px;
+  border-bottom: 1px solid var(--bf-border);
+  /* padding-top evita que html2canvas recorte el ascendente de la tipografía */
+  padding: 3px 0 10px;
+  margin-bottom: 20px;
   flex: none;
+  overflow: visible;
 }
-.bf-header-logo { height: 18px; width: auto; object-fit: contain; }
+.bf-header-logo { height: 18px; width: auto; object-fit: contain; display: block; }
 .bf-header-title {
   font-size: 10.5px; color: var(--bf-header-text); letter-spacing: 0.02em;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 4.5in;
+  line-height: 1.5;
+  white-space: nowrap;
+  /* overflow:hidden recorta ascendentes en html2canvas — no usarlo aquí */
+  overflow: visible;
+  max-width: 4.5in;
+  padding: 2px 0;
 }
 .bf-flow-footer {
   margin-top: auto;
   display: flex; justify-content: space-between; align-items: center; gap: 16px;
   border-top: 1px solid var(--bf-border); padding-top: 10px;
   font-size: 9.5px; color: var(--bf-header-text); letter-spacing: 0.03em;
+  line-height: 1.4;
   flex: none;
+  overflow: visible;
 }
 
 /* Cada bloque de primer nivel no se parte al paginar */
@@ -173,13 +186,18 @@ export const BUFFALO_REPORT_CSS = `
 .bf-h2 {
   font-family: 'Space Grotesk','Inter',sans-serif; font-size: 16px; font-weight: 700;
   color: var(--bf-heading); display: flex; align-items: center; gap: 12px; margin: 26px 0 12px;
+  line-height: 1.25;
 }
 .bf-h2:first-child { margin-top: 0; }
+/* Badge numérico SVG (rect + text) — estable en PDF raster */
 .bf-numbadge {
-  font-family: 'Space Grotesk','Inter',sans-serif; font-size: 10px; font-weight: 700;
-  color: var(--bf-accent-contrast); background: var(--bf-accent);
-  border-radius: 3px; padding: 3px 7px; line-height: 1;
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: middle;
+  overflow: visible;
 }
+.bf-numbadge-bg { fill: var(--bf-accent); }
+.bf-numbadge-text { fill: var(--bf-accent-contrast); }
 
 .bf-flow h3, .bf-page h3 {
   font-family: 'Space Grotesk','Inter',sans-serif; font-size: 11.5px; font-weight: 700;
@@ -400,14 +418,16 @@ export const BUFFALO_REPORT_CSS = `
 .bf-callout-body p { margin: 0 0 6px; font-size: 12px; }
 .bf-callout-body p:last-child { margin-bottom: 0; }
 
-/* Píldora de semáforo */
+/* Píldora semáforo SVG */
 .bf-semaforo {
-  display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 10px;
-  font-size: 11px; font-weight: 700; color: #fff; letter-spacing: 0.02em;
+  display: inline-block;
+  vertical-align: middle;
+  overflow: visible;
 }
-.bf-semaforo.ok { background: var(--bf-ok); }
-.bf-semaforo.amber { background: var(--bf-amber); }
-.bf-semaforo.red { background: var(--bf-red); }
+.bf-semaforo-text { fill: #ffffff; }
+.bf-semaforo-ok .bf-semaforo-bg { fill: var(--bf-ok); }
+.bf-semaforo-amber .bf-semaforo-bg { fill: var(--bf-amber); }
+.bf-semaforo-red .bf-semaforo-bg { fill: var(--bf-red); }
 
 /* Highlight */
 .bf-highlight { background: var(--bf-accent); border-radius: 6px; padding: 18px 22px; margin: 0 0 14px; break-inside: avoid; }
@@ -423,7 +443,24 @@ export const BUFFALO_REPORT_CSS = `
 .bf-checklist-item:first-child { padding-top: 0; }
 .bf-checklist-item:last-child { border-bottom: none; padding-bottom: 0; }
 .bf-checklist-item p { margin: 0; font-size: 12px; }
-.bf-check { flex: 0 0 auto; width: 15px; height: 15px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; line-height: 1; margin-top: 1px; }
+/* Check: SVG centrado (el glifo ✓ se desplaza en raster PDF) */
+.bf-check {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  position: relative;
+  overflow: hidden;
+}
+.bf-check svg {
+  display: block;
+  width: 10px;
+  height: 10px;
+}
 .bf-check.on { background: var(--bf-accent); color: var(--bf-accent-contrast); }
 .bf-check.off { background: transparent; border: 1.5px solid var(--bf-border); color: transparent; }
 

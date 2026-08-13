@@ -261,7 +261,139 @@ function addCanvasToPdf(
 }
 
 /**
+ * Captura una hoja en un iframe aislado (sin overflow/scroll del workspace).
+ * Ahí es donde html2canvas solía recortar el header y descuadrar badges.
+ */
+async function captureSheetInIframe(
+  sheet: HTMLElement,
+  root: HTMLElement,
+  pageSize: 'A4' | 'letter',
+  html2canvas: typeof import('html2canvas').default
+): Promise<HTMLCanvasElement> {
+  const w = pageSize === 'A4' ? '210mm' : '8.5in'
+  const h = pageSize === 'A4' ? '297mm' : '11in'
+  const styleAttr = root.getAttribute('style') || ''
+  const kindAttr = root.getAttribute('data-kind') || 'proposal'
+  const themeAttr = root.getAttribute('data-theme') || ''
+  const bg =
+    getComputedStyle(sheet).backgroundColor ||
+    getComputedStyle(root).getPropertyValue('--bf-bg')?.trim() ||
+    '#123524'
+
+  // Absolutizar src de imágenes para el iframe
+  const clone = sheet.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('img').forEach((img) => {
+    try {
+      if (img.src) img.setAttribute('src', img.src)
+    } catch {
+      /* ignore */
+    }
+  })
+  clone.style.cssText = [
+    `width:${w}`,
+    `height:${h}`,
+    `min-height:${h}`,
+    `max-height:${h}`,
+    'margin:0',
+    'box-shadow:none',
+    'border-radius:0',
+    'overflow:hidden',
+  ].join(';')
+
+  const iframe = document.createElement('iframe')
+  iframe.setAttribute('aria-hidden', 'true')
+  iframe.style.cssText =
+    'position:fixed;left:-12000px;top:0;width:210mm;height:297mm;border:0;opacity:0;pointer-events:none;'
+  document.body.appendChild(iframe)
+
+  const idoc = iframe.contentDocument
+  if (!idoc) {
+    iframe.remove()
+    throw new Error('No se pudo crear iframe de captura')
+  }
+
+  idoc.open()
+  idoc.write(`<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="${FONTS_LINK}" rel="stylesheet" />
+<style>
+${BUFFALO_REPORT_CSS}
+html, body {
+  margin: 0; padding: 0;
+  background: ${bg};
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+.buffalo-doc {
+  gap: 0 !important;
+  align-items: stretch !important;
+  width: ${w} !important;
+  max-width: ${w} !important;
+}
+.buffalo-cover, .bf-page {
+  width: ${w} !important;
+  height: ${h} !important;
+  min-height: ${h} !important;
+  max-height: ${h} !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  overflow: hidden !important;
+}
+.bf-flow-header, .bf-header-title, .bf-flow-footer {
+  overflow: visible !important;
+}
+.bf-header-title {
+  line-height: 1.5 !important;
+  padding: 2px 0 !important;
+}
+</style>
+</head>
+<body>
+<div class="buffalo-doc" style="${escapeHtml(styleAttr)}" data-kind="${escapeHtml(kindAttr)}"${
+    themeAttr ? ` data-theme="${escapeHtml(themeAttr)}"` : ''
+  }>
+${clone.outerHTML}
+</div>
+</body>
+</html>`)
+  idoc.close()
+
+  try {
+    await waitForPrintReady(idoc)
+    await wait(120)
+    const target =
+      idoc.querySelector<HTMLElement>('.buffalo-cover, .bf-page') ||
+      idoc.body.firstElementChild
+    if (!(target instanceof HTMLElement)) {
+      throw new Error('Hoja no encontrada en iframe')
+    }
+
+    return await html2canvas(target, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: bg.includes('rgb') || bg.startsWith('#') ? bg : '#123524',
+      logging: false,
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: target.offsetWidth,
+      windowHeight: target.offsetHeight,
+      width: target.offsetWidth,
+      height: target.offsetHeight,
+    })
+  } finally {
+    iframe.remove()
+  }
+}
+
+/**
  * Descarga PDF real: una página A4 por hoja visual (portada + .bf-page).
+ * Cada hoja se rasteriza en un iframe aislado (evita recortes del preview).
  */
 async function downloadPdfFromSheets(
   root: HTMLElement,
@@ -276,72 +408,18 @@ async function downloadPdfFromSheets(
   const sheets = collectSheets(root)
   if (sheets.length === 0) throw new Error('No hay hojas para exportar')
 
-  const prevClass = root.className
-  root.classList.remove('proposal-preview-soft')
-
   const format = pageSize === 'A4' ? 'a4' : 'letter'
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format })
   const pageW = pdf.internal.pageSize.getWidth()
   const pageH = pdf.internal.pageSize.getHeight()
-  // jsPDF crea la 1ª página vacía; la rellenamos con la portada
   let isFirst = true
 
-  try {
-    for (const el of sheets) {
-      const prev = {
-        width: el.style.width,
-        minHeight: el.style.minHeight,
-        boxShadow: el.style.boxShadow,
-        borderRadius: el.style.borderRadius,
-      }
-      el.style.width = pageSize === 'A4' ? '210mm' : '8.5in'
-      el.style.minHeight = pageSize === 'A4' ? '297mm' : '11in'
-      el.style.boxShadow = 'none'
-      el.style.borderRadius = '0'
-
-      // Esperar tipografías (números / badges) antes de capturar
-      try {
-        if (document.fonts?.ready) await document.fonts.ready
-      } catch {
-        /* ignore */
-      }
-      await wait(80)
-
-      const canvas = await html2canvas(el, {
-        scale: 3,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        onclone: (_doc, cloned) => {
-          const node = cloned as HTMLElement
-          node.style.boxShadow = 'none'
-          node.style.borderRadius = '0'
-          node.style.transform = 'none'
-          node.style.setProperty('-webkit-font-smoothing', 'antialiased')
-          node.style.setProperty('text-rendering', 'geometricPrecision')
-          // Badges / números: evitar recortes por letter-spacing o overflow
-          node.querySelectorAll<HTMLElement>('.bf-numbadge, .bf-kpi-value, .bf-meta-value').forEach((n) => {
-            n.style.letterSpacing = '0.02em'
-            n.style.overflow = 'visible'
-            n.style.whiteSpace = 'nowrap'
-          })
-          node.querySelectorAll<HTMLElement>('.bf-page-body, .bf-cover-stack').forEach((n) => {
-            n.style.overflow = 'visible'
-          })
-        },
-      })
-
-      el.style.width = prev.width
-      el.style.minHeight = prev.minHeight
-      el.style.boxShadow = prev.boxShadow
-      el.style.borderRadius = prev.borderRadius
-
-      addCanvasToPdf(pdf, canvas, pageW, pageH, !isFirst)
-      isFirst = false
-    }
-  } finally {
-    root.className = prevClass
+  for (const el of sheets) {
+    const canvas = await captureSheetInIframe(el, root, pageSize, html2canvas)
+    // Encajar siempre a página completa (ratio A4 del iframe)
+    if (!isFirst) pdf.addPage()
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pageW, pageH)
+    isFirst = false
   }
 
   pdf.save(`${fileBase}.pdf`)

@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
-import { SEMAFORO_LABEL, type SemaforoLevel } from './buffaloTheme'
+import type { SemaforoLevel } from './buffaloTheme'
+import { CheckMarkIcon, SemaforoPill } from './bfBadges'
 
 export { BuffaloChart } from './charts/BuffaloChart'
+export { SemaforoPill } from './bfBadges'
 
 /* Utilidades ------------------------------------------------------------- */
 
@@ -24,12 +26,6 @@ function trendPrefix(trend: 'up' | 'down' | 'flat'): string {
   if (trend === 'up') return '\u25B2 ' // ▲
   if (trend === 'down') return '\u25BC ' // ▼
   return '\u2013 ' // –
-}
-
-/* Semáforo --------------------------------------------------------------- */
-
-export function SemaforoPill({ level }: { level: SemaforoLevel }) {
-  return <span className={`bf-semaforo ${level}`}>{SEMAFORO_LABEL[level]}</span>
 }
 
 /* KPI -------------------------------------------------------------------- */
@@ -122,7 +118,9 @@ export function ChecklistItem(props: AnyProps) {
   const checked = str(props['data-checked']) === 'true'
   return (
     <div className="bf-checklist-item">
-      <span className={`bf-check ${checked ? 'on' : 'off'}`}>{checked ? '\u2713' : ''}</span>
+      <span className={`bf-check ${checked ? 'on' : 'off'}`}>
+        {checked ? <CheckMarkIcon /> : null}
+      </span>
       <span className="bf-checklist-text">{props.children}</span>
     </div>
   )

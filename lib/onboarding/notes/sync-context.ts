@@ -50,15 +50,14 @@ export function buildNotebookSlice(
     .trim()
 }
 
-/** Definición del proyecto = nota «definición» si existe; si no, todas las notas. */
+/**
+ * Definición del proyecto = solo nota tipo «definición».
+ * No volcamos todas las notas/reuniones aquí (eso ensucia la ficha);
+ * el resto vive en project_context.
+ */
 export function definitionFromNotes(notes: ProjectNote[]): string | null {
   const def = notes.find((n) => n.type === 'definicion' && n.body.trim())
-  if (def) return def.body.trim()
-  const bodies = notes
-    .filter((n) => n.body.trim())
-    .map((n) => n.body.trim())
-  if (!bodies.length) return null
-  return bodies.join('\n\n').slice(0, 12000)
+  return def ? def.body.trim().slice(0, 12000) : null
 }
 
 /**

@@ -18,6 +18,7 @@ import { isAuditConfiguracion } from '@/lib/onboarding/audit/config-detect'
 import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
 import OnboardingDocumentActions from '@/components/onboarding/OnboardingDocumentActions'
 import OnboardingInvoicesThread from '@/components/onboarding/OnboardingInvoicesThread'
+import ProjectSummaryCard from '@/components/onboarding/ProjectSummaryCard'
 import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
 
 interface Props {
@@ -353,60 +354,45 @@ export default function ProyectoDetailPage({ lead }: Props) {
             }}
           />
 
-          {/* Nombre + definición del proyecto */}
-          <section className="rounded-2xl border border-gray-200 bg-white px-6 py-6 sm:px-8 sm:py-7">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
-              Proyecto
-            </p>
-            <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-gray-900">
-              {project.projectName || 'Sin nombre de proyecto'}
-            </h2>
-            {project.projectDefinition ? (
-              <div className="mt-4 space-y-3">
-                {project.projectDefinition.split('\n').filter(Boolean).map((line, i) => (
-                  <p key={i} className="text-sm leading-relaxed text-gray-600">
-                    {line}
-                  </p>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-gray-400">
-                Todavía no hay definición del proyecto.
-              </p>
-            )}
-            {project.scopeItems.length > 0 &&
-              project.projectDefinition !== project.scopeItems.join('\n') && (
-                <ul className="mt-5 pt-5 border-t border-gray-100 space-y-2">
-                  {project.scopeItems.map((item) => (
-                    <li
-                      key={item}
-                      className="flex gap-2.5 text-sm text-gray-600 leading-relaxed"
-                    >
-                      <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-gray-300" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              )}
-          </section>
+          <ProjectSummaryCard
+            leadId={lead.id}
+            projectName={project.projectName}
+            fallbackName={
+              lead.contact?.empresa || lead.contact?.nombre || displayName
+            }
+            projectDefinition={project.projectDefinition}
+            projectContext={project.projectContext}
+            scopeItems={project.scopeItems}
+            notebookHref={auditUrl}
+          />
 
           {project.projectContext && (
-            <section className="rounded-2xl border border-gray-200 bg-white px-6 py-6 sm:px-8 sm:py-7">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mb-3">
-                Contexto
-              </p>
-              <p className="text-xs text-gray-400 mb-4">
-                Materia prima del cuaderno, investigación web y reuniones. La
-                definición de arriba es este contexto redactado.
-              </p>
-              <div className="max-h-72 overflow-y-auto rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 space-y-2">
-                {project.projectContext.split('\n').filter(Boolean).map((line, i) => (
-                  <p key={i} className="text-xs leading-relaxed text-gray-600 whitespace-pre-wrap">
-                    {line}
+            <details className="group rounded-2xl border border-gray-200 bg-white px-6 py-4 sm:px-8">
+              <summary className="cursor-pointer list-none flex items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                    Contexto completo
                   </p>
-                ))}
+                  <p className="text-xs text-gray-400 mt-1">
+                    Materia prima del cuaderno, investigación y reuniones (texto bruto).
+                  </p>
+                </div>
+                <span className="text-xs font-medium text-gray-400 group-open:hidden">
+                  Ver
+                </span>
+                <span className="text-xs font-medium text-gray-400 hidden group-open:inline">
+                  Ocultar
+                </span>
+              </summary>
+              <div className="mt-4 max-h-72 overflow-y-auto rounded-xl bg-gray-50 border border-gray-100 px-4 py-3">
+                <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-gray-600">
+                  {project.projectContext.replace(
+                    /┌[\s\S]*?Ficha\s*web/gi,
+                    '[Ficha web omitida]'
+                  )}
+                </pre>
               </div>
-            </section>
+            </details>
           )}
 
           {/* Documentos: propuesta, factura, contrato, pre-kick-off */}
