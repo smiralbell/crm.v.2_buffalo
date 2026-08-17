@@ -6,6 +6,7 @@ import { requireAuth } from '@/lib/auth'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, AlertCircle, Check, Save, Search } from 'lucide-react'
+import TicketsWebhookGuideDownload from '@/components/tickets/TicketsWebhookGuideDownload'
 
 interface ProjectConfig {
   id: string
@@ -109,12 +110,15 @@ export default function TicketsConfigPage() {
   return (
     <Layout>
       <div className="space-y-5 max-w-xl mx-auto">
-        <Link
-          href="/tickets"
-          className="inline-flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Link>
+        <div className="flex items-center justify-between gap-3">
+          <Link
+            href="/tickets"
+            className="inline-flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+          <TicketsWebhookGuideDownload compact />
+        </div>
 
         {needsMigration && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">

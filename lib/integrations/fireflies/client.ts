@@ -21,6 +21,61 @@ export type FirefliesSummary = {
   topics_discussed?: string[] | null
 }
 
+export type FirefliesWebhookEvent = {
+  event: string
+  meetingId: string | null
+}
+
+/** Extrae event + meeting id de Webhooks V1 (`meetingId`/`eventType`) y V2 (`meeting_id`/`event`). */
+export function parseFirefliesWebhookPayload(raw: unknown): FirefliesWebhookEvent {
+  const body = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const nested =
+    body.data && typeof body.data === 'object'
+      ? (body.data as Record<string, unknown>)
+      : {}
+
+  const event = String(
+    body.event ||
+      body.eventType ||
+      nested.event ||
+      nested.eventType ||
+      ''
+  ).trim()
+
+  const meetingId = String(
+    body.meeting_id ||
+      body.meetingId ||
+      nested.meeting_id ||
+      nested.meetingId ||
+      body.transcript_id ||
+      nested.transcript_id ||
+      ''
+  ).trim()
+
+  return {
+    event,
+    meetingId: meetingId || null,
+  }
+}
+
+/** Eventos que aún no tienen transcripción lista. */
+export function isFirefliesPrematureEvent(event: string): boolean {
+  const e = event.toLowerCase()
+  return e.includes('bot_joined') || e.includes('bot joined')
+}
+
+export function isFirefliesTranscriptReadyEvent(event: string): boolean {
+  if (!event) return true
+  const e = event.toLowerCase()
+  if (isFirefliesPrematureEvent(event)) return false
+  return (
+    e === 'meeting.transcribed' ||
+    e === 'meeting.summarized' ||
+    e.includes('transcript') ||
+    e.includes('summar')
+  )
+}
+
 export type FirefliesTranscript = {
   id: string
   title: string | null
@@ -208,8 +263,17 @@ export function extractParticipants(t: FirefliesTranscript): FirefliesParticipan
   for (const a of t.meeting_attendees || []) {
     add(a.email, a.displayName || a.name)
   }
-  for (const p of t.participants || []) {
-    if (typeof p === 'string' && p.includes('@')) add(p, null)
+  for (const p of (t.participants || []) as unknown[]) {
+    if (typeof p === 'string') {
+      const angle = p.match(/<([^>]+@[^>]+)>/)
+      add(
+        angle ? angle[1] : p.includes('@') ? p : null,
+        angle ? p.replace(/<[^>]+>/, '').trim() : p.includes('@') ? null : p
+      )
+    } else if (p && typeof p === 'object') {
+      const row = p as { email?: string; name?: string }
+      add(row.email, row.name)
+    }
   }
   add(t.host_email, null)
   add(t.organizer_email, null)

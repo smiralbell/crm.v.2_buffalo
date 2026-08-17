@@ -28,6 +28,7 @@ export type MeetingDto = {
   status: string
   match_reason: string | null
   lead_id: number | null
+  contact_id?: number | null
 }
 
 function fmtDate(iso: string | null) {

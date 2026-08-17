@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { RefreshCw, AlertCircle, Settings, FolderKanban, Clock } from 'lucide-react'
+import TicketsWebhookGuideDownload from '@/components/tickets/TicketsWebhookGuideDownload'
 import { PRIORITY_LABELS, STATUS_LABELS, type TicketPriority, type TicketStatus } from '@/lib/tickets/ingest'
 
 interface TicketRow {
@@ -147,6 +148,7 @@ export default function TicketsPage() {
             </SelectContent>
           </Select>
 
+          <TicketsWebhookGuideDownload />
           <Link
             href="/tickets/config"
             className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:bg-gray-50"

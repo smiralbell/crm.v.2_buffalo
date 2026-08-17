@@ -57,6 +57,35 @@ function internalDomains(): string[] {
   return ['agenciabuffalo.es']
 }
 
+const GENERIC_EMAIL_DOMAINS = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'hotmail.com',
+  'outlook.com',
+  'outlook.es',
+  'yahoo.com',
+  'yahoo.es',
+  'icloud.com',
+  'live.com',
+  'msn.com',
+  'proton.me',
+  'protonmail.com',
+  'me.com',
+  'aol.com',
+])
+
+export function emailDomain(email: string | null | undefined): string | null {
+  const e = normEmail(email)
+  if (!e) return null
+  const domain = e.split('@')[1]
+  return domain || null
+}
+
+export function isGenericEmailDomain(domain: string | null | undefined): boolean {
+  if (!domain) return true
+  return GENERIC_EMAIL_DOMAINS.has(domain.toLowerCase())
+}
+
 function extraInternalEmails(): Set<string> {
   const set = new Set<string>()
   const admin = process.env.CRM_ADMIN_EMAIL?.trim().toLowerCase()
@@ -125,7 +154,62 @@ export async function matchCrmFromParticipants(
     })
   }
 
-  if (hits.length === 0) return { kind: 'none' }
+  if (hits.length === 0) {
+    // Fallback: dominio corporativo único (no Gmail/Hotmail) → un solo contacto
+    const companyDomains = emails
+      .map((e) => emailDomain(e))
+      .filter((d): d is string => {
+        if (!d) return false
+        if (isGenericEmailDomain(d)) return false
+        return !internalDomains().includes(d)
+      })
+    const uniqueDomains = Array.from(new Set(companyDomains))
+    if (uniqueDomains.length === 1) {
+      const domain = uniqueDomains[0]
+      const byDomain = await prisma.contact.findMany({
+        where: { email: { endsWith: `@${domain}`, mode: 'insensitive' } },
+        include: { leads: { take: 1, orderBy: { updated_at: 'desc' } } },
+        take: 8,
+      })
+      if (byDomain.length === 1) {
+        const ct = byDomain[0]
+        const email = normEmail(ct.email) || emails[0]
+        const lead = ct.leads[0] || null
+        if (lead) {
+          return {
+            kind: 'lead',
+            leadId: lead.id,
+            contactId: ct.id,
+            email,
+            hits: [
+              {
+                contactId: ct.id,
+                leadId: lead.id,
+                email,
+                empresa: ct.empresa ?? null,
+                nombre: ct.nombre ?? null,
+              },
+            ],
+          }
+        }
+        return {
+          kind: 'contact_only',
+          contactId: ct.id,
+          email,
+          hits: [
+            {
+              contactId: ct.id,
+              leadId: null,
+              email,
+              empresa: ct.empresa ?? null,
+              nombre: ct.nombre ?? null,
+            },
+          ],
+        }
+      }
+    }
+    return { kind: 'none' }
+  }
 
   const leadHits = hits.filter((h) => h.leadId != null) as Array<
     CrmMatchHit & { leadId: number }

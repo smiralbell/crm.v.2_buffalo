@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
+  Copy,
   ExternalLink,
   Link2,
   Loader2,
@@ -39,6 +40,9 @@ type LeadHit = {
 export default function FirefliesInboxPanel() {
   const [meetings, setMeetings] = useState<MeetingDto[]>([])
   const [configured, setConfigured] = useState(true)
+  const [webhookUrl, setWebhookUrl] = useState<string | null>(null)
+  const [webhookSecretOk, setWebhookSecretOk] = useState(false)
+  const [copied, setCopied] = useState(false)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,6 +70,17 @@ export default function FirefliesInboxPanel() {
       setLoading(false)
     }
   }, [unmatchedOnly])
+
+  useEffect(() => {
+    void fetch('/api/integrations/fireflies/status')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.webhook_url) setWebhookUrl(d.webhook_url)
+        setWebhookSecretOk(Boolean(d.webhook_secret_configured))
+        if (typeof d.api_configured === 'boolean') setConfigured(d.api_configured)
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     void load()
@@ -161,7 +176,8 @@ export default function FirefliesInboxPanel() {
             Fireflies · Reuniones
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Transcripciones y resúmenes entrantes. Vincula las que no se emparejaron solas.
+            Las reuniones llegan solas cuando Fireflies termina la transcripción. Sincronizar es
+            solo un respaldo.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -188,6 +204,58 @@ export default function FirefliesInboxPanel() {
             Sincronizar
           </Button>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 space-y-2">
+        <p className="font-medium text-gray-900">Cómo se asocia cada reunión</p>
+        <ol className="list-decimal pl-4 space-y-1">
+          <li>
+            Al acabar la call, Fireflies transcribe y avisa al CRM (tarda unos minutos; no es
+            instantáneo).
+          </li>
+          <li>
+            El CRM mira los emails de los invitados (excepto @agenciabuffalo.es) y busca el mismo
+            email en un contacto/lead.
+          </li>
+          <li>
+            Si hay lead → nota en el cuaderno + ficha. Si solo hay contacto → ficha del contacto.
+            Si no coincide → queda aquí para vincular a mano.
+          </li>
+        </ol>
+        {webhookUrl && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <code className="text-xs bg-gray-50 border border-gray-100 rounded-md px-2 py-1 break-all">
+              {webhookUrl}
+            </code>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => {
+                void navigator.clipboard.writeText(webhookUrl)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1500)
+              }}
+            >
+              <Copy className="h-3.5 w-3.5 mr-1" />
+              {copied ? 'Copiado' : 'Copiar URL'}
+            </Button>
+            <a
+              href="https://app.fireflies.ai/integrations/api/webhook"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-gray-500 underline"
+            >
+              Abrir Fireflies Webhooks V2
+            </a>
+            {!webhookSecretOk && (
+              <span className="text-xs text-amber-700">
+                Falta FIREFLIES_WEBHOOK_SECRET (el mismo que pongas en Fireflies).
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {!configured && (
@@ -239,13 +307,22 @@ export default function FirefliesInboxPanel() {
                         Lead #{m.lead_id}
                       </Badge>
                     </Link>
+                  ) : m.contact_id ? (
+                    <Link href={`/contacts/${m.contact_id}`}>
+                      <Badge className="bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100">
+                        Contacto #{m.contact_id}
+                      </Badge>
+                    </Link>
                   ) : (
                     <Badge className="bg-amber-50 text-amber-800 border border-amber-200">
-                      Sin lead
+                      Sin match
                     </Badge>
                   )}
                 </div>
               </div>
+              {m.match_reason && (
+                <p className="text-[11px] text-gray-400 font-mono">{m.match_reason}</p>
+              )}
 
               {m.summary_overview && (
                 <p className="text-sm text-gray-600 line-clamp-3">{m.summary_overview}</p>
