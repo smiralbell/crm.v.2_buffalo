@@ -1,0 +1,180 @@
+BUFFAL
+CONTRATO DE PRESTACIÓN
+DE SERVICIOS DE
+INTELIGENCIA ARTIFICIAL
+En Barcelona, a ___ de __________ de 2026.
+REUNIDOS
+De una parte,
+Buffalo IA Global Digital Solutions, S.L., con domicilio social en Calle Provença, Pta. 2 Esc. B –
+08025 (Barcelona), y número de identificación fiscal B22944599, representada por D. Santiago
+Miralbell Costa y D. Sergi Masoliver López, en calidad de administradores (en adelante,
+«Buffalo»).
+Y de otra parte,
+M7 Consulting SLU, con CIF B75923664 y domicilio social en C/ Italia 1-3, 2º 8ª, 08320 El
+Masnou (Barcelona), representada por D. Alex Melero García (en adelante, el «Cliente»).
+Ambas partes, reconociéndose mutuamente la capacidad legal necesaria para contratar y
+obligarse, acuerdan suscribir el presente contrato de prestación de servicios (en adelante, el
+«Contrato»), que se regirá por las siguientes:
+EXPONEN
+I. Que Buffalo es una sociedad especializada en el desarrollo de soluciones de inteligencia
+artificial, automatización de procesos y sistemas de atención al cliente mediante agentes
+conversacionales.
+II. Que el Cliente está interesado en implementar un sistema de agente de voz con inteligencia
+artificial para la gestión, filtrado y cualificación de llamadas entrantes dentro de su operativa.
+III. Que ambas partes desean regular la prestación de dichos servicios mediante el presente
+Contrato.
+En virtud de lo anterior,
+A G E N C I A B U F F A L O . E S 	R E U N I D O S · E X P O N E N 	P Á G . 0 1 / 0 6
+
+-- 1 of 6 --
+
+BUFFAL
+CLÁUSULAS
+PRIMERA — OBJETO DEL CONTRATO
+El presente contrato tiene por objeto la prestación por parte de Buffalo de servicios de diseño,
+desarrollo, configuración e implementación de un sistema de agente de voz basado en
+inteligencia artificial para la gestión de llamadas entrantes del Cliente.
+En particular, el sistema podrá incluir, de forma enunciativa pero no limitativa:
+1. Atención automatizada de llamadas mediante agente de voz con inteligencia artificial.
+2. Identificación y clasificación de interlocutores conforme a los criterios definidos por el Cliente.
+3. Filtrado de llamadas no cualificadas según reglas de negocio y criterios operativos definidos
+durante la fase de configuración.
+4. Derivación automática de llamadas hacia números o responsables designados por el Cliente.
+5. Gestión de llamadas no derivadas mediante recogida de información relevante y generación
+de avisos o resúmenes.
+6. Configuración del flujo conversacional, lógica de decisión y comportamiento general del
+sistema conforme a la información facilitada por el Cliente.
+Quedan expresamente excluidos del objeto del presente contrato, salvo acuerdo expreso por
+escrito o anexo adicional:
+— desarrollos adicionales
+— dashboards
+— automatizaciones internas complejas
+— CRM
+— integraciones no contempladas inicialmente
+— nuevas verticales
+— agentes adicionales
+— ampliaciones funcionales
+— cualquier otro desarrollo distinto al aquí descrito
+A G E N C I A B U F F A L O . E S 	C L Á U S U L A S 	P Á G . 0 2 / 0 6
+
+-- 2 of 6 --
+
+BUFFAL
+SEGUNDA — DOCUMENTACIÓN FUNCIONAL Y DEFINICIÓN DEL PROYECTO
+Las partes reconocen la existencia de documentación funcional, materiales de trabajo,
+formularios, respuestas, ejemplos operativos y demás información facilitada por el Cliente durante
+la fase de análisis y definición del proyecto (en adelante, la «Documentación Funcional»).
+Dicha documentación tendrá carácter orientativo y servirá como base para la comprensión del
+negocio, definición de necesidades y configuración funcional del sistema, sin constituir por sí
+misma una obligación de entrega literal ni una definición cerrada del alcance técnico del proyecto.
+Las adaptaciones, modificaciones o ampliaciones que excedan del objeto descrito en el presente
+contrato podrán requerir validación adicional, presupuesto independiente o formalización
+mediante anexo.
+TERCERA — FASES DEL PROYECTO Y PLAZOS
+El desarrollo del sistema se estructurará, de forma orientativa, en las siguientes fases:
+— Semana 1–2: diseño y desarrollo del agente de voz y lógica operativa.
+— Semana 3: pruebas internas por parte de Buffalo.
+— Semana 4: pruebas conjuntas con el Cliente, ajustes finales y preparación para puesta en
+producción.
+Los plazos podrán ajustarse de mutuo acuerdo en función de la disponibilidad de información,
+feedback, validaciones o necesidades operativas del Cliente.
+CUARTA — REUNIONES DE SEGUIMIENTO
+Durante el proyecto se prevé la realización de las siguientes reuniones:
+1. Reunión inicial de definición, destinada a recopilación de requisitos, análisis funcional y
+casuísticas.
+2. Reunión de pruebas, para validación operativa del sistema.
+3. Reunión de puesta en producción, incluyendo, cuando proceda: configuración de API Keys,
+configuración de plataformas externas, configuración de métodos de pago y activación del
+entorno productivo.
+A G E N C I A B U F F A L O . E S 	C L Á U S U L A S 	P Á G . 0 3 / 0 6
+
+-- 3 of 6 --
+
+BUFFAL
+QUINTA — CONDICIONES ECONÓMICAS
+El importe total del desarrollo e implementación asciende a:
+DOS MIL DOSCIENTOS EUROS (2.200 €) + IVA
+Asimismo, una vez el sistema entre en producción, se activará un servicio de mantenimiento por
+importe de: NOVENTA EUROS (90 €) + IVA / mes
+Las condiciones y alcance del mantenimiento se regirán por el presupuesto facilitado por Buffalo
+al Cliente, formando parte integrante del presente contrato.
+SEXTA — FORMA DE PAGO
+El pago del desarrollo se realizará mediante transferencia bancaria:
+— 50 % al inicio del proyecto.
+— 50 % a la finalización del desarrollo y antes de puesta en producción.
+Los datos bancarios serán indicados en las correspondientes facturas emitidas por Buffalo.
+SÉPTIMA — PROPIEDAD INTELECTUAL
+La solución y desarrollos específicamente realizados para el Cliente serán de su titularidad una
+vez abonado íntegramente el precio del contrato.
+No obstante, Buffalo conservará en todo momento la titularidad exclusiva sobre: arquitectura
+base, lógica reutilizable, prompts, agentes, metodologías, componentes genéricos, flujos
+reutilizables, tecnología propia, know-how, herramientas y sistemas preexistentes.
+El Cliente adquiere derecho de uso sobre la solución desarrollada para su operativa interna. En
+ningún caso dicho uso permitirá: comercializar la solución como producto propio, sublicenciarla,
+revenderla, reutilizarla para prestar servicios a terceros, ni transferirla fuera de su organización.
+Buffalo podrá reutilizar conocimientos, metodologías y estructuras genéricas derivadas del
+proyecto, respetando siempre la confidencialidad y sin replicar la solución concreta del Cliente.
+A G E N C I A B U F F A L O . E S 	C L Á U S U L A S 	P Á G . 0 4 / 0 6
+
+-- 4 of 6 --
+
+BUFFAL
+OCTAVA — CONFIDENCIALIDAD Y PROTECCIÓN DE DATOS
+Las partes se comprometen a mantener absoluta confidencialidad sobre toda información,
+documentación, configuraciones, materiales, datos, procedimientos o información estratégica
+conocida durante la ejecución del proyecto. La obligación permanecerá vigente durante la
+duración del contrato y durante cinco (5) años posteriores a su terminación.
+Asimismo, ambas partes se obligan al cumplimiento del RGPD, LOPDGDD y normativa aplicable
+en protección de datos.
+NOVENA — RESPONSABILIDAD
+Buffalo no será responsable por interrupciones de servicios externos, fallos de plataformas de
+terceros, proveedores IA, APIs, telefonía, cloud, servicios externos de voz, acciones u omisiones
+del Cliente, daños indirectos, pérdida de oportunidad ni lucro cesante.
+Buffalo utiliza plataformas tecnológicas y proveedores externos para la prestación del servicio, no
+pudiendo garantizar el funcionamiento ininterrumpido de dichos servicios ni responder por
+incumplimientos imputables a terceros. La responsabilidad total de Buffalo quedará limitada, en
+cualquier caso, al importe efectivamente abonado por el Cliente.
+DÉCIMA — VALIDACIÓN Y ACEPTACIÓN
+El Cliente dispondrá de cinco (5) días hábiles desde la puesta a disposición del sistema o
+entregables para comunicar incidencias relevantes o desviaciones respecto del alcance
+acordado. Transcurrido dicho plazo sin observaciones por escrito, el entregable se entenderá
+aceptado.
+UNDÉCIMA — COMUNICACIONES
+Las comunicaciones y notificaciones relacionadas con la ejecución del presente contrato podrán
+realizarse por correo electrónico a las direcciones facilitadas por las partes, produciendo efectos
+desde su envío.
+DUODÉCIMA — DURACIÓN Y RESOLUCIÓN
+El presente contrato entrará en vigor desde su firma y desde la realización del primer pago. El
+mantenimiento tendrá carácter mensual y continuará vigente hasta que cualquiera de las partes
+comunique su resolución con un preaviso mínimo de quince (15) días naturales.
+DECIMOTERCERA — SERVICIOS FUTUROS
+Toda ampliación del proyecto, nuevos agentes, automatizaciones, dashboards, integraciones
+adicionales o nuevos desarrollos requerirá presupuesto independiente o anexo específico.
+DECIMOCUARTA — LEY APLICABLE Y JURISDICCIÓN
+El presente contrato se regirá por la legislación española y europea aplicable. Para cualquier
+controversia derivada de su interpretación o ejecución, las partes se someten expresamente a los
+Juzgados y Tribunales de Barcelona, con renuncia expresa a cualquier otro fuero.
+
+-- 5 of 6 --
+
+BUFFAL
+CONFORMIDAD Y FIRMAS
+Y en prueba de conformidad con todo lo anterior, ambas partes suscriben el presente Contrato
+por duplicado y a un solo efecto en el lugar y fecha indicados en la primera página.
+Santiago Miralbell Costa
+Administrador — Buffalo IA Global Digital
+Solutions, S.L.
+CIF · B22944599
+Sergi Masoliver López
+Administrador — Buffalo IA Global Digital
+Solutions, S.L.
+CIF · B22944599
+Alex Melero García
+Representante legal — M7 Consulting SLU
+CIF · B75923664
+Este contrato ha sido suscrito en dos ejemplares originales, quedando uno en poder de cada parte. La firma del presente
+documento implica la aceptación íntegra de su contenido.
+A G E N C I A B U F F A L O . E S 	F I R M A S 	P Á G . 0 6 / 0 6
+
+-- 6 of 6 --
+
