@@ -10,22 +10,13 @@ import {
 } from '@/lib/marketing/cal-bookings.types'
 import { ExternalLink, RefreshCw, Video } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { estadoBadgeClass } from '@/lib/leads/estados'
 
 const statusClass: Record<string, string> = {
   accepted: 'bg-emerald-50 text-emerald-800 border-emerald-200',
   pending: 'bg-amber-50 text-amber-800 border-amber-200',
   cancelled: 'bg-gray-100 text-gray-600 border-gray-200',
   rejected: 'bg-red-50 text-red-800 border-red-200',
-}
-
-const leadEstadoClass: Record<string, string> = {
-  frio: 'bg-blue-50 text-blue-700',
-  caliente: 'bg-orange-50 text-orange-700',
-  reunion: 'bg-purple-50 text-purple-700',
-  propuesta: 'bg-yellow-50 text-yellow-700',
-  cerrado: 'bg-green-50 text-green-700',
-  cliente: 'bg-emerald-50 text-emerald-700',
-  perdido: 'bg-red-50 text-red-700',
 }
 
 function fmtDate(iso: string) {
@@ -236,7 +227,7 @@ export default function WebCalBookingsPanel({ period }: { period: string }) {
                       {row.lead_estado && (
                         <Badge
                           variant="secondary"
-                          className={cn('text-[10px]', leadEstadoClass[row.lead_estado] || 'bg-gray-100')}
+                          className={cn('text-[10px]', estadoBadgeClass(row.lead_estado))}
                         >
                           {row.lead_estado}
                         </Badge>

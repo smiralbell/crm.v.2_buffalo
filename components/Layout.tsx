@@ -1,5 +1,6 @@
 import { ReactNode, useState } from 'react'
 import Sidebar from './Sidebar'
+import LeadContextShortcuts from '@/components/crm/LeadContextShortcuts'
 import { Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -71,6 +72,7 @@ export default function Layout({ children }: LayoutProps) {
         <main className="flex-1 overflow-y-auto shell-surface">
           <div className="mx-auto w-full max-w-[1600px] p-3 sm:p-6 lg:px-8 lg:py-7">{children}</div>
         </main>
+        <LeadContextShortcuts />
       </div>
     </div>
   )

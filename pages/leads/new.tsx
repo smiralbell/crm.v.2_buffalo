@@ -16,6 +16,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, User, Briefcase } from 'lucide-react'
 import Link from 'next/link'
+import { LEAD_ESTADO_OPTIONS } from '@/lib/leads/estados'
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
@@ -233,11 +234,9 @@ export default function NewLead() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="frio">Frío</SelectItem>
-                      <SelectItem value="caliente">Caliente</SelectItem>
-                      <SelectItem value="en_proceso">En Proceso</SelectItem>
-                      <SelectItem value="cerrado">Cerrado</SelectItem>
-                      <SelectItem value="perdido">Perdido</SelectItem>
+                      {LEAD_ESTADO_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

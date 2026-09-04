@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useRouter } from 'next/router'
 import {
   Search,
   MessageCircleQuestion,
@@ -65,6 +66,7 @@ export default function NotebookWorkspace({
   clientLabel,
   projectTitle,
 }: Props) {
+  const router = useRouter()
   const [notes, setNotes] = useState<ProjectNote[]>([])
   const [currentId, setCurrentId] = useState<string | null>(null)
   const [research, setResearch] = useState<ProjectResearch | null>(null)
@@ -277,7 +279,7 @@ export default function NotebookWorkspace({
         if (!notesRes.ok) throw new Error(notesData.error || 'Error cargando notas')
         if (cancelled) return
         let list: ProjectNote[] = notesData.notes || []
-        if (!list.length) {
+        if (!list.length && router.query.nueva !== '1') {
           const created = await fetch(`/api/onboarding/projects/${leadId}/notes`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -307,6 +309,42 @@ export default function NotebookWorkspace({
       cancelled = true
     }
   }, [leadId, runCopilot])
+
+  const spawnNewNote = router.query.nueva === '1'
+  useEffect(() => {
+    if (loading || !spawnNewNote) return
+    let cancelled = false
+    ;(async () => {
+      await flushSaveRef.current()
+      const res = await fetch(`/api/onboarding/projects/${leadId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'reunion',
+          note_date: isoToday(),
+          title: '',
+          body: '',
+        }),
+      })
+      const data = await res.json()
+      if (cancelled) return
+      if (res.ok && data.note) {
+        setNotes((prev) => [data.note, ...prev])
+        setCurrentId(data.note.id)
+      }
+      const nextQuery = { ...router.query }
+      delete nextQuery.nueva
+      void router.replace(
+        { pathname: router.pathname, query: nextQuery },
+        undefined,
+        { shallow: true }
+      )
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to the nueva flag
+  }, [loading, leadId, spawnNewNote])
 
   useEffect(() => {
     paintHighlight()

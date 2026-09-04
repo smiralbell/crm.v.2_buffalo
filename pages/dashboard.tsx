@@ -15,6 +15,7 @@ import { getDashboardAlerts } from '@/lib/crm/dashboard-alerts'
 import DashboardAlertsPanel, {
   type DashboardAlertItem,
 } from '@/components/crm/DashboardAlertsPanel'
+import { estadoLabel } from '@/lib/leads/estados'
 
 // Recharts — client-side only
 const RevenueChart = dynamic(() => import('@/components/Dashboard/RevenueChart'), { ssr: false })
@@ -304,11 +305,6 @@ export default function Dashboard({
 }: DashboardProps) {
   const maxCount   = Math.max(...pipelineStages.map(s => s.count), 1)
 
-  const estadoLabel: Record<string, string> = {
-    frio:'Frío', caliente:'Caliente', reunion:'Reunión',
-    propuesta:'Propuesta', negociando:'Negociando', cerrado:'Cerrado', activo:'Activo',
-  }
-
   return (
     <Layout>
       <div className="space-y-6">
@@ -461,7 +457,7 @@ export default function Dashboard({
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold text-foreground truncate">{lead.name}</div>
                       <div className="text-xs text-muted-foreground truncate">
-                        {lead.empresa || estadoLabel[lead.estado || ''] || 'Lead'}
+                        {lead.empresa || (estadoLabel(lead.estado || '') || 'Lead')}
                       </div>
                     </div>
                     <div className="flex-shrink-0 flex items-center gap-2">

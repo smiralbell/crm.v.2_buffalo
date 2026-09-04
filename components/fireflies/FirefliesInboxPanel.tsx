@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
   Copy,
@@ -12,18 +11,17 @@ import {
   Loader2,
   RefreshCw,
   Search,
-  Video,
   X,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { MeetingDto } from '@/components/fireflies/LeadMeetingsPanel'
 
 function fmtDate(iso: string | null) {
-  if (!iso) return 'Sin fecha'
+  if (!iso) return ''
   try {
     return new Date(iso).toLocaleString('es-ES', {
-      day: '2-digit',
+      day: 'numeric',
       month: 'short',
-      year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
     })
@@ -43,6 +41,7 @@ export default function FirefliesInboxPanel() {
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null)
   const [webhookSecretOk, setWebhookSecretOk] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [showSetup, setShowSetup] = useState(false)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -97,7 +96,7 @@ export default function FirefliesInboxPanel() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error sync')
-      setMessage(`Sincronizadas ${data.synced} · vinculadas ${data.matched}`)
+      setMessage(`${data.synced} sincronizadas`)
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error sync')
@@ -167,259 +166,200 @@ export default function FirefliesInboxPanel() {
     }
   }
 
-  return (
-    <div className="space-y-5 max-w-4xl">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Video className="h-6 w-6" />
-            Fireflies · Reuniones
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Las reuniones llegan solas cuando Fireflies termina la transcripción. Sincronizar es
-            solo un respaldo.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={unmatchedOnly ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setUnmatchedOnly(true)}
-          >
-            Sin lead
-          </Button>
-          <Button
-            variant={!unmatchedOnly ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setUnmatchedOnly(false)}
-          >
-            Recientes
-          </Button>
-          <Button size="sm" onClick={() => void syncNow()} disabled={syncing || !configured}>
-            {syncing ? (
-              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4 mr-1.5" />
-            )}
-            Sincronizar
-          </Button>
-        </div>
-      </div>
+  const emails = (m: MeetingDto) =>
+    m.participants
+      .map((p) => p.email)
+      .filter((e): e is string => Boolean(e))
+      .slice(0, 3)
 
-      <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 space-y-2">
-        <p className="font-medium text-gray-900">Cómo se asocia cada reunión</p>
-        <ol className="list-decimal pl-4 space-y-1">
-          <li>
-            Al acabar la call, Fireflies transcribe y avisa al CRM (tarda unos minutos; no es
-            instantáneo).
-          </li>
-          <li>
-            El CRM mira los emails de los invitados (excepto @agenciabuffalo.es) y busca el mismo
-            email en un contacto/lead.
-          </li>
-          <li>
-            Si hay lead → nota en el cuaderno + ficha. Si solo hay contacto → ficha del contacto.
-            Si no coincide → queda aquí para vincular a mano.
-          </li>
-        </ol>
-        {webhookUrl && (
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <code className="text-xs bg-gray-50 border border-gray-100 rounded-md px-2 py-1 break-all">
-              {webhookUrl}
-            </code>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => {
-                void navigator.clipboard.writeText(webhookUrl)
-                setCopied(true)
-                setTimeout(() => setCopied(false), 1500)
-              }}
-            >
-              <Copy className="h-3.5 w-3.5 mr-1" />
-              {copied ? 'Copiado' : 'Copiar URL'}
-            </Button>
-            <a
-              href="https://app.fireflies.ai/integrations/api/webhook"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-gray-500 underline"
-            >
-              Abrir Fireflies Webhooks V2
-            </a>
-            {!webhookSecretOk && (
-              <span className="text-xs text-amber-700">
-                Falta FIREFLIES_WEBHOOK_SECRET (el mismo que pongas en Fireflies).
-              </span>
+  return (
+    <div className="mx-auto w-full max-w-xl px-1">
+      <header className="text-center pt-4 pb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Reuniones</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Fireflies las envía al terminar la transcripción.
+        </p>
+      </header>
+
+      <div className="flex items-center justify-center gap-1 mb-8">
+        <div className="inline-flex rounded-full border border-border bg-muted/40 p-0.5">
+          <button
+            type="button"
+            onClick={() => setUnmatchedOnly(true)}
+            className={cn(
+              'rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors',
+              unmatchedOnly
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
             )}
-          </div>
-        )}
+          >
+            Pendientes
+          </button>
+          <button
+            type="button"
+            onClick={() => setUnmatchedOnly(false)}
+            className={cn(
+              'rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors',
+              !unmatchedOnly
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            Todas
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => void syncNow()}
+          disabled={syncing || !configured}
+          title="Sincronizar"
+          className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+        >
+          {syncing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" />
+          )}
+        </button>
       </div>
 
       {!configured && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Falta <code className="font-mono text-xs">FIREFLIES_API_KEY</code> en el servidor.
-          El webhook no podrá descargar transcripciones hasta configurarla.
-        </div>
+        <p className="text-center text-sm text-amber-800 mb-6">Falta FIREFLIES_API_KEY en el servidor.</p>
       )}
-
       {message && (
-        <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700">
-          {message}
-        </div>
+        <p className="text-center text-xs text-muted-foreground mb-4">{message}</p>
       )}
+      {error && <p className="text-center text-sm text-red-600 mb-4">{error}</p>}
 
       {loading && (
-        <div className="flex items-center gap-2 text-sm text-gray-400 py-10 justify-center">
+        <div className="flex justify-center py-16 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Cargando…
         </div>
       )}
-      {!loading && error && <p className="text-sm text-red-600">{error}</p>}
+
       {!loading && !error && meetings.length === 0 && (
-        <p className="text-sm text-gray-400 py-10 text-center">
-          {unmatchedOnly
-            ? 'No hay reuniones pendientes de vincular.'
-            : 'Aún no hay reuniones importadas de Fireflies.'}
+        <p className="text-center text-sm text-muted-foreground py-16">
+          {unmatchedOnly ? 'Nada pendiente de vincular.' : 'Aún no hay reuniones.'}
         </p>
       )}
 
       {!loading && meetings.length > 0 && (
-        <ul className="space-y-3">
+        <ul className="divide-y divide-border/80">
           {meetings.map((m) => (
-            <li
-              key={m.id}
-              className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-3"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-medium text-gray-900 truncate">
-                    {m.title || 'Reunión sin título'}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">{fmtDate(m.started_at)}</p>
-                </div>
-                <div className="flex items-center gap-2">
+            <li key={m.id} className="py-6">
+              <div className="text-center">
+                <p className="text-sm font-medium text-foreground leading-snug">
+                  {m.title || 'Sin título'}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {fmtDate(m.started_at)}
                   {m.lead_id ? (
-                    <Link href={`/leads/${m.lead_id}`}>
-                      <Badge className="bg-green-50 text-green-700 border border-green-200 hover:bg-green-100">
-                        Lead #{m.lead_id}
-                      </Badge>
-                    </Link>
+                    <>
+                      {' · '}
+                      <Link href={`/leads/${m.lead_id}`} className="hover:text-foreground">
+                        Lead
+                      </Link>
+                    </>
                   ) : m.contact_id ? (
-                    <Link href={`/contacts/${m.contact_id}`}>
-                      <Badge className="bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100">
-                        Contacto #{m.contact_id}
-                      </Badge>
-                    </Link>
+                    <>
+                      {' · '}
+                      <Link href={`/contacts/${m.contact_id}`} className="hover:text-foreground">
+                        Contacto
+                      </Link>
+                    </>
                   ) : (
-                    <Badge className="bg-amber-50 text-amber-800 border border-amber-200">
-                      Sin match
-                    </Badge>
+                    ' · Sin vincular'
                   )}
-                </div>
-              </div>
-              {m.match_reason && (
-                <p className="text-[11px] text-gray-400 font-mono">{m.match_reason}</p>
-              )}
-
-              {m.summary_overview && (
-                <p className="text-sm text-gray-600 line-clamp-3">{m.summary_overview}</p>
-              )}
-
-              <div className="flex flex-wrap gap-1.5">
-                {m.participants
-                  .filter((p) => p.email)
-                  .slice(0, 6)
-                  .map((p) => (
-                    <Badge key={p.email!} variant="secondary" className="text-xs font-normal">
-                      {p.email}
-                    </Badge>
-                  ))}
+                </p>
+                {emails(m).length > 0 && (
+                  <p className="mt-2 text-[11px] text-muted-foreground/80 tracking-tight">
+                    {emails(m).join('  ·  ')}
+                  </p>
+                )}
+                {m.summary_overview && (
+                  <p className="mt-3 text-sm text-muted-foreground line-clamp-2 max-w-md mx-auto leading-relaxed">
+                    {m.summary_overview}
+                  </p>
+                )}
               </div>
 
-              <div className="flex flex-wrap gap-2 pt-1">
+              <div className="mt-4 flex items-center justify-center gap-4 text-xs">
                 {m.transcript_url && (
-                  <a href={m.transcript_url} target="_blank" rel="noopener noreferrer">
-                    <Button variant="outline" size="sm" className="h-8 text-xs">
-                      <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                      Fireflies
-                    </Button>
+                  <a
+                    href={m.transcript_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Abrir
                   </a>
                 )}
                 {!m.lead_id && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
                     onClick={() => {
                       setLinkFor(linkFor === m.id ? null : m.id)
                       setLeadQuery('')
                       setLeadHits([])
                     }}
                   >
-                    <Link2 className="h-3.5 w-3.5 mr-1.5" />
-                    Vincular a lead
-                  </Button>
+                    <Link2 className="h-3 w-3" />
+                    Vincular
+                  </button>
                 )}
                 {!m.lead_id && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-xs text-gray-500"
+                  <button
+                    type="button"
                     disabled={busyId === m.id}
+                    className="text-muted-foreground/70 hover:text-foreground disabled:opacity-40"
                     onClick={() => void ignore(m.id)}
                   >
                     Ignorar
-                  </Button>
+                  </button>
                 )}
               </div>
 
               {linkFor === m.id && (
-                <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
+                <div className="mt-4 max-w-sm mx-auto space-y-2">
                   <div className="flex items-center gap-2">
-                    <Search className="h-4 w-4 text-gray-400 shrink-0" />
+                    <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <Input
-                      placeholder="Buscar lead por nombre o email…"
+                      placeholder="Nombre o email del lead"
                       value={leadQuery}
                       onChange={(e) => void searchLeads(e.target.value)}
-                      className="h-9 bg-white"
+                      className="h-9 rounded-xl"
                     />
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="shrink-0"
+                      className="shrink-0 h-8 w-8"
                       onClick={() => setLinkFor(null)}
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
                   {searching && (
-                    <p className="text-xs text-gray-400 flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" /> Buscando…
-                    </p>
+                    <p className="text-center text-xs text-muted-foreground">Buscando…</p>
                   )}
                   {leadHits.length > 0 && (
-                    <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white overflow-hidden">
+                    <ul className="rounded-xl border border-border overflow-hidden text-left">
                       {leadHits.map((lead) => {
                         const name =
-                          lead.contact?.nombre ||
-                          lead.contact?.email ||
-                          `Lead #${lead.id}`
+                          lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
                         return (
-                          <li key={lead.id}>
+                          <li key={lead.id} className="border-b border-border last:border-0">
                             <button
                               type="button"
                               disabled={busyId === m.id}
                               onClick={() => void link(m.id, lead.id)}
-                              className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50"
+                              className="w-full px-3 py-2.5 text-sm hover:bg-muted/50"
                             >
-                              <span className="font-medium text-gray-900">{name}</span>
+                              <span className="font-medium">{name}</span>
                               {lead.contact?.empresa && (
-                                <span className="text-gray-500"> · {lead.contact.empresa}</span>
+                                <span className="text-muted-foreground"> · {lead.contact.empresa}</span>
                               )}
-                              <span className="text-xs text-gray-400 ml-2">#{lead.id}</span>
                             </button>
                           </li>
                         )
@@ -432,6 +372,46 @@ export default function FirefliesInboxPanel() {
           ))}
         </ul>
       )}
+
+      <div className="mt-10 pb-8 text-center">
+        <button
+          type="button"
+          onClick={() => setShowSetup((v) => !v)}
+          className="text-[11px] text-muted-foreground/70 hover:text-muted-foreground"
+        >
+          {showSetup ? 'Ocultar configuración' : 'Configuración webhook'}
+        </button>
+        {showSetup && webhookUrl && (
+          <div className="mt-3 space-y-2">
+            <p className="text-[11px] text-muted-foreground break-all font-mono">{webhookUrl}</p>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  void navigator.clipboard.writeText(webhookUrl)
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 1500)
+                }}
+              >
+                <Copy className="h-3 w-3" />
+                {copied ? 'Copiado' : 'Copiar'}
+              </button>
+              <a
+                href="https://app.fireflies.ai/integrations/api/webhook"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                Fireflies
+              </a>
+            </div>
+            {!webhookSecretOk && (
+              <p className="text-[11px] text-amber-700">Falta FIREFLIES_WEBHOOK_SECRET.</p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

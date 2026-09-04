@@ -12,7 +12,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { currentPeriod } from '@/lib/leads/analytics.types'
-import type { CostChannelKey, CostKind } from '@/lib/leads/channel-costs'
+
+type CostChannelKey = 'meta' | 'google' | 'email' | 'cold_calling'
+type CostKind = 'setup' | 'monthly' | 'commission'
+
+const COST_CHANNEL_LABELS: Record<CostChannelKey, string> = {
+  meta: 'Meta Ads',
+  google: 'Google Ads',
+  email: 'Email marketing',
+  cold_calling: 'Cold calling',
+}
 
 type CostLine = {
   channel: CostChannelKey
@@ -292,12 +301,14 @@ export default function ChannelCostsEditor({
   onSaved,
   filterChannel,
   triggerLabel = 'Costes manuales',
+  dialogTitle,
 }: {
   period?: string
   periodLabel?: string
   onSaved?: () => void
   filterChannel?: CostChannelKey | null
   triggerLabel?: string
+  dialogTitle?: string
 }) {
   const [open, setOpen] = useState(false)
   const [localPeriod, setLocalPeriod] = useState(period || currentPeriod())
@@ -305,6 +316,10 @@ export default function ChannelCostsEditor({
   useEffect(() => {
     if (period) setLocalPeriod(period)
   }, [period])
+
+  const title =
+    dialogTitle ||
+    (filterChannel ? `Costes ${COST_CHANNEL_LABELS[filterChannel]}` : 'Costes por canal')
 
   return (
     <>
@@ -322,7 +337,7 @@ export default function ChannelCostsEditor({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Costes por canal</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
               {periodLabel || localPeriod} · setup y mensualidad (o comisión). Prioridad sobre banco.
             </DialogDescription>

@@ -1,6 +1,6 @@
 import { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
@@ -33,6 +33,7 @@ import {
   type LeadDetailBundle,
 } from '@/lib/leads/lead-detail-bundle'
 import { cn } from '@/lib/utils'
+import { estadoLabel, estadoBadgeClass } from '@/lib/leads/estados'
 
 interface LeadDetailProps {
   lead: {
@@ -112,24 +113,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   }
 }
 
-const estadoLabels: Record<string, string> = {
-  frio: 'Frío',
-  caliente: 'Caliente',
-  cerrado: 'Cerrado',
-  perdido: 'Perdido',
-  nuevo: 'Nuevo',
-  en_proceso: 'En Proceso',
-  reunion: 'Reunión',
-}
-const estadoColors: Record<string, string> = {
-  frio: 'bg-blue-50 text-blue-700 border-blue-200',
-  caliente: 'bg-orange-50 text-orange-700 border-orange-200',
-  cerrado: 'bg-green-50 text-green-700 border-green-200',
-  perdido: 'bg-red-50 text-red-700 border-red-200',
-  nuevo: 'bg-purple-50 text-purple-700 border-purple-200',
-  en_proceso: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-  reunion: 'bg-violet-50 text-violet-700 border-violet-200',
-}
 const prioridadColors: Record<string, string> = {
   alta: 'bg-red-50 text-red-700',
   media: 'bg-yellow-50 text-yellow-700',
@@ -255,7 +238,7 @@ function LeadContextEditor({
   }
 
   return (
-    <Card className="shadow-sm border-gray-200">
+    <Card id="contexto" className="shadow-sm border-gray-200 scroll-mt-6">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
@@ -300,6 +283,11 @@ export default function LeadDetail({ lead, bundle }: LeadDetailProps) {
   const router = useRouter()
   const [editOpen, setEditOpen] = useState(false)
   const displayName = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.location.hash !== '#contexto') return
+    document.getElementById('contexto')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
 
   const configureUrl = `/onboarding/configure?lead=${lead.id}&nombre=${encodeURIComponent(lead.contact?.nombre || '')}&empresa=${encodeURIComponent(lead.contact?.empresa || '')}&email=${encodeURIComponent(lead.contact?.email || '')}&ciudad=${encodeURIComponent(lead.contact?.ciudad || '')}`
   const hasConfig = !!lead.configuracion
@@ -391,9 +379,9 @@ export default function LeadDetail({ lead, bundle }: LeadDetailProps) {
             </div>
             <div className="ml-auto flex items-center gap-2">
               <Badge
-                className={`border text-xs ${estadoColors[lead.estado] || 'bg-gray-100 text-gray-700 border-gray-200'}`}
+                className={`border text-xs ${estadoBadgeClass(lead.estado)}`}
               >
-                {estadoLabels[lead.estado] || lead.estado}
+                {estadoLabel(lead.estado)}
               </Badge>
               {lead.prioridad && (
                 <Badge
@@ -462,9 +450,9 @@ export default function LeadDetail({ lead, bundle }: LeadDetailProps) {
                 label="Estado"
                 value={
                   <Badge
-                    className={`border text-xs ${estadoColors[lead.estado] || 'bg-gray-100 text-gray-700 border-gray-200'}`}
+                    className={`border text-xs ${estadoBadgeClass(lead.estado)}`}
                   >
-                    {estadoLabels[lead.estado] || lead.estado}
+                    {estadoLabel(lead.estado)}
                   </Badge>
                 }
               />

@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { LEAD_ESTADO_OPTIONS } from '@/lib/leads/estados'
 
 export type NewLeadDialogMode = 'lead' | 'contact'
 
@@ -319,11 +320,9 @@ export default function NewLeadDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="frio">Frío</SelectItem>
-                      <SelectItem value="caliente">Caliente</SelectItem>
-                      <SelectItem value="en_proceso">En Proceso</SelectItem>
-                      <SelectItem value="cerrado">Cerrado</SelectItem>
-                      <SelectItem value="perdido">Perdido</SelectItem>
+                      {LEAD_ESTADO_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

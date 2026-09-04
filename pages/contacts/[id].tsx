@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { ArrowLeft, Edit } from 'lucide-react'
 import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
 import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
+import { estadoLabel, estadoBadgeClass } from '@/lib/leads/estados'
 
 interface ContactDetailProps {
   contact: {
@@ -96,24 +97,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
 export default function ContactDetail({ contact, leads }: ContactDetailProps) {
   const router = useRouter()
-
-  const estadoLabels: { [key: string]: string } = {
-    frio: 'Frío',
-    caliente: 'Caliente',
-    cerrado: 'Cerrado',
-    perdido: 'Perdido',
-    nuevo: 'Nuevo',
-    en_proceso: 'En Proceso',
-  }
-
-  const estadoColors: { [key: string]: string } = {
-    frio: 'bg-gray-100 text-gray-800',
-    caliente: 'bg-red-100 text-red-800',
-    cerrado: 'bg-green-100 text-green-800',
-    perdido: 'bg-red-100 text-red-800',
-    nuevo: 'bg-blue-100 text-blue-800',
-    en_proceso: 'bg-yellow-100 text-yellow-800',
-  }
 
   return (
     <Layout>
@@ -240,10 +223,10 @@ export default function ContactDetail({ contact, leads }: ContactDetailProps) {
                       </Link>
                       <span
                         className={`rounded-full px-2 py-1 text-xs font-medium ${
-                          estadoColors[lead.estado] || 'bg-gray-100 text-gray-800'
+                          estadoBadgeClass(lead.estado)
                         }`}
                       >
-                        {estadoLabels[lead.estado] || lead.estado}
+                        {estadoLabel(lead.estado)}
                       </span>
                       {lead.valor && (
                         <p className="text-sm text-gray-600">

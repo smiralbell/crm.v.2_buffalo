@@ -56,7 +56,16 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin'] },
-  { href: '/leads', label: 'Leads', icon: TrendingUp, roles: ['admin'] },
+  {
+    href: '/leads',
+    label: 'Leads',
+    icon: TrendingUp,
+    roles: ['admin'],
+    children: [
+      { href: '/leads', label: 'Listado' },
+      { href: '/leads/reuniones', label: 'Reuniones' },
+    ],
+  },
   {
     href: '/finances',
     label: 'Finanzas',
@@ -122,7 +131,7 @@ const NAV: NavItem[] = [
   { href: '/comercial/campanas', label: 'Campañas', icon: Megaphone, roles: ['comercial'] },
   { href: '/comercial/pipeline', label: 'Pipeline', icon: Workflow, roles: ['comercial'] },
   { href: '/comercial/reuniones', label: 'Reuniones', icon: Calendar, roles: ['comercial'] },
-  { href: '/comercial/fireflies', label: 'Fireflies', icon: Video, roles: ['comercial', 'admin'] },
+  { href: '/comercial/fireflies', label: 'Fireflies', icon: Video, roles: ['comercial'] },
   { href: '/comercial/llamar-mas-tarde', label: 'Llamar más tarde', icon: Clock, roles: ['comercial'] },
   { href: '/comercial/objeciones', label: 'Objeciones', icon: MessageSquare, roles: ['comercial'] },
   { href: '/comercial/duplicados', label: 'Duplicados', icon: Copy, roles: ['comercial'] },
@@ -517,8 +526,11 @@ export default function Sidebar({
                                   ? !ccParam || ccParam === 'dashboard'
                                   : ccParam === child.cc
                                 : true)
-                            : router.pathname === child.href ||
-                              router.pathname.startsWith(child.href + '/')
+                            : child.href === '/leads'
+                              ? router.pathname === '/leads' ||
+                                /^\/leads\/\d+/.test(router.pathname)
+                              : router.pathname === child.href ||
+                                router.pathname.startsWith(child.href + '/')
 
                           return (
                             <Link

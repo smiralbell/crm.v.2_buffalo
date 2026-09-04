@@ -1,5 +1,6 @@
 import { GetServerSideProps } from 'next'
 import { useState, useCallback, useEffect } from 'react'
+import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import PipelineLayout from '@/components/PipelineLayout'
@@ -193,6 +194,7 @@ export default function PipelineDetail({
   viewerRole,
   initialProspectDisplay,
 }: PipelineDetailProps) {
+  const router = useRouter()
   const { user } = useAuth()
   const isComercialViewer = viewerRole === 'comercial' || user?.role === 'comercial'
   const [cards, setCards] = useState<PipelineCard[]>(initialCards)
@@ -558,7 +560,18 @@ export default function PipelineDetail({
         getEntityName={getEntityName}
         getEntityDetails={getEntityDetails}
         onCardMove={handleCardMove}
-        onClose={() => setDrawerCard(null)}
+        onClose={() => {
+          setDrawerCard(null)
+          if (router.query.lead) {
+            const nextQuery = { ...router.query }
+            delete nextQuery.lead
+            void router.replace(
+              { pathname: router.pathname, query: nextQuery },
+              undefined,
+              { shallow: true }
+            )
+          }
+        }}
         isColdCallPipeline={isColdCall}
       />
 

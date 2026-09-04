@@ -26,6 +26,7 @@ import type {
   PipelineProjectContext,
 } from '@/lib/pipelines/card-context.types'
 import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
+import { leadContextHref, leadNewNoteHref } from '@/lib/crm/lead-from-route'
 
 export { BUFFALO_STAGE_COLORS }
 
@@ -350,6 +351,18 @@ export default function PipelineCardDrawer({
       cancelled = true
     }
   }, [card?.entity_id, isColdCallPipeline])
+
+  useEffect(() => {
+    if (isColdCallPipeline || !context?.lead_id) return
+    const lead = String(context.lead_id)
+    if (router.query.lead === lead) return
+    void router.replace(
+      { pathname: router.pathname, query: { ...router.query, lead } },
+      undefined,
+      { shallow: true }
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context?.lead_id, isColdCallPipeline])
 
   // Close on Escape
   useEffect(() => {
@@ -684,13 +697,37 @@ export default function PipelineCardDrawer({
               Ver lead
             </Button>
           ) : (
-            <Button
-              onClick={handleConfigure}
-              className="w-full h-11 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-xl"
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              Configurar proyecto
-            </Button>
+            <>
+              {context?.lead_id ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 text-xs rounded-xl border-gray-200"
+                    onClick={() => router.push(leadContextHref(context.lead_id!))}
+                  >
+                    <StickyNote className="h-3.5 w-3.5 mr-1.5" />
+                    Contexto
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 text-xs rounded-xl border-gray-200"
+                    onClick={() => router.push(leadNewNoteHref(context.lead_id!))}
+                  >
+                    <BookOpen className="h-3.5 w-3.5 mr-1.5" />
+                    Nueva nota
+                  </Button>
+                </div>
+              ) : null}
+              <Button
+                onClick={handleConfigure}
+                className="w-full h-11 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-xl"
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Configurar proyecto
+              </Button>
+            </>
           )}
 
           {nextStage && (

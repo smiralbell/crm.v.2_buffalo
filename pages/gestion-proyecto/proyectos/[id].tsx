@@ -28,6 +28,7 @@ export default function GestionProyectoDetailPage() {
     service_type: string
     status: string
     config_ref: string | null
+    lead_id: number | null
   } | null>(null)
   const [onboarding, setOnboarding] = useState<ProjectOnboarding | null>(null)
   const [docs, setDocs] = useState<ProjectDoc[]>([])
@@ -68,10 +69,30 @@ export default function GestionProyectoDetailPage() {
     if (router.isReady && id) load()
   }, [router.isReady, id, load])
 
+  useEffect(() => {
+    if (!proyecto?.lead_id) return
+    const lead = String(proyecto.lead_id)
+    if (router.query.lead === lead) return
+    void router.replace(
+      {
+        pathname: router.pathname,
+        query: { ...router.query, lead },
+      },
+      undefined,
+      { shallow: true }
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proyecto?.lead_id])
+
   const switchTab = (tab: Tab) => {
     setActiveTab(tab)
     if (typeof id === 'string') {
-      router.replace(`/gestion-proyecto/proyectos/${id}?tab=${tab}`, undefined, { shallow: true })
+      const q = new URLSearchParams()
+      q.set('tab', tab)
+      if (proyecto?.lead_id) q.set('lead', String(proyecto.lead_id))
+      router.replace(`/gestion-proyecto/proyectos/${id}?${q.toString()}`, undefined, {
+        shallow: true,
+      })
     }
   }
 

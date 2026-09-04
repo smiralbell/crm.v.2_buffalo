@@ -16,7 +16,7 @@ import ColdCallingDashboard from '@/components/coldcall/ColdCallingDashboard'
 import ColdCallTeamDashboard from '@/components/coldcall/ColdCallTeamDashboard'
 import ColdCallingCampanasTab from '@/components/ColdCallingCampanasTab'
 import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
-import MarketingChannelCostsCard from '@/components/marketing/MarketingChannelCostsCard'
+import ChannelCostsEditor from '@/components/leads/ChannelCostsEditor'
 import { parseColdCallFilterParam } from '@/lib/coldcall/api-query'
 import type { ColdCallFilter } from '@/lib/coldcall/scope'
 import { useAuth } from '@/components/AuthContext'
@@ -417,15 +417,26 @@ export default function MarketingPage() {
                   <RefreshCw className={`h-4 w-4 ${coldCallLoading ? 'animate-spin' : ''}`} />
                 </Button>
               ) : (
-                <ColdCallScopeToolbar
-                  filter={ccFilter}
-                  onFilterChange={setColdCallFilter}
-                  onRefresh={() => {
-                    setColdCallLoading(true)
-                    setColdCallReload((n) => n + 1)
-                  }}
-                  loading={coldCallLoading}
-                />
+                <>
+                  {ccSection === 'dashboard' && (
+                    <ChannelCostsEditor
+                      period={effectivePeriod}
+                      periodLabel={periodLabel(effectivePeriod)}
+                      filterChannel="cold_calling"
+                      triggerLabel="Costes"
+                      dialogTitle="Costes Cold calling"
+                    />
+                  )}
+                  <ColdCallScopeToolbar
+                    filter={ccFilter}
+                    onFilterChange={setColdCallFilter}
+                    onRefresh={() => {
+                      setColdCallLoading(true)
+                      setColdCallReload((n) => n + 1)
+                    }}
+                    loading={coldCallLoading}
+                  />
+                </>
               )
             ) : (
               <>
@@ -442,6 +453,23 @@ export default function MarketingPage() {
                     </select>
                     <ChevronDown className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
                   </div>
+                )}
+                {(tab === 'email' || tab === 'meta' || tab === 'google') && (
+                  <ChannelCostsEditor
+                    period={effectivePeriod}
+                    periodLabel={periodLabel(effectivePeriod)}
+                    filterChannel={
+                      tab === 'email' ? 'email' : tab === 'meta' ? 'meta' : 'google'
+                    }
+                    triggerLabel="Costes"
+                    dialogTitle={
+                      tab === 'email'
+                        ? 'Costes Email marketing'
+                        : tab === 'meta'
+                          ? 'Costes Meta Ads'
+                          : 'Costes Google Ads'
+                    }
+                  />
                 )}
                 <Button variant="outline" size="sm" className="rounded-xl" onClick={() => load(period)} disabled={loading}>
                   <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -600,12 +628,6 @@ export default function MarketingPage() {
         {/* ── EMAIL OUTREACH TAB ────────────────────────────────────────────── */}
         {!loading && data && tab === 'email' && (
           <div className="space-y-6">
-            <MarketingChannelCostsCard
-              period={effectivePeriod}
-              channel="email"
-              title="Costes Email marketing"
-            />
-
             {/* KPIs email */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <KpiCard label="Emails enviados" value={fmt(emailMetric?.emails_sent)} sub="este período" />
@@ -777,11 +799,6 @@ export default function MarketingPage() {
         )}
         {tab === 'coldcalling' && ccSection === 'dashboard' && (
           <div className="space-y-6">
-            <MarketingChannelCostsCard
-              period={effectivePeriod}
-              channel="cold_calling"
-              title="Costes Cold calling (comisiones)"
-            />
             <ColdCallingDashboard
               filter={ccFilter}
               onFilterChange={setColdCallFilter}
@@ -804,11 +821,6 @@ export default function MarketingPage() {
         {/* ── META ADS TAB ─────────────────────────────────────────────────── */}
         {tab === 'meta' && (
           <div className="space-y-6">
-            <MarketingChannelCostsCard
-              period={effectivePeriod}
-              channel="meta"
-              title="Costes Meta Ads"
-            />
             <ComingSoon name="Meta Ads" />
           </div>
         )}
@@ -816,11 +828,6 @@ export default function MarketingPage() {
         {/* ── GOOGLE ADS TAB ───────────────────────────────────────────────── */}
         {tab === 'google' && (
           <div className="space-y-6">
-            <MarketingChannelCostsCard
-              period={effectivePeriod}
-              channel="google"
-              title="Costes Google Ads"
-            />
             <ComingSoon name="Google Ads" />
           </div>
         )}

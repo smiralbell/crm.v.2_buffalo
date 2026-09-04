@@ -23,12 +23,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, Search, Edit, Trash2, Eye, AlertTriangle } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, AlertTriangle, Video } from 'lucide-react'
 import Link from 'next/link'
 import NewLeadDialog from '@/components/NewLeadDialog'
 import EditLeadDialog from '@/components/EditLeadDialog'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { estadoLabel, estadoBadgeClass } from '@/lib/leads/estados'
 
 interface Lead {
   id: number
@@ -380,28 +381,6 @@ export default function LeadsPage({
     }
   }
 
-  const estadoLabels: { [key: string]: string } = {
-    frio: 'Frío',
-    caliente: 'Caliente',
-    cerrado: 'Cerrado',
-    perdido: 'Perdido',
-    nuevo: 'Nuevo',
-    en_proceso: 'En Proceso',
-    reunion: 'Reunión',
-    propuesta: 'Propuesta',
-  }
-
-  const estadoColors: { [key: string]: string } = {
-    frio: 'bg-muted text-muted-foreground',
-    caliente: 'bg-red-500/15 text-red-700 dark:text-red-300',
-    cerrado: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-    perdido: 'bg-red-500/15 text-red-700 dark:text-red-300',
-    nuevo: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
-    en_proceso: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
-    reunion: 'bg-violet-500/15 text-violet-700 dark:text-violet-300',
-    propuesta: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
-  }
-
   return (
     <Layout>
       <div className="space-y-5">
@@ -453,6 +432,12 @@ export default function LeadsPage({
                 <Button type="submit" disabled={loading} variant="outline" className="rounded-xl flex-1 sm:flex-initial">
                   Buscar
                 </Button>
+                <Link href="/leads/reuniones" className="flex-1 sm:flex-initial">
+                  <Button type="button" variant="outline" className="rounded-xl w-full">
+                    <Video className="mr-2 h-4 w-4" />
+                    Reuniones
+                  </Button>
+                </Link>
                 <Button
                   type="button"
                   variant="outline"
@@ -663,10 +648,10 @@ export default function LeadsPage({
                             <Badge
                               className={cn(
                                 'rounded-full font-medium border-0',
-                                estadoColors[lead.estado] || 'bg-muted text-muted-foreground'
+                                estadoBadgeClass(lead.estado)
                               )}
                             >
-                              {estadoLabels[lead.estado] || lead.estado}
+                              {estadoLabel(lead.estado)}
                             </Badge>
                           </div>
                         </td>

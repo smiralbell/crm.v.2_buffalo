@@ -1,3 +1,4 @@
+import { BUFFALO, BUFFALO_ADDRESS_FULL } from '@/lib/buffalo-identity'
 /** Modelo del Contrato de prestación de servicios de IA (plantilla CONTRATO/). */
 
 export type ContractBlock =
@@ -52,10 +53,10 @@ export type ContractServiceDoc = {
 }
 
 export const BUFFALO_PARTY: ContractParty = {
-  legal_name: 'Buffalo IA Global Digital Solutions, S.L.',
-  cif: 'B22944599',
-  address: 'Calle Provença, Pta. 2 Esc. B — 08025 (Barcelona)',
-  representative: 'D. Santiago Miralbell Costa y D. Sergi Masoliver López',
+  legal_name: BUFFALO.legalName,
+  cif: BUFFALO.cif,
+  address: BUFFALO_ADDRESS_FULL,
+  representative: BUFFALO.representatives.join(' y '),
 }
 
 /** Orden de páginas de la plantilla Contrato Buffalo (8 páginas). */

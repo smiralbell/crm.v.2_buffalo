@@ -1,3 +1,5 @@
+import { BUFFALO_LEGAL_LINE } from '@/lib/buffalo-identity'
+
 /**
  * Prompts del agente de contratos (prestación de servicios de IA).
  */
@@ -23,7 +25,7 @@ export const CONTRACT_GENERATE_SYSTEM = `Eres el responsable legal/comercial de 
 
 ${CONTRACT_JSON_SHAPE}
 
-Buffalo fijo (va primero en Reunidos): Buffalo IA Global Digital Solutions, S.L., CIF B22944599, Calle Provença Pta. 2 Esc. B — 08025 (Barcelona), D. Santiago Miralbell Costa y D. Sergi Masoliver López.
+Buffalo fijo (va primero en Reunidos): ${BUFFALO_LEGAL_LINE}
 Cliente: datos CRM; si falta CIF/dirección → "A completar".
 Adapta Exponen II + Primera al proyecto; Quinta/Sexta a precios.
 Incluye siempre exponen_closing.

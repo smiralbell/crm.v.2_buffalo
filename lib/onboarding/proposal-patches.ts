@@ -3,9 +3,11 @@
  * (mismo enfoque que contract-patches.ts).
  */
 
+import { buffaloSignatureLines, clientDisplayLabel } from '@/lib/buffalo-identity'
 import {
   composeProposalDraft,
   parseProposalDraft,
+  rebuildAcceptanceContent,
   shortenCoverSubtitle,
   withProposalPageMode,
   type ProposalPageMode,
@@ -69,20 +71,8 @@ export function normalizeText(s: string): string {
     .trim()
 }
 
-function clientLabel(opts?: ProposalPatchOpts): string {
-  return [opts?.clientCompany, opts?.clientName].filter(Boolean).join(' · ') || 'Cliente'
-}
-
 export function buildSignaturesBlock(opts?: ProposalPatchOpts): string {
-  return [
-    ':::signatures',
-    `client: ${clientLabel(opts)}`,
-    'provider: Buffalo IA Global Digital Solutions, S.L.',
-    'provider_cif: B22944599',
-    'provider_address: C/ Provença 474, esc B, entr. 2ª, 08025 Barcelona',
-    'provider_phone: 658 571 087',
-    ':::',
-  ].join('\n')
+  return buffaloSignatureLines(clientDisplayLabel(opts)).join('\n')
 }
 
 function listSectionRanges(content: string): SectionRange[] {
@@ -172,51 +162,6 @@ function fuzzyReplaceOnce(hay: string, match: string, replacement: string): stri
   const end = map[endIdx] + 1
   if (start == null || end == null || end <= start) return null
   return hay.slice(0, start) + replacement + hay.slice(end)
-}
-
-function rebuildAcceptance(
-  content: string,
-  opts?: ProposalPatchOpts
-): string {
-  const lines = content.replace(/\r\n/g, '\n').split('\n')
-  const ACCEPTANCE = /aceptaci[oó]n|acceptaci[oó]|acceptance|firma|signatura/i
-  let start = -1
-  for (let i = 0; i < lines.length; i++) {
-    const m = /^##(?!#)\s+(.*)$/.exec(lines[i] || '')
-    if (m && ACCEPTANCE.test(m[1])) {
-      start = i
-      break
-    }
-  }
-
-  const defaultIntro =
-    'La propuesta se podrá formalizar mediante la firma, la emisión del pedido correspondiente o el procedimiento de contratación que el cliente determine.'
-  const sig = buildSignaturesBlock(opts)
-
-  if (start < 0) {
-    const block = `\n\n:::pagebreak\n:::\n\n## Aceptación\n\n${defaultIntro}\n\n${sig}`
-    return content.trimEnd() + block
-  }
-
-  let end = lines.length
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^##(?!#)\s+/.test(lines[i] || '')) {
-      end = i
-      break
-    }
-  }
-  const sectionBody = lines.slice(start + 1, end).join('\n')
-  const intro =
-    sectionBody
-      .split(/\n::{3}signatures/i)[0]
-      .split(/\n\|/)[0]
-      .replace(/\n#{3,}[^\n]*/g, '')
-      .replace(/:::[^]*$/g, '')
-      .replace(/\|\s*[-:]+\s*\|[\s\S]*/g, '')
-      .trim() || defaultIntro
-
-  const rebuilt = ['## Aceptación', '', intro, '', sig, '']
-  return [...lines.slice(0, start), ...rebuilt, ...lines.slice(end)].join('\n')
 }
 
 function stripPagebreaks(content: string): string {
@@ -310,7 +255,7 @@ export function applyProposalPatches(
 
     if (patch.op === 'ensure_signatures') {
       const parsed = parseProposalDraft(current)
-      const nextContent = rebuildAcceptance(parsed.content || current, opts)
+      const nextContent = rebuildAcceptanceContent(parsed.content || current, opts)
       const next = composeProposalDraft({
         title: parsed.title,
         subtitle: parsed.subtitle,

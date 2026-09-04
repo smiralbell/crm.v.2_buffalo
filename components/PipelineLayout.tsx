@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import LeadContextShortcuts from '@/components/crm/LeadContextShortcuts'
 
 interface PipelineLayoutProps {
   children: ReactNode
@@ -182,6 +183,8 @@ export default function PipelineLayout({
       </div>
 
       <div className="flex-1 overflow-hidden bg-gray-50">{children}</div>
+
+      <LeadContextShortcuts />
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>

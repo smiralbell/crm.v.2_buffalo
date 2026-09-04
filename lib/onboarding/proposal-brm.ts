@@ -1,3 +1,5 @@
+import { buffaloSignatureLines, clientDisplayLabel } from '@/lib/buffalo-identity'
+
 /** Reexport: sintaxis BRM vive en proposal-prompt.ts (editable). */
 export { PROPOSAL_BRM_SYNTAX } from '@/lib/onboarding/proposal-prompt'
 
@@ -255,7 +257,7 @@ function buildSignaturesBlockInline(
   ].join('\n')
 }
 
-function rebuildAcceptanceContent(
+export function rebuildAcceptanceContent(
   content: string,
   opts?: { clientName?: string | null; clientCompany?: string | null }
 ): string {
