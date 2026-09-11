@@ -28,12 +28,33 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, Eye, AlertTriangle, FileText, Download, Trash2, FileDown, ChevronDown, Cloud, CloudOff } from 'lucide-react'
+import { Plus, Search, Eye, AlertTriangle, FileText, Download, Trash2, FileDown, ChevronDown, Cloud, CloudOff, ArrowDown, ArrowUp } from 'lucide-react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { format } from 'date-fns'
 import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
 import { getDeveloperInvoiceIds, getInvoiceDeveloperMetaMap } from '@/lib/invoices/developer-meta'
+
+type SortKey = 'number' | 'date' | 'subtotal' | 'total'
+type SortDir = 'asc' | 'desc'
+
+const SORT_FIELD_MAP: Record<SortKey, 'invoice_number' | 'issue_date' | 'subtotal' | 'total'> = {
+  number: 'invoice_number',
+  date: 'issue_date',
+  subtotal: 'subtotal',
+  total: 'total',
+}
+
+function parseSortKey(value: unknown): SortKey {
+  if (value === 'number' || value === 'date' || value === 'subtotal' || value === 'total') {
+    return value
+  }
+  return 'date'
+}
+
+function parseSortDir(value: unknown): SortDir {
+  return value === 'asc' ? 'asc' : 'desc'
+}
 
 interface Invoice {
   id: number
@@ -60,6 +81,8 @@ interface InvoicesPageProps {
   source?: string
   dateFrom?: string
   dateTo?: string
+  sortBy: SortKey
+  sortDir: SortDir
   stats: {
     total: number
     draft: number
@@ -102,6 +125,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     const source = (context.query.source as string) || 'all'
     const dateFrom = context.query.dateFrom as string | undefined
     const dateTo = context.query.dateTo as string | undefined
+    const sortBy = parseSortKey(context.query.sortBy)
+    const sortDir = parseSortDir(context.query.sortDir)
     const pageSize = 10
     const skip = (page - 1) * pageSize
 
@@ -151,7 +176,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           where,
           skip,
           take: pageSize,
-          orderBy: { issue_date: 'desc' },
+          orderBy: { [SORT_FIELD_MAP[sortBy]]: sortDir },
           select: {
             id: true,
             invoice_number: true,
@@ -226,6 +251,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           search,
           status: status || 'all',
           source: source || 'all',
+          sortBy,
+          sortDir,
           ...(dateFrom && { dateFrom }),
           ...(dateTo && { dateTo }),
           stats,
@@ -252,6 +279,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
             totalPages: 0,
             search: '',
             status: 'all',
+            sortBy: 'date' as SortKey,
+            sortDir: 'desc' as SortDir,
             stats: {
               total: 0,
               draft: 0,
@@ -279,6 +308,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           totalPages: 0,
           search: '',
           status: 'all',
+          sortBy: 'date' as SortKey,
+          sortDir: 'desc' as SortDir,
           stats: {
             total: 0,
             draft: 0,
@@ -314,6 +345,8 @@ export default function InvoicesPage({
   source: initialSource = 'all',
   dateFrom: initialDateFrom,
   dateTo: initialDateTo,
+  sortBy = 'date',
+  sortDir = 'desc',
   stats,
   error,
   debugInfo,
@@ -341,30 +374,95 @@ export default function InvoicesPage({
   const safePage = page || 1
   const safeTotalPages = totalPages || 1
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    const query: any = { search, status, source, page: 1 }
+  const buildListQuery = (overrides: Record<string, string | number | undefined> = {}) => {
+    const query: Record<string, string | number> = {
+      search,
+      status: status === 'all' ? '' : status,
+      source,
+      page: 1,
+      sortBy,
+      sortDir,
+    }
     if (dateRange.start) {
       query.dateFrom = dateRange.start.toISOString().split('T')[0]
     }
     if (dateRange.end) {
       query.dateTo = dateRange.end.toISOString().split('T')[0]
     }
+    for (const [key, value] of Object.entries(overrides)) {
+      if (value === undefined || value === '') {
+        delete query[key]
+      } else {
+        query[key] = value
+      }
+    }
+    if (query.status === '') delete query.status
+    return query
+  }
+
+  const handleSort = (key: SortKey) => {
+    const nextDir: SortDir =
+      sortBy === key ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
     router.push({
       pathname: '/invoices',
-      query,
+      query: buildListQuery({ sortBy: key, sortDir: nextDir, page: 1 }),
+    })
+  }
+
+  const SortHeader = ({
+    label,
+    column,
+    align = 'left',
+  }: {
+    label: string
+    column: SortKey
+    align?: 'left' | 'right' | 'center'
+  }) => {
+    const active = sortBy === column
+    const alignClass =
+      align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'
+    return (
+      <th className={`p-3 font-medium text-sm text-gray-700 ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}>
+        <button
+          type="button"
+          onClick={() => handleSort(column)}
+          className={`inline-flex items-center gap-1 ${alignClass} w-full hover:text-gray-900 transition-colors`}
+        >
+          <span>{label}</span>
+          {active ? (
+            sortDir === 'desc' ? (
+              <ArrowDown className="h-3.5 w-3.5 text-gray-900" />
+            ) : (
+              <ArrowUp className="h-3.5 w-3.5 text-gray-900" />
+            )
+          ) : (
+            <span className="h-3.5 w-3.5 text-gray-300" aria-hidden />
+          )}
+        </button>
+      </th>
+    )
+  }
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    router.push({
+      pathname: '/invoices',
+      query: buildListQuery({ search, page: 1 }),
     })
   }
 
   const handleDateRangeChange = (range: DateRangePickerResult) => {
     setDateRange(range)
-    // Aplicar filtro automáticamente cuando cambia el rango
-    const query: any = { search, status, source, page: 1 }
+    const query = buildListQuery({ page: 1 })
     if (range.start) {
       query.dateFrom = range.start.toISOString().split('T')[0]
+    } else {
+      delete query.dateFrom
     }
     if (range.end) {
       query.dateTo = range.end.toISOString().split('T')[0]
+    } else {
+      delete query.dateTo
     }
     router.push({
       pathname: '/invoices',
@@ -375,29 +473,18 @@ export default function InvoicesPage({
   const handleStatusChange = (value: string) => {
     const statusValue = value === 'all' ? '' : value
     setStatus(value)
-    const query: any = { search, status: statusValue, source, page: 1 }
-    if (dateRange.start) {
-      query.dateFrom = dateRange.start.toISOString().split('T')[0]
-    }
-    if (dateRange.end) {
-      query.dateTo = dateRange.end.toISOString().split('T')[0]
-    }
     router.push({
       pathname: '/invoices',
-      query,
+      query: buildListQuery({ status: statusValue, page: 1 }),
     })
   }
 
   const handleSourceChange = (value: string) => {
     setSource(value)
-    const query: any = { search, status, source: value, page: 1 }
-    if (dateRange.start) {
-      query.dateFrom = dateRange.start.toISOString().split('T')[0]
-    }
-    if (dateRange.end) {
-      query.dateTo = dateRange.end.toISOString().split('T')[0]
-    }
-    router.push({ pathname: '/invoices', query })
+    router.push({
+      pathname: '/invoices',
+      query: buildListQuery({ source: value, page: 1 }),
+    })
   }
 
   const handleDeleteClick = (invoice: Invoice) => {
@@ -938,12 +1025,12 @@ export default function InvoicesPage({
                           />
                         </th>
                       )}
-                      <th className="text-left p-3 font-medium text-sm text-gray-700">Número</th>
+                      <SortHeader label="Número" column="number" />
                       <th className="text-left p-3 font-medium text-sm text-gray-700">Cliente</th>
-                      <th className="text-left p-3 font-medium text-sm text-gray-700">Fecha</th>
+                      <SortHeader label="Fecha" column="date" />
                       <th className="text-center p-3 font-medium text-sm text-gray-700">Estado</th>
-                      <th className="text-right p-3 font-medium text-sm text-gray-700">Sin IVA</th>
-                      <th className="text-right p-3 font-medium text-sm text-gray-700">Con IVA</th>
+                      <SortHeader label="Sin IVA" column="subtotal" align="right" />
+                      <SortHeader label="Con IVA" column="total" align="right" />
                       <th className="text-right p-3 font-medium text-sm text-gray-700">Acciones</th>
                     </tr>
                   </thead>
@@ -1085,7 +1172,7 @@ export default function InvoicesPage({
                     onClick={() =>
                       router.push({
                         pathname: '/invoices',
-                        query: { search, status, page: safePage - 1 },
+                        query: buildListQuery({ page: safePage - 1 }),
                       })
                     }
                   >
@@ -1098,7 +1185,7 @@ export default function InvoicesPage({
                     onClick={() =>
                       router.push({
                         pathname: '/invoices',
-                        query: { search, status, page: safePage + 1 },
+                        query: buildListQuery({ page: safePage + 1 }),
                       })
                     }
                   >

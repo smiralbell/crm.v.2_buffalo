@@ -242,17 +242,27 @@ export async function getDeveloperInvoicePdfPath(
 
 export async function deleteDeveloperInvoice(userId: number, invoiceId: number): Promise<boolean> {
   try {
-    const rows = await prisma.$queryRaw<{ developer_pdf_path: string | null }[]>`
-      UPDATE invoices
-      SET deleted_at = NOW(), updated_at = NOW()
+    const current = await prisma.$queryRaw<{ invoice_number: string; developer_pdf_path: string | null }[]>`
+      SELECT invoice_number, developer_pdf_path
+      FROM invoices
       WHERE id = ${invoiceId}
         AND crm_user_id = ${userId}
         AND invoice_source = 'developer'
         AND deleted_at IS NULL
-      RETURNING developer_pdf_path
+      LIMIT 1
     `
-    if (!rows[0]) return false
-    await removeDevInvoicePdf(rows[0].developer_pdf_path)
+    if (!current[0]) return false
+
+    const pdfPath = current[0].developer_pdf_path
+    const deleted = await prisma.$executeRaw`
+      DELETE FROM invoices
+      WHERE id = ${invoiceId}
+        AND crm_user_id = ${userId}
+        AND invoice_source = 'developer'
+        AND deleted_at IS NULL
+    `
+    if (!deleted) return false
+    await removeDevInvoicePdf(pdfPath)
     return true
   } catch (err) {
     if (isMissingColumnError(err)) {

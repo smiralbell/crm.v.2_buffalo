@@ -73,8 +73,15 @@ export function buildAssigneeColorMap(
 export function serializeTaskRow<T extends Record<string, unknown>>(row: T) {
   const statusChanged = row.status_changed_at
   const extensionUntil = row.stale_extension_until
+  const dueDate = row.due_date
   return {
     ...row,
+    due_date:
+      dueDate instanceof Date
+        ? dueDate.toISOString().slice(0, 10)
+        : typeof dueDate === 'string'
+          ? dueDate.slice(0, 10)
+          : null,
     status_changed_at:
       statusChanged instanceof Date
         ? statusChanged.toISOString()

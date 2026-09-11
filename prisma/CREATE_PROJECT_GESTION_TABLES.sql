@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS project_dev_tasks (
   priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high')),
   assignee TEXT,
   estimated_hours DECIMAL(6, 2),
+  due_date DATE,
   position INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

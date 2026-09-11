@@ -2,46 +2,16 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
+import {
+  getNextBufInvoiceNumber,
+} from '@/lib/invoices/numbers'
 
 function daysInMonth(year: number, monthIndex: number) {
   return new Date(year, monthIndex + 1, 0).getDate()
 }
 
 async function getNextInvoiceNumber() {
-  const year = new Date().getFullYear()
-  const lastInvoice = await prisma.invoice.findFirst({
-    where: {
-      invoice_number: {
-        startsWith: `BUF-${year}-`,
-      },
-    },
-    orderBy: {
-      invoice_number: 'desc',
-    },
-  })
-
-  let nextNumber = 1
-  if (lastInvoice) {
-    const parts = lastInvoice.invoice_number.split('-')
-    if (parts.length >= 3) {
-      const lastNum = parseInt(parts[2] || '0', 10)
-      if (!Number.isNaN(lastNum)) nextNumber = lastNum + 1
-    }
-  }
-
-  let invoiceNumber = `BUF-${year}-${String(nextNumber).padStart(4, '0')}`
-  let attempts = 0
-  while (attempts < 100) {
-    const exists = await prisma.invoice.findUnique({
-      where: { invoice_number: invoiceNumber },
-    })
-    if (!exists) return invoiceNumber
-    nextNumber += 1
-    invoiceNumber = `BUF-${year}-${String(nextNumber).padStart(4, '0')}`
-    attempts += 1
-  }
-
-  throw new Error('No se pudo generar un número de factura único')
+  return getNextBufInvoiceNumber()
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

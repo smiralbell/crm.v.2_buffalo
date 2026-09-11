@@ -70,6 +70,8 @@ export interface ProjectTask {
   priority: TaskPriority
   assignee: string | null
   estimated_hours: number | null
+  /** Fecha de finalización (YYYY-MM-DD) */
+  due_date: string | null
   position: number
   status_changed_at: string
   stale_extension_until: string | null

@@ -4,6 +4,12 @@ import { requireProjectAccessAPI } from '@/lib/gestion-proyecto/require-project-
 import { STALE_EXTENSION_DAYS, serializeTaskRow } from '@/lib/gestion-proyecto/task-stale'
 import { prisma } from '@/lib/prisma'
 
+const dueDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida')
+  .nullable()
+  .optional()
+
 const updateTaskSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().nullable().optional(),
@@ -11,6 +17,7 @@ const updateTaskSchema = z.object({
   priority: z.enum(['low', 'medium', 'high']).optional(),
   assignee: z.string().nullable().optional(),
   estimated_hours: z.number().positive().nullable().optional(),
+  due_date: dueDateSchema,
   position: z.number().int().optional(),
   extend_stale: z.boolean().optional(),
   acknowledge_stale: z.boolean().optional(),
@@ -21,6 +28,7 @@ function formatTaskResponse(task: Record<string, unknown>) {
   return {
     ...serialized,
     estimated_hours: task.estimated_hours ?? null,
+    due_date: serialized.due_date ?? null,
     created_at:
       task.created_at instanceof Date ? task.created_at.toISOString() : String(task.created_at),
     updated_at:
@@ -94,6 +102,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const nextEstimatedHours =
         data.estimated_hours !== undefined ? data.estimated_hours : (current.estimated_hours ?? null)
 
+      const currentDue =
+        current.due_date instanceof Date
+          ? current.due_date.toISOString().slice(0, 10)
+          : typeof current.due_date === 'string'
+            ? current.due_date.slice(0, 10)
+            : null
+      const nextDueDate = data.due_date !== undefined ? data.due_date : currentDue
+
       try {
         const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
           UPDATE project_dev_tasks SET
@@ -103,6 +119,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             priority = ${data.priority ?? (current.priority as string)},
             assignee = ${data.assignee !== undefined ? data.assignee : (current.assignee as string | null)},
             estimated_hours = ${nextEstimatedHours},
+            due_date = ${nextDueDate}::date,
             position = ${nextPosition},
             status_changed_at = CASE WHEN ${Boolean(statusChanged)} THEN NOW() ELSE status_changed_at END,
             stale_notice_active = CASE WHEN ${Boolean(statusChanged)} THEN FALSE ELSE stale_notice_active END,
@@ -114,6 +131,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json(formatTaskResponse(rows[0]))
       } catch (updateError) {
         const msg = updateError instanceof Error ? updateError.message : ''
+        if (msg.includes('due_date')) {
+          const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
+            UPDATE project_dev_tasks SET
+              title = ${data.title ?? (current.title as string)},
+              description = ${data.description !== undefined ? data.description : (current.description as string | null)},
+              status = ${nextStatus},
+              priority = ${data.priority ?? (current.priority as string)},
+              assignee = ${data.assignee !== undefined ? data.assignee : (current.assignee as string | null)},
+              estimated_hours = ${nextEstimatedHours},
+              position = ${nextPosition},
+              status_changed_at = CASE WHEN ${Boolean(statusChanged)} THEN NOW() ELSE status_changed_at END,
+              stale_notice_active = CASE WHEN ${Boolean(statusChanged)} THEN FALSE ELSE stale_notice_active END,
+              stale_extension_until = CASE WHEN ${Boolean(statusChanged)} THEN NULL ELSE stale_extension_until END,
+              updated_at = NOW()
+            WHERE id = ${taskId}::uuid AND project_id = ${projectId}::uuid
+            RETURNING *
+          `
+          return res.status(200).json({ ...formatTaskResponse(rows[0]), due_date: nextDueDate })
+        }
         if (!msg.includes('estimated_hours') && !msg.includes('status_changed_at')) throw updateError
         const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
           UPDATE project_dev_tasks SET

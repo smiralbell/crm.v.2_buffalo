@@ -11,7 +11,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { AlertTriangle, Clock, Grip, Paperclip, Plus, Trash2, User } from 'lucide-react'
+import {
+  AlertTriangle,
+  CalendarDays,
+  Clock,
+  GanttChart,
+  Grip,
+  Kanban,
+  Paperclip,
+  Plus,
+  Trash2,
+  User,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { estimateTaskHours } from '@/lib/gestion-proyecto/dashboard-metrics'
 import {
@@ -23,6 +34,20 @@ import {
   isStaleTask,
 } from '@/lib/gestion-proyecto/task-stale'
 import type { ProjectTask, TaskPriority, TaskStatus } from '@/lib/gestion-proyecto/types'
+import ProjectTaskCalendar from '@/components/gestion-proyecto/ProjectTaskCalendar'
+import ProjectTaskGantt from '@/components/gestion-proyecto/ProjectTaskGantt'
+import { format, parseISO } from 'date-fns'
+import { es } from 'date-fns/locale'
+
+type TasksView = 'board' | 'calendar' | 'gantt'
+
+const VIEW_TABS: { id: TasksView; label: string; icon: typeof Kanban }[] = [
+  { id: 'board', label: 'Tablero', icon: Kanban },
+  { id: 'calendar', label: 'Calendario', icon: CalendarDays },
+  { id: 'gantt', label: 'Gantt', icon: GanttChart },
+]
+
+export type { TasksView }
 
 const PRIORITIES: { id: TaskPriority; label: string; className: string }[] = [
   { id: 'low', label: 'Baja', className: 'bg-slate-100 text-slate-700 border-slate-200' },
@@ -40,9 +65,25 @@ interface ProjectTaskBoardProps {
   projectId: string
   tasks: ProjectTask[]
   onChange: (tasks: ProjectTask[]) => void
+  view?: TasksView
+  onViewChange?: (view: TasksView) => void
+  hideViewSwitcher?: boolean
 }
 
-export default function ProjectTaskBoard({ projectId, tasks, onChange }: ProjectTaskBoardProps) {
+export default function ProjectTaskBoard({
+  projectId,
+  tasks,
+  onChange,
+  view: controlledView,
+  onViewChange,
+  hideViewSwitcher = false,
+}: ProjectTaskBoardProps) {
+  const [internalView, setInternalView] = useState<TasksView>('board')
+  const view = controlledView ?? internalView
+  const setView = (next: TasksView) => {
+    onViewChange?.(next)
+    if (controlledView === undefined) setInternalView(next)
+  }
   const [draggedTask, setDraggedTask] = useState<ProjectTask | null>(null)
   const [draggedOver, setDraggedOver] = useState<TaskStatus | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
@@ -53,6 +94,7 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
   const [priority, setPriority] = useState<TaskPriority>('medium')
   const [assignee, setAssignee] = useState('')
   const [estimatedHours, setEstimatedHours] = useState('')
+  const [dueDate, setDueDate] = useState('')
   const [teamMembers, setTeamMembers] = useState<{ id: number; name: string; color: string | null }[]>([])
   const [files, setFiles] = useState<File[]>([])
   const [creating, setCreating] = useState(false)
@@ -96,6 +138,7 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
     setPriority('medium')
     setAssignee('')
     setEstimatedHours('')
+    setDueDate('')
     setFiles([])
     setCreateOpen(true)
   }
@@ -129,6 +172,7 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
           priority,
           assignee: assignee.trim() || undefined,
           estimated_hours: estimatedHours ? Number(estimatedHours) : undefined,
+          due_date: dueDate || null,
         }),
       })
       const data = await res.json()
@@ -147,7 +191,15 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
         }
       }
 
-      onChange([...tasks, { ...data, estimated_hours: data.estimated_hours ?? null, attachments }])
+      onChange([
+        ...tasks,
+        {
+          ...data,
+          estimated_hours: data.estimated_hours ?? null,
+          due_date: data.due_date ?? (dueDate || null),
+          attachments,
+        },
+      ])
       setCreateOpen(false)
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Error al crear tarea')
@@ -274,6 +326,15 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
 
   const columnLabel = (status: TaskStatus) => TASK_STATUS_LABELS[status] || status
 
+  const formatDue = (value: string | null | undefined) => {
+    if (!value) return null
+    try {
+      return format(parseISO(value.slice(0, 10)), 'd MMM yyyy', { locale: es })
+    } catch {
+      return value
+    }
+  }
+
   const getCardClassName = (task: ProjectTask, stale: boolean) => {
     if (task.status === 'done') {
       return 'border-emerald-300 bg-emerald-50/90 hover:border-emerald-400 hover:shadow-md'
@@ -288,6 +349,58 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
   }
 
   return (
+    <div className="space-y-4 min-w-0">
+      {(!hideViewSwitcher || view !== 'board') && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {!hideViewSwitcher && (
+            <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+              {VIEW_TABS.map((tab) => {
+                const Icon = tab.icon
+                const active = view === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setView(tab.id)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                      active
+                        ? 'bg-gray-900 text-white'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {view !== 'board' && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => openCreate('pending')}
+              className={cn(hideViewSwitcher && 'ml-auto')}
+            >
+              <Plus className="h-4 w-4 mr-1.5" />
+              Nueva tarea
+            </Button>
+          )}
+        </div>
+      )}
+
+      {view === 'calendar' && (
+        <ProjectTaskCalendar
+          tasks={tasks}
+          onSelectTask={setViewTask}
+          onMoveDueDate={(taskId, nextDue) => patchTaskMeta(taskId, { due_date: nextDue })}
+        />
+      )}
+
+      {view === 'gantt' && <ProjectTaskGantt tasks={tasks} onSelectTask={setViewTask} />}
+
+      {view === 'board' && (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 min-w-0">
       {TASK_COLUMNS.map((column) => {
         const columnTasks = grouped[column.id]
@@ -447,6 +560,12 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
                               {task.attachments!.length}
                             </span>
                           )}
+                          {task.due_date && (
+                            <span className="inline-flex items-center gap-1 text-xs text-gray-600 px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50">
+                              <CalendarDays className="h-3 w-3 shrink-0" />
+                              {formatDue(task.due_date)}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -477,6 +596,8 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
           </div>
         )
       })}
+    </div>
+      )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -547,6 +668,17 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
               </div>
             </div>
             <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700" htmlFor="task_due">
+                Fecha de finalización
+              </label>
+              <Input
+                id="task_due"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
               <p className="text-sm font-medium text-gray-700">Prioridad</p>
               <div className="flex gap-2 max-w-md">
                 {PRIORITIES.map((p) => (
@@ -610,12 +742,34 @@ export default function ProjectTaskBoard({ projectId, tasks, onChange }: Project
                   <span className="text-xs text-gray-500">
                     ~{estimateTaskHours(viewTask)}h estimadas
                   </span>
+                  {viewTask.due_date && (
+                    <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+                      <CalendarDays className="h-3 w-3" />
+                      Fin: {formatDue(viewTask.due_date)}
+                    </span>
+                  )}
                 </div>
                 <DialogTitle className="text-left text-lg leading-snug break-all [overflow-wrap:anywhere] pr-8">
                   {viewTask.title}
                 </DialogTitle>
               </DialogHeader>
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pb-4">
+                <div className="mb-4 space-y-2">
+                  <label className="text-sm font-medium text-gray-700" htmlFor="view_task_due">
+                    Fecha de finalización
+                  </label>
+                  <Input
+                    id="view_task_due"
+                    type="date"
+                    value={viewTask.due_date || ''}
+                    onChange={(e) => {
+                      const next = e.target.value || null
+                      setViewTask({ ...viewTask, due_date: next })
+                      void patchTaskMeta(viewTask.id, { due_date: next })
+                    }}
+                    className="max-w-xs"
+                  />
+                </div>
                 {viewTask.description ? (
                   <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 max-w-full overflow-hidden">
                     <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed break-all [overflow-wrap:anywhere]">

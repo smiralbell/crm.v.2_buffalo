@@ -5,6 +5,9 @@ import { prisma } from '@/lib/prisma'
 import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import { mergeLeadConfig } from '@/lib/onboarding/project-context-ai'
 import { logCrmActivity } from '@/lib/crm/activities'
+import {
+  getNextBufInvoiceNumber,
+} from '@/lib/invoices/numbers'
 
 type LinkedInvoice = {
   id: number
@@ -22,25 +25,7 @@ const createSchema = z.object({
 })
 
 async function nextInvoiceNumber(): Promise<string> {
-  const year = new Date().getFullYear()
-  const lastInvoice = await prisma.invoice.findFirst({
-    where: { invoice_number: { startsWith: `BUF-${year}-` } },
-    orderBy: { invoice_number: 'desc' },
-  })
-  let nextNumber = 1
-  if (lastInvoice) {
-    const parts = lastInvoice.invoice_number.split('-')
-    const lastNum = parseInt(parts[2] || '0', 10)
-    if (!Number.isNaN(lastNum)) nextNumber = lastNum + 1
-  }
-  let invoiceNumber = `BUF-${year}-${String(nextNumber).padStart(4, '0')}`
-  for (let i = 0; i < 50; i++) {
-    const exists = await prisma.invoice.findUnique({ where: { invoice_number: invoiceNumber } })
-    if (!exists) return invoiceNumber
-    nextNumber++
-    invoiceNumber = `BUF-${year}-${String(nextNumber).padStart(4, '0')}`
-  }
-  return invoiceNumber
+  return getNextBufInvoiceNumber()
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

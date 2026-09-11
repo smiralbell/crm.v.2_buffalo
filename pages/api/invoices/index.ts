@@ -2,6 +2,12 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import {
+  ensureInvoiceNumberAvailable,
+  formatBufInvoiceNumber,
+  getNextBufInvoiceNumber,
+  parseBufInvoiceSeq,
+} from '@/lib/invoices/numbers'
 
 const serviceSchema = z.object({
   description: z.string().min(1, 'La descripción es requerida'),
@@ -150,50 +156,21 @@ export default async function handler(
       let invoiceNumber = data.invoice_number
       
       if (!invoiceNumber) {
-        // Generar número de factura (BUF-YYYY-NNNN)
         const year = new Date().getFullYear()
-        
-        // Buscar el último número de factura del año actual (incluyendo eliminadas para evitar duplicados)
-        const lastInvoice = await prisma.invoice.findFirst({
-          where: {
-            invoice_number: {
-              startsWith: `BUF-${year}-`,
-            },
-          },
-          orderBy: {
-            invoice_number: 'desc',
-          },
-        })
-
-        let nextNumber = 1
-        if (lastInvoice) {
-          const parts = lastInvoice.invoice_number.split('-')
-          if (parts.length >= 3) {
-            const lastNum = parseInt(parts[2] || '0')
-            if (!isNaN(lastNum)) {
-              nextNumber = lastNum + 1
-            }
-          }
-        }
-
-        // Verificar que el número no exista (por si acaso)
-        invoiceNumber = `BUF-${year}-${String(nextNumber).padStart(4, '0')}`
+        invoiceNumber = await getNextBufInvoiceNumber(year)
         let attempts = 0
         while (attempts < 100) {
-          const exists = await prisma.invoice.findUnique({
-            where: { invoice_number: invoiceNumber },
-          })
-          if (!exists) break
-          nextNumber++
-          invoiceNumber = `BUF-${year}-${String(nextNumber).padStart(4, '0')}`
+          const availability = await ensureInvoiceNumberAvailable(invoiceNumber)
+          if (availability.ok) break
+          const parsed = parseBufInvoiceSeq(invoiceNumber)
+          const nextSeq = (parsed?.seq ?? 0) + 1
+          invoiceNumber = formatBufInvoiceNumber(year, nextSeq)
           attempts++
         }
       } else {
-        // Verificar que el número proporcionado no exista
-        const exists = await prisma.invoice.findUnique({
-          where: { invoice_number: invoiceNumber },
-        })
-        if (exists) {
+        // Verificar que el número no esté en uso por una factura activa
+        const availability = await ensureInvoiceNumberAvailable(invoiceNumber)
+        if (!availability.ok) {
           return res.status(400).json({ error: 'El número de factura ya existe' })
         }
       }

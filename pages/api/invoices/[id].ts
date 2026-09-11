@@ -3,6 +3,10 @@ import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
 import { z } from 'zod'
+import {
+  ensureInvoiceNumberAvailable,
+  hardDeleteInvoice,
+} from '@/lib/invoices/numbers'
 
 const invoiceUpdateSchema = z.object({
   invoice_number: z.string().min(1).optional(),
@@ -70,6 +74,13 @@ export default async function handler(
       }
 
       const data = invoiceUpdateSchema.parse(req.body)
+
+      if (data.invoice_number !== undefined && data.invoice_number !== invoice.invoice_number) {
+        const availability = await ensureInvoiceNumberAvailable(data.invoice_number, id)
+        if (!availability.ok) {
+          return res.status(400).json({ error: 'El número de factura ya existe' })
+        }
+      }
 
       const updateData: any = {}
       if (data.invoice_number !== undefined) updateData.invoice_number = data.invoice_number
@@ -151,11 +162,7 @@ export default async function handler(
         return res.status(404).json({ error: 'Factura no encontrada' })
       }
 
-      // Soft delete
-      await prisma.invoice.update({
-        where: { id },
-        data: { deleted_at: new Date() },
-      })
+      await hardDeleteInvoice(id)
 
       return res.status(200).json({ success: true })
     }

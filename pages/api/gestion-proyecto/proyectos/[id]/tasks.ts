@@ -4,6 +4,12 @@ import { requireProjectAccessAPI } from '@/lib/gestion-proyecto/require-project-
 import { serializeTaskRow } from '@/lib/gestion-proyecto/task-stale'
 import { prisma } from '@/lib/prisma'
 
+const dueDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida')
+  .optional()
+  .nullable()
+
 const createTaskSchema = z.object({
   title: z.string().min(1, 'El título es obligatorio'),
   description: z.string().optional(),
@@ -11,7 +17,21 @@ const createTaskSchema = z.object({
   priority: z.enum(['low', 'medium', 'high']).optional(),
   assignee: z.string().optional(),
   estimated_hours: z.number().positive().optional(),
+  due_date: dueDateSchema,
 })
+
+function formatTask(task: Record<string, unknown>) {
+  const serialized = serializeTaskRow(task)
+  return {
+    ...serialized,
+    estimated_hours: task.estimated_hours ?? null,
+    due_date: serialized.due_date ?? null,
+    created_at:
+      task.created_at instanceof Date ? task.created_at.toISOString() : String(task.created_at),
+    updated_at:
+      task.updated_at instanceof Date ? task.updated_at.toISOString() : String(task.updated_at),
+  }
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const projectId = req.query.id as string
@@ -28,16 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ORDER BY position ASC, created_at ASC
       `
       return res.status(200).json({
-        tasks: rows.map((t) => {
-          const serialized = serializeTaskRow(t)
-          return {
-            ...serialized,
-            created_at:
-              t.created_at instanceof Date ? t.created_at.toISOString() : String(t.created_at),
-            updated_at:
-              t.updated_at instanceof Date ? t.updated_at.toISOString() : String(t.updated_at),
-          }
-        }),
+        tasks: rows.map((t) => formatTask(t)),
       })
     }
 
@@ -50,11 +61,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           AND status = ${data.status || 'pending'}
       `
       const position = (maxPos[0]?.max_pos ?? -1) + 1
+      const dueDate = data.due_date ?? null
 
       try {
         const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
           INSERT INTO project_dev_tasks (
-            project_id, title, description, status, priority, assignee, estimated_hours, position, status_changed_at
+            project_id, title, description, status, priority, assignee, estimated_hours, due_date, position, status_changed_at
           ) VALUES (
             ${projectId}::uuid,
             ${data.title},
@@ -63,26 +75,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             ${data.priority || 'medium'},
             ${data.assignee ?? null},
             ${data.estimated_hours ?? null},
+            ${dueDate}::date,
             ${position},
             NOW()
           )
           RETURNING *
         `
-        const task = rows[0]
-        const serialized = serializeTaskRow(task)
-        return res.status(201).json({
-          ...serialized,
-          created_at:
-            task.created_at instanceof Date
-              ? task.created_at.toISOString()
-              : String(task.created_at),
-          updated_at:
-            task.updated_at instanceof Date
-              ? task.updated_at.toISOString()
-              : String(task.updated_at),
-        })
+        return res.status(201).json(formatTask(rows[0]))
       } catch (insertError) {
         const msg = insertError instanceof Error ? insertError.message : ''
+        if (msg.includes('due_date')) {
+          const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
+            INSERT INTO project_dev_tasks (
+              project_id, title, description, status, priority, assignee, estimated_hours, position, status_changed_at
+            ) VALUES (
+              ${projectId}::uuid,
+              ${data.title},
+              ${data.description ?? null},
+              ${data.status || 'pending'},
+              ${data.priority || 'medium'},
+              ${data.assignee ?? null},
+              ${data.estimated_hours ?? null},
+              ${position},
+              NOW()
+            )
+            RETURNING *
+          `
+          return res.status(201).json({ ...formatTask(rows[0]), due_date: dueDate })
+        }
         if (!msg.includes('estimated_hours') && !msg.includes('status_changed_at')) throw insertError
         const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
           INSERT INTO project_dev_tasks (
@@ -98,19 +118,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           )
           RETURNING *
         `
-        const task = rows[0]
-        const serialized = serializeTaskRow(task)
         return res.status(201).json({
-          ...serialized,
+          ...formatTask(rows[0]),
           estimated_hours: data.estimated_hours ?? null,
-          created_at:
-            task.created_at instanceof Date
-              ? task.created_at.toISOString()
-              : String(task.created_at),
-          updated_at:
-            task.updated_at instanceof Date
-              ? task.updated_at.toISOString()
-              : String(task.updated_at),
+          due_date: dueDate,
         })
       }
     }

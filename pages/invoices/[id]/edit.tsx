@@ -20,6 +20,8 @@ import { ArrowLeft, Plus, Trash2, Download } from 'lucide-react'
 import Link from 'next/link'
 import InvoicePreview from '@/components/InvoicePreview'
 import { useRef } from 'react'
+import { getNextBufInvoiceNumber } from '@/lib/invoices/numbers'
+import InvoiceFeedbackDialog from '@/components/invoices/InvoiceFeedbackDialog'
 
 interface Service {
   description: string
@@ -71,31 +73,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       }
     }
 
-    // Calcular el siguiente número de factura basándose en borradores
-    const year = new Date().getFullYear()
-    const lastDraftInvoice = await prisma.invoice.findFirst({
-      where: {
-        status: 'draft',
-        deleted_at: null,
-        invoice_number: {
-          startsWith: `BUF-${year}-`,
-        },
-      },
-      orderBy: {
-        invoice_number: 'desc',
-      },
-    })
-
-    let nextInvoiceNumber = `BUF-${year}-0001`
-    if (lastDraftInvoice) {
-      const parts = lastDraftInvoice.invoice_number.split('-')
-      if (parts.length >= 3) {
-        const lastNum = parseInt(parts[2] || '0')
-        if (!isNaN(lastNum)) {
-          nextInvoiceNumber = `BUF-${year}-${String(lastNum + 1).padStart(4, '0')}`
-        }
-      }
-    }
+    const nextInvoiceNumber = await getNextBufInvoiceNumber()
 
     return {
       props: {
@@ -138,6 +116,13 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [feedback, setFeedback] = useState<{
+    open: boolean
+    variant: 'success' | 'error'
+    title: string
+    description?: string
+    confirmLabel?: string
+  }>({ open: false, variant: 'success', title: '' })
 
   const [formData, setFormData] = useState({
     invoice_number: invoice.invoice_number,
@@ -247,7 +232,13 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
         return
       }
 
-      alert('Factura guardada correctamente')
+      setFeedback({
+        open: true,
+        variant: 'success',
+        title: 'Factura guardada',
+        description: `${formData.invoice_number || nextInvoiceNumber} se ha actualizado correctamente.`,
+        confirmLabel: 'Entendido',
+      })
       setLoading(false)
     } catch (err) {
       setError('Error de conexión')
@@ -304,7 +295,13 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
       URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Error al generar PDF:', error)
-      alert('Error al generar el PDF. Por favor, intenta de nuevo.')
+      setFeedback({
+        open: true,
+        variant: 'error',
+        title: 'No se pudo generar el PDF',
+        description: 'Inténtalo de nuevo en unos segundos.',
+        confirmLabel: 'Entendido',
+      })
     }
   }
 
@@ -694,6 +691,15 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
           </div>
         </div>
       </div>
+
+      <InvoiceFeedbackDialog
+        open={feedback.open}
+        onOpenChange={(open) => setFeedback((prev) => ({ ...prev, open }))}
+        title={feedback.title}
+        description={feedback.description}
+        variant={feedback.variant}
+        confirmLabel={feedback.confirmLabel}
+      />
     </FullScreenLayout>
   )
 }
