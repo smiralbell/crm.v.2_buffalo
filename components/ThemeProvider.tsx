@@ -27,45 +27,40 @@ const ThemeContext = createContext<ThemeContextValue>({
 
 const STORAGE_KEY = 'buffalo-crm-theme'
 
-function applyTheme(theme: ThemeMode) {
+function applyLightTheme() {
   const root = document.documentElement
-  if (theme === 'dark') root.classList.add('dark')
-  else root.classList.remove('dark')
+  root.classList.remove('dark')
+  root.style.colorScheme = 'light'
+  root.setAttribute('data-theme', 'light')
 }
 
+/** CRM siempre en modo claro (ignora OS / dominio / preferencia guardada). */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>('light')
+  const [theme] = useState<ThemeMode>('light')
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
+    applyLightTheme()
     try {
-      const stored = localStorage.getItem(STORAGE_KEY) as ThemeMode | null
-      const prefersDark =
-        typeof window !== 'undefined' &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches
-      const initial: ThemeMode =
-        stored === 'dark' || stored === 'light' ? stored : prefersDark ? 'dark' : 'light'
-      setThemeState(initial)
-      applyTheme(initial)
+      localStorage.setItem(STORAGE_KEY, 'light')
     } catch {
-      applyTheme('light')
+      /* ignore */
     }
     setReady(true)
   }, [])
 
-  const setTheme = useCallback((t: ThemeMode) => {
-    setThemeState(t)
-    applyTheme(t)
+  const setTheme = useCallback((_t: ThemeMode) => {
+    applyLightTheme()
     try {
-      localStorage.setItem(STORAGE_KEY, t)
+      localStorage.setItem(STORAGE_KEY, 'light')
     } catch {
       /* ignore */
     }
   }, [])
 
   const toggleTheme = useCallback(() => {
-    setTheme(theme === 'dark' ? 'light' : 'dark')
-  }, [setTheme, theme])
+    applyLightTheme()
+  }, [])
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, ready }}>

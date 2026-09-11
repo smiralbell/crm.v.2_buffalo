@@ -134,17 +134,33 @@ export function mapConfigToProyecto(
 }
 
 export function isValidConfiguradorConfig(
-  cfg: ConfiguradorConfig | null
+  cfg: ConfiguradorConfig | null,
+  opts: { fallbackName?: string | null; setupFee?: number | null } = {}
 ): cfg is ConfiguradorConfig {
   if (!cfg) return false
   if (cfg.mode === 'custom') {
-    if (cfg.service_type === 'audit') {
-      return Boolean(cfg.title || cfg.empresa || cfg.nombre)
-    }
-    return Boolean(
-      (cfg.title || cfg.empresa || cfg.nombre) &&
-        (cfg.setup_total_eur || (cfg.line_items && cfg.line_items.length > 0))
+    const hasIdentity = Boolean(
+      cfg.title?.trim() ||
+        cfg.empresa?.trim() ||
+        cfg.nombre?.trim() ||
+        opts.fallbackName?.trim()
     )
+    if (!hasIdentity) return false
+    if (cfg.service_type === 'audit') return true
+
+    const hasPricing = Boolean(
+      (cfg.setup_total_eur != null && Number.isFinite(Number(cfg.setup_total_eur)) && Number(cfg.setup_total_eur) > 0) ||
+        (cfg.line_items && cfg.line_items.length > 0) ||
+        (opts.setupFee != null && Number.isFinite(Number(opts.setupFee)) && Number(opts.setupFee) > 0)
+    )
+    // Proyectos del cuaderno / propuesta: pueden no tener setup en el JSON aún
+    const hasContent = Boolean(
+      cfg.project_context?.trim() ||
+        cfg.proposal_draft?.trim() ||
+        cfg.description?.trim() ||
+        cfg.contract_draft
+    )
+    return hasPricing || hasContent
   }
   return Boolean(cfg.voz || cfg.chat || cfg.dash)
 }

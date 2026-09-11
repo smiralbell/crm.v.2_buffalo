@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!proyecto) {
       return res.status(404).json({
         error: 'Proyecto no sincronizado',
-        hint: 'Guarda la configuración del lead para crear el proyecto en ENG 3.',
+        hint: 'Pulsa «Poner en marcha» en Onboarding para crear el proyecto en ENG 3 (o guarda la configuración del lead).',
       })
     }
 

@@ -1,11 +1,14 @@
 import { Html, Head, Main, NextScript } from 'next/document'
 
-const themeBoot = `(function(){try{var t=localStorage.getItem('buffalo-crm-theme');if(t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})();`
+/** Fuerza modo claro antes de hidratar (evita flash oscuro por OS / localStorage). */
+const themeBoot = `(function(){try{var r=document.documentElement;r.classList.remove('dark');r.style.colorScheme='light';r.setAttribute('data-theme','light');localStorage.setItem('buffalo-crm-theme','light')}catch(e){}})();`
 
 export default function Document() {
   return (
-    <Html lang="es" suppressHydrationWarning>
+    <Html lang="es" className="light" style={{ colorScheme: 'light' }} suppressHydrationWarning>
       <Head>
+        <meta name="color-scheme" content="light" />
+        <meta name="theme-color" content="#ffffff" />
         <script dangerouslySetInnerHTML={{ __html: themeBoot }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
@@ -18,7 +21,7 @@ export default function Document() {
           rel="stylesheet"
         />
       </Head>
-      <body className="antialiased">
+      <body className="antialiased bg-white text-gray-900" style={{ colorScheme: 'light' }}>
         <Main />
         <NextScript />
       </body>

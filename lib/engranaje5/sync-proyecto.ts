@@ -40,16 +40,24 @@ export async function syncProyectoFromLead(input: SyncProyectoInput) {
 
   const configRaw = input.configuracion ?? lead.configuracion
   const cfg = parseConfiguradorConfig(configRaw)
+  const setupFeeHint =
+    input.setupFee ?? (lead.valor != null && Number.isFinite(Number(lead.valor)) ? Number(lead.valor) : null)
+  const fallbackName = lead.contact?.empresa || lead.contact?.nombre || undefined
 
-  if (!isValidConfiguradorConfig(cfg)) {
+  if (
+    !isValidConfiguradorConfig(cfg, {
+      fallbackName,
+      setupFee: setupFeeHint,
+    })
+  ) {
     return { skipped: true as const, reason: 'Sin configuración válida' }
   }
 
   const payload = mapConfigToProyecto(cfg, {
-    setupFee: input.setupFee ?? (lead.valor ? Number(lead.valor) : null),
+    setupFee: setupFeeHint,
     monthlyFee: input.monthlyFee ?? null,
     leadEstado: input.leadEstado ?? lead.estado,
-    fallbackName: lead.contact?.empresa || lead.contact?.nombre || undefined,
+    fallbackName,
   })
 
   const existing = await prisma.$queryRaw<{ id: string; client_id: string }[]>`

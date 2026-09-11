@@ -43,7 +43,11 @@ export default function AssignDevelopersButton({
       if (!res.ok) {
         setProjectId(null)
         setDevelopers([])
-        setResolveError(data.hint || data.error || 'No se pudo cargar el proyecto')
+        setResolveError(
+          data.hint ||
+            data.error ||
+            'No hay proyecto en ENG 3. Pulsa «Poner en marcha» en Onboarding para crearlo.'
+        )
         return
       }
       setProjectId(data.proyecto.id)

@@ -23,8 +23,6 @@ import {
   Copy,
   ListChecks,
   Sparkles,
-  Moon,
-  Sun,
   HelpCircle,
   Video,
 } from 'lucide-react'
@@ -33,7 +31,6 @@ import ComercialSidebarBrand from '@/components/coldcall/ComercialSidebarBrand'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/AuthContext'
-import { useTheme } from '@/components/ThemeProvider'
 import type { CrmRole } from '@/lib/auth'
 
 interface SubItem {
@@ -167,7 +164,6 @@ export default function Sidebar({
 }: SidebarProps) {
   const router = useRouter()
   const { user, loading } = useAuth()
-  const { theme, toggleTheme } = useTheme()
   const role = user?.role
   const isAdmin = role === 'admin'
   const isDesktop = variant === 'desktop'
@@ -558,22 +554,6 @@ export default function Sidebar({
       </div>
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-2 shrink-0 space-y-0.5">
-        <button
-          type="button"
-          title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
-          onClick={toggleTheme}
-          className={cn(itemClass(false), 'w-full')}
-        >
-          {theme === 'dark' ? (
-            <Sun className="h-4 w-4 shrink-0" />
-          ) : (
-            <Moon className="h-4 w-4 shrink-0" />
-          )}
-          {showLabels && (
-            <span className="flex-1 text-left">{theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</span>
-          )}
-        </button>
-
         {isAdmin && (
           <Link
             href="/usuarios"

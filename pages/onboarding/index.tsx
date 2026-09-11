@@ -151,8 +151,11 @@ export default function OnboardingPage() {
       if (!res.ok) throw new Error(data.error || 'Error al actualizar')
       setBuffaloFlags((prev) => ({
         ...prev,
-        [leadId]: Boolean(data.proyecto?.es_buffalo ?? !currentlyBuffalo),
+        [leadId]: Boolean(data.proyecto?.es_buffalo),
       }))
+      if (!currentlyBuffalo && !data.proyecto) {
+        throw new Error('No se creó el proyecto en ENG 3')
+      }
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'Error al poner en marcha')
     } finally {

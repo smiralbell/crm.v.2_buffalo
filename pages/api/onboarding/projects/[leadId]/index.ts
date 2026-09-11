@@ -226,7 +226,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!lead.configuracion) {
           return res.status(400).json({ error: 'El lead no tiene configuración de proyecto' })
         }
-        await syncProyectoFromLead({ leadId })
+        const syncResult = await syncProyectoFromLead({ leadId })
+        const synced = await getProyectoByLead(leadId)
+        if (!synced) {
+          return res.status(400).json({
+            error:
+              syncResult.skipped
+                ? `No se pudo crear el proyecto en ENG 3 (${syncResult.reason}). Revisa nombre/empresa e importe del lead.`
+                : 'No se pudo crear el proyecto en ENG 3. Intenta guardar la configuración e inténtalo de nuevo.',
+          })
+        }
         await prisma.$executeRaw`
           UPDATE proyectos
           SET
