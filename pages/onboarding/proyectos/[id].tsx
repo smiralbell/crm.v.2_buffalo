@@ -18,6 +18,7 @@ import { isAuditConfiguracion } from '@/lib/onboarding/audit/config-detect'
 import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
 import OnboardingDocumentActions from '@/components/onboarding/OnboardingDocumentActions'
 import OnboardingInvoicesThread from '@/components/onboarding/OnboardingInvoicesThread'
+import OnboardingPublicFormsPanel from '@/components/onboarding/OnboardingPublicFormsPanel'
 import ProjectSummaryCard from '@/components/onboarding/ProjectSummaryCard'
 import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
 
@@ -418,6 +419,8 @@ export default function ProyectoDetailPage({ lead }: Props) {
             </div>
             <OnboardingDocumentActions leadId={lead.id} />
           </div>
+
+          <OnboardingPublicFormsPanel leadId={lead.id} />
 
           <OnboardingInvoicesThread leadId={lead.id} />
 
