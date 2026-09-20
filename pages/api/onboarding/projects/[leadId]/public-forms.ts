@@ -10,17 +10,26 @@ import {
   updateForm,
 } from '@/lib/onboarding/public-forms'
 
+/** HTML completo (CSS + scripts + logos base64) puede superar 1 MB */
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '12mb',
+    },
+  },
+}
+
 const createSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   slug: z.string().min(2).max(64),
-  html: z.string().min(1),
+  html: z.string().min(1).max(12_000_000),
 })
 
 const updateSchema = z.object({
   id: z.string().uuid(),
   title: z.string().min(1).max(200).optional(),
   slug: z.string().min(2).max(64).optional(),
-  html: z.string().min(1).optional(),
+  html: z.string().min(1).max(12_000_000).optional(),
   is_active: z.boolean().optional(),
 })
 

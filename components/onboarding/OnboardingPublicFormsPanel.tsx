@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { OnboardingFormSubmission, OnboardingPublicForm } from '@/lib/onboarding/public-forms'
+import { getPublicFormsBaseUrl, publicFormUrl } from '@/lib/onboarding/public-forms-url'
 
 type Props = {
   leadId: number
@@ -30,7 +31,11 @@ type Props = {
 
 const HTML_HELP = `Cómo preparar el HTML para que se guarden los datos
 
-1) Incluye un <form> con campos que tengan atributo name.
+0) Puedes pegar HTML completo (<!doctype html>… con CSS, fuentes y scripts)
+   o solo un fragmento (<form>…</form>). Se sirve como documento real,
+   no dentro de una página React: todo se ve y ejecuta correctamente.
+
+1) Formularios clásicos: incluye un <form> con campos que tengan name.
    Solo se guardan inputs/select/textarea con name.
 
 2) Nombres recomendados (opcionales, puedes usar los que quieras):
@@ -51,10 +56,12 @@ const HTML_HELP = `Cómo preparar el HTML para que se guarden los datos
 </form>
 
 4) No hace falta poner action ni method: el CRM captura el envío
-   y guarda el JSON en Postgres (onboarding_form_submissions).
+   (también si usas Web3Forms / fetch con FormData) y guarda una copia
+   en Postgres (onboarding_form_submissions).
 
-5) El HTML se muestra tal cual al cliente (estilos CSS incluidos).
-   El cliente NO entra al CRM: solo ve esta página pública /f/tu-slug.`
+5) El cliente NO entra al CRM: solo ve esta página pública.
+   Configura NEXT_PUBLIC_FORMS_BASE_URL (ej. https://forms.agenciabuffalo.es)
+   para que el link no use el dominio del CRM ni exponga /login.`
 
 export default function OnboardingPublicFormsPanel({ leadId }: Props) {
   const [forms, setForms] = useState<OnboardingPublicForm[]>([])
@@ -70,7 +77,20 @@ export default function OnboardingPublicFormsPanel({ leadId }: Props) {
   const [submissions, setSubmissions] = useState<OnboardingFormSubmission[]>([])
   const [subsLoading, setSubsLoading] = useState(false)
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const formsBase = useMemo(() => getPublicFormsBaseUrl(), [])
+  const usingCrmOrigin =
+    typeof window !== 'undefined' &&
+    (!process.env.NEXT_PUBLIC_FORMS_BASE_URL ||
+      formsBase === window.location.origin)
+
+  const publicUrlPreview = useMemo(() => {
+    const s = slug
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+    return s ? publicFormUrl(s, formsBase) : publicFormUrl('…', formsBase)
+  }, [formsBase, slug])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -90,11 +110,6 @@ export default function OnboardingPublicFormsPanel({ leadId }: Props) {
   useEffect(() => {
     load()
   }, [load])
-
-  const publicUrl = useMemo(() => {
-    const s = slug.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '')
-    return s ? `${origin}/f/${s}` : `${origin}/f/…`
-  }, [origin, slug])
 
   const openCreate = () => {
     setTitle('Formulario onboarding')
@@ -189,7 +204,7 @@ export default function OnboardingPublicFormsPanel({ leadId }: Props) {
   }
 
   const copyLink = async (formSlug: string) => {
-    const url = `${origin}/f/${formSlug}`
+    const url = publicFormUrl(formSlug, formsBase)
     try {
       await navigator.clipboard.writeText(url)
       alert('Link copiado')
@@ -226,6 +241,13 @@ export default function OnboardingPublicFormsPanel({ leadId }: Props) {
           <p className="text-xs text-gray-500 mt-1 max-w-xl">
             Pega un HTML, elige el nombre del link y compártelo con el cliente. No puede entrar al CRM.
           </p>
+          {usingCrmOrigin && (
+            <p className="text-[11px] text-amber-800 mt-2 max-w-xl rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5">
+              Configura <code className="font-mono">NEXT_PUBLIC_FORMS_BASE_URL</code> (ej.{' '}
+              <code className="font-mono">https://forms.agenciabuffalo.es</code>) para que el link
+              no use el dominio del CRM ni exponga el login.
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => setHelpOpen(true)}>
@@ -261,7 +283,7 @@ export default function OnboardingPublicFormsPanel({ leadId }: Props) {
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-gray-900 truncate">{form.title}</p>
                 <p className="text-xs text-gray-500 font-mono truncate">
-                  /f/{form.slug}
+                  {publicFormUrl(form.slug, formsBase)}
                   <span
                     className={cn(
                       'ml-2 inline-flex px-1.5 py-0.5 rounded-md text-[10px] font-semibold',
@@ -288,7 +310,7 @@ export default function OnboardingPublicFormsPanel({ leadId }: Props) {
                   Copiar link
                 </button>
                 <a
-                  href={`/f/${form.slug}`}
+                  href={publicFormUrl(form.slug, formsBase)}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 px-2.5 h-8 rounded-lg border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50"
@@ -357,7 +379,7 @@ export default function OnboardingPublicFormsPanel({ leadId }: Props) {
                   placeholder="aic-onboarding"
                   className="font-mono"
                 />
-                <p className="text-[11px] text-gray-500 break-all">{publicUrl}</p>
+                <p className="text-[11px] text-gray-500 break-all">{publicUrlPreview}</p>
               </div>
             </div>
             <div className="space-y-2">

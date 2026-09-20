@@ -1,4 +1,27 @@
-# Formularios públicos de onboarding
+## Dominio público (sin CRM / sin login)
+
+Los links compartidos **no deben usar** el host del CRM
+(`n8n-crmv2-buffalo…` o `crm.agenciabuffalo.es`), porque el cliente podría abrir `/login`.
+
+### 1. Crea un subdominio solo para formularios
+
+Ejemplo: `forms.agenciabuffalo.es` → apunta (CNAME/A) al **mismo** servicio EasyPanel del CRM.
+
+### 2. Variables de entorno (EasyPanel)
+
+```env
+NEXT_PUBLIC_FORMS_BASE_URL=https://forms.agenciabuffalo.es
+FORMS_PUBLIC_HOST=forms.agenciabuffalo.es
+```
+
+Con eso:
+- Al copiar el link sale `https://forms.agenciabuffalo.es/f/delockos`
+- En ese host, `/login` y el resto del CRM están **bloqueados** (middleware)
+- Solo funcionan `/f/*` y `/api/f/*`
+
+### 3. SQL en producción
+
+Ejecuta `prisma/CREATE_ONBOARDING_PUBLIC_FORMS.sql` en la BD de producción si aún no está.
 
 ## Qué es
 
@@ -6,9 +29,11 @@ Desde la ficha de un onboarding (`/onboarding/proyectos/[id]`) puedes crear un f
 
 1. Pegar el **HTML completo** (se muestra tal cual al cliente).
 2. Elegir un **nombre de link** (slug), p. ej. `aic-onboarding`.
-3. Compartir `https://TU-DOMINIO/f/aic-onboarding`.
+3. Compartir `https://forms.TU-DOMINIO/f/aic-onboarding`.
 
-El cliente **no entra al CRM**: la página `/f/[slug]` no tiene sidebar, login ni sesión. Solo muestra el HTML y guarda el envío.
+El cliente **no entra al CRM**: la página `/f/[slug]` no tiene sidebar, login ni sesión.
+El HTML se sirve como **documento completo** (`Content-Type: text/html`), así que funcionan
+`<!doctype html>`, `<head>`, CSS externos, fuentes y `<script>` (formularios SPA tipo Delokos).
 
 ## Tablas Postgres
 
@@ -19,9 +44,14 @@ Migración: `prisma/CREATE_ONBOARDING_PUBLIC_FORMS.sql`
 
 ## Cómo preparar el HTML
 
-- Debe haber un `<form>` con campos que tengan atributo **`name`**.
-- Solo se guardan campos con `name` (input, select, textarea).
-- No hace falta `action` ni `method`: el CRM intercepta el submit y hace `POST /api/f/{slug}`.
+Puedes pegar:
+- Un fragmento (`<form>…</form>`) — el CRM lo envuelve en un documento básico.
+- Un HTML completo (`<!doctype html>…`) — se sirve tal cual, con CSS y JS incluidos.
+
+### Envío al CRM
+
+- Formularios nativos: campos con atributo **`name`**. No hace falta `action`/`method`: se intercepta el submit → `POST /api/f/{slug}`.
+- SPAs / Web3Forms / `fetch` con `FormData`: también se guarda una copia en el CRM (script de captura inyectado al final del documento).
 
 ### Nombres recomendados
 
