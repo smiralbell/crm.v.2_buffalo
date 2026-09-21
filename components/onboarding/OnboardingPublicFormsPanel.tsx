@@ -29,39 +29,71 @@ type Props = {
   leadId: number
 }
 
-const HTML_HELP = `Cómo preparar el HTML para que se guarden los datos
+const HTML_HELP = `CÓMO DEBE GUARDARSE EL ENVÍO EN EL CRM
+=====================================
 
-0) Puedes pegar HTML completo (<!doctype html>… con CSS, fuentes y scripts)
-   o solo un fragmento (<form>…</form>). Se sirve como documento real,
-   no dentro de una página React: todo se ve y ejecuta correctamente.
+El CRM inyecta en la página esta función (no la inventes tú):
 
-1) Formularios clásicos: incluye un <form> con campos que tengan name.
-   Solo se guardan inputs/select/textarea con name.
+  window.BuffaloCRM.submit({ campo1: "valor", campo2: "valor", ... })
 
-2) Nombres recomendados (opcionales, puedes usar los que quieras):
-   - contacto_nombre
-   - contacto_email
-   - contacto_tel / telefono
-   - empresa / contacto_empresa
-   - notas / mensaje
+Eso hace POST a /api/f/{slug} y guarda la fila en
+onboarding_form_submissions. Sin esa llamada (o un <form> nativo),
+NO se guarda nada — aunque el HTML muestre “¡Enviado!”.
 
-3) Ejemplo mínimo:
+
+── Opción recomendada para cuestionarios SPA (Delokos, La Llar…) ──
+
+1) Guarda las respuestas en un objeto JS, p.ej. answers = { nombre, area, ... }
+
+2) En el botón “Enviar”, llama SIEMPRE a BuffaloCRM.submit con un objeto plano:
+
+function enviarAlCRM() {
+  if (!window.BuffaloCRM || typeof BuffaloCRM.submit !== "function") {
+    alert("Error: el CRM no está disponible. Abre el link /f/… del CRM, no el HTML suelto.");
+    return;
+  }
+  BuffaloCRM.submit({
+    empresa: "La Llar del Vidre",
+    formulario: "Diagnóstico equipo",
+    contacto_nombre: answers.nombre || "",
+    // ...todas las respuestas (claves = nombres de campo):
+    ...answers
+  }).then(function (ok) {
+    if (ok) {
+      // aquí tu modal de gracias
+    } else {
+      alert("No se han podido guardar las respuestas. Revisa la conexión.");
+    }
+  });
+}
+
+3) NO uses Web3Forms / email / solo localStorage como único envío.
+   Puedes seguir mostrando un modal, pero el guardado real es BuffaloCRM.submit.
+
+
+── Opción B — formulario HTML clásico ──
 
 <form>
-  <label>Nombre <input name="contacto_nombre" required /></label>
-  <label>Email <input type="email" name="contacto_email" required /></label>
-  <label>Empresa <input name="empresa" /></label>
+  <label>Nombre <input name="contacto_nombre" required></label>
+  <label>Email <input type="email" name="contacto_email" required></label>
+  <label>Empresa <input name="empresa"></label>
   <label>Mensaje <textarea name="notas"></textarea></label>
   <button type="submit">Enviar</button>
 </form>
 
-4) No hace falta poner action ni method: el CRM captura el envío
-   (también si usas Web3Forms / fetch con FormData) y guarda una copia
-   en Postgres (onboarding_form_submissions).
+Cada campo DEBE tener atributo name. No hace falta action ni method:
+el CRM captura el submit solo.
 
-5) El cliente NO entra al CRM: solo ve esta página pública.
-   Configura NEXT_PUBLIC_FORMS_BASE_URL (ej. https://forms.agenciabuffalo.es)
-   para que el link no use el dominio del CRM ni exponga /login.`
+
+── Qué NO funciona ──
+
+- Solo “Enviado!” en pantalla sin BuffaloCRM.submit ni <form> con name=
+- Abrir el .html en local (file://) en vez del link /f/tu-slug
+- Enviar solo por email / Web3Forms sin copiar también a BuffaloCRM.submit
+
+
+Nombres útiles (opcionales): contacto_nombre, contacto_email,
+contacto_tel, empresa, notas. Cualquier otra clave también se guarda.`
 
 export default function OnboardingPublicFormsPanel({ leadId }: Props) {
   const [forms, setForms] = useState<OnboardingPublicForm[]>([])

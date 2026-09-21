@@ -48,9 +48,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
           flat[key] = value
         } else if (Array.isArray(value)) {
-          flat[key] = value.map(String)
+          flat[key] = value.map((v) =>
+            v != null && typeof v === 'object' ? v : String(v)
+          )
         } else if (value == null) {
           flat[key] = null
+        } else if (typeof value === 'object') {
+          // Escalas, matrices, objetos anidados de SPAs → se guardan en JSONB tal cual
+          flat[key] = value
         } else {
           flat[key] = String(value)
         }

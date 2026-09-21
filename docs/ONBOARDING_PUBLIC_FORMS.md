@@ -55,10 +55,53 @@ Puedes pegar:
 - Un fragmento (`<form>…</form>`) — el CRM lo envuelve en un documento básico.
 - Un HTML completo (`<!doctype html>…`) — se sirve tal cual, con CSS y JS incluidos.
 
-### Envío al CRM
+### Envío al CRM (obligatorio)
 
-- Formularios nativos: campos con atributo **`name`**. No hace falta `action`/`method`: se intercepta el submit → `POST /api/f/{slug}`.
-- SPAs / Web3Forms / `fetch` con `FormData`: también se guarda una copia en el CRM (script de captura inyectado al final del documento).
+El CRM inyecta en la página pública:
+
+```js
+window.BuffaloCRM.submit({ campo: "valor", ... })
+```
+
+Eso es lo que guarda la respuesta en Postgres. Si el HTML solo muestra un modal de “¡Enviado!” sin llamar a eso (ni usar un `<form>` nativo), **no habrá filas en Respuestas**.
+
+#### Cuestionarios SPA (recomendado)
+
+```js
+function enviarAlCRM() {
+  if (!window.BuffaloCRM) {
+    alert("Abre el link /f/… del CRM, no el HTML suelto.");
+    return;
+  }
+  BuffaloCRM.submit({
+    empresa: "Nombre cliente",
+    formulario: "Diagnóstico equipo",
+    contacto_nombre: answers.nombre || "",
+    ...answers,
+  }).then(function (ok) {
+    if (ok) {
+      /* modal de gracias */
+    } else {
+      alert("No se pudieron guardar las respuestas.");
+    }
+  });
+}
+```
+
+En el botón final: `data-act="submit"` → `enviarAlCRM()` (no solo localStorage / email).
+
+#### Formulario HTML clásico
+
+```html
+<form>
+  <label>Nombre <input name="contacto_nombre" required /></label>
+  <label>Email <input type="email" name="contacto_email" required /></label>
+  <label>Empresa <input name="empresa" /></label>
+  <button type="submit">Enviar</button>
+</form>
+```
+
+Campos con **`name`**. Sin `action`/`method`: el CRM captura el submit.
 
 ### Nombres recomendados
 
@@ -70,18 +113,7 @@ Puedes pegar:
 | `empresa` / `contacto_empresa` | Empresa |
 | `notas` / `mensaje` | Texto libre |
 
-Puedes usar **cualquier** `name`: todo va al JSON `payload`.
-
-### Ejemplo mínimo
-
-```html
-<form>
-  <label>Nombre <input name="contacto_nombre" required /></label>
-  <label>Email <input type="email" name="contacto_email" required /></label>
-  <label>Empresa <input name="empresa" /></label>
-  <button type="submit">Enviar</button>
-</form>
-```
+Puedes usar **cualquier** clave: todo va al JSON `payload`.
 
 ## APIs
 
