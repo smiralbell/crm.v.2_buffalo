@@ -13,6 +13,10 @@ export function getPublicFormsBaseUrl(): string {
     ''
   const trimmed = raw.trim().replace(/\/$/, '')
   if (trimmed) return trimmed
+  // Solo servidor: FORMS_PUBLIC_HOST no se inlinea en el bundle del cliente,
+  // por eso la API devuelve formsBaseUrl calculado en runtime.
+  const envHost = (process.env.FORMS_PUBLIC_HOST || '').trim().replace(/\/+$/, '')
+  if (envHost) return envHost.startsWith('http') ? envHost : 'https://' + envHost
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin
   }

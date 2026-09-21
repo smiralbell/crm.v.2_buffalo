@@ -77,11 +77,14 @@ export default function OnboardingPublicFormsPanel({ leadId }: Props) {
   const [submissions, setSubmissions] = useState<OnboardingFormSubmission[]>([])
   const [subsLoading, setSubsLoading] = useState(false)
 
-  const formsBase = useMemo(() => getPublicFormsBaseUrl(), [])
+  // El dominio de formularios llega del servidor (runtime). Así basta con
+  // cambiar FORMS_PUBLIC_HOST en EasyPanel y reiniciar: sin rebuild.
+  const [serverFormsBase, setServerFormsBase] = useState('')
+  const fallbackFormsBase = useMemo(() => getPublicFormsBaseUrl(), [])
+  const formsBase = serverFormsBase || fallbackFormsBase
   const usingCrmOrigin =
     typeof window !== 'undefined' &&
-    (!process.env.NEXT_PUBLIC_FORMS_BASE_URL ||
-      formsBase === window.location.origin)
+    (!formsBase || formsBase === window.location.origin)
 
   const publicUrlPreview = useMemo(() => {
     const s = slug
@@ -100,6 +103,7 @@ export default function OnboardingPublicFormsPanel({ leadId }: Props) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'No se pudieron cargar los formularios')
       setForms(data.forms || [])
+      setServerFormsBase(typeof data.formsBaseUrl === 'string' ? data.formsBaseUrl : '')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar')
     } finally {
@@ -243,9 +247,9 @@ export default function OnboardingPublicFormsPanel({ leadId }: Props) {
           </p>
           {usingCrmOrigin && (
             <p className="text-[11px] text-amber-800 mt-2 max-w-xl rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5">
-              Configura <code className="font-mono">NEXT_PUBLIC_FORMS_BASE_URL</code> (ej.{' '}
-              <code className="font-mono">https://forms.agenciabuffalo.es</code>) para que el link
-              no use el dominio del CRM ni exponga el login.
+              Configura <code className="font-mono">FORMS_PUBLIC_HOST</code> (ej.{' '}
+              <code className="font-mono">forms.agenciabuffalo.es</code>) en el servidor para que el
+              link no use el dominio del CRM ni exponga el login.
             </p>
           )}
         </div>

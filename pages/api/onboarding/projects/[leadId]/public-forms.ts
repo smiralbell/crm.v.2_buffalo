@@ -9,6 +9,7 @@ import {
   listSubmissions,
   updateForm,
 } from '@/lib/onboarding/public-forms'
+import { getPublicFormsBaseUrl } from '@/lib/onboarding/public-forms-url'
 
 /** HTML completo (CSS + scripts + logos base64) puede superar 1 MB */
 export const config = {
@@ -49,13 +50,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
 
     if (req.method === 'GET') {
+      // Runtime, no build-time: cambiar el dominio de formularios en EasyPanel
+      // solo requiere reiniciar el servicio, no reconstruir la imagen.
+      const formsBaseUrl = getPublicFormsBaseUrl()
       const forms = await listFormsByLead(leadId)
       const formId = typeof req.query.formId === 'string' ? req.query.formId : null
       if (formId) {
         const submissions = await listSubmissions(formId, leadId)
-        return res.status(200).json({ forms, submissions })
+        return res.status(200).json({ forms, submissions, formsBaseUrl })
       }
-      return res.status(200).json({ forms })
+      return res.status(200).json({ forms, formsBaseUrl })
     }
 
     if (req.method === 'POST') {
