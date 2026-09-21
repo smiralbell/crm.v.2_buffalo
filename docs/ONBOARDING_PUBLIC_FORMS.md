@@ -10,9 +10,16 @@ Ejemplo: `forms.agenciabuffalo.es` → apunta (CNAME/A) al **mismo** servicio Ea
 ### 2. Variables de entorno (EasyPanel)
 
 ```env
-NEXT_PUBLIC_FORMS_BASE_URL=https://forms.agenciabuffalo.es
 FORMS_PUBLIC_HOST=forms.agenciabuffalo.es
 ```
+
+Basta con esa variable: se lee en **runtime**, así que cambiar el dominio solo
+requiere reiniciar el servicio (no reconstruir la imagen). El panel de onboarding
+recibe el dominio desde la API, no del bundle.
+
+`NEXT_PUBLIC_FORMS_BASE_URL` sigue soportada pero es opcional: Next la incrusta
+durante `npm run build`, que en este repo ocurre dentro del Dockerfile, por lo que
+solo surte efecto si reconstruyes la imagen.
 
 Con eso:
 - Al copiar el link sale `https://forms.agenciabuffalo.es/f/delockos`
