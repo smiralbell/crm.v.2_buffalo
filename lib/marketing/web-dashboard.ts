@@ -4,6 +4,11 @@ import { AGENT_CHAT_HISTORY_TABLE } from '@/lib/agent-chat-history'
 import { countPendingWebFormSubmissions, isWebFormSubmissionsTableAvailable } from '@/lib/marketing/web-form-submissions'
 import { countUpcomingCalBookings, isCalBookingsReady, listCalBookings } from '@/lib/marketing/cal-bookings'
 import { listWebFormSubmissions } from '@/lib/marketing/web-form-submissions'
+import {
+  countFormacionDiagnosticosToday,
+  isFormacionDiagnosticosAvailable,
+  listFormacionDiagnosticos,
+} from '@/lib/marketing/formacion-diagnosticos'
 import type { WebDashboardMetrics, WebDashboardAlert, WebTimelinePoint } from '@/lib/marketing/web-dashboard.types'
 import { getWebPipelineInfo, syncAllWebSourcesToPipeline } from '@/lib/pipelines/web'
 
@@ -82,6 +87,7 @@ function isToday(iso: string): boolean {
 function buildAlerts(input: {
   formPending: number
   formsToday: number
+  formacionToday: number
   calToday: number
   calBookedToday: number
   calUpcoming: number
@@ -103,6 +109,16 @@ function buildAlerts(input: {
     })
   }
 
+  if (input.formacionToday > 0) {
+    alerts.push({
+      id: 'formacion-today',
+      severity: 'warning',
+      title: `${input.formacionToday} respuesta${input.formacionToday > 1 ? 's' : ''} de Formación hoy`,
+      message: 'Nuevos envíos desde formacion.agenciabuffalo.es (diagnóstico / FUNDAE).',
+      href: `/marketing/web/formularios${periodQs}`,
+    })
+  }
+
   if (input.formPending > 0) {
     alerts.push({
       id: 'form-pending',
@@ -117,7 +133,7 @@ function buildAlerts(input: {
     alerts.push({
       id: 'forms-today',
       severity: 'info',
-      title: `${input.formsToday} formulario${input.formsToday > 1 ? 's' : ''} hoy`,
+      title: `${input.formsToday} formulario${input.formsToday > 1 ? 's' : ''} web hoy`,
       message: 'Nuevos envíos recibidos hoy desde la web.',
       href: `/marketing/web/formularios${periodQs}`,
     })
@@ -174,9 +190,11 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
   const pipelineAvailable = !!pipelineInfo.web_pipeline_id
 
   const formsOk = await isWebFormSubmissionsTableAvailable()
+  const formacionOk = await isFormacionDiagnosticosAvailable()
   const calOk = await isCalBookingsReady()
 
   const forms = formsOk ? await listWebFormSubmissions(period, 500) : []
+  const formacion = formacionOk ? await listFormacionDiagnosticos(period, 500) : []
   const bookings = calOk
     ? (await listCalBookings(period, 500)).filter(
         (b) => b.status !== 'cancelled' && b.status !== 'rejected'
@@ -186,6 +204,10 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
   const formByDay: Record<string, number> = {}
   for (const f of forms) {
     const k = dayKey(f.submitted_at)
+    formByDay[k] = (formByDay[k] || 0) + 1
+  }
+  for (const f of formacion) {
+    const k = dayKey(f.created_at)
     formByDay[k] = (formByDay[k] || 0) + 1
   }
 
@@ -208,10 +230,10 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
   }
 
   const totals = {
-    form: forms.length,
+    form: forms.length + formacion.length,
     cal: bookings.length,
     chat: chatReplied,
-    total: forms.length + bookings.length + chatReplied,
+    total: forms.length + formacion.length + bookings.length + chatReplied,
   }
 
   const totalAll = totals.total || 1
@@ -219,8 +241,12 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
   const calUpcoming = calOk ? await countUpcomingCalBookings() : 0
   const calToday = calOk ? await countCalBookingsToday() : 0
   const formsToday = forms.filter((f) => isToday(f.submitted_at)).length
+  const formacionToday = formacionOk
+    ? (await countFormacionDiagnosticosToday()) ||
+      formacion.filter((f) => isToday(f.created_at)).length
+    : 0
   const calBookedToday = bookings.filter((b) => isToday(b.created_at)).length
-  const newLeadsToday = formsToday + calBookedToday
+  const newLeadsToday = formsToday + formacionToday + calBookedToday
 
   return {
     period,
@@ -229,6 +255,7 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
     alerts: buildAlerts({
       formPending,
       formsToday,
+      formacionToday,
       calToday,
       calBookedToday,
       calUpcoming,
@@ -242,7 +269,7 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
     cal_upcoming_today: calToday,
     chat_replied: chatReplied,
     chat_available: chatReplied > 0 || totals.chat >= 0,
-    form_available: formsOk,
+    form_available: formsOk || formacionOk,
     cal_available: calOk,
     pipeline_synced: syncResult.synced,
     pipeline_available: pipelineAvailable,

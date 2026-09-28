@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Bell, Calendar, Check, Loader2, ArrowRight } from 'lucide-react'
+import { Bell, Calendar, Check, GraduationCap, Loader2, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type DashboardAlertItem = {
   id: string
-  source: 'manual' | 'meeting'
+  source: 'manual' | 'meeting' | 'form'
   severity: 'info' | 'warn' | 'bad'
   title: string
   message: string
@@ -78,7 +78,7 @@ export default function DashboardAlertsPanel({ initialItems = [] }: Props) {
             Alertas y reuniones
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Follow-ups pendientes + reuniones en los próximos 2 días
+            Follow-ups, reuniones próximas y respuestas de formularios web / formación
           </p>
         </div>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -97,12 +97,13 @@ export default function DashboardAlertsPanel({ initialItems = [] }: Props) {
         </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground py-6 text-center">
-          Sin alertas abiertas ni reuniones en los próximos 2 días
+          Sin alertas abiertas, reuniones próximas ni formularios recientes
         </p>
       ) : (
         <ul className="space-y-2">
           {items.map((item) => {
-            const Icon = item.source === 'meeting' ? Calendar : Bell
+            const Icon =
+              item.source === 'meeting' ? Calendar : item.source === 'form' ? GraduationCap : Bell
             return (
               <li
                 key={item.id}
@@ -110,7 +111,9 @@ export default function DashboardAlertsPanel({ initialItems = [] }: Props) {
                   'flex items-start gap-3 rounded-xl border px-3.5 py-3',
                   item.source === 'meeting'
                     ? 'border-sky-200/80 bg-sky-50/40'
-                    : 'border-amber-200/80 bg-amber-50/40'
+                    : item.source === 'form'
+                      ? 'border-teal-200/80 bg-teal-50/40'
+                      : 'border-amber-200/80 bg-amber-50/40'
                 )}
               >
                 <span
@@ -118,7 +121,9 @@ export default function DashboardAlertsPanel({ initialItems = [] }: Props) {
                     'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border',
                     item.source === 'meeting'
                       ? 'border-sky-100 bg-white text-sky-700'
-                      : 'border-amber-100 bg-white text-amber-700'
+                      : item.source === 'form'
+                        ? 'border-teal-100 bg-white text-teal-700'
+                        : 'border-amber-100 bg-white text-amber-700'
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -127,7 +132,11 @@ export default function DashboardAlertsPanel({ initialItems = [] }: Props) {
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm font-medium text-foreground leading-snug">{item.title}</p>
                     <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                      {item.source === 'meeting' ? 'Reunión' : 'Alerta'}
+                      {item.source === 'meeting'
+                        ? 'Reunión'
+                        : item.source === 'form'
+                          ? 'Formulario'
+                          : 'Alerta'}
                     </span>
                   </div>
                   {item.client_name && (

@@ -1,9 +1,14 @@
 import { prisma } from '@/lib/prisma'
 import { listOpenAlerts, type CrmActivityRow } from '@/lib/crm/activities'
+import { countPendingWebFormSubmissions, isWebFormSubmissionsTableAvailable } from '@/lib/marketing/web-form-submissions'
+import {
+  FORMACION_INTENT_LABELS,
+  listRecentFormacionDiagnosticos,
+} from '@/lib/marketing/formacion-diagnosticos'
 
 export type DashboardAlertItem = {
   id: string
-  source: 'manual' | 'meeting'
+  source: 'manual' | 'meeting' | 'form'
   severity: 'info' | 'warn' | 'bad'
   title: string
   message: string
@@ -28,6 +33,11 @@ function relativeMeetingLabel(start: Date, now: Date): string {
   const days = Math.ceil(ms / (1000 * 60 * 60 * 24))
   if (days === 1) return 'Mañana'
   return `En ${days} días`
+}
+
+function currentPeriod(): string {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 async function loadManualAlerts(): Promise<DashboardAlertItem[]> {
@@ -133,16 +143,67 @@ async function loadMeetingAlerts(withinDays = 2): Promise<DashboardAlertItem[]> 
   }
 }
 
-/** Alertas manuales abiertas + reuniones en los próximos `withinDays` días. */
+async function loadFormAlerts(): Promise<DashboardAlertItem[]> {
+  const period = currentPeriod()
+  const periodQs = `?period=${encodeURIComponent(period)}`
+  const href = `/marketing/web/formularios${periodQs}`
+  const items: DashboardAlertItem[] = []
+
+  try {
+    const recent = await listRecentFormacionDiagnosticos(3, 20)
+    for (const r of recent) {
+      const intentLabel = FORMACION_INTENT_LABELS[r.intent]
+      items.push({
+        id: `formacion-${r.id}`,
+        source: 'form',
+        severity: 'warn',
+        title: `Nueva respuesta · Formación (${intentLabel})`,
+        message: r.objetivo
+          ? r.objetivo.slice(0, 140) + (r.objetivo.length > 140 ? '…' : '')
+          : `${r.email}${r.telefono ? ` · ${r.telefono}` : ''}`,
+        client_name: [r.nombre, r.empresa].filter(Boolean).join(' · ') || null,
+        at: r.created_at,
+        href,
+      })
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    if (await isWebFormSubmissionsTableAvailable()) {
+      const pending = await countPendingWebFormSubmissions(period)
+      if (pending > 0) {
+        items.push({
+          id: 'web-forms-pending',
+          source: 'form',
+          severity: pending >= 3 ? 'bad' : 'warn',
+          title: `${pending} formulario${pending > 1 ? 's' : ''} web pendiente${pending > 1 ? 's' : ''}`,
+          message: 'Hay envíos de la web sin marcar como contactados.',
+          client_name: null,
+          at: new Date().toISOString(),
+          href,
+        })
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return items
+}
+
+/** Alertas manuales + reuniones próximas + respuestas de formularios. */
 export async function getDashboardAlerts(withinDays = 2): Promise<DashboardAlertItem[]> {
-  const [manual, meetings] = await Promise.all([
+  const [manual, meetings, forms] = await Promise.all([
     loadManualAlerts(),
     loadMeetingAlerts(withinDays),
+    loadFormAlerts(),
   ])
   const rank = { bad: 0, warn: 1, info: 2 }
-  return [...manual, ...meetings].sort((a, b) => {
+  return [...manual, ...meetings, ...forms].sort((a, b) => {
     const sr = rank[a.severity] - rank[b.severity]
     if (sr !== 0) return sr
-    return new Date(a.at).getTime() - new Date(b.at).getTime()
+    return new Date(b.at).getTime() - new Date(a.at).getTime()
   })
 }
