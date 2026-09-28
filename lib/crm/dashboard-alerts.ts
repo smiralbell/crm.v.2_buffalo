@@ -3,6 +3,8 @@ import { listOpenAlerts, type CrmActivityRow } from '@/lib/crm/activities'
 import { countPendingWebFormSubmissions, isWebFormSubmissionsTableAvailable } from '@/lib/marketing/web-form-submissions'
 import {
   FORMACION_INTENT_LABELS,
+} from '@/lib/marketing/formacion-diagnosticos.types'
+import {
   listRecentFormacionDiagnosticos,
 } from '@/lib/marketing/formacion-diagnosticos'
 

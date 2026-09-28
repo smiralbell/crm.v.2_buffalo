@@ -12,7 +12,7 @@ import {
 import {
   FORMACION_INTENT_LABELS,
   type FormacionDiagnosticoRow,
-} from '@/lib/marketing/formacion-diagnosticos'
+} from '@/lib/marketing/formacion-diagnosticos.types'
 import { Check, ChevronDown, ChevronUp, ExternalLink, GraduationCap, RefreshCw, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 

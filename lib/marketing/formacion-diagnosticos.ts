@@ -1,28 +1,12 @@
 import { queryChat } from '@/lib/db-chat'
 import { inWebFormPeriod } from '@/lib/marketing/web-form-submissions.types'
+import type {
+  FormacionDiagnosticoRow,
+  FormacionIntent,
+} from '@/lib/marketing/formacion-diagnosticos.types'
 
-export type FormacionIntent = 'diagnostico' | 'fundae'
-
-export type FormacionDiagnosticoRow = {
-  id: number
-  intent: FormacionIntent
-  nombre: string
-  empresa: string
-  email: string
-  telefono: string | null
-  trabajadores: string
-  funcion: string
-  uso_ia: string
-  credito_fundae: string
-  objetivo: string
-  consentimiento: boolean
-  created_at: string
-}
-
-export const FORMACION_INTENT_LABELS: Record<FormacionIntent, string> = {
-  diagnostico: 'Diagnóstico',
-  fundae: 'Crédito FUNDAE',
-}
+export type { FormacionDiagnosticoRow, FormacionIntent } from '@/lib/marketing/formacion-diagnosticos.types'
+export { FORMACION_INTENT_LABELS } from '@/lib/marketing/formacion-diagnosticos.types'
 
 type DbRow = {
   id: string | number
@@ -47,7 +31,7 @@ function mapRow(row: DbRow): FormacionDiagnosticoRow {
       : new Date(row.created_at).toISOString()
   return {
     id: Number(row.id),
-    intent: row.intent === 'fundae' ? 'fundae' : 'diagnostico',
+    intent: (row.intent === 'fundae' ? 'fundae' : 'diagnostico') as FormacionIntent,
     nombre: String(row.nombre || '').trim(),
     empresa: String(row.empresa || '').trim(),
     email: String(row.email || '').trim(),
