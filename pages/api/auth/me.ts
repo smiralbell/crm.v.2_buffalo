@@ -7,6 +7,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   void import('@/lib/enable-banking/daily-sync-scheduler')
     .then((m) => m.startBankSyncScheduler())
     .catch(() => {})
+  // Correos Gmail → historial CRM (idempotente).
+  void import('@/lib/integrations/google/gmail-sync-scheduler')
+    .then((m) => m.startGmailSyncScheduler())
+    .catch(() => {})
 
   try {
     let user = await requireAuthAPI(req, res)

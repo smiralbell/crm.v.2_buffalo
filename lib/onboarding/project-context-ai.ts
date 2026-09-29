@@ -4,6 +4,8 @@ import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import { getAuditByLeadId } from '@/lib/onboarding/audit/store'
 import { buildProposalPayload } from '@/lib/onboarding/audit/proposal'
 import { listMeetingsForLead } from '@/lib/integrations/fireflies/store'
+import { listActivities } from '@/lib/crm/activities'
+import { prisma } from '@/lib/prisma'
 import {
   getResearch,
   listNotes,
@@ -29,9 +31,39 @@ export function mergeLeadConfig(
   return { cfg, encoded: encodeConfiguradorConfig(cfg) }
 }
 
+const HISTORY_CONTEXT_KINDS = new Set(['email', 'call', 'note'])
+const HISTORY_CONTEXT_MAX_ITEMS = 25
+const HISTORY_CONTEXT_EMAIL_CHARS = 1200
+
+/** Correos, llamadas y notas del historial del contacto (más recientes primero). */
+async function crmHistoryContextBlock(leadId: number): Promise<string> {
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { contact_id: true },
+  })
+  if (!lead?.contact_id) return ''
+  const items = (await listActivities({ contactId: lead.contact_id, limit: 120 }))
+    .filter((a) => HISTORY_CONTEXT_KINDS.has(a.kind))
+    .slice(0, HISTORY_CONTEXT_MAX_ITEMS)
+  if (!items.length) return ''
+  const lines = items.map((a) => {
+    const when = new Date(a.created_at).toLocaleString('es-ES', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    })
+    let body = (a.body || '').trim()
+    if (a.kind === 'email' && body.length > HISTORY_CONTEXT_EMAIL_CHARS) {
+      body = `${body.slice(0, HISTORY_CONTEXT_EMAIL_CHARS)}…`
+    }
+    return [`### ${a.title} (${when})`, body].filter(Boolean).join('\n')
+  })
+  return '## Historial CRM (correos, llamadas y notas)\n' + lines.join('\n\n')
+}
+
 /**
  * Fuentes CRM para enriquecer el contexto.
- * Orden: notas → research → auditoría (solo si no hay notas) → Fireflies.
+ * Orden: notas → research → auditoría (solo si no hay notas) → historial CRM → Fireflies.
  */
 export async function buildCrmContextSources(leadId: number): Promise<string> {
   const parts: string[] = []
@@ -66,6 +98,13 @@ export async function buildCrmContextSources(leadId: number): Promise<string> {
     } catch {
       /* best-effort */
     }
+  }
+
+  try {
+    const block = await crmHistoryContextBlock(leadId)
+    if (block) parts.push(block)
+  } catch {
+    /* best-effort */
   }
 
   try {

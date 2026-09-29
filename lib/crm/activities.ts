@@ -10,6 +10,7 @@ export const CRM_ACTIVITY_KINDS = [
   'status',
   'origin',
   'system',
+  'email',
 ] as const
 
 export type CrmActivityKind = (typeof CRM_ACTIVITY_KINDS)[number]
@@ -269,4 +270,66 @@ export async function deleteActivity(id: string | number): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+let emailIndexReady: Promise<void> | null = null
+
+/** Índice único (contacto, Message-ID): el mismo correo visto en varios buzones entra una vez. */
+function ensureEmailIndex(): Promise<void> {
+  if (!emailIndexReady) {
+    emailIndexReady = prisma
+      .$executeRawUnsafe(
+        `CREATE UNIQUE INDEX IF NOT EXISTS uq_crm_activities_email_message
+         ON crm_activities (contact_id, (meta->>'email_message_id'))
+         WHERE kind = 'email'`
+      )
+      .then(() => undefined)
+      .catch((e) => {
+        emailIndexReady = null
+        throw e
+      })
+  }
+  return emailIndexReady
+}
+
+/** Contactos que ya tienen este correo en su historial. */
+export async function contactIdsWithEmail(messageId: string): Promise<Set<number>> {
+  const rows = await prisma.$queryRawUnsafe<{ contact_id: number }[]>(
+    `SELECT contact_id FROM crm_activities
+     WHERE kind = 'email' AND meta->>'email_message_id' = $1`,
+    messageId
+  )
+  return new Set(rows.map((r) => r.contact_id))
+}
+
+/**
+ * Guarda un correo en el historial con la fecha real del correo.
+ * Idempotente por (contacto, Message-ID). Devuelve true si lo insertó.
+ */
+export async function logEmailActivity(input: {
+  contactId: number
+  leadId: number | null
+  messageId: string
+  title: string
+  body: string | null
+  sentAt: Date
+  meta: Record<string, unknown>
+  createdBy?: string | null
+}): Promise<boolean> {
+  await ensureEmailIndex()
+  const meta = { ...input.meta, email_message_id: input.messageId }
+  const inserted = await prisma.$executeRawUnsafe(
+    `INSERT INTO crm_activities
+       (contact_id, lead_id, kind, title, body, meta, created_by, created_at, updated_at)
+     VALUES ($1, $2, 'email', $3, $4, $5::jsonb, $6, $7, NOW())
+     ON CONFLICT DO NOTHING`,
+    input.contactId,
+    input.leadId,
+    input.title.slice(0, 300),
+    input.body,
+    JSON.stringify(meta),
+    input.createdBy ?? null,
+    input.sentAt
+  )
+  return inserted > 0
 }

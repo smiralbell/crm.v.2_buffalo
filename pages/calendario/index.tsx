@@ -3,7 +3,7 @@ import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle, Calendar, Link2Off, Loader2 } from 'lucide-react'
+import { AlertTriangle, Calendar, Link2Off, Loader2, Mail } from 'lucide-react'
 
 const GoogleCalendarBoard = dynamic(
   () => import('@/components/calendario/GoogleCalendarBoard'),
@@ -31,6 +31,7 @@ type Status = {
   connected: boolean
   email: string | null
   needs_reauth: boolean
+  gmail: boolean
 }
 
 export default function CalendarioPage() {
@@ -51,10 +52,11 @@ export default function CalendarioPage() {
         connected: Boolean(data.connected),
         email: data.email || null,
         needs_reauth: Boolean(data.needs_reauth),
+        gmail: Boolean(data.gmail),
       })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
-      setStatus({ connected: false, email: null, needs_reauth: false })
+      setStatus({ connected: false, email: null, needs_reauth: false, gmail: false })
     } finally {
       setLoading(false)
     }
@@ -68,6 +70,8 @@ export default function CalendarioPage() {
     if (!router.isReady) return
     if (router.query.connected === '1') {
       setBanner('Conectado correctamente')
+      // Primera pasada de correos → historial CRM sin esperar al scheduler
+      void fetch('/api/integrations/google/gmail-sync', { method: 'POST' }).catch(() => {})
       void router.replace('/calendario', undefined, { shallow: true })
       void loadStatus()
     }
@@ -168,6 +172,28 @@ export default function CalendarioPage() {
           </div>
         )}
 
+        {showCalendar && !status?.gmail && (
+          <div className="flex items-start gap-3 rounded-2xl border border-sky-200/80 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            <Mail className="h-[18px] w-[18px] shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-medium text-sm">Activa los correos en el historial</p>
+              <p className="text-xs text-sky-800/80 mt-0.5">
+                Vuelve a conectar Google y acepta el permiso de Gmail: los correos con tus
+                contactos del CRM aparecerán en su historial y en el contexto.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = '/api/integrations/google/connect'
+                }}
+                className="mt-2 inline-flex rounded-xl bg-sky-900/90 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-900"
+              >
+                Reconectar con Gmail
+              </button>
+            </div>
+          </div>
+        )}
+
         {!loading && !showCalendar && !status?.needs_reauth && (
           <div className="relative overflow-hidden rounded-[1.75rem] border border-dashed border-gray-200 bg-gradient-to-b from-white to-gray-50 px-6 py-20 text-center">
             <div className="mx-auto mb-4 inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-gray-900 text-white shadow-lg shadow-gray-900/15">
@@ -195,7 +221,7 @@ export default function CalendarioPage() {
               setStatus((prev) =>
                 prev
                   ? { ...prev, connected: false, needs_reauth: true }
-                  : { connected: false, email: null, needs_reauth: true }
+                  : { connected: false, email: null, needs_reauth: true, gmail: false }
               )
             }}
           />

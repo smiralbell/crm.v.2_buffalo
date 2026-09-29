@@ -14,6 +14,7 @@ import {
   Sparkles,
   Bell,
   Check,
+  Mail,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -58,6 +59,8 @@ function formatWhen(iso: string) {
 
 function kindIcon(kind: string) {
   switch (kind) {
+    case 'email':
+      return Mail
     case 'alert':
       return Bell
     case 'call':
@@ -94,7 +97,7 @@ export default function CrmActivityTimeline({
   leadId,
   derived = [],
   title = 'Historial',
-  subtitle = 'Entrada, reuniones, documentos y notas manuales',
+  subtitle = 'Entrada, reuniones, correos, documentos y notas manuales',
   className,
   compact,
 }: Props) {
@@ -107,6 +110,16 @@ export default function CrmActivityTimeline({
   const [body, setBody] = useState('')
   const [dueAtLocal, setDueAtLocal] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+
+  const toggleExpanded = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const load = useCallback(async () => {
     if (!contactId && !leadId) {
@@ -390,9 +403,23 @@ export default function CrmActivityTimeline({
                       )}
                     </div>
                     {item.detail && (
-                      <p className="text-xs text-gray-600 mt-0.5 leading-snug whitespace-pre-wrap">
+                      <p
+                        className={cn(
+                          'text-xs text-gray-600 mt-0.5 leading-snug whitespace-pre-wrap',
+                          item.kind === 'email' && !expanded.has(item.id) && 'line-clamp-3'
+                        )}
+                      >
                         {item.detail}
                       </p>
+                    )}
+                    {item.kind === 'email' && item.detail && item.detail.length > 180 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(item.id)}
+                        className="mt-0.5 text-[11px] font-medium text-gray-500 hover:text-gray-800"
+                      >
+                        {expanded.has(item.id) ? 'Ocultar correo' : 'Ver correo completo'}
+                      </button>
                     )}
                     <p className="text-[11px] text-gray-400 mt-1">{formatWhen(item.at)}</p>
                   </div>

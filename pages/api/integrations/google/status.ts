@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { googleOwnerKey } from '@/lib/integrations/google/owner'
+import { hasGmailScope } from '@/lib/integrations/google/oauth'
 import {
   ensureGoogleConnectionsTable,
   getConnectionByOwner,
@@ -33,6 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       connected: Boolean(row.refresh_token_enc) && !row.needs_reauth,
       email: row.google_email,
       needs_reauth: row.needs_reauth,
+      gmail: hasGmailScope(row.scopes),
     })
   } catch (e) {
     if (

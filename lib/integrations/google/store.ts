@@ -29,6 +29,38 @@ export async function ensureGoogleConnectionsTable(): Promise<void> {
   `)
 }
 
+export type GmailSyncConnection = {
+  owner_key: string
+  google_email: string | null
+  scopes: string | null
+  gmail_synced_at: Date | null
+}
+
+async function ensureGmailSyncColumn(): Promise<void> {
+  await ensureGoogleConnectionsTable()
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE google_calendar_connections ADD COLUMN IF NOT EXISTS gmail_synced_at TIMESTAMPTZ`
+  )
+}
+
+/** Conexiones activas (con refresh token) candidatas a sincronizar Gmail. */
+export async function listActiveConnectionsForGmail(): Promise<GmailSyncConnection[]> {
+  await ensureGmailSyncColumn()
+  return prisma.$queryRaw<GmailSyncConnection[]>`
+    SELECT owner_key, google_email, scopes, gmail_synced_at
+    FROM google_calendar_connections
+    WHERE refresh_token_enc IS NOT NULL AND needs_reauth = FALSE
+  `
+}
+
+export async function setGmailSyncedAt(ownerKey: string, at: Date): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE google_calendar_connections
+    SET gmail_synced_at = ${at}
+    WHERE owner_key = ${ownerKey}
+  `
+}
+
 export async function getConnectionByOwner(
   ownerKey: string
 ): Promise<GoogleConnectionRow | null> {

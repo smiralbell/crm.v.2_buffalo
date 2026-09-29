@@ -6,6 +6,13 @@ import { googleOwnerKey } from '@/lib/integrations/google/owner'
 export const GOOGLE_CALENDAR_READONLY_SCOPE =
   'https://www.googleapis.com/auth/calendar.readonly'
 
+/** Lectura de Gmail: los correos con contactos del CRM se vuelcan al historial. */
+export const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly'
+
+export function hasGmailScope(scopes: string | null | undefined): boolean {
+  return Boolean(scopes && scopes.split(/\s+/).includes(GMAIL_READONLY_SCOPE))
+}
+
 export function getGoogleRedirectUri(): string {
   return (
     process.env.GOOGLE_REDIRECT_URI ||
@@ -61,7 +68,7 @@ export function buildGoogleConnectUrl(user: AuthUser): string {
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: true,
-    scope: [GOOGLE_CALENDAR_READONLY_SCOPE, 'openid', 'email', 'profile'],
+    scope: [GOOGLE_CALENDAR_READONLY_SCOPE, GMAIL_READONLY_SCOPE, 'openid', 'email', 'profile'],
     state: createOAuthState(user),
   })
 }
