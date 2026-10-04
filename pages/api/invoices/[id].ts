@@ -154,6 +154,7 @@ export default async function handler(
     }
 
     if (req.method === 'DELETE') {
+      // Solo facturas activas (no leftovers soft-deleted)
       const invoice = await prisma.invoice.findUnique({
         where: { id, deleted_at: null },
       })
@@ -162,9 +163,18 @@ export default async function handler(
         return res.status(404).json({ error: 'Factura no encontrada' })
       }
 
-      await hardDeleteInvoice(id)
+      // DELETE físico — nunca soft-delete (evita bloquear el número BUF)
+      const result = await hardDeleteInvoice(id)
+      if (!result.deleted) {
+        return res.status(500).json({ error: 'No se pudo eliminar la factura por completo' })
+      }
 
-      return res.status(200).json({ success: true })
+      return res.status(200).json({
+        success: true,
+        deleted: true,
+        invoice_number: result.invoice_number,
+        hard_delete: true,
+      })
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

@@ -505,14 +505,15 @@ export default function InvoicesPage({
       const res = await fetch(`/api/invoices/${invoiceToDelete.id}`, {
         method: 'DELETE',
       })
+      const data = await res.json().catch(() => ({}))
 
-      if (res.ok) {
+      if (res.ok && data.hard_delete !== false) {
         setDeleteDialogOpen(false)
         setInvoiceToDelete(null)
         setDeleteConfirmNumber('')
         router.reload()
       } else {
-        alert('Error al eliminar factura')
+        alert(data.error || 'Error al eliminar factura. No se ha borrado a medias.')
       }
     } catch (error) {
       alert('Error de conexión')

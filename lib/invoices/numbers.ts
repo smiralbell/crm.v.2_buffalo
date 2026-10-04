@@ -120,22 +120,47 @@ export async function ensureInvoiceNumberAvailable(
 }
 
 /**
- * Elimina la factura de verdad. Limpia FKs de recurrentes antes.
- * Así el número queda libre y el correlativo se recalcula desde las que quedan.
+ * Elimina la factura COMPLETAMENTE (DELETE real, nunca soft-delete).
+ * Limpia FKs de recurrentes antes para no dejar restos que bloqueen el número.
  */
-export async function hardDeleteInvoice(invoiceId: number) {
-  await prisma.$executeRaw`
-    UPDATE recurring_invoices
-    SET last_generated_invoice_id = NULL
-    WHERE last_generated_invoice_id = ${invoiceId}
-  `
-  await prisma.$executeRaw`
-    DELETE FROM recurring_invoices
-    WHERE source_invoice_id = ${invoiceId}
-  `
-  await prisma.invoice.delete({
+export async function hardDeleteInvoice(invoiceId: number): Promise<{
+  deleted: boolean
+  invoice_number: string | null
+}> {
+  const existing = await prisma.invoice.findUnique({
     where: { id: invoiceId },
+    select: { id: true, invoice_number: true },
   })
+  if (!existing) {
+    return { deleted: false, invoice_number: null }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Plantillas recurrentes que apuntan a esta factura
+    await tx.$executeRaw`
+      UPDATE recurring_invoices
+      SET last_generated_invoice_id = NULL, updated_at = NOW()
+      WHERE last_generated_invoice_id = ${invoiceId}
+    `
+    await tx.$executeRaw`
+      DELETE FROM recurring_invoices
+      WHERE source_invoice_id = ${invoiceId}
+    `
+    // Borrado físico: el número queda libre para reutilizar/correlativo
+    await tx.$executeRaw`
+      DELETE FROM invoices WHERE id = ${invoiceId}
+    `
+  })
+
+  const stillThere = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { id: true },
+  })
+  if (stillThere) {
+    throw new Error(`La factura ${invoiceId} no se pudo eliminar por completo`)
+  }
+
+  return { deleted: true, invoice_number: existing.invoice_number }
 }
 
 /** Renombra leftovers soft-deleted que aún tienen número BUF limpio (migración one-shot). */
