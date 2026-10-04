@@ -20,8 +20,35 @@ export function parseBufInvoiceSeq(invoiceNumber: string): { year: number; seq: 
 }
 
 /**
- * Siguiente número BUF del año: max(correlativo existente) + 1.
- * Solo mira facturas vivas con patrón exacto BUF-YYYY-dígitos (no __deleted_).
+ * Libera el slot único si solo lo ocupan facturas soft-deleted.
+ * (deleted_at IS NOT NULL pero invoice_number sigue en unique).
+ */
+export async function releaseSoftDeletedInvoiceNumber(invoiceNumber: string): Promise<number> {
+  const blockers = await prisma.invoice.findMany({
+    where: {
+      invoice_number: invoiceNumber,
+      deleted_at: { not: null },
+    },
+    select: { id: true },
+  })
+  if (blockers.length === 0) return 0
+
+  let released = 0
+  for (const row of blockers) {
+    const tombstone = `${invoiceNumber}__deleted_${row.id}_${Date.now().toString(36)}`
+    await prisma.invoice.update({
+      where: { id: row.id },
+      data: { invoice_number: tombstone.slice(0, 80) },
+    })
+    released++
+  }
+  return released
+}
+
+/**
+ * Siguiente número BUF del año: max(correlativo) + 1.
+ * Mira facturas activas Y soft-deleted con patrón limpio (no __deleted_),
+ * para no proponer un número que falle por unique constraint.
  */
 export async function getNextBufInvoiceNumber(
   year: number = new Date().getFullYear()
@@ -29,7 +56,6 @@ export async function getNextBufInvoiceNumber(
   const prefix = `BUF-${year}-`
   const rows = await prisma.invoice.findMany({
     where: {
-      deleted_at: null,
       invoice_number: { startsWith: prefix },
     },
     select: { invoice_number: true },
@@ -43,24 +69,53 @@ export async function getNextBufInvoiceNumber(
     }
   }
 
-  return formatBufInvoiceNumber(year, maxSeq + 1)
+  // Avanza hasta encontrar un número libre a nivel unique (tras liberar soft-deleted)
+  let seq = maxSeq + 1
+  for (let i = 0; i < 200; i++) {
+    const candidate = formatBufInvoiceNumber(year, seq)
+    await releaseSoftDeletedInvoiceNumber(candidate)
+    const taken = await prisma.invoice.findFirst({
+      where: { invoice_number: candidate },
+      select: { id: true },
+    })
+    if (!taken) return candidate
+    seq++
+  }
+
+  return formatBufInvoiceNumber(year, seq)
 }
 
-/** True si el número está libre (no hay factura activa con ese invoice_number). */
+/**
+ * True si el número está libre para una factura activa.
+ * Si solo lo bloquean soft-deleted, los renombra y deja el número libre.
+ */
 export async function ensureInvoiceNumberAvailable(
   invoiceNumber: string,
   exceptInvoiceId?: number
 ): Promise<{ ok: true } | { ok: false; reason: 'taken' }> {
+  await releaseSoftDeletedInvoiceNumber(invoiceNumber)
+
   const existing = await prisma.invoice.findFirst({
     where: {
       invoice_number: invoiceNumber,
-      deleted_at: null,
       ...(exceptInvoiceId != null ? { id: { not: exceptInvoiceId } } : {}),
     },
-    select: { id: true },
+    select: { id: true, deleted_at: true },
   })
 
   if (!existing) return { ok: true }
+  if (existing.deleted_at) {
+    // Por si quedó alguno: reintentar liberar
+    await releaseSoftDeletedInvoiceNumber(invoiceNumber)
+    const again = await prisma.invoice.findFirst({
+      where: {
+        invoice_number: invoiceNumber,
+        ...(exceptInvoiceId != null ? { id: { not: exceptInvoiceId } } : {}),
+      },
+      select: { id: true },
+    })
+    if (!again) return { ok: true }
+  }
   return { ok: false, reason: 'taken' }
 }
 
@@ -81,4 +136,27 @@ export async function hardDeleteInvoice(invoiceId: number) {
   await prisma.invoice.delete({
     where: { id: invoiceId },
   })
+}
+
+/** Renombra leftovers soft-deleted que aún tienen número BUF limpio (migración one-shot). */
+export async function cleanupSoftDeletedBufNumbers(): Promise<number> {
+  const rows = await prisma.invoice.findMany({
+    where: {
+      deleted_at: { not: null },
+      invoice_number: { startsWith: 'BUF-' },
+    },
+    select: { id: true, invoice_number: true },
+  })
+
+  let fixed = 0
+  for (const row of rows) {
+    if (!BUF_NUMBER_RE.test(row.invoice_number)) continue
+    const tombstone = `${row.invoice_number}__deleted_${row.id}_${Date.now().toString(36)}`
+    await prisma.invoice.update({
+      where: { id: row.id },
+      data: { invoice_number: tombstone.slice(0, 80) },
+    })
+    fixed++
+  }
+  return fixed
 }

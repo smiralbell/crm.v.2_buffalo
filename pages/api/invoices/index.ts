@@ -186,26 +186,60 @@ export default async function handler(
         if (!leadExists) leadId = null
       }
 
-      // Crear factura
-      const invoice = await prisma.invoice.create({
-        data: {
-          invoice_number: invoiceNumber,
-          client_name: data.client_name,
-          client_company_name: data.client_company_name || null,
-          client_email: data.client_email || null,
-          client_address: data.client_address || null,
-          client_tax_id: data.client_tax_id || null,
-          company_name: data.company_name || 'BUFFALO AI',
-          company_address: data.company_address || null,
-          issue_date: data.issue_date ? new Date(data.issue_date) : new Date(),
-          due_date: data.due_date ? new Date(data.due_date) : null,
-          services: data.services as any,
-          subtotal: data.subtotal,
-          iva: data.iva,
-          total: data.total,
-          status,
-        },
-      })
+      // Crear factura (reintenta si unique choca con leftover soft-deleted)
+      let invoice
+      try {
+        const availability = await ensureInvoiceNumberAvailable(invoiceNumber)
+        if (!availability.ok) {
+          return res.status(400).json({ error: 'El número de factura ya existe' })
+        }
+        invoice = await prisma.invoice.create({
+          data: {
+            invoice_number: invoiceNumber,
+            client_name: data.client_name,
+            client_company_name: data.client_company_name || null,
+            client_email: data.client_email || null,
+            client_address: data.client_address || null,
+            client_tax_id: data.client_tax_id || null,
+            company_name: data.company_name || 'BUFFALO AI',
+            company_address: data.company_address || null,
+            issue_date: data.issue_date ? new Date(data.issue_date) : new Date(),
+            due_date: data.due_date ? new Date(data.due_date) : null,
+            services: data.services as any,
+            subtotal: data.subtotal,
+            iva: data.iva,
+            total: data.total,
+            status,
+          },
+        })
+      } catch (createErr: unknown) {
+        const code =
+          createErr && typeof createErr === 'object' && 'code' in createErr
+            ? String((createErr as { code?: string }).code)
+            : ''
+        if (code !== 'P2002') throw createErr
+        // Unique constraint: tomar el siguiente libre
+        invoiceNumber = await getNextBufInvoiceNumber()
+        invoice = await prisma.invoice.create({
+          data: {
+            invoice_number: invoiceNumber,
+            client_name: data.client_name,
+            client_company_name: data.client_company_name || null,
+            client_email: data.client_email || null,
+            client_address: data.client_address || null,
+            client_tax_id: data.client_tax_id || null,
+            company_name: data.company_name || 'BUFFALO AI',
+            company_address: data.company_address || null,
+            issue_date: data.issue_date ? new Date(data.issue_date) : new Date(),
+            due_date: data.due_date ? new Date(data.due_date) : null,
+            services: data.services as any,
+            subtotal: data.subtotal,
+            iva: data.iva,
+            total: data.total,
+            status,
+          },
+        })
+      }
 
       if (leadId != null) {
         try {
