@@ -7,7 +7,8 @@
  *
  * Con BLOG_STORE=file guarda en .data/blog/*.json en lugar de Postgres.
  * Sirve para probar el módulo en local sin tocar la base de datos.
- * Para producción: ejecutar prisma/CREATE_BLOG_ENGINE.sql una vez.
+ * En Postgres la tabla se crea sola la primera vez (CREATE TABLE IF NOT EXISTS,
+ * lo mismo que prisma/CREATE_BLOG_ENGINE.sql); no toca ninguna otra tabla.
  */
 import fs from 'fs'
 import path from 'path'
@@ -50,17 +51,42 @@ function fileWrite(col: Collection, data: Record<string, unknown>) {
   fs.rmSync(tmp, { force: true })
 }
 
+/* ---------- Postgres ---------- */
+
+let ready: Promise<void> | null = null
+function db() {
+  if (!ready) {
+    ready = getPool()
+      .query(
+        `CREATE TABLE IF NOT EXISTS blog_docs (
+           collection TEXT NOT NULL,
+           id TEXT NOT NULL,
+           data JSONB NOT NULL,
+           updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+           PRIMARY KEY (collection, id)
+         );
+         CREATE INDEX IF NOT EXISTS blog_docs_collection_idx ON blog_docs (collection);`
+      )
+      .then(() => undefined)
+      .catch((e) => {
+        ready = null // se reintenta en la próxima llamada
+        throw e
+      })
+  }
+  return ready.then(() => getPool())
+}
+
 /* ---------- API común ---------- */
 
 export async function list<T>(col: Collection): Promise<T[]> {
   if (fileMode()) return Object.values(fileRead(col)) as T[]
-  const { rows } = await getPool().query('SELECT data FROM blog_docs WHERE collection = $1', [col])
+  const { rows } = await (await db()).query('SELECT data FROM blog_docs WHERE collection = $1', [col])
   return rows.map((r) => r.data as T)
 }
 
 export async function get<T>(col: Collection, id: string): Promise<T | null> {
   if (fileMode()) return ((fileRead(col)[id] as T) ?? null)
-  const { rows } = await getPool().query('SELECT data FROM blog_docs WHERE collection = $1 AND id = $2', [col, id])
+  const { rows } = await (await db()).query('SELECT data FROM blog_docs WHERE collection = $1 AND id = $2', [col, id])
   return rows[0] ? (rows[0].data as T) : null
 }
 
@@ -71,7 +97,7 @@ export async function put<T extends { id: string }>(col: Collection, doc: T): Pr
     fileWrite(col, all)
     return doc
   }
-  await getPool().query(
+  await (await db()).query(
     `INSERT INTO blog_docs (collection, id, data, updated_at) VALUES ($1, $2, $3, now())
      ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
     [col, doc.id, JSON.stringify(doc)]
@@ -96,20 +122,20 @@ export async function remove(col: Collection, id: string) {
     fileWrite(col, all)
     return
   }
-  await getPool().query('DELETE FROM blog_docs WHERE collection = $1 AND id = $2', [col, id])
+  await (await db()).query('DELETE FROM blog_docs WHERE collection = $1 AND id = $2', [col, id])
 }
 
 /** ¿Está creada la tabla? Para avisar en el panel en lugar de dar un error 500. */
 export async function storeStatus(): Promise<{ ok: boolean; mode: 'file' | 'postgres'; message?: string }> {
   if (fileMode()) return { ok: true, mode: 'file' }
   try {
-    await getPool().query('SELECT 1 FROM blog_docs LIMIT 1')
+    await (await db()).query('SELECT 1 FROM blog_docs LIMIT 1')
     return { ok: true, mode: 'postgres' }
   } catch (e) {
     return {
       ok: false,
       mode: 'postgres',
-      message: 'Falta la tabla blog_docs: ejecuta prisma/CREATE_BLOG_ENGINE.sql en la base de datos.',
+      message: 'No se pudo crear o leer la tabla blog_docs: ' + (e instanceof Error ? e.message : String(e)),
     }
   }
 }

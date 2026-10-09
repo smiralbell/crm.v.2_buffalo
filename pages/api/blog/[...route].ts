@@ -52,6 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (a === 'cron') {
     const secret = process.env.CRON_SECRET
     if (!secret || req.headers.authorization !== `Bearer ${secret}`) return res.status(401).json({ error: 'No autorizado' })
+    ensureRunner()
     return res.status(200).json(await tick('cron'))
   }
 
