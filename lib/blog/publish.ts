@@ -8,7 +8,8 @@
  * ruta) y la contraseña irá en CDMON_SFTP_PASSWORD.
  */
 import { createHash } from 'crypto'
-import { withFtp } from './ftp'
+import { saveSettings } from './config'
+import { type Ftp, withFtp } from './ftp'
 import { articleHtml, blogCss, feedXml, indexHtml, publishedImage, sitemapXml, themePages } from './render'
 import * as store from './store'
 import type { BlogSettings, Post } from './types'
@@ -125,48 +126,84 @@ export async function buildPackage(posts: Post[], s: BlogSettings): Promise<Buff
 
 /* ---------- Subida directa a CDMON ---------- */
 
-type Manifest = { id: string; files: Record<string, string>; at?: string }
+type Manifest = { id: string; files: Record<string, string>; at?: string; base?: string }
 
 /**
- * Sube a CDMON solo los ficheros que han cambiado desde la última subida
- * (se guarda una huella de cada uno). Devuelve cuántos ha subido.
+ * Busca la carpeta pública de la web: la que tiene index.html. Prueba la
+ * configurada, la raíz de la cuenta y /web, porque según cómo se cree la
+ * cuenta FTP en CDMON entra directamente en /web o un nivel por encima.
+ */
+async function findWebRoot(ftp: Ftp, configured: string): Promise<string | null> {
+  const norm = (d: string) => d.replace(/\/+$/, '') || '/'
+  for (const dir of Array.from(new Set([norm(configured), '/', '/web']))) {
+    try {
+      if (/(^|\/)index\.html\s*$/im.test(await ftp.list(dir))) return dir
+    } catch {
+      /* esa carpeta no existe */
+    }
+  }
+  return null
+}
+
+const join = (base: string, p: string) => (base === '/' ? '' : base) + '/' + p
+
+/**
+ * Sube a CDMON solo los ficheros que han cambiado desde la última subida.
+ * Si la carpeta de la web no es la de la última subida, lo sube todo de
+ * nuevo en la buena y borra lo que se subió en la equivocada.
  */
 export async function uploadSite(posts: Post[], s: BlogSettings): Promise<{ uploaded: number; total: number }> {
   const files = await buildSiteFiles(posts, s)
   delete files['LEEME-BLOG.txt']
   const manifest = (await store.get<Manifest>('settings', 'uploaded')) || { id: 'uploaded', files: {} }
   const hash = (b: Buffer) => createHash('sha1').update(b).digest('hex')
-  const changed = Object.entries(files).filter(([p, b]) => manifest.files[p] !== hash(b))
-  // Lo que subimos antes y ya no existe (artículo despublicado o con otro slug) se borra de la web.
-  // Sólo se tocan ficheros que subió este módulo: nunca el resto de la web.
-  const gone = Object.keys(manifest.files).filter((p) => !(p in files) && p.startsWith('blog/'))
-  if (!changed.length && !gone.length) return { uploaded: 0, total: Object.keys(files).length }
+  let uploaded = 0
 
-  const base = s.publish.remoteDir.replace(/\/+$/, '')
   await withFtp(s.publish.secure, async (ftp) => {
+    const base = await findWebRoot(ftp, s.publish.remoteDir)
+    if (!base) throw new Error(`No encuentro la carpeta de la web (con index.html) en ${s.publish.remoteDir}, / ni /web. Revisa la cuenta FTP.`)
+    const oldBase = (manifest.base ?? s.publish.remoteDir).replace(/\/+$/, '') || '/'
+    const moved = oldBase !== base && Object.keys(manifest.files).length > 0
+    if (moved) {
+      // Lo subido en la carpeta equivocada se borra (solo ficheros de este módulo) y se sube todo otra vez
+      const old = Object.keys(manifest.files)
+      for (const p of old) await ftp.remove(join(oldBase, p))
+      const dirs = Array.from(new Set(old.flatMap((p) => p.split('/').slice(0, -1).map((_, i, a) => a.slice(0, i + 1).join('/'))))).filter(Boolean)
+      for (const d of dirs.sort((a, b) => b.length - a.length)) await ftp.rmdir(join(oldBase, d))
+      if (oldBase !== '/') await ftp.rmdir(oldBase)
+      manifest.files = {}
+    }
+
+    const changed = Object.entries(files).filter(([p, b]) => manifest.files[p] !== hash(b))
+    // Lo que subimos antes y ya no existe (artículo despublicado o con otro slug) se borra de la web.
+    // Sólo se tocan ficheros que subió este módulo: nunca el resto de la web.
+    const gone = Object.keys(manifest.files).filter((p) => !(p in files) && p.startsWith('blog/'))
     const dirs = new Set(changed.map(([p]) => p.split('/').slice(0, -1).join('/')).filter(Boolean))
-    for (const d of Array.from(dirs).sort()) await ftp.mkdirs(`${base}/${d}`)
+    for (const d of Array.from(dirs).sort()) await ftp.mkdirs(join(base, d))
     for (const [p, b] of changed) {
-      await ftp.put(`${base}/${p}`, b)
+      await ftp.put(join(base, p), b)
       manifest.files[p] = hash(b)
     }
     for (const p of gone) {
-      await ftp.remove(`${base}/${p}`)
+      await ftp.remove(join(base, p))
       delete manifest.files[p]
     }
+    uploaded = changed.length
+    manifest.base = base
+    if (s.publish.remoteDir !== base) await saveSettings({ ...s, publish: { ...s.publish, remoteDir: base } })
   })
   manifest.at = new Date().toISOString()
   await store.put('settings', manifest)
-  return { uploaded: changed.length, total: Object.keys(files).length }
+  return { uploaded, total: Object.keys(files).length }
 }
 
-/** Comprueba la conexión: entra, mira la carpeta de destino y sale. No sube nada. */
+/** Comprueba la conexión: entra, busca la carpeta de la web y sale. No sube nada. */
 export async function testConnection(s: BlogSettings): Promise<string> {
   return withFtp(s.publish.secure, async (ftp) => {
-    const listing = await ftp.list(s.publish.remoteDir)
-    const hasIndex = /index\.html/i.test(listing)
-    return hasIndex
-      ? `Conexión correcta. La carpeta ${s.publish.remoteDir} contiene la web (index.html encontrado).`
-      : `Conexión correcta, pero en ${s.publish.remoteDir} no se ve index.html: revisa que sea la carpeta pública de buffaloia.com.`
+    const base = await findWebRoot(ftp, s.publish.remoteDir)
+    if (!base) return `Conexión correcta, pero no encuentro la web (index.html) en ${s.publish.remoteDir}, / ni /web. Revisa la carpeta de acceso de la cuenta FTP.`
+    return base === s.publish.remoteDir
+      ? `Conexión correcta. La web está en ${base}.`
+      : `Conexión correcta. La web está en ${base} (no en ${s.publish.remoteDir}); se usará esa automáticamente.`
   })
 }

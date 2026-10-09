@@ -159,6 +159,15 @@ export class Ftp {
     }
   }
 
+  /** Borra una carpeta vacía; si no está vacía o no existe, no hace nada. */
+  async rmdir(path: string) {
+    try {
+      await this.send('RMD ' + path, [250, 200])
+    } catch {
+      // no vacía o no existe
+    }
+  }
+
   async pwd(): Promise<string> {
     const r = await this.send('PWD', [257])
     return (r.text.match(/"([^"]*)"/) || [])[1] || '/'
