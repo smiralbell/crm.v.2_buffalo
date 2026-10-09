@@ -32,7 +32,6 @@ export const SITE_PAGES: SitePage[] = [
   { path: '/casos-de-exito/', title: 'Casos de éxito', about: 'Precualificación por WhatsApp, llamada al instante a leads, facturas centralizadas' },
   { path: '/contact/', title: 'Contacto', about: 'Reservar la auditoría gratuita' },
   { path: '/llamadas-con-ia-para-el-sector-legal/', title: 'Asistente virtual con IA para abogados', about: 'Landing de despachos: WhatsApp y llamadas' },
-  { path: '/ia-para-despachos-de-abogados/', title: 'IA para despachos de abogados', about: 'Automatización legal' },
   { path: '/emailmarketing/', title: 'Email marketing automatizado con IA', about: 'Campañas y secuencias de email que se escriben y envían solas' },
   { path: '/formacion-y-educacion-ia/', title: 'IA para formación y educación', about: 'Academias y centros de formación: captación, matrícula y atención' },
   { path: '/gestion-de-redes-sociales/', title: 'Gestión de redes sociales con IA', about: 'Contenido y respuestas en redes con IA' },
