@@ -34,7 +34,7 @@ export function slugify(s: string): string {
 }
 
 const tagTexts = (html: string, tag: string) =>
-  [...html.matchAll(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi'))].map((m) => m[1])
+  Array.from(html.matchAll(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi'))).map((m) => m[1])
 
 interface Link {
   href: string
@@ -47,12 +47,12 @@ export function extractLinks(html: string, domain: string): { internal: Link[]; 
   const links: Link[] = []
   // Enlaces dentro de H2 (y si el H2 entero es el enlace)
   for (const h2 of tagTexts(html, 'h2')) {
-    for (const m of h2.matchAll(/<a\s[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)) {
+    for (const m of Array.from(h2.matchAll(/<a\s[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi))) {
       links.push({ href: m[1], text: stripTags(m[2]), inH2: true, h2Full: stripTags(m[2]) === stripTags(h2) })
     }
   }
   const withoutH2 = html.replace(/<h2[^>]*>[\s\S]*?<\/h2>/gi, ' ')
-  for (const m of withoutH2.matchAll(/<a\s[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)) {
+  for (const m of Array.from(withoutH2.matchAll(/<a\s[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi))) {
     links.push({ href: m[1], text: stripTags(m[2]), inH2: false, h2Full: false })
   }
   const host = domain.replace(/^https?:\/\//, '')

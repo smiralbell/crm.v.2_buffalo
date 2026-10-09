@@ -15,7 +15,7 @@ import { getPool } from '@/lib/db'
 
 export type Collection = 'posts' | 'topics' | 'slots' | 'settings' | 'rules' | 'runs' | 'images'
 
-const useFile = () => process.env.BLOG_STORE === 'file'
+const fileMode = () => process.env.BLOG_STORE === 'file'
 const FILE_DIR = path.join(process.cwd(), '.data', 'blog')
 
 /* ---------- Backend de ficheros (local) ---------- */
@@ -33,25 +33,38 @@ function fileWrite(col: Collection, data: Record<string, unknown>) {
   const target = path.join(FILE_DIR, col + '.json')
   const tmp = target + '.' + process.pid + '.tmp'
   fs.writeFileSync(tmp, JSON.stringify(data, null, 1))
-  fs.renameSync(tmp, target)
+  // En Windows el antivirus a veces bloquea el fichero un instante: reintentar y, si no, escribir directo
+  for (let i = 0; i < 5; i++) {
+    try {
+      fs.renameSync(tmp, target)
+      return
+    } catch {
+      const until = Date.now() + 40
+      while (Date.now() < until) {
+        /* espera corta */
+      }
+    }
+  }
+  fs.copyFileSync(tmp, target)
+  fs.rmSync(tmp, { force: true })
 }
 
 /* ---------- API común ---------- */
 
 export async function list<T>(col: Collection): Promise<T[]> {
-  if (useFile()) return Object.values(fileRead(col)) as T[]
+  if (fileMode()) return Object.values(fileRead(col)) as T[]
   const { rows } = await getPool().query('SELECT data FROM blog_docs WHERE collection = $1', [col])
   return rows.map((r) => r.data as T)
 }
 
 export async function get<T>(col: Collection, id: string): Promise<T | null> {
-  if (useFile()) return ((fileRead(col)[id] as T) ?? null)
+  if (fileMode()) return ((fileRead(col)[id] as T) ?? null)
   const { rows } = await getPool().query('SELECT data FROM blog_docs WHERE collection = $1 AND id = $2', [col, id])
   return rows[0] ? (rows[0].data as T) : null
 }
 
 export async function put<T extends { id: string }>(col: Collection, doc: T): Promise<T> {
-  if (useFile()) {
+  if (fileMode()) {
     const all = fileRead(col)
     all[doc.id] = doc
     fileWrite(col, all)
@@ -66,7 +79,7 @@ export async function put<T extends { id: string }>(col: Collection, doc: T): Pr
 }
 
 export async function putMany<T extends { id: string }>(col: Collection, docs: T[]) {
-  if (useFile()) {
+  if (fileMode()) {
     const all = fileRead(col)
     for (const d of docs) all[d.id] = d
     fileWrite(col, all)
@@ -76,7 +89,7 @@ export async function putMany<T extends { id: string }>(col: Collection, docs: T
 }
 
 export async function remove(col: Collection, id: string) {
-  if (useFile()) {
+  if (fileMode()) {
     const all = fileRead(col)
     delete all[id]
     fileWrite(col, all)
@@ -87,7 +100,7 @@ export async function remove(col: Collection, id: string) {
 
 /** ¿Está creada la tabla? Para avisar en el panel en lugar de dar un error 500. */
 export async function storeStatus(): Promise<{ ok: boolean; mode: 'file' | 'postgres'; message?: string }> {
-  if (useFile()) return { ok: true, mode: 'file' }
+  if (fileMode()) return { ok: true, mode: 'file' }
   try {
     await getPool().query('SELECT 1 FROM blog_docs LIMIT 1')
     return { ok: true, mode: 'postgres' }

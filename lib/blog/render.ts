@@ -153,7 +153,7 @@ export function articleHtml(p: Post, all: Post[], s: BlogSettings, img: ImageRes
   const theme = THEMES.find((t) => t.code === p.theme)
   const dest = p.brief?.internalLinks?.[0]?.url || theme?.salesPage || '/auditoria/'
   const destPage = SITE_PAGES.find((x) => x.path === dest)
-  const h2s = [...p.body.matchAll(/<h2>([\s\S]*?)<\/h2>/g)].map((m) => stripTags(m[1]))
+  const h2s = Array.from(p.body.matchAll(/<h2>([\s\S]*?)<\/h2>/g)).map((m) => stripTags(m[1]))
   const related = all
     .filter((x) => x.id !== p.id && x.status === 'publicado')
     .sort((a, b) => (a.theme === p.theme ? -1 : 0) - (b.theme === p.theme ? -1 : 0) || (b.publishedAt || '').localeCompare(a.publishedAt || ''))

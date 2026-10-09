@@ -66,6 +66,8 @@ export default function Resumen({ state, reload, go }: TabProps & { go: (t: stri
         <Button variant="outline" className="gap-1.5 rounded-xl" onClick={() => go('calendario')}>
           <CalendarClock className="h-4 w-4" /> Ver calendario
         </Button>
+        {/* Descarga de fichero desde la API: tiene que ser un <a> normal, no <Link> */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
         <a href="/api/blog/package" className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-input bg-background px-4 text-sm hover:bg-accent">
           <Download className="h-4 w-4" /> Paquete para CDMON
         </a>

@@ -43,7 +43,7 @@ export default function Calendario({ state, reload }: TabProps) {
       {err && <Notice tone="error">{err}</Notice>}
       {weeks.size === 0 && <Notice>No hay huecos planificados. Pulsa «Planificar semanas».</Notice>}
 
-      {[...weeks.entries()].map(([week, list]) => (
+      {Array.from(weeks.entries()).map(([week, list]) => (
         <Panel
           key={week}
           title={`Semana del ${fmt(list[0].at, false)} · ${list.length} artículos`}

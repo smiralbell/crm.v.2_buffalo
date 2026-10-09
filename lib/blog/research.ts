@@ -28,7 +28,7 @@ async function fetchJson(url: string, ms = 6000): Promise<unknown> {
     const res = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } })
     if (!res.ok) return null
     const buf = Buffer.from(await res.arrayBuffer())
-    // Google responde en ISO-8859-1 con client=firefox; se detecta por cabecera
+    // Por si algún buscador responde en ISO-8859-1: se detecta por la cabecera
     const ct = res.headers.get('content-type') || ''
     const text = /8859|latin/i.test(ct) ? buf.toString('latin1') : buf.toString('utf8')
     return JSON.parse(text)
@@ -40,7 +40,7 @@ async function fetchJson(url: string, ms = 6000): Promise<unknown> {
 }
 
 const SOURCES: Record<string, (q: string) => string> = {
-  google: (q) => `https://suggestqueries.google.com/complete/search?client=firefox&hl=es&gl=es&q=${encodeURIComponent(q)}`,
+  google: (q) => `https://suggestqueries.google.com/complete/search?client=chrome&hl=es&gl=es&q=${encodeURIComponent(q)}`,
   bing: (q) => `https://api.bing.com/osjson.aspx?market=es-ES&query=${encodeURIComponent(q)}`,
   ddg: (q) => `https://duckduckgo.com/ac/?type=list&kl=es-es&q=${encodeURIComponent(q)}`,
 }
@@ -66,7 +66,7 @@ export async function harvestSearches(seed: string, deep = false): Promise<Harve
   if (deep) for (const c of 'abcdefghijlmnopqrstv') queries.add(`${seed} ${c}`)
 
   const found = new Map<string, Harvest>()
-  const list = [...queries]
+  const list = Array.from(queries)
   for (let i = 0; i < list.length; i += 6) {
     const batch = list.slice(i, i + 6)
     const results = await Promise.all(
@@ -85,8 +85,8 @@ export async function harvestSearches(seed: string, deep = false): Promise<Harve
       })
     }
   }
-  for (const h of found.values()) h.score *= h.engines.length // varios buscadores = señal más fuerte
-  return [...found.values()].sort((a, b) => b.score - a.score)
+  for (const h of Array.from(found.values())) h.score *= h.engines.length // varios buscadores = señal más fuerte
+  return Array.from(found.values()).sort((a, b) => b.score - a.score)
 }
 
 export function demandFrom(h: Harvest[], keyword: string): 'alta' | 'media' | 'baja' {
@@ -110,14 +110,14 @@ export async function researchKeyword(
 ): Promise<{ research: KeywordResearch; usd: number; citations: { url: string; title: string }[] }> {
   // La hipótesis completa y una versión corta (dos palabras significativas) para captar búsquedas más amplias
   const seeds = [topic.keyword, significantWords(topic.keyword).slice(0, 2).join(' ')].filter(Boolean)
-  const harvest = (await Promise.all([...new Set(seeds)].map((q, i) => harvestSearches(q, i === 0)))).flat()
+  const harvest = (await Promise.all(Array.from(new Set(seeds)).map((q, i) => harvestSearches(q, i === 0)))).flat()
   const merged = new Map<string, Harvest>()
   for (const h of harvest) {
     const m = merged.get(h.term)
     if (m) m.score += h.score
     else merged.set(h.term, { ...h })
   }
-  const top = [...merged.values()].sort((a, b) => b.score - a.score).slice(0, 80)
+  const top = Array.from(merged.values()).sort((a, b) => b.score - a.score).slice(0, 80)
 
   const used = existing.filter((p) => p.keyword).map((p) => `${p.keyword} (${p.status})`).join('; ') || 'ninguno'
   const { data, usd, citations } = await askAi<KeywordResearch>({
@@ -173,7 +173,7 @@ export async function proposeTopics(
   const harvest = (await Promise.all(seeds.slice(0, 4).map((q) => harvestSearches(q, false)))).flat()
   const seen = new Map<string, Harvest>()
   for (const h of harvest) if (!seen.has(h.term) || seen.get(h.term)!.score < h.score) seen.set(h.term, h)
-  const top = [...seen.values()].sort((a, b) => b.score - a.score).slice(0, 120)
+  const top = Array.from(seen.values()).sort((a, b) => b.score - a.score).slice(0, 120)
 
   const taken = [...existingTopics.filter((t) => t.status !== 'descartado').map((t) => t.keyword), ...posts.map((p) => p.keyword)]
   const { data, usd } = await askAi<{ topics: Array<Omit<Topic, 'id' | 'createdAt' | 'status' | 'order' | 'source' | 'ownMaterial'> & { ownMaterial?: string }> }>({
@@ -250,7 +250,7 @@ async function googleNews(q: string): Promise<{ title: string; url: string; date
     const res = await fetch(`https://news.google.com/rss/search?q=${encodeURIComponent(q + ' when:14d')}&hl=es&gl=ES&ceid=ES:es`)
     if (!res.ok) return []
     const xml = await res.text()
-    return [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, 8).map((m) => {
+    return Array.from(xml.matchAll(/<item>([\s\S]*?)<\/item>/g)).slice(0, 8).map((m) => {
       const get = (tag: string) => (m[1].match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`)) || [])[1] || ''
       return {
         title: get('title').replace(/<!\[CDATA\[|\]\]>/g, ''),
@@ -267,7 +267,7 @@ async function googleNews(q: string): Promise<{ title: string; url: string; date
 /** Noticias de los últimos 14 días que de verdad afectan a nuestro lector, con ángulo propio. */
 export async function findNews(s: BlogSettings, count = 4, posts: Post[] = []): Promise<{ topics: Topic[]; usd: number }> {
   const items = (await Promise.all(NEWS_QUERIES.map(googleNews))).flat()
-  const unique = [...new Map(items.map((i) => [i.title.toLowerCase().slice(0, 70), i])).values()].slice(0, 70)
+  const unique = Array.from(new Map(items.map((i) => [i.title.toLowerCase().slice(0, 70), i] as [string, typeof i])).values()).slice(0, 70)
 
   const { data, usd } = await askAi<{ topics: Array<{ title: string; keyword: string; destination: string; notes: string; evidence: Topic['evidence'] }> }>({
     model: s.models.research,

@@ -63,8 +63,19 @@ function planWeek(monday: Date, s: BlogSettings, prev: Slot[]): Slot[] {
   // Las horas usadas en las últimas semanas, para no repetir el mismo «martes 9:15»
   const recent = new Set(prev.slice(-9).map((p) => `${new Date(p.at).getUTCDay()}-${new Date(p.at).getUTCHours()}`))
 
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const pick = [...days].sort(() => Math.random() - 0.5).slice(0, count)
+  // Combinaciones de días posibles. Si con `count` no cabe ninguna (separación mínima), se prueba con uno menos.
+  const combos = (n: number, from = 0): Date[][] =>
+    n === 0 ? [[]] : days.slice(from).flatMap((d, i) => combos(n - 1, from + i + 1).map((rest) => [d, ...rest]))
+  for (let n = Math.min(count, days.length); n >= 1; n--) {
+    const options = combos(n)
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const picked = tryDays(options[rand(0, options.length - 1)], attempt > 120)
+      if (picked) return picked
+    }
+  }
+  return []
+
+  function tryDays(pick: Date[], allowRepeats: boolean): Slot[] | null {
     const slots = pick
       .map((day) => {
         const w = sc.windows[rand(0, sc.windows.length - 1)]
@@ -78,11 +89,11 @@ function planWeek(monday: Date, s: BlogSettings, prev: Slot[]): Slot[] {
     const all = last ? [last, ...slots] : slots
     const gapsOk = all.every((d, i) => i === 0 || d.getTime() - all[i - 1].getTime() >= sc.minGapHours * 3600 * 1000)
     const repeats = slots.filter((d) => recent.has(`${d.getUTCDay()}-${d.getUTCHours()}`)).length
-    if (gapsOk && (repeats === 0 || attempt > 40)) {
-      return slots.map((at) => ({ id: store.newId('slot-'), at: at.toISOString(), week: isoWeek(at), kind: 'normal' }))
+    if (gapsOk && (repeats === 0 || allowRepeats)) {
+      return slots.map((at) => ({ id: store.newId('slot-'), at: at.toISOString(), week: isoWeek(at), kind: 'normal' as const }))
     }
+    return null
   }
-  return []
 }
 
 /** Marca 1 de cada N huecos como «actualidad», en una posición aleatoria de cada bloque. */
