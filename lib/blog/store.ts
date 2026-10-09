@@ -16,7 +16,8 @@ import { getPool } from '@/lib/db'
 export type Collection = 'posts' | 'topics' | 'slots' | 'settings' | 'rules' | 'runs' | 'images'
 
 const fileMode = () => process.env.BLOG_STORE === 'file'
-const FILE_DIR = path.join(process.cwd(), '.data', 'blog')
+// BLOG_FILE_DIR permite usar otra carpeta (por ejemplo, para pruebas sin tocar los datos del panel)
+const FILE_DIR = process.env.BLOG_FILE_DIR ? path.resolve(process.env.BLOG_FILE_DIR) : path.join(process.cwd(), '.data', 'blog')
 
 /* ---------- Backend de ficheros (local) ---------- */
 

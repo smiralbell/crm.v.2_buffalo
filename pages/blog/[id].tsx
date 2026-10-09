@@ -186,6 +186,12 @@ export default function BlogPostPage() {
                 <Pill key={label} className={doneSince(event) ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}>{doneSince(event) && <Check className="h-3 w-3" />}{label}</Pill>
               ))}
             </div>
+            <div className="mt-3 flex items-center justify-center gap-3">
+              <span className="text-xs text-gray-400">Gastado en este artículo: {(post.cost?.usd || 0).toFixed(2)} $</span>
+              <Button size="sm" variant="outline" className="rounded-xl text-red-600" disabled={busy === 'cancel'} onClick={() => confirm('¿Cancelar? Se para al momento; lo ya hecho se guarda.') && act('cancel', '/cancel')}>
+                {busy === 'cancel' ? 'Cancelando…' : 'Cancelar'}
+              </Button>
+            </div>
           </div>
         )}
         {post.lastError && !working && <Notice tone="error"><b>No se pudo completar ({post.lastError.step}).</b> {post.lastError.message} — usa «{post.manual ? 'Ayuda de la IA' : 'Rehacer'}» para intentarlo otra vez.</Notice>}

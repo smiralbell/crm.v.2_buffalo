@@ -47,6 +47,18 @@ export const SITE_PAGES: SitePage[] = [
   { path: '/sobre-nosotros/', title: 'Sobre nosotros', about: 'Equipo de BuffaloIA' },
 ]
 
+/**
+ * Combinaciones de modelos. «Económico» es el predeterminado: Sonnet escribe
+ * (buena calidad a la mitad de precio que Opus) y Haiku hace lo mecánico
+ * (investigar, revisar, corregir), unas 40 veces más barato.
+ * Coste orientativo por artículo completo con 3 imágenes.
+ */
+export const MODEL_PRESETS = {
+  economico: { label: 'Económico (recomendado) · ~0,30-0,50 $ por artículo', models: { research: 'anthropic/claude-haiku-5.5', writing: 'anthropic/claude-sonnet-5.5', webSearchResults: 4 }, image: 'google/gemini-3.1-flash-image' },
+  equilibrado: { label: 'Equilibrado · ~0,60-0,90 $ por artículo', models: { research: 'anthropic/claude-sonnet-5.5', writing: 'anthropic/claude-sonnet-5.5', webSearchResults: 6 }, image: 'google/gemini-3.1-flash-image' },
+  maximo: { label: 'Máxima calidad · ~1,50-2,50 $ por artículo', models: { research: 'anthropic/claude-sonnet-5.5', writing: 'anthropic/claude-opus-5.5', webSearchResults: 8 }, image: 'google/gemini-3-pro-image' },
+} as const
+
 export const DEFAULT_SETTINGS: BlogSettings = {
   enabled: false,
   publishing: { mode: 'revision', autoPublishAfterHours: 24 },
@@ -67,16 +79,12 @@ export const DEFAULT_SETTINGS: BlogSettings = {
   },
   leadTimes: { briefDaysBefore: 10, draftDaysBefore: 7 },
   topics: { source: 'calendario', proposalsPerSearch: 6 },
-  models: {
-    research: '~anthropic/claude-sonnet-latest',
-    writing: '~anthropic/claude-opus-latest',
-    webSearchResults: 8,
-  },
+  models: { ...MODEL_PRESETS.economico.models, preset: 'economico' },
   images: {
     provider: 'openrouter',
     openaiModel: 'gpt-image-1',
     // Nano Banana Pro: el que mejor escribe texto dentro de la imagen (infografías)
-    openrouterModel: 'google/gemini-3-pro-image',
+    openrouterModel: MODEL_PRESETS.economico.image,
     size: '1536x1024',
   },
   seo: {
@@ -103,7 +111,7 @@ export const DEFAULT_SETTINGS: BlogSettings = {
   },
   // En CDMON la carpeta pública del dominio es /web
   publish: { method: 'ftp', remoteDir: '/web', secure: true },
-  budget: { monthlyUsd: 60 },
+  budget: { monthlyUsd: 30, perArticleUsd: 1 },
   customThemes: [],
 }
 

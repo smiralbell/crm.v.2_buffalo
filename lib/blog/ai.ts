@@ -11,6 +11,8 @@
  * OPENAI_API_KEY.
  */
 
+import { AsyncLocalStorage } from 'async_hooks'
+
 export interface AiResult<T> {
   data: T
   text: string
@@ -19,6 +21,47 @@ export interface AiResult<T> {
 }
 
 const OR_URL = 'https://openrouter.ai/api/v1/chat/completions'
+
+/**
+ * Contexto de un trabajo en marcha (un artículo): permite cancelarlo al
+ * momento y sumar todo lo gastado, también si falla a medias.
+ */
+interface Job {
+  signal: AbortSignal
+  spent: number
+  limitUsd?: number
+}
+export const jobContext = new AsyncLocalStorage<Job>()
+
+export class CancelledError extends Error {
+  constructor() {
+    super('Cancelado')
+  }
+}
+
+function job() {
+  const j = jobContext.getStore()
+  if (j?.signal.aborted) throw new CancelledError()
+  return j
+}
+
+function charge(usd: number) {
+  const j = jobContext.getStore()
+  if (!j) return
+  j.spent += usd
+  if (j.limitUsd && j.spent > j.limitUsd) throw new Error(`Parado: este artículo ya ha gastado ${j.spent.toFixed(2)} $ y el límite por artículo es ${j.limitUsd} $ (Ajustes → IA).`)
+}
+
+/** fetch que respeta la cancelación del trabajo en curso. */
+async function jobFetch(url: string, init: RequestInit): Promise<Response> {
+  const j = job()
+  try {
+    return await fetch(url, { ...init, signal: j?.signal })
+  } catch (e) {
+    if (j?.signal.aborted) throw new CancelledError()
+    throw e
+  }
+}
 
 function orHeaders() {
   const key = process.env.OPENROUTER_API_KEY
@@ -55,7 +98,7 @@ export function parseJson<T>(text: string): T {
 
 /** Si la IA devuelve un JSON mal formado, se le pide que lo corrija (llamada barata, sin búsqueda). */
 async function repairJson<T>(model: string, broken: string): Promise<{ data: T; usd: number }> {
-  const res = await fetch(OR_URL, {
+  const res = await jobFetch(OR_URL, {
     method: 'POST',
     headers: orHeaders(),
     body: JSON.stringify({
@@ -72,8 +115,10 @@ async function repairJson<T>(model: string, broken: string): Promise<{ data: T; 
   if (!res.ok) throw new Error('La IA devolvió una respuesta mal formada y no se pudo corregir')
   const out = await res.json()
   const text = out.choices?.[0]?.message?.content || ''
+  const usd = Number(out.usage?.cost || 0)
+  charge(usd)
   try {
-    return { data: parseJson<T>(text), usd: Number(out.usage?.cost || 0) }
+    return { data: parseJson<T>(text), usd }
   } catch {
     throw new Error('La IA devolvió una respuesta mal formada dos veces. Vuelve a intentarlo.')
   }
@@ -88,7 +133,7 @@ export async function askAi<T = unknown>(opts: {
   maxTokens?: number
   temperature?: number
   /** Cuánto «piensa» el modelo antes de responder (los tokens de razonamiento cuentan en el límite) */
-  reasoning?: "low" | "medium" | "high"
+  reasoning?: 'low' | 'medium' | 'high'
 }): Promise<AiResult<T>> {
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -106,7 +151,7 @@ export async function askAi<T = unknown>(opts: {
 
   let lastErr = ''
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(OR_URL, { method: 'POST', headers: orHeaders(), body: JSON.stringify(body) })
+    const res = await jobFetch(OR_URL, { method: 'POST', headers: orHeaders(), body: JSON.stringify(body) })
     if (res.status === 429 || res.status >= 500) {
       lastErr = `OpenRouter ${res.status}`
       await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)))
@@ -126,6 +171,7 @@ export async function askAi<T = unknown>(opts: {
         content: a.url_citation.content,
       }))
     let usd = Number(out.usage?.cost || 0)
+    charge(usd)
     if (!text.trim()) {
       lastErr = 'La IA devolvió una respuesta vacía'
       continue
@@ -156,7 +202,7 @@ export async function generateImage(opts: {
   if (opts.provider === 'openai') {
     const key = process.env.OPENAI_API_KEY
     if (!key) throw new Error('Falta OPENAI_API_KEY en el entorno')
-    const res = await fetch('https://api.openai.com/v1/images/generations', {
+    const res = await jobFetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: opts.openaiModel, prompt: opts.prompt, size: opts.size, quality: 'medium', n: 1 }),
@@ -165,11 +211,12 @@ export async function generateImage(opts: {
     const out = await res.json()
     const b64 = out.data?.[0]?.b64_json
     if (!b64) throw new Error('OpenAI no devolvió imagen')
+    charge(0.06)
     return { dataUrl: `data:image/png;base64,${b64}`, usd: 0.06 }
   }
 
   // OpenRouter: modelos de imagen por chat completions con modalities
-  const res = await fetch(OR_URL, {
+  const res = await jobFetch(OR_URL, {
     method: 'POST',
     headers: orHeaders(),
     body: JSON.stringify({
@@ -184,7 +231,9 @@ export async function generateImage(opts: {
   if (res.status === 402) throw new Error("Sin saldo en OpenRouter para las imágenes. Recarga créditos en openrouter.ai/settings/credits.")
   if (!res.ok) throw new Error(`OpenRouter imágenes ${res.status}: ${(await res.text()).slice(0, 300)}`)
   const out = await res.json()
+  const usd = Number(out.usage?.cost || 0)
+  charge(usd)
   const url: string | undefined = out.choices?.[0]?.message?.images?.[0]?.image_url?.url
   if (!url) throw new Error('El modelo de imagen de OpenRouter no devolvió imagen')
-  return { dataUrl: url, usd: Number(out.usage?.cost || 0) }
+  return { dataUrl: url, usd }
 }

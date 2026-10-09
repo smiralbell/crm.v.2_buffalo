@@ -1,4 +1,4 @@
-import { DEFAULT_RULES, DEFAULT_SETTINGS } from './defaults'
+import { DEFAULT_RULES, DEFAULT_SETTINGS, MODEL_PRESETS } from './defaults'
 import * as store from './store'
 import type { BlogRules, BlogSettings } from './types'
 
@@ -16,7 +16,14 @@ function deepMerge<T>(base: T, over: unknown): T {
 
 export async function getSettings(): Promise<BlogSettings> {
   const doc = await store.get<Doc<BlogSettings>>('settings', 'main')
-  return deepMerge(DEFAULT_SETTINGS, doc?.value)
+  const s = deepMerge(DEFAULT_SETTINGS, doc?.value)
+  // Configuraciones guardadas antes de existir los modelos económicos: se pasan a ellos
+  // (la primera versión usaba Opus para redactar, demasiado caro para un blog).
+  if (!doc?.value?.models?.preset) {
+    s.models = { ...MODEL_PRESETS.economico.models, preset: 'economico' }
+    s.images.openrouterModel = MODEL_PRESETS.economico.image
+  }
+  return s
 }
 
 export async function saveSettings(value: BlogSettings, by?: string): Promise<BlogSettings> {

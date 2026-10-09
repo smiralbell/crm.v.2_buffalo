@@ -16,6 +16,7 @@ import { calendarTopics } from './calendar-seed'
 import { findNews, proposeTopics } from './research'
 import { ensurePlanned } from './schedule'
 import { uploadSite } from './publish'
+import { CancelledError, jobContext } from './ai'
 import { blockingFailures, runChecks } from './seo'
 import * as store from './store'
 import type { BlogRules, BlogSettings, Post, RunLog, Slot, Topic } from './types'
@@ -133,8 +134,57 @@ async function saveImagesApart(post: Post) {
 
 export type Step = 'brief' | 'borrador' | 'control' | 'imagenes' | 'todo'
 
-const running = new Set<string>()
+const running = new Map<string, AbortController>()
 export const isRunning = (postId: string) => running.has(postId)
+
+/** Cancela el trabajo en curso de un artículo. La llamada a la IA en marcha se corta al momento. */
+export function cancelJob(postId: string): boolean {
+  const c = running.get(postId)
+  if (!c) return false
+  c.abort()
+  return true
+}
+
+/** Coste acumulado de un artículo, sumando el gasto del trabajo en curso. */
+function addSpent(post: Post, usd: number) {
+  post.cost = { usd: Math.round(((post.cost?.usd || 0) + usd) * 10000) / 10000 }
+}
+
+/**
+ * Ejecuta un trabajo de un artículo con su propio interruptor de cancelar y su
+ * límite de gasto. Todo lo gastado se apunta, termine bien, mal o cancelado.
+ */
+async function withJob<T>(postId: string, label: string, fn: (job: { spent: () => number }) => Promise<T>): Promise<T> {
+  if (running.has(postId)) throw new Error('Este artículo ya se está procesando')
+  const controller = new AbortController()
+  running.set(postId, controller)
+  const s = await getSettings()
+  const existing = (await store.get<Post>('posts', postId))?.cost?.usd || 0
+  const ctx = { signal: controller.signal, spent: 0, limitUsd: Math.max(0.05, s.budget.perArticleUsd - existing) }
+  try {
+    return await jobContext.run(ctx, () => fn({ spent: () => ctx.spent }))
+  } catch (e) {
+    const cancelled = e instanceof CancelledError || controller.signal.aborted
+    const message = cancelled ? 'Cancelado' : e instanceof Error ? e.message : String(e)
+    // El error (o la cancelación) queda en el artículo para enseñarlo en su ficha, con lo gastado
+    const post = await store.get<Post>('posts', postId)
+    if (post) {
+      addSpent(post, ctx.spent)
+      if (cancelled) {
+        delete post.lastError
+        log(post, 'Cancelado', ctx.spent ? `Gastado hasta cancelar: ${ctx.spent.toFixed(3)} $` : undefined)
+      } else {
+        post.lastError = { at: nowIso(), step: label, message }
+        log(post, 'Error', message)
+      }
+      await store.put('posts', post)
+    }
+    await record(label, false, message, { postId, usd: ctx.spent })
+    throw e
+  } finally {
+    running.delete(postId)
+  }
+}
 
 /**
  * «Que la IA elija»: busca qué tiene más demanda ahora relacionado con la web,
@@ -143,41 +193,27 @@ export const isRunning = (postId: string) => running.has(postId)
  */
 export function startAutoPost(postId: string, opts: { focus?: string; theme?: string }, by?: string) {
   if (running.has(postId)) throw new Error('Este artículo ya se está procesando')
-  running.add(postId)
-  void (async () => {
-    try {
-      const s = await getSettings()
-      const rules = await getRules()
-      const [topics, posts] = await Promise.all([store.list<Topic>('topics'), store.list<Post>('posts')])
-      const { topics: found, usd } = await proposeTopics({ focus: opts.focus, theme: opts.theme || '', count: 5 }, s, rules, topics, posts)
-      if (!found.length) throw new Error('No se encontró ningún tema con demanda suficiente. Prueba con un enfoque concreto.')
-      const rank = { alta: 0, media: 1, baja: 2 } as const
-      const best = [...found].sort((a, b) => rank[a.evidence?.demand || 'baja'] - rank[b.evidence?.demand || 'baja'])[0]
-      best.status = 'usado'
-      for (const t of found) if (t !== best) t.status = 'sugerido'
-      await store.putMany('topics', found)
-      const post = await store.get<Post>('posts', postId)
-      if (!post) throw new Error('Artículo no encontrado')
-      Object.assign(post, { topicId: best.id, title: best.title, h1: best.title, keyword: best.keyword, theme: best.theme, kind: best.kind })
-      post.cost = { usd: Math.round(((post.cost?.usd || 0) + usd) * 10000) / 10000 }
-      log(post, 'Tema elegido por la IA', `«${best.title}» · interés ${best.evidence?.demand || '—'} · ${found.length - 1} ideas más guardadas en Temas`)
-      await store.put('posts', post)
-      await record('elegir tema', true, best.title, { postId, usd })
-      running.delete(postId)
-      await runStep(postId, 'todo', by)
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      const post = await store.get<Post>('posts', postId)
-      if (post) {
-        post.lastError = { at: nowIso(), step: 'elegir tema', message }
-        log(post, 'Error', message)
-        await store.put('posts', post)
-      }
-      await record('elegir tema', false, message, { postId })
-    } finally {
-      running.delete(postId)
-    }
-  })()
+  void withJob(postId, 'elegir tema', async (job) => {
+    const s = await getSettings()
+    const rules = await getRules()
+    const [topics, posts] = await Promise.all([store.list<Topic>('topics'), store.list<Post>('posts')])
+    const { topics: found } = await proposeTopics({ focus: opts.focus, theme: opts.theme || '', count: 5 }, s, rules, topics, posts)
+    if (!found.length) throw new Error('No se encontró ningún tema con demanda suficiente. Prueba con un enfoque concreto.')
+    const rank = { alta: 0, media: 1, baja: 2 } as const
+    const best = [...found].sort((a, b) => rank[a.evidence?.demand || 'baja'] - rank[b.evidence?.demand || 'baja'])[0]
+    best.status = 'usado'
+    for (const t of found) if (t !== best) t.status = 'sugerido'
+    await store.putMany('topics', found)
+    const post = await store.get<Post>('posts', postId)
+    if (!post) throw new Error('Artículo no encontrado')
+    Object.assign(post, { topicId: best.id, title: best.title, h1: best.title, keyword: best.keyword, theme: best.theme, kind: best.kind })
+    addSpent(post, job.spent())
+    log(post, 'Tema elegido', `«${best.title}» · interés ${best.evidence?.demand || '—'} · ${found.length - 1} ideas más guardadas en Temas`)
+    await store.put('posts', post)
+    await record('elegir tema', true, best.title, { postId, usd: job.spent() })
+  })
+    .then(() => runStep(postId, 'todo', by))
+    .catch(() => undefined)
 }
 
 /** Lanza un paso en segundo plano (puede tardar minutos) y vuelve enseguida. */
@@ -187,19 +223,20 @@ export function startStep(postId: string, step: Step, by?: string) {
 }
 
 export async function runStep(postId: string, step: Step, by?: string): Promise<Post> {
-  if (running.has(postId)) throw new Error('Este artículo ya se está procesando')
-  running.add(postId)
-  const s = await getSettings()
-  const rules = await getRules()
-  try {
+  return withJob(postId, step, async (job) => {
+    const s = await getSettings()
+    const rules = await getRules()
     const all = await store.list<Post>('posts')
     const post = all.find((p) => p.id === postId)
     if (!post) throw new Error('Artículo no encontrado')
     const topic = post.topicId ? await store.get<Topic>('topics', post.topicId) : null
-    const before = post.cost?.usd || 0
+    const costBefore = post.cost?.usd || 0
+    // El coste del artículo se va actualizando con lo gastado en este trabajo
+    const save = () => {
+      post.cost = { usd: Math.round((costBefore + job.spent()) * 10000) / 10000 }
+      return store.put('posts', post)
+    }
 
-    // Se guarda tras cada fase para que el panel vaya mostrando el avance
-    const save = () => store.put('posts', post)
     if (post.manual) {
       // Escrito por una persona: el motor revisa y hace las imágenes, pero no reescribe el texto
       if (step === 'brief') await makeBrief(post, topic, s, rules, all).then(save)
@@ -215,23 +252,10 @@ export async function runStep(postId: string, step: Step, by?: string): Promise<
     if (step !== 'brief' && post.body) afterChecks(post, s, rules)
     if (by) log(post, `Paso «${step}» lanzado a mano`, undefined, by)
     delete post.lastError
-    await store.put('posts', post)
-    await record(step, true, `${post.h1 || post.title}`, { postId, usd: (post.cost?.usd || 0) - before })
+    await save()
+    await record(step, true, `${post.h1 || post.title}`, { postId, usd: job.spent() })
     return post
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
-    // El error queda guardado en el artículo para enseñarlo en su ficha
-    const post = await store.get<Post>('posts', postId)
-    if (post) {
-      post.lastError = { at: nowIso(), step, message }
-      log(post, 'Error', message)
-      await store.put('posts', post)
-    }
-    await record(step, false, message, { postId })
-    throw e
-  } finally {
-    running.delete(postId)
-  }
+  })
 }
 
 /** Tras el control: a revisión, o aprobado directamente en modo automático si todo está bien. */

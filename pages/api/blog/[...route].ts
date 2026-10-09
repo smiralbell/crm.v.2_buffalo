@@ -6,7 +6,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdminAPI } from '@/lib/auth'
 import { getRules, getSettings, rulesHistory, saveRules, saveSettings } from '@/lib/blog/config'
-import { bootstrap, emptyPost, ensureRunner, isRunning, monthSpend, publishPost, record, startAutoPost, startStep, syncWeb, tick, type Step } from '@/lib/blog/engine'
+import { bootstrap, cancelJob, emptyPost, ensureRunner, isRunning, monthSpend, publishPost, record, startAutoPost, startStep, syncWeb, tick, type Step } from '@/lib/blog/engine'
 import { allThemes } from '@/lib/blog/defaults'
 import { buildPackage, testConnection } from '@/lib/blog/publish'
 import { ftpConfigured } from '@/lib/blog/ftp'
@@ -256,6 +256,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Si ya estaba en la web, se actualiza también allí
         const sync = post.status === 'publicado' ? await syncWeb() : null
         return res.status(200).json({ post, message: sync?.message })
+      }
+      if (c === 'cancel' && req.method === 'POST') {
+        const ok = cancelJob(post.id)
+        return res.status(200).json({ ok, message: ok ? 'Cancelado. Lo gastado hasta ahora queda apuntado en el artículo.' : 'No había nada en marcha.' })
       }
       if (c === 'step' && req.method === 'POST') {
         const step = String(req.body.step) as Step

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Download, Loader2, Plug, Plus, Save, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { MODEL_PRESETS } from '@/lib/blog/defaults'
 import type { BlogRules, BlogSettings } from '@/lib/blog/types'
 import { cn } from '@/lib/utils'
 import { api, Field, fmt, Info, inputCls, Notice, Panel, Segmented } from './shared'
@@ -138,9 +139,14 @@ export default function Ajustes({ state, reload }: TabProps) {
           </Panel>
 
           <Panel title="Límite de gasto" info="Lo máximo que se gasta al mes en OpenRouter (texto e imágenes). Si se llega, el sistema deja de escribir hasta el mes siguiente; lo ya escrito se sigue publicando.">
-            <Field label="Dólares al mes" hint={`Gastado este mes: ${state.status.spend.toFixed(2)} $. Un artículo completo suele costar entre 0,40 y 1 $.`}>
-              <input className={inputCls} type="number" value={s.budget.monthlyUsd} onChange={(e) => set('budget', { monthlyUsd: num(e.target.value) })} />
-            </Field>
+            <div className="space-y-3">
+              <Field label="Dólares al mes" hint={`Gastado este mes: ${state.status.spend.toFixed(2)} $.`}>
+                <input className={inputCls} type="number" value={s.budget.monthlyUsd} onChange={(e) => set('budget', { monthlyUsd: num(e.target.value) })} />
+              </Field>
+              <Field label="Máximo por artículo ($)" info="Si un artículo llega a este gasto, se para solo y queda avisado en su ficha. Con el nivel económico un artículo cuesta unos 0,30-0,50 $.">
+                <input className={inputCls} type="number" step="0.1" value={s.budget.perArticleUsd} onChange={(e) => set('budget', { perArticleUsd: num(e.target.value) })} />
+              </Field>
+            </div>
           </Panel>
         </div>
       )}
@@ -269,10 +275,24 @@ export default function Ajustes({ state, reload }: TabProps) {
       {/* ---------------- IA e imágenes ---------------- */}
       {section === 'ia' && (
         <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-2">
-          <Panel title="Modelos de texto" info="Todo pasa por OpenRouter. «~anthropic/claude-opus-latest» es siempre el Claude Opus más reciente, el que mejor escribe; para investigar basta Sonnet.">
+          <Panel title="Modelos de texto" info="Todo pasa por OpenRouter. Elige un nivel: el económico escribe bien y cuesta poco; el máximo usa Opus para redactar y cuesta varias veces más.">
             <div className="space-y-3">
-              <Field label="Para investigar"><input className={inputCls} value={s.models.research} onChange={(e) => set('models', { research: e.target.value })} /></Field>
-              <Field label="Para escribir"><input className={inputCls} value={s.models.writing} onChange={(e) => set('models', { writing: e.target.value })} /></Field>
+              <Field label="Nivel" info="Cambia a la vez el modelo de investigar, el de escribir y el de imágenes. Si tocas un modelo a mano pasa a «Personalizado».">
+                <select
+                  className={inputCls}
+                  value={s.models.preset}
+                  onChange={(e) => {
+                    const p = (MODEL_PRESETS as Record<string, (typeof MODEL_PRESETS)[keyof typeof MODEL_PRESETS]>)[e.target.value]
+                    if (!p) return set('models', { preset: 'personalizado' })
+                    setS((prev) => ({ ...prev, models: { ...p.models, preset: e.target.value }, images: { ...prev.images, openrouterModel: p.image } }))
+                  }}
+                >
+                  {Object.entries(MODEL_PRESETS).map(([id, p]) => <option key={id} value={id}>{p.label}</option>)}
+                  <option value="personalizado">Personalizado</option>
+                </select>
+              </Field>
+              <Field label="Para investigar"><input className={inputCls} value={s.models.research} onChange={(e) => set('models', { research: e.target.value, preset: 'personalizado' })} /></Field>
+              <Field label="Para escribir"><input className={inputCls} value={s.models.writing} onChange={(e) => set('models', { writing: e.target.value, preset: 'personalizado' })} /></Field>
               <Field label="Resultados de búsqueda web" info="Cuántas páginas mira en cada búsqueda. Cada una cuesta unos 0,4 céntimos."><input className={inputCls} type="number" value={s.models.webSearchResults} onChange={(e) => set('models', { webSearchResults: num(e.target.value) })} /></Field>
             </div>
           </Panel>

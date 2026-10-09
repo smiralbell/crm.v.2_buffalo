@@ -186,6 +186,8 @@ export interface BlogSettings {
     proposalsPerSearch: number
   }
   models: {
+    /** economico | equilibrado | maximo | personalizado */
+    preset: string
     research: string
     writing: string
     webSearchResults: number
@@ -224,7 +226,8 @@ export interface BlogSettings {
     remoteDir: string
     secure: boolean
   }
-  budget: { monthlyUsd: number }
+  /** monthlyUsd: tope del mes; perArticleUsd: tope de un artículo (si lo pasa, se para) */
+  budget: { monthlyUsd: number; perArticleUsd: number }
   /** Categorías añadidas desde el panel, además de las de serie */
   customThemes: Theme[]
 }
