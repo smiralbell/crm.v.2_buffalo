@@ -73,9 +73,10 @@ export const DEFAULT_SETTINGS: BlogSettings = {
     webSearchResults: 8,
   },
   images: {
-    provider: 'openai',
+    provider: 'openrouter',
     openaiModel: 'gpt-image-1',
-    openrouterModel: 'google/gemini-2.5-flash-image',
+    // Nano Banana Pro: el que mejor escribe texto dentro de la imagen (infografías)
+    openrouterModel: 'google/gemini-3-pro-image',
     size: '1536x1024',
   },
   seo: {

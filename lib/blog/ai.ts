@@ -124,8 +124,10 @@ export async function generateImage(opts: {
     headers: orHeaders(),
     body: JSON.stringify({
       model: opts.openrouterModel,
-      messages: [{ role: 'user', content: opts.prompt + '\n\nFormato horizontal 3:2.' }],
+      messages: [{ role: 'user', content: opts.prompt + '\n\nFormato horizontal 16:9. Genera solo la imagen.' }],
       modalities: ['image', 'text'],
+      // Los modelos de Google aceptan la proporción aquí; los demás la ignoran y usan el texto del prompt
+      image_config: { aspect_ratio: '16:9' },
       usage: { include: true },
     }),
   })

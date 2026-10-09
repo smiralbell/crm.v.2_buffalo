@@ -30,7 +30,7 @@ function TopicCard({ t, onAction, busy }: { t: Topic; onAction: (id: string, act
       </div>
       <p className="mt-2 font-medium text-gray-900">{t.title}</p>
       <p className="mt-1 text-sm text-gray-600">
-        Palabra clave: <b className="font-medium text-gray-800">{t.keyword}</b> · Enlaza a <span className="text-emerald-700">{t.destination}</span>
+        Palabra clave: <b className="font-medium text-gray-800">{t.keyword}</b> · Enlaza a <span className="font-medium text-gray-900">{t.destination}</span>
       </p>
       {t.notes && <p className="mt-2 text-sm text-gray-600">{t.notes}</p>}
       {ev?.whyNow && <p className="mt-1 text-xs text-gray-500">Por qué ahora: {ev.whyNow}</p>}
@@ -134,9 +134,9 @@ export default function Temas({ state, reload }: TabProps) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap justify-center gap-1.5">
         {SUB.map(([id, label]) => (
-          <button key={id} onClick={() => setSub(id)} className={cn('rounded-full px-3 py-1.5 text-sm', sub === id ? 'bg-emerald-50 font-medium text-emerald-700' : 'text-gray-600 hover:bg-gray-100')}>
+          <button key={id} onClick={() => setSub(id)} className={cn('rounded-full px-3 py-1.5 text-sm', sub === id ? 'bg-gray-900 font-medium text-white' : 'text-gray-600 hover:bg-gray-100')}>
             {label}
             {id === 'proponer' && suggested.length ? ` (${suggested.length})` : ''}
             {id === 'actualidad' && news.filter((n) => n.status === 'sugerido').length ? ` (${news.filter((n) => n.status === 'sugerido').length})` : ''}

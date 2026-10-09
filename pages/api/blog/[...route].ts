@@ -6,7 +6,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdminAPI } from '@/lib/auth'
 import { getRules, getSettings, rulesHistory, saveRules, saveSettings } from '@/lib/blog/config'
-import { bootstrap, emptyPost, ensureRunner, monthSpend, publishPost, record, runStep, tick, type Step } from '@/lib/blog/engine'
+import { bootstrap, emptyPost, ensureRunner, isRunning, monthSpend, publishPost, record, startStep, tick, type Step } from '@/lib/blog/engine'
 import { buildPackage } from '@/lib/blog/publish'
 import { articleHtml, indexHtml, type ImageResolver } from '@/lib/blog/render'
 import { findNews, proposeTopics } from '@/lib/blog/research'
@@ -212,8 +212,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!post) return res.status(404).json({ error: 'Artículo no encontrado' })
 
       if (!c && req.method === 'GET') {
-        const res2 = { ...post }
-        return res.status(200).json({ post: res2 })
+        return res.status(200).json({ post, working: isRunning(post.id) })
       }
       if (!c && req.method === 'PUT') {
         for (const k of EDITABLE) if (k in req.body) (post as unknown as Record<string, unknown>)[k] = req.body[k]
@@ -227,7 +226,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       if (c === 'step' && req.method === 'POST') {
         const step = String(req.body.step) as Step
-        return res.status(200).json({ post: await runStep(post.id, step, by) })
+        // En segundo plano: investigar y redactar puede tardar varios minutos y el proxy cortaría la petición
+        startStep(post.id, step, by)
+        return res.status(202).json({ post, working: true })
       }
       if (c === 'approve' && req.method === 'POST') {
         if (/\[SERGI:/.test(post.body)) return res.status(400).json({ error: 'Quedan huecos [SERGI: …] por rellenar' })
@@ -268,6 +269,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         await store.remove('posts', post.id)
         return res.status(200).json({ ok: true })
       }
+    }
+
+    /* ---------- Imagen de un artículo (para verla en el panel) ---------- */
+    if (a === 'image' && b && c && req.method === 'GET') {
+      const doc = await store.get<{ id: string; dataUrl: string }>('images', `${b}-${c}`)
+      if (!doc?.dataUrl) return res.status(404).end()
+      const [meta, data] = doc.dataUrl.split(',')
+      res.setHeader('Content-Type', meta.replace('data:', '').replace(';base64', '') || 'image/png')
+      res.setHeader('Cache-Control', 'private, max-age=60')
+      return res.status(200).send(Buffer.from(data, 'base64'))
+    }
+
+    /* ---------- Modelos de imagen disponibles en OpenRouter (lista pública) ---------- */
+    if (a === 'image-models' && req.method === 'GET') {
+      const r = await fetch('https://openrouter.ai/api/v1/models')
+      const data = (await r.json()) as { data: { id: string; name: string; created: number; architecture?: { output_modalities?: string[] } }[] }
+      const models = (data.data || [])
+        .filter((m) => m.architecture?.output_modalities?.includes('image') && !m.id.startsWith('openrouter/'))
+        .sort((x, y) => y.created - x.created)
+        .map((m) => ({ id: m.id, name: m.name }))
+      return res.status(200).json({ models })
     }
 
     /* ---------- Vista previa y paquete ---------- */

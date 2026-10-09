@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Loader2, Plus, Save, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { BlogSettings } from '@/lib/blog/types'
@@ -12,6 +12,11 @@ export default function Configuracion({ state, reload }: TabProps) {
   const [s, setS] = useState<BlogSettings>(structuredClone(state.settings))
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
+  const [imageModels, setImageModels] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    api<{ models: { id: string; name: string }[] }>('image-models').then((r) => setImageModels(r.models)).catch(() => undefined)
+  }, [])
 
   const set = <K extends keyof BlogSettings>(k: K, v: Partial<BlogSettings[K]>) => setS((prev) => ({ ...prev, [k]: { ...(prev[k] as object), ...v } }))
   const num = (v: string) => Number(v.replace(',', '.')) || 0
@@ -35,7 +40,7 @@ export default function Configuracion({ state, reload }: TabProps) {
     <div className="space-y-5">
       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white/90 p-3 backdrop-blur">
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={s.enabled} onChange={(e) => setS({ ...s, enabled: e.target.checked })} className="h-4 w-4 accent-emerald-600" />
+          <input type="checkbox" checked={s.enabled} onChange={(e) => setS({ ...s, enabled: e.target.checked })} className="h-4 w-4 accent-gray-900" />
           <b>Motor activo</b> <span className="text-gray-500">(planifica, investiga, redacta y publica solo)</span>
         </label>
         <Button onClick={save} disabled={busy} className="gap-1.5 rounded-xl">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Guardar</Button>
@@ -50,8 +55,8 @@ export default function Configuracion({ state, reload }: TabProps) {
               ['revision_con_plazo', 'Revisión con plazo', 'Si en el plazo nadie lo rechaza y pasa los controles, se aprueba solo.'],
               ['automatico', 'Automático', 'Si pasa todos los controles SEO y no tiene huecos [SERGI], se publica sin revisión.'],
             ] as const).map(([v, l, d]) => (
-              <label key={v} className={cn('flex cursor-pointer gap-3 rounded-xl border p-3', s.publishing.mode === v ? 'border-emerald-400 bg-emerald-50/50' : 'border-gray-200')}>
-                <input type="radio" checked={s.publishing.mode === v} onChange={() => set('publishing', { mode: v })} className="mt-1 accent-emerald-600" />
+              <label key={v} className={cn('flex cursor-pointer gap-3 rounded-xl border p-3', s.publishing.mode === v ? 'border-gray-900 bg-gray-50' : 'border-gray-200')}>
+                <input type="radio" checked={s.publishing.mode === v} onChange={() => set('publishing', { mode: v })} className="mt-1 accent-gray-900" />
                 <span><b className="text-sm">{l}</b><span className="block text-xs text-gray-500">{d}</span></span>
               </label>
             ))}
@@ -76,7 +81,7 @@ export default function Configuracion({ state, reload }: TabProps) {
               {DAYS.map((d, i) => {
                 const on = sc.weekdays.includes(i + 1)
                 return (
-                  <button key={d} type="button" onClick={() => set('schedule', { weekdays: on ? sc.weekdays.filter((x) => x !== i + 1) : [...sc.weekdays, i + 1].sort() })} className={cn('h-9 w-9 rounded-lg border text-sm', on ? 'border-emerald-500 bg-emerald-50 font-medium text-emerald-700' : 'border-gray-200 text-gray-400')}>{d}</button>
+                  <button key={d} type="button" onClick={() => set('schedule', { weekdays: on ? sc.weekdays.filter((x) => x !== i + 1) : [...sc.weekdays, i + 1].sort() })} className={cn('h-9 w-9 rounded-lg border text-sm', on ? 'border-gray-900 bg-gray-900 font-medium text-white' : 'border-gray-200 text-gray-400')}>{d}</button>
                 )
               })}
             </div>
@@ -133,16 +138,27 @@ export default function Configuracion({ state, reload }: TabProps) {
         <Panel title="Imágenes">
           <Field label="Proveedor">
             <select className={inputCls} value={s.images.provider} onChange={(e) => set('images', { provider: e.target.value as BlogSettings['images']['provider'] })}>
-              <option value="openai">OpenAI (necesita OPENAI_API_KEY)</option>
-              <option value="openrouter">OpenRouter (usa la misma clave que el texto)</option>
+              <option value="openrouter">OpenRouter (misma clave que el texto)</option>
+              <option value="openai">OpenAI directo (necesita OPENAI_API_KEY)</option>
               <option value="ninguno">Sin imágenes</option>
             </select>
           </Field>
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <Field label="Modelo OpenAI"><input className={inputCls} value={s.images.openaiModel} onChange={(e) => set('images', { openaiModel: e.target.value })} /></Field>
-            <Field label="Modelo OpenRouter"><input className={inputCls} value={s.images.openrouterModel} onChange={(e) => set('images', { openrouterModel: e.target.value })} /></Field>
-            <Field label="Tamaño (OpenAI)"><input className={inputCls} value={s.images.size} onChange={(e) => set('images', { size: e.target.value })} /></Field>
-          </div>
+          {s.images.provider === 'openrouter' && (
+            <div className="mt-3">
+              <Field label="Modelo de imagen" hint="Lista en directo de OpenRouter. Nano Banana Pro es el que mejor escribe texto dentro de las infografías; los de OpenAI («GPT Image») son los de ChatGPT.">
+                <select className={inputCls} value={s.images.openrouterModel} onChange={(e) => set('images', { openrouterModel: e.target.value })}>
+                  {!imageModels.some((m) => m.id === s.images.openrouterModel) && <option value={s.images.openrouterModel}>{s.images.openrouterModel}</option>}
+                  {imageModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              </Field>
+            </div>
+          )}
+          {s.images.provider === 'openai' && (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field label="Modelo OpenAI"><input className={inputCls} value={s.images.openaiModel} onChange={(e) => set('images', { openaiModel: e.target.value })} /></Field>
+              <Field label="Tamaño"><input className={inputCls} value={s.images.size} onChange={(e) => set('images', { size: e.target.value })} /></Field>
+            </div>
+          )}
         </Panel>
 
         <Panel title="Normas SEO (números)">

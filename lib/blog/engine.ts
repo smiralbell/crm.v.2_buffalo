@@ -133,6 +133,13 @@ async function saveImagesApart(post: Post) {
 export type Step = 'brief' | 'borrador' | 'control' | 'imagenes' | 'todo'
 
 const running = new Set<string>()
+export const isRunning = (postId: string) => running.has(postId)
+
+/** Lanza un paso en segundo plano (puede tardar minutos) y vuelve enseguida. */
+export function startStep(postId: string, step: Step, by?: string) {
+  if (running.has(postId)) throw new Error('Este artículo ya se está procesando')
+  void runStep(postId, step, by).catch(() => undefined)
+}
 
 export async function runStep(postId: string, step: Step, by?: string): Promise<Post> {
   if (running.has(postId)) throw new Error('Este artículo ya se está procesando')
@@ -146,13 +153,15 @@ export async function runStep(postId: string, step: Step, by?: string): Promise<
     const topic = post.topicId ? await store.get<Topic>('topics', post.topicId) : null
     const before = post.cost?.usd || 0
 
+    // Se guarda tras cada fase para que el panel vaya mostrando el avance
+    const save = () => store.put('posts', post)
     if (post.manual) {
       // Escrito por una persona: el motor revisa y hace las imágenes, pero no reescribe el texto
-      if (step === 'brief') await makeBrief(post, topic, s, rules, all)
+      if (step === 'brief') await makeBrief(post, topic, s, rules, all).then(save)
     } else {
-      if (step === 'brief' || step === 'todo' || !post.brief) await makeBrief(post, topic, s, rules, all)
-      if (step === 'borrador' || step === 'todo') await makeDraft(post, s, rules)
-      if (['borrador', 'control', 'todo'].includes(step)) await checkAndFix(post, s, rules)
+      if (step === 'brief' || step === 'todo' || !post.brief) await makeBrief(post, topic, s, rules, all).then(save)
+      if (step === 'borrador' || step === 'todo') await makeDraft(post, s, rules).then(save)
+      if (['borrador', 'control', 'todo'].includes(step)) await checkAndFix(post, s, rules).then(save)
     }
     if (step === 'imagenes' || step === 'todo' || (step === 'borrador' && !post.images?.length)) {
       await makeImages(post, s, rules)
