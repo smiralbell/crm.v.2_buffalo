@@ -3,10 +3,11 @@ import { useRouter } from 'next/router'
 import { useMemo, useState } from 'react'
 import { AlertCircle, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { PostStatus, ThemeCode, Topic } from '@/lib/blog/types'
+import type { PostStatus, Topic } from '@/lib/blog/types'
 import { cn } from '@/lib/utils'
 import NewArticle from './NewArticle'
-import { chipCls, fmt, Info, inputCls, KIND_NAMES, Pill, Segmented, STATUS, StatusPill, THEME_COLOR, THEME_NAMES, ThemePill } from './shared'
+import { CategorySelect } from './Categories'
+import { fmt, Info, inputCls, KIND_NAMES, Pill, Segmented, STATUS, StatusPill, THEME_COLOR, THEME_NAMES, ThemePill } from './shared'
 import type { PostLite, TabProps } from './types'
 
 const COLUMNS: PostStatus[] = ['idea', 'brief', 'borrador', 'revision', 'aprobado', 'publicado']
@@ -42,11 +43,11 @@ function Card({ p, origin }: { p: PostLite; origin?: Topic['source'] }) {
   )
 }
 
-export default function Articulos({ state }: TabProps) {
+export default function Articulos({ state, reload }: TabProps) {
   const router = useRouter()
   const [view, setView] = useState<View>('tablero')
   const [q, setQ] = useState('')
-  const [theme, setTheme] = useState<ThemeCode | ''>('')
+  const [theme, setTheme] = useState('')
   const [showRejected, setShowRejected] = useState(false)
   const [creating, setCreating] = useState(false)
 
@@ -57,36 +58,29 @@ export default function Articulos({ state }: TabProps) {
     if (q && !`${p.h1} ${p.title} ${p.keyword}`.toLowerCase().includes(q.toLowerCase())) return false
     return true
   })
-  const countTheme = (t: ThemeCode) => state.posts.filter((p) => p.theme === t && p.status !== 'rechazado').length
+  const countTheme = (t: string) => state.posts.filter((p) => p.theme === t && p.status !== 'rechazado').length
   const sortByDate = (a: PostLite, b: PostLite) => (a.scheduledAt || a.publishedAt || 'z').localeCompare(b.scheduledAt || b.publishedAt || 'z')
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col items-center gap-3">
-        <div className="flex w-full flex-col items-center justify-between gap-3 md:flex-row">
-          <div className="relative w-full md:max-w-xs">
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            <input className={inputCls + ' pl-9'} placeholder="Buscar por título o palabra clave" value={q} onChange={(e) => setQ(e.target.value)} />
-          </div>
-          <div className="flex items-center gap-2">
-            <Segmented<View> value={view} onChange={setView} options={[{ id: 'tablero', label: 'Por estado' }, { id: 'categorias', label: 'Por categoría' }, { id: 'lista', label: 'Lista' }]} />
-            <Info>«Por estado» enseña en qué punto está cada artículo. «Por categoría» ayuda a ver si algún tema se queda corto. «Lista» lo pone todo en una tabla.</Info>
-          </div>
-          <Button className="gap-1.5 rounded-xl" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nuevo artículo</Button>
+      {/* Una sola línea: buscar, categoría, vista y crear */}
+      <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:items-center">
+        <div className="relative lg:w-72">
+          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+          <input className={inputCls + ' pl-9'} placeholder="Buscar" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-1.5">
-          <button className={chipCls(!theme)} onClick={() => setTheme('')}>Todas</button>
-          {(Object.keys(THEME_NAMES) as ThemeCode[]).map((t) => (
-            <button key={t} className={cn(chipCls(theme === t), 'inline-flex items-center gap-1.5')} onClick={() => setTheme(theme === t ? '' : t)}>
-              <span className={cn('h-2 w-2 rounded-full', THEME_COLOR[t])} />
-              {THEME_NAMES[t]} <span className={theme === t ? 'text-white/60' : 'text-gray-400'}>{countTheme(t)}</span>
-            </button>
-          ))}
-          <Info>Las categorías del blog. Cada una tiene su color y su página en la web (buffaloia.com/blog/tema/…), y cada artículo empuja a la página de venta de su categoría.</Info>
+        <div className="flex items-center gap-1.5 lg:w-64">
+          <CategorySelect className="flex-1" value={theme} onChange={setTheme} allowAll="Todas las categorías" counts={countTheme} onCreated={reload} />
+          <Info>Cada categoría tiene su color, su página en la web (buffaloia.com/blog/tema/…) y su página de venta. Con «＋ Nueva categoría» podéis crear otra.</Info>
         </div>
-        <label className="flex items-center gap-2 text-xs text-gray-500">
-          <input type="checkbox" className="h-3.5 w-3.5 accent-gray-900" checked={showRejected} onChange={(e) => setShowRejected(e.target.checked)} /> Mostrar rechazados
+        <div className="flex flex-1 items-center justify-center gap-2">
+          <Segmented<View> value={view} onChange={setView} options={[{ id: 'tablero', label: 'Por estado' }, { id: 'categorias', label: 'Por categoría' }, { id: 'lista', label: 'Lista' }]} />
+          <Info>«Por estado» enseña en qué punto está cada artículo. «Por categoría» ayuda a ver si alguna se queda corta. «Lista» lo pone todo en una tabla.</Info>
+        </div>
+        <label className="flex items-center justify-center gap-2 text-xs text-gray-500">
+          <input type="checkbox" className="h-3.5 w-3.5 accent-gray-900" checked={showRejected} onChange={(e) => setShowRejected(e.target.checked)} /> Descartados
         </label>
+        <Button className="gap-1.5 rounded-xl" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nuevo artículo</Button>
       </div>
 
       {posts.length === 0 && (
@@ -117,7 +111,7 @@ export default function Articulos({ state }: TabProps) {
 
       {posts.length > 0 && view === 'categorias' && (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {(Object.keys(THEME_NAMES) as ThemeCode[])
+          {Object.keys(THEME_NAMES)
             .filter((t) => posts.some((p) => p.theme === t))
             .map((t) => {
               const list = posts.filter((p) => p.theme === t).sort(sortByDate)
@@ -171,7 +165,7 @@ export default function Articulos({ state }: TabProps) {
         </div>
       )}
 
-      <NewArticle open={creating} onClose={() => setCreating(false)} topics={state.topics} />
+      <NewArticle open={creating} onClose={() => setCreating(false)} topics={state.topics} reload={reload} />
     </div>
   )
 }

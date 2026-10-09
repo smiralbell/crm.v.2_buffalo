@@ -13,7 +13,7 @@
  */
 import { getRules, getSettings } from './config'
 import { calendarTopics } from './calendar-seed'
-import { findNews } from './research'
+import { findNews, proposeTopics } from './research'
 import { ensurePlanned } from './schedule'
 import { uploadSite } from './publish'
 import { blockingFailures, runChecks } from './seo'
@@ -135,6 +135,50 @@ export type Step = 'brief' | 'borrador' | 'control' | 'imagenes' | 'todo'
 
 const running = new Set<string>()
 export const isRunning = (postId: string) => running.has(postId)
+
+/**
+ * «Que la IA elija»: busca qué tiene más demanda ahora relacionado con la web,
+ * elige el tema con más potencial y lo escribe entero. El resto de ideas
+ * encontradas se guardan como sugerencias en Temas → Buscar ideas.
+ */
+export function startAutoPost(postId: string, opts: { focus?: string; theme?: string }, by?: string) {
+  if (running.has(postId)) throw new Error('Este artículo ya se está procesando')
+  running.add(postId)
+  void (async () => {
+    try {
+      const s = await getSettings()
+      const rules = await getRules()
+      const [topics, posts] = await Promise.all([store.list<Topic>('topics'), store.list<Post>('posts')])
+      const { topics: found, usd } = await proposeTopics({ focus: opts.focus, theme: opts.theme || '', count: 5 }, s, rules, topics, posts)
+      if (!found.length) throw new Error('No se encontró ningún tema con demanda suficiente. Prueba con un enfoque concreto.')
+      const rank = { alta: 0, media: 1, baja: 2 } as const
+      const best = [...found].sort((a, b) => rank[a.evidence?.demand || 'baja'] - rank[b.evidence?.demand || 'baja'])[0]
+      best.status = 'usado'
+      for (const t of found) if (t !== best) t.status = 'sugerido'
+      await store.putMany('topics', found)
+      const post = await store.get<Post>('posts', postId)
+      if (!post) throw new Error('Artículo no encontrado')
+      Object.assign(post, { topicId: best.id, title: best.title, h1: best.title, keyword: best.keyword, theme: best.theme, kind: best.kind })
+      post.cost = { usd: Math.round(((post.cost?.usd || 0) + usd) * 10000) / 10000 }
+      log(post, 'Tema elegido por la IA', `«${best.title}» · interés ${best.evidence?.demand || '—'} · ${found.length - 1} ideas más guardadas en Temas`)
+      await store.put('posts', post)
+      await record('elegir tema', true, best.title, { postId, usd })
+      running.delete(postId)
+      await runStep(postId, 'todo', by)
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      const post = await store.get<Post>('posts', postId)
+      if (post) {
+        post.lastError = { at: nowIso(), step: 'elegir tema', message }
+        log(post, 'Error', message)
+        await store.put('posts', post)
+      }
+      await record('elegir tema', false, message, { postId })
+    } finally {
+      running.delete(postId)
+    }
+  })()
+}
 
 /** Lanza un paso en segundo plano (puede tardar minutos) y vuelve enseguida. */
 export function startStep(postId: string, step: Step, by?: string) {

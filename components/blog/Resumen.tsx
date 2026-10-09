@@ -157,7 +157,7 @@ export default function Resumen({ state, reload, go }: TabProps & { go: (t: stri
         )}
       </div>
 
-      <NewArticle open={creating} onClose={() => setCreating(false)} topics={topics} />
+      <NewArticle open={creating} onClose={() => setCreating(false)} topics={topics} reload={reload} />
     </div>
   )
 }

@@ -6,7 +6,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdminAPI } from '@/lib/auth'
 import { getRules, getSettings, rulesHistory, saveRules, saveSettings } from '@/lib/blog/config'
-import { bootstrap, emptyPost, ensureRunner, isRunning, monthSpend, publishPost, record, startStep, syncWeb, tick, type Step } from '@/lib/blog/engine'
+import { bootstrap, emptyPost, ensureRunner, isRunning, monthSpend, publishPost, record, startAutoPost, startStep, syncWeb, tick, type Step } from '@/lib/blog/engine'
+import { allThemes } from '@/lib/blog/defaults'
 import { buildPackage, testConnection } from '@/lib/blog/publish'
 import { ftpConfigured } from '@/lib/blog/ftp'
 import { articleHtml, indexHtml, type ImageResolver } from '@/lib/blog/render'
@@ -196,6 +197,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const s = await getSettings()
       const rules = await getRules()
 
+      // Nuevo artículo en el que la IA elige el tema según lo más buscado ahora
+      if (b === 'new' && req.method === 'POST' && req.body.auto) {
+        const post = emptyPost({ title: 'Eligiendo el tema con más potencial…', theme: req.body.theme || 'A' }, s)
+        log(post, 'La IA está eligiendo el tema', req.body.focus ? `Enfoque: ${req.body.focus}` : undefined, by)
+        await store.put('posts', post)
+        startAutoPost(post.id, { focus: req.body.focus || undefined, theme: req.body.theme || undefined }, by)
+        return res.status(200).json({ post, working: true })
+      }
+
       // Nuevo artículo: de un tema de la cola, de un tema escrito al momento, o escrito a mano
       if (b === 'new' && req.method === 'POST') {
         let topic: Topic | null = req.body.topicId ? await store.get<Topic>('topics', String(req.body.topicId)) : null
@@ -233,7 +243,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!post) return res.status(404).json({ error: 'Artículo no encontrado' })
 
       if (!c && req.method === 'GET') {
-        return res.status(200).json({ post, working: isRunning(post.id) })
+        return res.status(200).json({ post, working: isRunning(post.id), themes: s.customThemes })
       }
       if (!c && req.method === 'PUT') {
         for (const k of EDITABLE) if (k in req.body) (post as unknown as Record<string, unknown>)[k] = req.body[k]
@@ -340,6 +350,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!post) return res.status(404).send('No encontrado')
       return res.status(200).send(articleHtml(post, posts, s, img, true))
     }
+    /* ---------- Categorías creadas desde el panel ---------- */
+    if (a === 'categories' && b === 'new' && req.method === 'POST') {
+      const s = await getSettings()
+      const name = String(req.body.name || '').trim()
+      if (!name) return res.status(400).json({ error: 'Falta el nombre de la categoría' })
+      if (allThemes(s).some((t) => t.name.toLowerCase() === name.toLowerCase())) return res.status(400).json({ error: 'Ya existe una categoría con ese nombre' })
+      const theme = {
+        code: 'c-' + store.newId(),
+        name,
+        question: String(req.body.question || '').trim() || `Artículos sobre ${name.toLowerCase()}`,
+        salesPage: String(req.body.salesPage || '/auditoria/').trim(),
+      }
+      s.customThemes = [...(s.customThemes || []), theme]
+      await saveSettings(s, by)
+      return res.status(200).json({ theme })
+    }
+    if (a === 'categories' && b && c === 'delete' && req.method === 'POST') {
+      const s = await getSettings()
+      const posts = await store.list<Post>('posts')
+      if (posts.some((p) => p.theme === b && p.status !== 'rechazado')) return res.status(400).json({ error: 'No se puede borrar: hay artículos en esta categoría' })
+      s.customThemes = (s.customThemes || []).filter((t) => t.code !== b)
+      await saveSettings(s, by)
+      return res.status(200).json({ ok: true })
+    }
+
     /* ---------- Conexión con la web (CDMON) ---------- */
     if (a === 'web' && b === 'test' && req.method === 'POST') {
       return res.status(200).json({ message: await testConnection(await getSettings()) })

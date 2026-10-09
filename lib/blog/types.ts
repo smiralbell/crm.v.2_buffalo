@@ -5,7 +5,8 @@
  * y no lee ni escribe en ninguna tabla de otros módulos del CRM.
  */
 
-export type ThemeCode = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'S' | 'N'
+/** Código de categoría: A-G, S y N son las de serie; las creadas desde el panel usan c-xxxx. */
+export type ThemeCode = string
 
 export type PostStatus =
   | 'idea'        // tema asignado, sin investigar
@@ -23,6 +24,8 @@ export interface Theme {
   name: string
   question: string
   salesPage: string // ruta interna o URL completa
+  /** Solo en las categorías creadas desde el panel */
+  color?: string
 }
 
 /** Página de la web que se puede enlazar. */
@@ -222,6 +225,8 @@ export interface BlogSettings {
     secure: boolean
   }
   budget: { monthlyUsd: number }
+  /** Categorías añadidas desde el panel, además de las de serie */
+  customThemes: Theme[]
 }
 
 export interface BlogRules {

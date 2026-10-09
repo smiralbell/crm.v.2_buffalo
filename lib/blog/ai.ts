@@ -87,6 +87,8 @@ export async function askAi<T = unknown>(opts: {
   web?: number // nº de resultados de búsqueda web (0 = sin búsqueda)
   maxTokens?: number
   temperature?: number
+  /** Cuánto «piensa» el modelo antes de responder (los tokens de razonamiento cuentan en el límite) */
+  reasoning?: "low" | "medium" | "high"
 }): Promise<AiResult<T>> {
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -99,7 +101,8 @@ export async function askAi<T = unknown>(opts: {
   }
   if (opts.temperature !== undefined) body.temperature = opts.temperature
   if (opts.json) body.response_format = { type: 'json_object' }
-  if (opts.web) body.plugins = [{ id: 'web', max_results: opts.web }]
+  if (opts.web) body.plugins = [{ id: "web", max_results: opts.web }]
+  if (opts.reasoning) body.reasoning = { effort: opts.reasoning }
 
   let lastErr = ''
   for (let attempt = 0; attempt < 3; attempt++) {

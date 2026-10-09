@@ -15,7 +15,7 @@
  * Search Console se pueden añadir.
  */
 import { askAi } from './ai'
-import { SITE_PAGES, THEMES } from './defaults'
+import { allThemes, SITE_PAGES } from './defaults'
 import type { BlogRules, BlogSettings, KeywordResearch, Post, Topic, ThemeCode } from './types'
 import { newId } from './store'
 
@@ -163,6 +163,7 @@ export async function proposeTopics(
   existingTopics: Topic[],
   posts: Post[]
 ): Promise<{ topics: Topic[]; usd: number }> {
+  const THEMES = allThemes(s)
   const theme = opts.theme ? THEMES.find((t) => t.code === opts.theme) : null
   const seeds = opts.focus
     ? [opts.focus]
@@ -204,7 +205,7 @@ Propón ${opts.count} temas distintos. Cada uno con palabra clave de 1-3 palabra
 {"topics":[{
  "title": "título de trabajo como lo buscaría un gerente",
  "keyword": "palabra clave principal",
- "theme": "A|B|C|D|E|F|G|S",
+ "theme": "código de la categoría (${THEMES.filter((t) => t.code !== 'N').map((t) => t.code).join('|')})",
  "kind": "articulo | pilar | sector",
  "destination": "ruta de la página de venta",
  "notes": "ángulo y por qué este artículo ganaría a lo que ya posiciona",

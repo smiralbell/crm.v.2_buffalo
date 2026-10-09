@@ -2,7 +2,7 @@
  * Del tema al artículo: brief → borrador → control → correcciones → imágenes.
  */
 import { askAi, generateImage } from './ai'
-import { SITE_PAGES, THEMES } from './defaults'
+import { allThemes, SITE_PAGES } from './defaults'
 import { researchKeyword } from './research'
 import { blockingFailures, runChecks, slugify } from './seo'
 import type { BlogRules, BlogSettings, Brief, Post, Topic } from './types'
@@ -44,7 +44,7 @@ function internalCandidates(post: Post, all: Post[], s: BlogSettings) {
 /* ---------------- 1. Brief ---------------- */
 
 export async function makeBrief(post: Post, topic: Topic | null, s: BlogSettings, rules: BlogRules, all: Post[]): Promise<Post> {
-  const theme = THEMES.find((t) => t.code === post.theme)
+  const theme = allThemes(s).find((t) => t.code === post.theme)
   const destination = topic?.destination || theme?.salesPage || '/auditoria/'
   const { research, usd, citations } = await researchKeyword(
     { title: post.title, keyword: post.keyword || topic?.keyword || post.title, theme: post.theme, destination, notes: topic?.notes },
@@ -219,15 +219,17 @@ Devuelve {"links":[{"url":"","title":"","reason":"qué dato o norma respalda"}]}
 }
 
 /* ---------------- 2. Borrador ---------------- */
+/*
+ * El texto se pide en HTML directo (no dentro de un JSON): así no se corta a
+ * medias ni se rompe al escapar comillas. Los datos (título, descripción,
+ * resumen, preguntas) se sacan después con una llamada pequeña y barata.
+ */
 
-interface Draft {
+interface Meta {
   h1: string
-  slug: string
   metaDescription: string
   excerpt: string
-  body: string
   faq: { q: string; a: string }[]
-  secondary: string[]
   imagePrompts: { featured: string; infographic: string }
 }
 
@@ -243,72 +245,106 @@ NUNCA DIGAS: ${rules.neverSay.join(' · ')}
 REGLAS DE CONTENIDO
 ${rules.ownMaterial}
 
-FORMATO DEL CUERPO (campo body)
-- HTML limpio: <h2>, <h3>, <p>, <ul>/<ol>/<li>, <strong>, <a href="URL">texto</a>, <table> si compara cosas. Sin <h1>, sin estilos, sin clases, sin imágenes.
-- Los indicadores de imagen van solos en su párrafo: <p>(imagen1)</p> y <p>(imagen2)</p>, en puntos que tengan sentido visual.
-- Párrafos cortos. Nada de relleno.
+FORMATO
+- Devuelves SOLO el cuerpo del artículo en HTML limpio, sin \`\`\` ni explicaciones: <h2>, <h3>, <p>, <ul>/<ol>/<li>, <strong>, <a href="URL">texto</a>, <table> si compara cosas.
+- Sin <h1> (lo pone la plantilla), sin estilos, sin clases, sin imágenes, sin preguntas frecuentes al final (van aparte) y sin llamada a la acción final (la pone la plantilla).
+- Los indicadores de imagen van solos en su párrafo: <p>(imagen1)</p> y <p>(imagen2)</p>, en puntos con sentido visual.
+- Párrafos de 2 a 4 frases. Nada de relleno.`
+}
 
-Respondes solo con JSON.`
+/** Saca el HTML de una respuesta aunque venga con ``` o texto alrededor. */
+function extractHtml(text: string): string {
+  let t = text.trim().replace(/^```(?:html)?\s*/i, '').replace(/```\s*$/, '').trim()
+  const first = t.search(/<(p|h2|h3|ul|ol|table)[\s>]/i)
+  if (first > 0) t = t.slice(first)
+  return t
+}
+
+const words = (html: string) => html.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length
+
+function linkRules(post: Post) {
+  const b = post.brief!
+  return `ENLACES A VUESTRA WEB (exactamente estos 3, uno de cada tipo):
+${b.internalLinks.map((l) => `- ${l.url} → ${l.anchorType === 'h2' ? 'un H2 entero enlazado: <h2><a href="' + l.url + '">texto del H2</a></h2>' : l.anchorType === 'frase' ? 'una frase de 3 o más palabras enlazada dentro de un párrafo' : 'UNA sola palabra enlazada dentro de un párrafo'}`).join('\n')}
+
+ENLACES A OTRAS WEBS (exactamente estos 3, repartidos por el texto, con texto ancla descriptivo, nunca la URL a la vista):
+${b.externalLinks.map((l) => `- ${l.url} (${l.title}): ${l.reason}`).join('\n') || '- (no hay fuentes verificadas: no inventes enlaces externos)'}`
 }
 
 export async function makeDraft(post: Post, s: BlogSettings, rules: BlogRules): Promise<Post> {
   const b = post.brief
   if (!b) throw new Error('El artículo no tiene brief todavía')
   const [wMin, wMax] = post.kind === 'pilar' ? s.seo.wordsPillar : s.seo.wordsArticle
+  const perSection = Math.round(((wMin + wMax) / 2) / Math.max(4, b.outline.length || 5))
 
-  const { data, usd } = await askAi<Draft>({
+  const { data: text, usd } = await askAi<string>({
     model: s.models.writing,
-    json: true,
-    maxTokens: 16000,
+    maxTokens: 32000,
     system: writerSystem(rules),
-    prompt: `Escribe el artículo completo siguiendo este brief.
+    prompt: `Escribe el cuerpo completo del artículo «${b.h1}».
 
-H1 propuesto: ${b.h1}
-Slug: ${b.slug}
-Meta-description: ${b.metaDescription}
-Palabra clave principal: «${b.research.keyword}»
-Secundarias: ${b.research.secondary.join(', ')}
+LONGITUD: entre ${wMin} y ${wMax} palabras en total (es un${post.kind === 'pilar' ? 'a guía pilar' : ' artículo'}). Desarrolla cada H2 con unas ${perSection} palabras. No te quedes corto.
+
+Palabra clave principal: «${b.research.keyword}». Úsala al menos ${s.seo.keywordMinCount} veces de forma natural: en el primer párrafo, en al menos un H2 o H3 y repartida por el texto.
+Secundarias (cada una al menos ${s.seo.secondaryMinCount} veces): ${post.secondary.join(', ')}
 Ángulo: ${b.angle}
-Estructura:
-${b.outline.map((o) => `- H2: ${o.h2}${o.h3?.length ? ' (H3: ' + o.h3.join(' / ') + ')' : ''}${o.notes ? ' — ' + o.notes : ''}`).join('\n')}
-Preguntas frecuentes: ${b.faq.join(' | ')}
+Preguntas que se hace la gente (respóndelas dentro del texto): ${b.research.questions.join(' | ')}
 Material propio: ${b.ownMaterial}
-CTA: NO escribas una llamada a la acción al final; la plantilla añade un único CTA («${b.cta}»). Termina con el último punto del contenido.
-Longitud: ${wMin}-${wMax} palabras.
 
-NORMAS SEO (obligatorias, se comprueban una a una):
+ESTRUCTURA
+${b.outline.map((o) => `- H2: ${o.h2}${o.h3?.length ? ' (H3: ' + o.h3.join(' / ') + ')' : ''}${o.notes ? ' — ' + o.notes : ''}`).join('\n')}
+
+${linkRules(post)}
+
+NORMAS SEO
 ${rules.seo}
 
-ENLACES INTERNOS (exactamente estos 3, uno de cada tipo):
-${b.internalLinks.map((l) => `- ${l.url} → ${l.anchorType === 'h2' ? 'un H2 completo enlazado: <h2><a href="' + l.url + '">texto del H2</a></h2>' : l.anchorType === 'frase' ? 'una frase de varias palabras enlazada dentro de un párrafo' : 'UNA sola palabra enlazada dentro de un párrafo'}`).join('\n')}
-
-ENLACES EXTERNOS (exactamente estos 3, repartidos por el texto, con texto ancla descriptivo):
-${b.externalLinks.map((l) => `- ${l.url} (${l.title}): ${l.reason}`).join('\n')}
-
-Antes de responder, repasa tú mismo: palabra clave al menos ${s.seo.keywordMinCount} veces, en el H1, en la meta, en el slug, en el primer párrafo y en un H2 o H3; cada secundaria al menos ${s.seo.secondaryMinCount} veces; H1 ≤ ${s.seo.h1Max} caracteres; meta ≤ ${s.seo.metaMax}; párrafos de máximo ${s.seo.paragraphMaxLines} líneas.
-
-Devuelve:
-{"h1": "", "slug": "", "metaDescription": "", "excerpt": "1-2 frases para la tarjeta del blog", "body": "<p>...</p>", "faq": [{"q": "", "a": "40-80 palabras"}], "secondary": ["3 secundarias tal cual las usas"], "imagePrompts": {"featured": "", "infographic": ""}}`,
+Empieza directamente con el primer <p>.`,
   })
   addCost(post, usd)
-  applyDraft(post, data, s)
+  post.body = extractHtml(text)
   post.status = 'borrador'
-  log(post, 'Borrador escrito', `${post.body.split(/\s+/).length} palabras aprox.`)
+  log(post, 'Borrador escrito', `${words(post.body)} palabras`)
+  await makeMeta(post, s, rules)
   return post
 }
 
-function applyDraft(post: Post, d: Partial<Draft>, s: BlogSettings) {
-  if (d.h1) post.h1 = d.h1.trim()
-  if (d.slug) post.slug = slugify(d.slug).slice(0, s.seo.slugMax).replace(/-+$/, '')
-  if (d.metaDescription) post.metaDescription = d.metaDescription.trim()
-  if (d.excerpt) post.excerpt = d.excerpt.trim()
-  if (d.body) post.body = d.body.trim()
-  if (d.faq?.length) post.faq = d.faq
-  if (d.secondary?.length) post.secondary = d.secondary.slice(0, s.seo.secondaryCount)
-  if (d.imagePrompts?.featured) post.imagePrompts = d.imagePrompts
+/** Título, descripción, resumen, preguntas frecuentes y prompts de imagen, a partir del texto ya escrito. */
+async function makeMeta(post: Post, s: BlogSettings, rules: BlogRules, only?: string[]) {
+  const b = post.brief!
+  const { data, usd } = await askAi<Partial<Meta>>({
+    model: s.models.research,
+    json: true,
+    maxTokens: 6000,
+    system: 'Eres el editor SEO de BuffaloIA. Respondes solo con JSON.',
+    prompt: `Artículo (HTML):
+${post.body.slice(0, 30000)}
+
+Palabra clave principal: «${post.keyword}»
+${only ? 'Devuelve SOLO estos campos: ' + only.join(', ') : 'Devuelve todos los campos.'}
+{
+ "h1": "título de máximo ${s.seo.h1Max} caracteres, con «${post.keyword}» lo más a la izquierda posible, como lo buscaría un gerente",
+ "metaDescription": "máximo ${s.seo.metaMax} caracteres, con «${post.keyword}», dice qué se aprende y por qué importa, sin comillas dobles",
+ "excerpt": "1-2 frases para la tarjeta del blog",
+ "faq": [{"q": "pregunta real (de estas si encajan: ${b.research.questions.slice(0, 6).join(' | ')})", "a": "respuesta de 40-80 palabras, autosuficiente, con el tono del artículo"}],
+ "imagePrompts": {"featured": "prompt de la imagen destacada", "infographic": "prompt de una infografía que explique una idea concreta del artículo"}
+}
+Entre 3 y 5 preguntas frecuentes. Respeta estas reglas de estilo: ${rules.bannedPhrases.slice(0, 12).join(', ')} están prohibidas.`,
+  })
+  addCost(post, usd)
+  if (data.h1) post.h1 = data.h1.trim()
+  if (data.metaDescription) post.metaDescription = data.metaDescription.trim().replace(/"/g, '')
+  if (data.excerpt) post.excerpt = data.excerpt.trim()
+  if (data.faq?.length) post.faq = data.faq.slice(0, 5)
+  if (data.imagePrompts?.featured && !post.imagePrompts?.featured) post.imagePrompts = data.imagePrompts
+  // La URL con la palabra clave y dentro del límite, sin depender de la IA
+  if (!post.slug || !post.slug.includes(slugify(post.keyword))) post.slug = slugify(post.keyword + ' ' + post.h1.replace(new RegExp(post.keyword, 'i'), ''))
+  post.slug = post.slug.slice(0, s.seo.slugMax).replace(/-[^-]*$/, (m) => (post.slug.length > s.seo.slugMax ? '' : m)).replace(/-+$/, '')
 }
 
 /* ---------------- 3. Control y correcciones ---------------- */
+
+const META_CHECKS = ['kw-h1', 'kw-meta', 'kw-slug', 'h1-len', 'meta-len', 'slug-len', 'faq']
 
 export async function checkAndFix(post: Post, s: BlogSettings, rules: BlogRules): Promise<Post> {
   for (let round = 0; round <= s.seo.maxRewrites; round++) {
@@ -324,25 +360,48 @@ export async function checkAndFix(post: Post, s: BlogSettings, rules: BlogRules)
       log(post, 'Control SEO con fallos', fails.map((f) => f.label).join(' · '))
       return post
     }
-    const { data, usd } = await askAi<Partial<Draft>>({
-      model: s.models.writing,
-      json: true,
-      maxTokens: 16000,
-      system: writerSystem(rules),
-      prompt: `Este artículo no pasa el control. Corrige SOLO lo necesario para que pase, sin empeorar la naturalidad ni tocar lo que está bien. Mantén exactamente los mismos enlaces.
 
-FALLOS:
-${fails.map((f) => `- ${f.label}: ${f.detail}`).join('\n')}
+    // 1) Lo pequeño (título, descripción, URL, preguntas): llamada barata, sin tocar el texto
+    const metaFails = fails.filter((f) => META_CHECKS.includes(f.id))
+    if (metaFails.length) {
+      const fields = new Set<string>()
+      for (const f of metaFails) {
+        if (f.id.includes('h1')) fields.add('h1')
+        if (f.id.includes('meta')) fields.add('metaDescription')
+        if (f.id === 'faq') fields.add('faq')
+      }
+      if (metaFails.some((f) => f.id.includes('slug'))) post.slug = ''
+      if (fields.size) await makeMeta(post, s, rules, Array.from(fields))
+      else await makeMeta(post, s, rules, ['excerpt'])
+    }
 
-Palabra clave: «${post.keyword}» · Secundarias: ${post.secondary.join(', ')}
+    // 2) El texto: solo si falla algo del cuerpo. Se reescribe con menos razonamiento (más rápido)
+    const bodyFails = fails.filter((f) => !META_CHECKS.includes(f.id))
+    if (bodyFails.length) {
+      const [wMin, wMax] = post.kind === 'pilar' ? s.seo.wordsPillar : s.seo.wordsArticle
+      const { data: text, usd } = await askAi<string>({
+        model: s.models.writing,
+        maxTokens: 32000,
+        reasoning: 'low',
+        system: writerSystem(rules),
+        prompt: `Este artículo no pasa el control SEO. Corrige SOLO lo necesario, sin empeorar la naturalidad ni quitar contenido bueno, y devuelve el cuerpo completo corregido en HTML.
 
-ARTÍCULO ACTUAL (JSON):
-${JSON.stringify({ h1: post.h1, slug: post.slug, metaDescription: post.metaDescription, excerpt: post.excerpt, body: post.body, faq: post.faq, secondary: post.secondary, imagePrompts: post.imagePrompts })}
+FALLOS
+${bodyFails.map((f) => `- ${f.label}: ${f.detail}`).join('\n')}
 
-Devuelve el JSON completo corregido con los mismos campos.`,
-    })
-    addCost(post, usd)
-    applyDraft(post, data, s)
+Palabra clave: «${post.keyword}» (al menos ${s.seo.keywordMinCount} veces) · Secundarias (al menos ${s.seo.secondaryMinCount} veces cada una): ${post.secondary.join(', ')}
+Longitud objetivo: ${wMin}-${wMax} palabras (ahora tiene ${words(post.body)}).
+
+${linkRules(post)}
+
+ARTÍCULO ACTUAL
+${post.body}`,
+      })
+      addCost(post, usd)
+      const fixed = extractHtml(text)
+      // Si la respuesta viniera cortada, no se pierde el texto bueno
+      if (words(fixed) >= words(post.body) * 0.8) post.body = fixed
+    }
     log(post, `Corrección ${round + 1}`, fails.map((f) => f.label).join(' · '))
   }
   return post
@@ -351,7 +410,15 @@ Devuelve el JSON completo corregido con los mismos campos.`,
 /* ---------------- 4. Imágenes ---------------- */
 
 export async function makeImages(post: Post, s: BlogSettings, rules: BlogRules): Promise<Post> {
-  if (s.images.provider === 'ninguno' || !post.imagePrompts) return post
+  if (s.images.provider === 'ninguno') return post
+  // Artículos escritos a mano sin investigación: prompts a partir del título
+  if (!post.imagePrompts?.featured) {
+    const about = post.h1 || post.title
+    post.imagePrompts = {
+      featured: `Imagen editorial para un artículo de blog titulado «${about}», dirigido a gerentes de empresas de servicios en España.`,
+      infographic: `Infografía sencilla que resuma en 3-4 pasos o puntos la idea principal de «${about}».`,
+    }
+  }
   const jobs: { slot: 'destacada' | 'imagen1' | 'imagen2'; prompt: string; alt: string }[] = [
     { slot: 'destacada', prompt: `${post.imagePrompts.featured}\n\nEstilo: ${rules.imageStyle}`, alt: post.h1 },
     { slot: 'imagen1', prompt: `${post.imagePrompts.featured} (otro encuadre, detalle de la situación)\n\nEstilo: ${rules.imageStyle}`, alt: `${post.keyword}: situación del día a día` },

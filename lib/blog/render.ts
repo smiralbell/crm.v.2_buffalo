@@ -6,7 +6,7 @@
  */
 import fs from 'fs'
 import path from 'path'
-import { SITE_PAGES, THEMES } from './defaults'
+import { allThemes, SITE_PAGES } from './defaults'
 import { slugify, stripTags } from './seo'
 import type { BlogSettings, Post, ThemeCode } from './types'
 
@@ -18,6 +18,9 @@ export const blogCss = () => tpl('blog.css')
 const esc = (s: string) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>'
 
+// La lista de categorías se fija en cada render (incluye las creadas desde el panel)
+let THEMES = allThemes({ customThemes: [] })
+const setThemesFrom = (s: BlogSettings) => (THEMES = allThemes(s))
 const themeName = (c: ThemeCode) => THEMES.find((t) => t.code === c)?.name || 'Blog'
 const themeSlug = (c: ThemeCode) => slugify(themeName(c).split(':')[0].split(',')[0])
 
@@ -149,6 +152,7 @@ function bodyWithImages(p: Post, img: ImageResolver) {
 }
 
 export function articleHtml(p: Post, all: Post[], s: BlogSettings, img: ImageResolver, preview = false): string {
+  setThemesFrom(s)
   const url = postUrl(p, s)
   const theme = THEMES.find((t) => t.code === p.theme)
   const dest = p.brief?.internalLinks?.[0]?.url || theme?.salesPage || '/auditoria/'
@@ -255,6 +259,7 @@ ${related.map((r) => card(r, s, img)).join('\n')}
 const usedThemes = (posts: Post[]) => THEMES.filter((t) => posts.some((p) => p.theme === t.code))
 
 export function indexHtml(posts: Post[], s: BlogSettings, img: ImageResolver, theme?: ThemeCode, preview = false): string {
+  setThemesFrom(s)
   const list = posts
     .filter((p) => p.status === 'publicado' && (!theme || p.theme === theme))
     .sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''))
@@ -332,6 +337,7 @@ export const themePages = (posts: Post[]) => usedThemes(posts.filter((p) => p.st
 const xml = (s: string) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 export function feedXml(posts: Post[], s: BlogSettings): string {
+  setThemesFrom(s)
   const list = posts.filter((p) => p.status === 'publicado').sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || '')).slice(0, 30)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
@@ -360,6 +366,7 @@ ${list
 
 /** Sitemap completo: páginas de la web + blog, con lastmod real en el blog. */
 export function sitemapXml(posts: Post[], s: BlogSettings): string {
+  setThemesFrom(s)
   const pub = posts.filter((p) => p.status === 'publicado')
   const last = pub.map((p) => p.updatedAt).sort().pop()
   const entries: { loc: string; lastmod?: string; priority: string }[] = [

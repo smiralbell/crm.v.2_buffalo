@@ -104,6 +104,7 @@ export const DEFAULT_SETTINGS: BlogSettings = {
   // En CDMON la carpeta pública del dominio es /web
   publish: { method: 'ftp', remoteDir: '/web', secure: true },
   budget: { monthlyUsd: 60 },
+  customThemes: [],
 }
 
 export const DEFAULT_RULES: BlogRules = {
@@ -193,3 +194,6 @@ Nunca: nombres de clientes sin permiso escrito; prometer sustituir equipos, ahor
 
   imageStyle: `Fotografía editorial realista y luminosa, estilo revista de negocios. Oficinas y despachos españoles reales, luz natural, tonos claros con algún acento verde (#00c896). Personas de espaldas o desenfocadas, sin caras reconocibles. Nada de robots, cerebros brillantes, hologramas ni texto dentro de la imagen.`,
 }
+
+/** Categorías de serie más las creadas desde el panel. */
+export const allThemes = (s: Pick<BlogSettings, 'customThemes'>): Theme[] => [...THEMES, ...(s.customThemes || [])]

@@ -2,8 +2,9 @@ import { useRouter } from 'next/router'
 import { useState } from 'react'
 import { ArrowUpToLine, Check, Loader2, Newspaper, Plus, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { ThemeCode, Topic } from '@/lib/blog/types'
+import type { Topic } from '@/lib/blog/types'
 import { cn } from '@/lib/utils'
+import { CategorySelect } from './Categories'
 import { api, Field, Info, inputCls, Notice, Panel, Pill, Segmented, THEME_COLOR, THEME_NAMES } from './shared'
 import type { TabProps } from './types'
 
@@ -53,15 +54,17 @@ export default function Temas({ state, reload }: TabProps) {
   const [busy, setBusy] = useState('')
   const [err, setErr] = useState('')
   const [focus, setFocus] = useState('')
-  const [theme, setTheme] = useState<ThemeCode | ''>('')
+  const [theme, setTheme] = useState('')
+  const [filter, setFilter] = useState('')
   const [adding, setAdding] = useState(false)
-  const [manual, setManual] = useState({ title: '', keyword: '', theme: 'A' as ThemeCode, notes: '' })
+  const [manual, setManual] = useState({ title: '', keyword: '', theme: 'A', notes: '' })
 
   const { topics, settings } = state
-  const queue = topics.filter((t) => t.status === 'pendiente')
+  const byCat = (t: Topic) => !filter || t.theme === filter
+  const queue = topics.filter((t) => t.status === 'pendiente' && byCat(t))
   const ordered = [...queue.filter((t) => t.source !== 'calendario').sort((a, b) => a.order - b.order), ...queue.filter((t) => t.source === 'calendario').sort((a, b) => a.order - b.order)]
   const usedCal = topics.filter((t) => t.source === 'calendario' && t.status === 'usado').length
-  const ideas = topics.filter((t) => t.status === 'sugerido').sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const ideas = topics.filter((t) => t.status === 'sugerido' && byCat(t)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
   const action = async (id: string, act: string, body?: unknown) => {
     setBusy(id)
@@ -106,7 +109,8 @@ export default function Temas({ state, reload }: TabProps) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-center gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <CategorySelect className="w-60" value={filter} onChange={setFilter} allowAll="Todas las categorías" counts={(c) => topics.filter((t) => t.theme === c && (t.status === 'pendiente' || t.status === 'sugerido')).length} onCreated={reload} />
         <Segmented value={view} onChange={setView} options={[{ id: 'cola', label: `Cola (${queue.length})` }, { id: 'ideas', label: `Buscar ideas${ideas.length ? ` (${ideas.length})` : ''}` }]} />
         <Info>
           <b>Cola</b>: los temas que se van a escribir, en orden. Empieza por los 90 del calendario anual de Sergi; lo que aceptéis o añadáis a mano pasa delante.
@@ -128,9 +132,7 @@ export default function Temas({ state, reload }: TabProps) {
                 <Field label="Tema"><input className={inputCls} value={manual.title} onChange={(e) => setManual({ ...manual, title: e.target.value })} placeholder="De qué tiene que tratar" /></Field>
                 <Field label="Palabra clave (opcional)" info="Si no la sabes, déjala vacía: el sistema investigará la mejor."><input className={inputCls} value={manual.keyword} onChange={(e) => setManual({ ...manual, keyword: e.target.value })} /></Field>
                 <Field label="Categoría">
-                  <select className={inputCls} value={manual.theme} onChange={(e) => setManual({ ...manual, theme: e.target.value as ThemeCode })}>
-                    {Object.entries(THEME_NAMES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
+                  <CategorySelect value={manual.theme} onChange={(c) => setManual({ ...manual, theme: c })} onCreated={reload} />
                 </Field>
               </div>
               <div className="mt-3"><Field label="Notas (opcional)" info="Un caso propio, un enfoque o algo que no debe decir."><input className={inputCls} value={manual.notes} onChange={(e) => setManual({ ...manual, notes: e.target.value })} /></Field></div>
@@ -169,10 +171,7 @@ export default function Temas({ state, reload }: TabProps) {
                 <input className={inputCls} value={focus} onChange={(e) => setFocus(e.target.value)} placeholder="Sobre qué quieres ideas" />
               </Field>
               <Field label="Categoría">
-                <select className={inputCls} value={theme} onChange={(e) => setTheme(e.target.value as ThemeCode | '')}>
-                  <option value="">Cualquiera</option>
-                  {Object.entries(THEME_NAMES).filter(([k]) => k !== 'N').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
+                <CategorySelect value={theme} onChange={setTheme} allowAll="Cualquiera" withNews={false} onCreated={reload} />
               </Field>
             </div>
             <div className="mt-4 flex flex-wrap justify-center gap-2">

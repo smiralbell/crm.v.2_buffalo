@@ -12,7 +12,7 @@ import Articulos from '@/components/blog/Articulos'
 import Temas from '@/components/blog/Temas'
 import Calendario from '@/components/blog/Calendario'
 import Ajustes from '@/components/blog/Ajustes'
-import { Info } from '@/components/blog/shared'
+import { Info, registerThemes } from '@/components/blog/shared'
 import { cn } from '@/lib/utils'
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -46,6 +46,7 @@ export default function BlogPage() {
     try {
       const data = await api<BlogState & { setupRequired?: boolean; message?: string }>('state')
       if (data.setupRequired) return setSetup(data.message || '')
+      registerThemes(data.settings.customThemes)
       setState(data)
       setError('')
     } catch (e) {
@@ -66,9 +67,9 @@ export default function BlogPage() {
       <div className="space-y-6">
         {/* Pestañas centradas, como en Marketing */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="hidden w-40 lg:block" />
-          <div className="flex flex-1 justify-center overflow-x-auto border-b border-gray-200 lg:border-b-0">
-            <div className="flex min-w-0 flex-nowrap justify-start gap-0 sm:flex-wrap sm:justify-center">
+          <div className="hidden w-56 lg:block" />
+          <div className="flex flex-1 justify-center border-b border-gray-200 lg:border-b-0">
+            <div className="flex flex-wrap justify-center gap-0">
               {TABS.map(([id, label, info]) => (
                 <div
                   key={id}
@@ -85,9 +86,9 @@ export default function BlogPage() {
               ))}
             </div>
           </div>
-          <div className="flex w-full items-center justify-center gap-2 lg:w-40 lg:justify-end">
+          <div className="flex w-full items-center justify-center gap-2 lg:w-56 lg:justify-end">
             {state && (
-              <span className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium', state.settings.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500')}>
+              <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium', state.settings.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500')}>
                 <span className={cn('h-1.5 w-1.5 rounded-full', state.settings.enabled ? 'bg-emerald-500' : 'bg-gray-400')} />
                 {state.settings.enabled ? 'Piloto automático' : 'En pausa'}
               </span>

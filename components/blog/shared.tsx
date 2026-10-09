@@ -1,6 +1,6 @@
-import { ReactNode } from 'react'
+import { ReactNode, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import type { PostKind, PostStatus, ThemeCode } from '@/lib/blog/types'
+import type { PostKind, PostStatus, Theme, ThemeCode } from '@/lib/blog/types'
 
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   const res = await fetch('/api/blog/' + path, {
@@ -49,6 +49,23 @@ export const THEME_COLOR: Record<ThemeCode, string> = {
   N: 'bg-orange-500',
 }
 
+/** Colores para las categorías que creéis desde el panel (en este orden). */
+export const CUSTOM_COLORS = ['bg-pink-500', 'bg-emerald-600', 'bg-fuchsia-500', 'bg-yellow-500', 'bg-slate-500', 'bg-red-400', 'bg-blue-600', 'bg-green-500']
+
+/**
+ * Añade al registro las categorías creadas desde el panel. Se llama cada vez que
+ * se cargan los datos, así todas las pantallas las muestran con su nombre y color.
+ */
+export function registerThemes(custom: Theme[] = []) {
+  custom.forEach((t, i) => {
+    THEME_NAMES[t.code] = t.name
+    THEME_COLOR[t.code] = t.color || CUSTOM_COLORS[i % CUSTOM_COLORS.length]
+  })
+}
+
+/** Lista de categorías para desplegables: las de serie más las vuestras. */
+export const themeOptions = (withNews = true) => Object.entries(THEME_NAMES).filter(([k]) => withNews || k !== 'N')
+
 export const KIND_NAMES: Record<PostKind, string> = {
   pilar: 'Guía pilar',
   articulo: 'Artículo',
@@ -88,22 +105,50 @@ export function ThemePill({ theme }: { theme: ThemeCode }) {
   )
 }
 
-/** La «i» de información: al pasar el ratón (o tocarla en el móvil) explica qué hace cada cosa. */
-export function Info({ children, className, side = 'top' }: { children: ReactNode; className?: string; side?: 'top' | 'bottom' }) {
+/**
+ * La «i» de información: al pasar el ratón (o tocarla) explica qué hace cada cosa.
+ * La burbuja se coloca con posición fija medida en pantalla: siempre cabe dentro de la
+ * ventana y no crea barras de desplazamiento en los contenedores.
+ */
+export function Info({ children, className }: { children: ReactNode; className?: string; side?: 'top' | 'bottom' }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null)
+  const W = 288
+  const show = () => {
+    const r = ref.current?.getBoundingClientRect()
+    if (!r) return
+    const margin = 12
+    const left = Math.min(Math.max(margin, r.left + r.width / 2 - W / 2), window.innerWidth - W - margin)
+    // Debajo si hay sitio; si no, encima
+    const below = window.innerHeight - r.bottom > 180 || r.top < 180
+    setPos(below ? { left, top: r.bottom + 8 } : { left, bottom: window.innerHeight - r.top + 8 })
+  }
   return (
-    <span className={cn('group/info relative inline-flex align-middle', className)} tabIndex={0}>
-      <span className="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-gray-300 text-[10px] font-semibold leading-none text-gray-400 transition group-hover/info:border-gray-900 group-hover/info:text-gray-900 group-focus/info:border-gray-900 group-focus/info:text-gray-900">
-        i
-      </span>
-      <span
-        role="tooltip"
-        className={cn(
-          'pointer-events-none absolute left-1/2 z-50 w-72 -translate-x-1/2 rounded-xl bg-gray-900 px-3 py-2.5 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-white opacity-0 shadow-lg transition group-hover/info:opacity-100 group-focus/info:opacity-100',
-          side === 'top' ? 'bottom-6' : 'top-6'
-        )}
-      >
-        {children}
-      </span>
+    <span
+      ref={ref}
+      className={cn('inline-flex align-middle', className)}
+      tabIndex={0}
+      onMouseEnter={show}
+      onMouseLeave={() => setPos(null)}
+      onFocus={show}
+      onBlur={() => setPos(null)}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        if (pos) setPos(null)
+        else show()
+      }}
+    >
+      <span className={cn('flex h-4 w-4 cursor-help items-center justify-center rounded-full border text-[10px] font-semibold leading-none transition', pos ? 'border-gray-900 text-gray-900' : 'border-gray-300 text-gray-400')}>i</span>
+      {pos && (
+        <span
+          role="tooltip"
+          style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, width: W }}
+          className="pointer-events-none z-[100] rounded-xl bg-gray-900 px-3 py-2.5 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-white shadow-lg"
+        >
+          {children}
+        </span>
+      )}
     </span>
   )
 }

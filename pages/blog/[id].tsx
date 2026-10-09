@@ -2,13 +2,15 @@ import { GetServerSideProps } from 'next'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, Check, ChevronDown, ExternalLink, ImageIcon, Loader2, X } from 'lucide-react'
+import { ArrowLeft, Check, ChevronDown, ExternalLink, ImageIcon, Loader2, Save, X } from 'lucide-react'
 import Layout from '@/components/Layout'
 import { Button } from '@/components/ui/button'
 import { requireAuth } from '@/lib/auth'
-import type { Post } from '@/lib/blog/types'
+import type { Post, Theme } from '@/lib/blog/types'
 import { cn } from '@/lib/utils'
-import { api, Field, fmt, Info, inputCls, KIND_NAMES, Notice, Panel, Pill, Segmented, StatusPill, ThemePill } from '@/components/blog/shared'
+import RichEditor from '@/components/blog/RichEditor'
+import { CategorySelect } from '@/components/blog/Categories'
+import { api, Field, fmt, Info, inputCls, KIND_NAMES, Notice, Panel, Pill, registerThemes, Segmented, StatusPill, ThemePill } from '@/components/blog/shared'
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
@@ -22,6 +24,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
 /** Fases que se enseñan mientras la IA trabaja, con el evento del historial que marca cada una. */
 const PHASES: [string, string][] = [
+  ['Elegir tema', 'Tema elegido'],
   ['Investigación', 'Brief generado'],
   ['Texto', 'Borrador escrito'],
   ['Revisión SEO', 'Control SEO'],
@@ -37,15 +40,18 @@ export default function BlogPostPage() {
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
   const [v, setV] = useState(0)
-  const [left, setLeft] = useState<'seo' | 'editar' | 'investigacion'>('seo')
+  const [left, setLeft] = useState<'seo' | 'datos' | 'investigacion'>('seo')
+  const [main, setMain] = useState<'vista' | 'escribir' | null>(null)
   const [redoOpen, setRedoOpen] = useState(false)
+  const [dirty, setDirty] = useState(false)
   const [startedAt] = useState(() => new Date().toISOString())
 
   const load = useCallback(async () => {
     if (!id) return
     try {
-      const r = await api<{ post: Post; working: boolean }>(`post/${id}`)
-      setPost(r.post)
+      const r = await api<{ post: Post; working: boolean; themes: Theme[] }>(`post/${id}`)
+      registerThemes(r.themes)
+      setPost((prev) => (dirty && prev ? prev : r.post))
       setWorking((was) => {
         if (was && !r.working) setV((x) => x + 1)
         return r.working
@@ -53,7 +59,7 @@ export default function BlogPostPage() {
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error')
     }
-  }, [id])
+  }, [id, dirty])
   useEffect(() => void load(), [load])
   useEffect(() => {
     if (!working) return
@@ -70,6 +76,7 @@ export default function BlogPostPage() {
       const r = await api<{ post?: Post; working?: boolean; message?: string }>(`post/${id}${path}`, { body, method })
       if (key === 'delete') return push('/blog?tab=articulos')
       if (r.post) setPost(r.post)
+      if (key === 'save') setDirty(false)
       if (r.message) setMsg(r.message)
       if (r.working) setWorking(true)
       else setV((x) => x + 1)
@@ -82,117 +89,126 @@ export default function BlogPostPage() {
 
   if (!post) return <Layout><div className="flex justify-center py-24 text-gray-400">{err || <Loader2 className="h-6 w-6 animate-spin" />}</div></Layout>
 
-  const set = (k: keyof Post, val: unknown) => setPost({ ...post, [k]: val } as Post)
+  const mainView = main ?? (post.manual ? 'escribir' : 'vista')
+  const set = (k: keyof Post, val: unknown) => {
+    setDirty(true)
+    setPost({ ...post, [k]: val } as Post)
+  }
+  const save = () => act('save', '', { h1: post.h1, slug: post.slug, metaDescription: post.metaDescription, keyword: post.keyword, secondary: post.secondary, excerpt: post.excerpt, body: post.body, theme: post.theme }, 'PUT')
   const r = post.brief?.research
   const fails = (post.checks || []).filter((c) => !c.ok && c.severity === 'error').length
   const gaps = (post.body.match(/\[SERGI:/g) || []).length
   const doneSince = (event: string) => post.history.some((h) => h.event.startsWith(event) && h.at >= startedAt)
   const live = post.status === 'publicado'
-  const url = `https://buffaloia.com/blog/${post.slug}/`
+  const auto = post.history.some((h) => h.event === 'La IA está eligiendo el tema')
+  const phases = PHASES.filter(([l]) => auto || l !== 'Elegir tema').filter(([l]) => !post.manual || ['Investigación', 'Revisión SEO', 'Imágenes'].includes(l))
 
-  const redo = [
-    ['brief', 'Volver a investigar', 'Busca otra vez qué busca la gente y rehace la estructura.'],
-    ...(post.manual ? [] : [['borrador', 'Reescribir el texto', 'Escribe el artículo de nuevo con la investigación actual.']]),
-    ['control', post.manual ? 'Revisar el SEO' : 'Corregir el SEO', post.manual ? 'Comprueba las normas sin tocar tu texto.' : 'Corrige solo lo que no cumple las normas.'],
-    ['imagenes', 'Rehacer las imágenes', 'Genera de nuevo las 3 imágenes.'],
-  ]
+  const redo: [string, string, string][] = post.manual
+    ? [
+        ['brief', 'Sugerirme palabra clave y SEO', 'Investiga qué busca la gente y propone palabra clave, título, URL y descripción. No toca tu texto.'],
+        ['control', 'Revisar el SEO', 'Comprueba tu texto contra las normas, sin cambiarlo.'],
+        ['imagenes', 'Generar las imágenes', 'Crea la destacada, la de apoyo y la infografía.'],
+      ]
+    : [
+        ['brief', 'Volver a investigar', 'Busca otra vez qué busca la gente y rehace la estructura.'],
+        ['borrador', 'Reescribir el texto', 'Escribe el artículo de nuevo con la investigación actual.'],
+        ['control', 'Corregir el SEO', 'Corrige solo lo que no cumple las normas.'],
+        ['imagenes', 'Rehacer las imágenes', 'Genera de nuevo las 3 imágenes.'],
+      ]
 
   return (
     <Layout>
-      <div className="space-y-5">
-        <div className="flex items-center justify-between">
-          <Link href="/blog?tab=articulos" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"><ArrowLeft className="h-4 w-4" /> Artículos</Link>
-          {live ? (
-            <a className="inline-flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-950" href={url} target="_blank" rel="noreferrer">Ver en buffaloia.com <ExternalLink className="h-3.5 w-3.5" /></a>
-          ) : (
-            <a className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-900" href={`/api/blog/preview/${post.id}`} target="_blank" rel="noreferrer">Vista previa a pantalla completa <ExternalLink className="h-3.5 w-3.5" /></a>
-          )}
-        </div>
-
-        {/* Cabecera centrada */}
-        <div className="mx-auto max-w-4xl space-y-3 text-center">
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
-            <StatusPill status={post.status} />
-            <ThemePill theme={post.theme} />
-            <Pill className="bg-gray-100 text-gray-600">{KIND_NAMES[post.kind]}</Pill>
-            {typeof post.score === 'number' && <Pill className={post.score >= 100 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}>SEO {post.score}/100</Pill>}
-          </div>
-          <h1 className="text-2xl font-semibold leading-tight text-gray-900">{post.h1 || post.title}</h1>
-          <p className="text-sm text-gray-500">
-            {live ? `Publicado el ${fmt(post.publishedAt)}` : post.scheduledAt ? `Sale el ${fmt(post.scheduledAt)}` : 'Sin fecha: al aprobarlo ocupará el siguiente hueco libre'}
-            {post.keyword ? ` · palabra clave «${post.keyword}»` : ''} · coste {(post.cost?.usd || 0).toFixed(2)} $
-          </p>
-
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-            {['revision', 'borrador', 'brief', 'idea'].includes(post.status) && (
-              <>
-                <Button className="gap-1.5 rounded-xl" disabled={!!busy || working || !post.body} onClick={() => act('approve', '/approve')}>
-                  {busy === 'approve' && <Loader2 className="h-4 w-4 animate-spin" />}<Check className="h-4 w-4" /> Aprobar
-                </Button>
-                <Info>Lo dais por bueno. Se publicará y se subirá a la web solo, en su fecha del calendario. Si queréis que salga ya, usad «Publicar ahora».</Info>
-              </>
-            )}
-            {['revision', 'aprobado', 'borrador'].includes(post.status) && post.body && (
-              <Button variant={post.status === 'aprobado' ? 'default' : 'outline'} className="rounded-xl" disabled={!!busy || working} onClick={() => confirm('¿Publicarlo ahora en buffaloia.com, sin esperar a su fecha?') && act('publish', '/publish')}>
-                {busy === 'publish' && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}Publicar ahora
-              </Button>
-            )}
-            {live && <Button variant="outline" className="rounded-xl" disabled={!!busy} onClick={() => confirm('¿Retirarlo de la web?') && act('unpublish', '/unpublish')}>Retirar de la web</Button>}
-
-            <div className="relative">
-              <Button variant="outline" className="gap-1 rounded-xl" disabled={!!busy || working} onClick={() => setRedoOpen((o) => !o)}>Rehacer <ChevronDown className="h-4 w-4" /></Button>
-              {redoOpen && (
-                <div className="absolute left-1/2 z-20 mt-2 w-72 -translate-x-1/2 rounded-2xl border border-gray-200 bg-white p-1.5 text-left shadow-lg">
-                  {redo.map(([k, l, d]) => (
-                    <button key={k} className="block w-full rounded-xl px-3 py-2 text-left hover:bg-gray-50" onClick={() => act(k, '/step', { step: k })}>
-                      <span className="block text-sm font-medium text-gray-900">{l}</span>
-                      <span className="block text-xs text-gray-500">{d}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
+      <div className="space-y-4">
+        {/* Cabecera compacta: título a la izquierda, acciones a la derecha */}
+        <div className="rounded-2xl border border-gray-200 bg-white px-5 py-3.5 shadow-sm">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Link href="/blog?tab=articulos" className="mr-1 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900"><ArrowLeft className="h-3.5 w-3.5" /> Artículos</Link>
+                <StatusPill status={post.status} />
+                <ThemePill theme={post.theme} />
+                <Pill className="bg-gray-100 text-gray-600">{KIND_NAMES[post.kind]}</Pill>
+                {typeof post.score === 'number' && <Pill className={post.score >= 100 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}>SEO {post.score}/100</Pill>}
+              </div>
+              <h1 className="mt-1.5 truncate text-lg font-semibold text-gray-900" title={post.h1 || post.title}>{post.h1 || post.title}</h1>
+              <p className="text-xs text-gray-500">
+                {live ? `Publicado el ${fmt(post.publishedAt)}` : post.scheduledAt ? `Sale el ${fmt(post.scheduledAt)}` : 'Sin fecha: al aprobarlo ocupa el siguiente hueco libre'}
+                {post.keyword ? ` · «${post.keyword}»` : ''} · {(post.cost?.usd || 0).toFixed(2)} $
+              </p>
             </div>
 
-            {post.status === 'rechazado' ? (
-              <Button variant="ghost" className="rounded-xl" onClick={() => act('reopen', '/reopen')}>Recuperar</Button>
-            ) : !live ? (
-              <Button variant="ghost" className="rounded-xl text-gray-500" disabled={!!busy || working} onClick={() => { const reason = prompt('¿Por qué lo descartas? (opcional)'); if (reason !== null) void act('reject', '/reject', { reason }) }}>Descartar</Button>
-            ) : null}
-            <Button variant="ghost" className="rounded-xl text-gray-400" disabled={!!busy || working} onClick={() => confirm('¿Eliminar el artículo para siempre?') && act('delete', '/delete')}>Eliminar</Button>
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+              {dirty && <Button size="sm" className="gap-1.5 rounded-xl" disabled={!!busy} onClick={save}>{busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Guardar</Button>}
+              {!live && post.status !== 'aprobado' && post.status !== 'rechazado' && (
+                <span className="flex items-center gap-1">
+                  <Button size="sm" variant={dirty ? 'outline' : 'default'} className="gap-1.5 rounded-xl" disabled={!!busy || working || !post.body || dirty} onClick={() => act('approve', '/approve')}>
+                    {busy === 'approve' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Aprobar
+                  </Button>
+                  <Info>Lo dais por bueno. Se publica y se sube a la web solo, en su fecha del calendario. Si queréis que salga ya, usad «Publicar ahora».</Info>
+                </span>
+              )}
+              {!live && post.body && post.status !== 'rechazado' && (
+                <Button size="sm" variant={post.status === 'aprobado' ? 'default' : 'outline'} className="rounded-xl" disabled={!!busy || working || dirty} onClick={() => confirm('¿Publicarlo ahora en buffaloia.com, sin esperar a su fecha?') && act('publish', '/publish')}>
+                  {busy === 'publish' && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}Publicar ahora
+                </Button>
+              )}
+              {live && <a className="inline-flex h-9 items-center gap-1 rounded-xl border border-gray-200 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50" href={`https://buffaloia.com/blog/${post.slug}/`} target="_blank" rel="noreferrer">Ver en la web <ExternalLink className="h-3.5 w-3.5" /></a>}
+              {live && <Button size="sm" variant="outline" className="rounded-xl" disabled={!!busy} onClick={() => confirm('¿Retirarlo de la web?') && act('unpublish', '/unpublish')}>Retirar de la web</Button>}
+
+              <div className="relative">
+                <Button size="sm" variant="outline" className="gap-1 rounded-xl" disabled={!!busy || working} onClick={() => setRedoOpen((o) => !o)}>{post.manual ? 'Ayuda de la IA' : 'Rehacer'} <ChevronDown className="h-4 w-4" /></Button>
+                {redoOpen && (
+                  <div className="absolute right-0 z-20 mt-2 w-72 rounded-2xl border border-gray-200 bg-white p-1.5 text-left shadow-lg">
+                    {redo.map(([k, l, d]) => (
+                      <button key={k} className="block w-full rounded-xl px-3 py-2 text-left hover:bg-gray-50" onClick={() => (dirty ? alert('Guarda los cambios primero.') : act(k, '/step', { step: k }))}>
+                        <span className="block text-sm font-medium text-gray-900">{l}</span>
+                        <span className="block text-xs text-gray-500">{d}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {post.status === 'rechazado' ? (
+                <Button size="sm" variant="ghost" className="rounded-xl" onClick={() => act('reopen', '/reopen')}>Recuperar</Button>
+              ) : !live ? (
+                <Button size="sm" variant="ghost" className="rounded-xl text-gray-500" disabled={!!busy || working} onClick={() => { const reason = prompt('¿Por qué lo descartas? (opcional)'); if (reason !== null) void act('reject', '/reject', { reason }) }}>Descartar</Button>
+              ) : null}
+              <Button size="sm" variant="ghost" className="rounded-xl text-gray-400" disabled={!!busy || working} onClick={() => confirm('¿Eliminar el artículo para siempre?') && act('delete', '/delete')}>Eliminar</Button>
+            </div>
           </div>
         </div>
 
         {working && (
-          <div className="mx-auto max-w-3xl rounded-2xl border border-gray-200 bg-white p-5 text-center shadow-sm">
-            <p className="flex items-center justify-center gap-2 text-sm font-medium text-gray-900"><Loader2 className="h-4 w-4 animate-spin" /> La IA está trabajando en el artículo</p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {PHASES.map(([label, event]) => (
+          <div className="rounded-2xl border border-gray-200 bg-white px-5 py-3.5 text-center shadow-sm">
+            <p className="flex items-center justify-center gap-2 text-sm font-medium text-gray-900"><Loader2 className="h-4 w-4 animate-spin" /> La IA está trabajando · puedes salir de esta página, sigue sola</p>
+            <div className="mt-2.5 flex flex-wrap justify-center gap-2">
+              {phases.map(([label, event]) => (
                 <Pill key={label} className={doneSince(event) ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}>{doneSince(event) && <Check className="h-3 w-3" />}{label}</Pill>
               ))}
             </div>
-            <p className="mt-3 text-xs text-gray-400">Tarda entre 3 y 6 minutos. Puedes salir de esta página: sigue trabajando.</p>
           </div>
         )}
-        {post.lastError && !working && <Notice tone="error"><b>No se pudo completar ({post.lastError.step}).</b> {post.lastError.message} <span className="text-red-600/70">· {fmt(post.lastError.at)}</span> — usa «Rehacer» para intentarlo otra vez.</Notice>}
+        {post.lastError && !working && <Notice tone="error"><b>No se pudo completar ({post.lastError.step}).</b> {post.lastError.message} — usa «{post.manual ? 'Ayuda de la IA' : 'Rehacer'}» para intentarlo otra vez.</Notice>}
         {msg && <Notice tone="ok">{msg}</Notice>}
         {err && <Notice tone="error">{err}</Notice>}
-        {!working && gaps > 0 && <Notice tone="warn">Hay {gaps} {gaps === 1 ? 'hueco' : 'huecos'} <b>[SERGI: …]</b> donde la IA necesita un caso o dato vuestro. Rellénalos en «Editar» antes de aprobar.</Notice>}
-        {!working && post.body && fails > 0 && post.status !== 'publicado' && <Notice tone="warn">{fails} {fails === 1 ? 'norma SEO no se cumple' : 'normas SEO no se cumplen'} tras las correcciones automáticas. Mira «Revisión SEO».</Notice>}
+        {!working && gaps > 0 && <Notice tone="warn">Hay {gaps} {gaps === 1 ? 'hueco' : 'huecos'} <b>[SERGI: …]</b> donde hace falta un caso o dato vuestro. Complétalos en «Escribir» antes de aprobar.</Notice>}
+        {!working && post.body && fails > 0 && !live && <Notice tone="warn">{fails} {fails === 1 ? 'norma SEO no se cumple' : 'normas SEO no se cumplen'}. Mira «Revisión SEO» a la izquierda.</Notice>}
 
-        <div className="grid gap-5 xl:grid-cols-[440px_1fr]">
+        <div className="grid gap-4 xl:grid-cols-[400px_1fr]">
+          {/* Columna izquierda */}
           <div className="space-y-4">
             <div className="flex items-center justify-center gap-2">
-              <Segmented value={left} onChange={setLeft} options={[{ id: 'seo', label: 'Revisión SEO' }, { id: 'editar', label: 'Editar' }, { id: 'investigacion', label: 'Investigación' }]} />
+              <Segmented value={left} onChange={setLeft} options={[{ id: 'seo', label: 'Revisión SEO' }, { id: 'datos', label: 'Datos SEO' }, { id: 'investigacion', label: 'Investigación' }]} />
               <Info>
                 <b>Revisión SEO</b>: cada norma, en verde si se cumple.<br />
-                <b>Editar</b>: cambiar título, URL, descripción y texto.<br />
-                <b>Investigación</b>: qué busca la gente, la competencia y las fuentes usadas.
+                <b>Datos SEO</b>: título, URL, descripción para Google y palabras clave.<br />
+                <b>Investigación</b>: qué busca la gente, la competencia y las fuentes.
               </Info>
             </div>
 
             {left === 'seo' && (
-              <Panel title={post.checks?.length ? `${post.checks.filter((c) => c.ok).length} de ${post.checks.length} normas cumplidas` : 'Revisión SEO'} info="Las rojas impiden pasar a revisión y la IA las corrige sola; las amarillas son avisos para quien revisa.">
-                {!post.checks?.length ? <p className="py-6 text-center text-sm text-gray-400">Aún no hay texto que revisar.</p> : (
+              <Panel title={post.checks?.length ? `${post.checks.filter((c) => c.ok).length} de ${post.checks.length} normas` : 'Revisión SEO'} info="Las rojas impiden pasar a revisión (la IA las corrige sola en sus artículos); las amarillas son avisos.">
+                {!post.checks?.length ? <p className="py-6 text-center text-sm text-gray-400">{post.manual ? 'Escribe el texto y pulsa «Ayuda de la IA → Revisar el SEO».' : 'Aún no hay texto que revisar.'}</p> : (
                   <ul className="space-y-2">
                     {post.checks.slice().sort((a, b) => Number(a.ok) - Number(b.ok)).map((c) => (
                       <li key={c.id} className="flex gap-2.5 text-xs">
@@ -207,24 +223,16 @@ export default function BlogPostPage() {
               </Panel>
             )}
 
-            {left === 'editar' && (
-              <Panel
-                title="Editar"
-                info="Al guardar se vuelve a revisar el SEO. Si el artículo ya está publicado, el cambio se sube también a la web."
-                action={<Button size="sm" className="rounded-xl" disabled={!!busy || working} onClick={() => act('save', '', { h1: post.h1, slug: post.slug, metaDescription: post.metaDescription, keyword: post.keyword, secondary: post.secondary, excerpt: post.excerpt, body: post.body }, 'PUT')}>{busy === 'save' && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}Guardar</Button>}
-              >
+            {left === 'datos' && (
+              <Panel title="Datos SEO" info="Lo que lee Google. Al guardar se vuelve a revisar; si ya está publicado, se actualiza también en la web.">
                 <div className="space-y-3">
                   <Field label={`Título · ${post.h1.length}/55`} info="El H1: lo primero que se lee y lo que más pesa para Google. Con la palabra clave."><input className={inputCls} value={post.h1} onChange={(e) => set('h1', e.target.value)} /></Field>
-                  <Field label={`URL · ${post.slug.length}/70`} info="La dirección del artículo: buffaloia.com/blog/esta-parte/. Con la palabra clave y guiones."><input className={inputCls} value={post.slug} onChange={(e) => set('slug', e.target.value)} /></Field>
-                  <Field label={`Descripción para Google · ${post.metaDescription.length}/155`} info="La meta-description: el texto gris bajo el título en los resultados de Google."><textarea className={inputCls + ' h-20'} value={post.metaDescription} onChange={(e) => set('metaDescription', e.target.value)} /></Field>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Palabra clave" info="La búsqueda principal para la que quiere posicionar."><input className={inputCls} value={post.keyword} onChange={(e) => set('keyword', e.target.value)} /></Field>
-                    <Field label="Secundarias" info="Separadas por comas. Variantes que también debe cubrir."><input className={inputCls} value={post.secondary.join(', ')} onChange={(e) => set('secondary', e.target.value.split(',').map((x) => x.trim()).filter(Boolean))} /></Field>
-                  </div>
-                  <Field label="Resumen para la tarjeta" info="Las dos frases que salen en la portada del blog."><textarea className={inputCls + ' h-16'} value={post.excerpt} onChange={(e) => set('excerpt', e.target.value)} /></Field>
-                  <Field label="Texto" info="En HTML. (imagen1) e (imagen2) marcan dónde van las imágenes; [SERGI: …] marca lo que tenéis que completar.">
-                    <textarea className={inputCls + ' h-96 font-mono text-[11px] leading-relaxed'} value={post.body} onChange={(e) => set('body', e.target.value)} />
-                  </Field>
+                  <Field label={`URL · ${post.slug.length}/70`} info="buffaloia.com/blog/esta-parte/. Con la palabra clave y guiones."><input className={inputCls} value={post.slug} onChange={(e) => set('slug', e.target.value)} /></Field>
+                  <Field label={`Descripción para Google · ${post.metaDescription.length}/155`} info="El texto gris bajo el título en los resultados de Google."><textarea className={inputCls + ' h-20'} value={post.metaDescription} onChange={(e) => set('metaDescription', e.target.value)} /></Field>
+                  <Field label="Palabra clave principal" info="La búsqueda para la que quiere posicionar."><input className={inputCls} value={post.keyword} onChange={(e) => set('keyword', e.target.value)} /></Field>
+                  <Field label="Secundarias" info="Separadas por comas. Variantes que también debe cubrir."><input className={inputCls} value={post.secondary.join(', ')} onChange={(e) => set('secondary', e.target.value.split(',').map((x) => x.trim()).filter(Boolean))} /></Field>
+                  <Field label="Categoría"><CategorySelect value={post.theme} onChange={(c) => set('theme', c)} /></Field>
+                  <Field label="Resumen para la portada del blog" info="Las dos frases que salen en la tarjeta del artículo."><textarea className={inputCls + ' h-16'} value={post.excerpt} onChange={(e) => set('excerpt', e.target.value)} /></Field>
                 </div>
               </Panel>
             )}
@@ -247,7 +255,7 @@ export default function BlogPostPage() {
               </Panel>
             )}
 
-            <Panel title="Imágenes" info="La destacada (arriba del artículo y al compartir), una de apoyo y una infografía. Pulsa una para verla grande.">
+            <Panel title="Imágenes" info="La destacada (arriba y al compartir), una de apoyo y una infografía. Pulsa una para verla grande.">
               {post.images?.length ? (
                 <div className="grid grid-cols-3 gap-2">
                   {post.images.map((img) => (
@@ -259,18 +267,33 @@ export default function BlogPostPage() {
                   ))}
                 </div>
               ) : (
-                <p className="flex flex-col items-center gap-2 py-4 text-center text-sm text-gray-400"><ImageIcon className="h-6 w-6" />Sin imágenes todavía.</p>
+                <p className="flex flex-col items-center gap-2 py-3 text-center text-sm text-gray-400"><ImageIcon className="h-6 w-6" />Sin imágenes todavía.</p>
               )}
             </Panel>
           </div>
 
+          {/* Zona principal: vista previa o editor */}
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/80 px-4 py-2.5">
-              <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500">Así se verá en buffaloia.com <Info side="bottom">Vista previa con el diseño real de la web. Lo que ves aquí es exactamente lo que se publicará.</Info></p>
-              <span className="text-[11px] text-gray-400">/blog/{post.slug || '…'}/</span>
+            <div className="flex items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/80 px-4 py-2">
+              <Segmented value={mainView} onChange={(x) => setMain(x)} options={[{ id: 'vista', label: 'Vista previa' }, { id: 'escribir', label: 'Escribir' }]} />
+              <span className="flex items-center gap-2 text-[11px] text-gray-400">
+                /blog/{post.slug || '…'}/
+                <a href={`/api/blog/preview/${post.id}`} target="_blank" rel="noreferrer" title="Abrir a pantalla completa" className="text-gray-500 hover:text-gray-900"><ExternalLink className="h-3.5 w-3.5" /></a>
+              </span>
             </div>
-            {post.body ? (
-              <iframe key={v} src={`/api/blog/preview/${post.id}`} className="h-[1500px] w-full" title="Vista previa" />
+            {mainView === 'escribir' ? (
+              <div className="space-y-2 p-4">
+                <p className="text-xs text-gray-500">
+                  Usa «Título de sección» para cada apartado y «Insertar imagen» donde quieras una imagen (el sistema la genera). Los enlaces, con el botón de enlace. Cuando acabes, pulsa <b>Guardar</b> arriba.
+                </p>
+                <RichEditor value={post.body} onChange={(html) => set('body', html)} placeholder="Empieza a escribir aquí…" />
+              </div>
+            ) : post.body ? (
+              dirty ? (
+                <p className="px-6 py-24 text-center text-sm text-gray-400">Guarda los cambios para ver la vista previa actualizada.</p>
+              ) : (
+                <iframe key={v} src={`/api/blog/preview/${post.id}`} className="h-[1500px] w-full" title="Vista previa" />
+              )
             ) : (
               <p className="px-6 py-24 text-center text-sm text-gray-400">{working ? 'Escribiendo…' : 'Todavía no hay texto.'}</p>
             )}
