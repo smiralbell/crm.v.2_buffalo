@@ -29,7 +29,7 @@ export const SITE_PAGES: SitePage[] = [
   { path: '/agentes-de-texto-multicanal/', title: 'Agentes de texto', about: 'WhatsApp, web e Instagram con IA' },
   { path: '/automatizaciones-internas/', title: 'Automatizaciones internas', about: 'Facturas, informes, documentos, integraciones' },
   { path: '/buffalo-core/', title: 'Buffalo Core', about: 'Software a medida y panel de KPIs de la operación' },
-  { path: '/casos-de-exito/', title: 'Casos de éxito', about: 'Precualificación por WhatsApp, llamada al instante a leads, facturas centralizadas' },
+  { path: '/casos-de-exito/', title: 'Casos de éxito', about: 'No enlazar desde el blog', noLink: true },
   { path: '/contact/', title: 'Contacto', about: 'Reservar la auditoría gratuita' },
   { path: '/llamadas-con-ia-para-el-sector-legal/', title: 'Asistente virtual con IA para abogados', about: 'Landing de despachos: WhatsApp y llamadas' },
   { path: '/emailmarketing/', title: 'Email marketing automatizado con IA', about: 'Campañas y secuencias de email que se escriben y envían solas' },
@@ -118,6 +118,26 @@ export const DEFAULT_SETTINGS: BlogSettings = {
   customThemes: [],
 }
 
+/**
+ * Regla fija (no se puede quitar desde Ajustes): BuffaloIA no tiene casos
+ * publicables, así que el blog nunca cita proyectos, clientes ni resultados
+ * propios. Inventarlos se nota y resta credibilidad.
+ */
+export const NO_CASES_RULE = `SIN CASOS PROPIOS (obligatorio)
+- No cites proyectos, clientes, implantaciones ni resultados de BuffaloIA: ni reales, ni anónimos («un despacho con el que trabajamos»), ni inventados.
+- No inventes empresas, nombres, citas de clientes, cifras de resultados ni testimonios.
+- No enlaces a /casos-de-exito/.
+- Para aterrizar las ideas usa situaciones típicas del sector planteadas como hipotéticas («pongamos una clínica que recibe 60 llamadas al día…»), cálculos sencillos que el lector pueda hacer, o datos externos con enlace a la fuente.
+- Habla de cómo trabajamos (primero auditoría, empezar pequeño, medir) como método, no como historias de clientes.`
+
+export const OWN_MATERIAL = `Material propio que SÍ se puede usar:
+- Nuestro método: primero una auditoría de media hora sin coste; se revisa el proceso antes de automatizarlo; se empieza por una fase pequeña y medible; no todo debe automatizarse.
+- Nuestra opinión: si automatizas un proceso roto, solo consigues que funcione mal más rápido. Sin volumen de consultas no compensa.
+- Preguntas que suelen hacerse las empresas: «¿Qué pasa si dejo de pagar el mantenimiento?», «¿Molestará a mis clientes?», «¿Una mala implementación puede ser peor que como estábamos?». Plantéalas como dudas habituales, no como frases de clientes.
+- Seguridad, solo esto: permisos mínimos; ningún agente mueve dinero ni borra información crítica; RGPD contemplado en los contratos. No afirmar país de servidores, cifrado en reposo ni otras medidas.
+
+Nunca: casos, clientes o resultados propios (ver la regla fija); prometer sustituir equipos, ahorro garantizado o plazos cerrados; cifras externas sin enlace a la fuente primaria.`
+
 export const DEFAULT_RULES: BlogRules = {
   voice: `Escribe Sergi, cofundador de BuffaloIA, hablando con un gerente o socio director de una empresa de servicios de 10-100 personas que no tiene tiempo. Frases cortas, ejemplos concretos, opinión clara. Nunca suena a marca corporativa ni a IA.
 
@@ -128,12 +148,12 @@ export const DEFAULT_RULES: BlogRules = {
 - Nuestra tesis: si automatizas un proceso roto, solo consigues que funcione mal más rápido. Primero se audita y se decide; la tecnología viene después. Y no todo debe automatizarse.
 - Comparamos con lo que el lector haría si no nos llama: seguir a mano, contratar a otra persona o usar herramientas sueltas. No con otras agencias.
 - Varía la longitud de las frases. Alguna muy corta. Ninguna frase de relleno que repita el título.
-- Donde falte material propio, deja [SERGI: qué falta] en lugar de inventarlo.`,
+- Habla desde el criterio y la experiencia del sector, no desde proyectos concretos: BuffaloIA no cita casos, clientes ni resultados propios.`,
 
   structure: `1. H1 con la palabra clave principal, escrito como lo buscaría un gerente.
 2. Respuesta directa en los dos primeros párrafos: el dolor real y la respuesta corta.
 3. Qué problema resuelve, con una situación concreta del día a día.
-4. Ejemplos y material propio: un caso, una frase de cliente o un error nuestro.
+4. Un ejemplo práctico: una situación típica del sector, planteada como hipotética («pongamos un despacho de 8 personas…»), nunca como un cliente nuestro.
 5. Cuándo tiene sentido y cuándo no (siempre con la parte del «no»: volumen bajo, proceso sin definir, tareas de criterio).
 6. Cómo sería una primera fase: pequeña, medible, sin prometer resultados.
 7. Errores habituales.
@@ -180,30 +200,14 @@ Elementos visuales
     'cuota mensual cerrada',
   ],
 
-  ownMaterial: `Material propio que se puede usar (sin nombres de cliente):
-- Despacho de abogados: el agente telefónico agendó dos citas reales en sus primeros minutos funcionando.
-- Otro despacho: sistema con voz, WhatsApp, Instagram, gestión documental y CRM. Contarlo como capacidad técnica, nunca con resultados numéricos.
-- Equipo de comunicación de una figura política: miles de mensajes; atenderlos a mano puede costar unos 950 € al día.
-- Proyecto terminado y bloqueado meses por las validaciones de Meta. Error propio: empezar a desarrollar antes de cerrar alcance, accesos y dependencias externas.
-- Asesoría con 3-4 consultas cada 15 días: «no hay nada que filtrar». Sin volumen no hay proyecto.
-- Volumen visto en reuniones: empresas con unos 3.000 formularios y 2.000 llamadas al mes; otras con 100-200 llamadas diarias.
-- Los tres casos de Casos de éxito: precualificación por WhatsApp, llamada al instante a leads de Google Ads, facturas centralizadas e IVA trimestral.
-- Rechazamos un proyecto rentable por no encajar con nuestros valores.
-- Sergi y Santi son formadores externos de Learning Heroes.
-
-Frases literales de clientes:
-«Recibimos 50 o 60 consultas diarias por WhatsApp y tenemos que revisarlas una por una»; «De todos los formularios que entran, descartamos entre el 80 % y el 90 %»; «¿Qué pasa con el sistema si dejamos de pagar el mantenimiento?»; «Una mala implementación puede ser peor que como estábamos»; «No quiero que la IA moleste a los clientes»; «Necesito que filtre lo importante y avise al equipo, no otro sitio más que revisar».
-
-Seguridad (solo esto hasta que Santi confirme más): permisos mínimos por proyecto; ningún agente mueve dinero ni borra información crítica; RGPD contemplado en contratos con revisión jurídica; no ha habido incidentes. No afirmar país de servidores, cifrado en reposo, aislamiento entre clientes ni medidas contra prompt injection.
-
-Nunca: nombres de clientes sin permiso escrito; prometer sustituir equipos, ahorro garantizado o plazos cerrados; cifras externas sin enlace a la fuente primaria; inventar casos, citas o clientes.`,
+  ownMaterial: OWN_MATERIAL,
 
   trustedSources: [
     'boe.es', 'aepd.es', 'eur-lex.europa.eu', 'commission.europa.eu', 'digital-strategy.ec.europa.eu', 'fundae.es',
     'ine.es', 'ontsi.es', 'red.es', 'business.whatsapp.com', 'developers.facebook.com', 'abogacia.es', 'cgae.es',
   ],
 
-  imageStyle: `Fotografía editorial realista y luminosa, estilo revista de negocios. Oficinas y despachos españoles reales, luz natural, tonos claros con algún acento verde (#00c896). Personas de espaldas o desenfocadas, sin caras reconocibles. Nada de robots, cerebros brillantes, hologramas ni texto dentro de la imagen.`,
+  imageStyle: `Fotografía editorial realista y luminosa, estilo revista de negocios. Oficinas y despachos españoles, luz natural, tonos claros con algún acento verde (#00c896). Personas de espaldas o desenfocadas, sin caras reconocibles. Nada de robots, cerebros brillantes ni hologramas. Sin texto, rótulos, carteles, placas, logotipos ni nombres de empresas en ninguna parte de la imagen.`,
 }
 
 /** Categorías de serie más las creadas desde el panel. */

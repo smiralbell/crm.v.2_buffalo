@@ -131,6 +131,15 @@ export function runChecks(post: Post, s: BlogSettings, rules: BlogRules): { chec
   add('banned', 'Sin expresiones prohibidas', banned.length === 0, banned.length ? banned.join(', ') : 'Ninguna')
   const never = rules.neverSay.filter((b) => fullText.toLowerCase().includes(b.toLowerCase()))
   add('never', 'Sin cifras ni promesas prohibidas', never.length === 0, never.length ? never.join(', ') : 'Ninguna')
+  // BuffaloIA no cita casos propios: frases que suenan a «un cliente nuestro» o a proyecto hecho
+  const cases = Array.from(
+    new Set(
+      (bodyText.match(/[^.]*(nuestros? clientes?|uno de nuestros|una de nuestras|con el que trabajamos|con la que trabajamos|con los que trabajamos|hemos implantado|implantamos (?:en|para) (?:un|una)|en un proyecto (?:reciente|nuestro)|un cliente (?:nos|nuestro)|casos? de éxito)[^.]*.?/gi) || []).map((x) => x.trim().slice(0, 140))
+    )
+  )
+  add('casos', 'Sin casos ni clientes propios', cases.length === 0, cases.length ? 'Quitar o plantear como ejemplo hipotético: ' + cases.join(' · ') : 'Ninguno')
+  const caseLink = internal.some((l) => l.href.includes('casos-de-exito'))
+  add('casos-link', 'Sin enlace a Casos de éxito', !caseLink, caseLink ? 'Quitar el enlace a /casos-de-exito/' : 'Correcto')
   add('brand', 'Marca escrita «BuffaloIA»', !/buffalo ia|buffalo\.ai|buffalo ai/i.test(fullText), /buffalo ia|buffalo ai/i.test(fullText) ? 'Corregir a BuffaloIA' : 'Correcto')
   const dashes = (bodyText.match(/—/g) || []).length
   add('dashes', 'Pocos guiones largos (máximo 3)', dashes <= 3, `${dashes} guiones largos`, 'aviso')

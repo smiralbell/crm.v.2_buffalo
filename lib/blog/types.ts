@@ -33,6 +33,8 @@ export interface SitePage {
   path: string
   title: string
   about: string
+  /** No se enlaza desde el blog (solo va en el sitemap) */
+  noLink?: boolean
 }
 
 /** Tema de partida: del calendario anual, propuesto por la IA, una noticia o escrito a mano. */
