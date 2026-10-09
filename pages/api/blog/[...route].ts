@@ -308,9 +308,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({ post: await store.get<Post>('posts', post.id), message: r.message })
       }
       if (c === 'unpublish' && req.method === 'POST') {
-        post.status = 'aprobado'
+        // Vuelve a revisión y suelta su fecha: si siguiera «aprobado» con la fecha pasada, el motor lo republicaría
+        post.status = 'revision'
         delete post.uploadedAt
-        log(post, 'Despublicado', 'Se retira de la web', by)
+        delete post.scheduledAt
+        for (const sl of (await store.list<Slot>('slots')).filter((x) => x.postId === post.id)) {
+          delete sl.postId
+          await store.put('slots', sl)
+        }
+        log(post, 'Despublicado', 'Se retira de la web y vuelve a revisión', by)
         await store.put('posts', post)
         const r = await syncWeb()
         return res.status(200).json({ post, message: r.uploaded ? 'Retirado de la web.' : r.message })

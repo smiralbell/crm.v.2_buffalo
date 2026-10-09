@@ -165,6 +165,12 @@ export default function BlogPostPage() {
                         <span className="block text-xs text-gray-500">{d}</span>
                       </button>
                     ))}
+                    {live && (
+                      <button className="mt-1 block w-full rounded-xl border-t border-gray-100 px-3 py-2 text-left hover:bg-red-50" onClick={() => confirm('¿Despublicar? Se quita de buffaloia.com y vuelve a revisión.') && act('unpublish', '/unpublish')}>
+                        <span className="block text-sm font-medium text-red-600">Despublicar</span>
+                        <span className="block text-xs text-gray-500">Lo quita de la web y vuelve a revisión</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
