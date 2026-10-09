@@ -7,6 +7,8 @@
  * subir por SFTP: la configuración ya tiene los campos (host, usuario,
  * ruta) y la contraseña irá en CDMON_SFTP_PASSWORD.
  */
+import { createHash } from 'crypto'
+import { withFtp } from './ftp'
 import { articleHtml, blogCss, feedXml, indexHtml, publishedImage, sitemapXml, themePages } from './render'
 import * as store from './store'
 import type { BlogSettings, Post } from './types'
@@ -119,4 +121,52 @@ Artículos publicados: ${pub.length}.
 
 export async function buildPackage(posts: Post[], s: BlogSettings): Promise<Buffer> {
   return zip(await buildSiteFiles(posts, s))
+}
+
+/* ---------- Subida directa a CDMON ---------- */
+
+type Manifest = { id: string; files: Record<string, string>; at?: string }
+
+/**
+ * Sube a CDMON solo los ficheros que han cambiado desde la última subida
+ * (se guarda una huella de cada uno). Devuelve cuántos ha subido.
+ */
+export async function uploadSite(posts: Post[], s: BlogSettings): Promise<{ uploaded: number; total: number }> {
+  const files = await buildSiteFiles(posts, s)
+  delete files['LEEME-BLOG.txt']
+  const manifest = (await store.get<Manifest>('settings', 'uploaded')) || { id: 'uploaded', files: {} }
+  const hash = (b: Buffer) => createHash('sha1').update(b).digest('hex')
+  const changed = Object.entries(files).filter(([p, b]) => manifest.files[p] !== hash(b))
+  // Lo que subimos antes y ya no existe (artículo despublicado o con otro slug) se borra de la web.
+  // Sólo se tocan ficheros que subió este módulo: nunca el resto de la web.
+  const gone = Object.keys(manifest.files).filter((p) => !(p in files) && p.startsWith('blog/'))
+  if (!changed.length && !gone.length) return { uploaded: 0, total: Object.keys(files).length }
+
+  const base = s.publish.remoteDir.replace(/\/+$/, '')
+  await withFtp(s.publish.secure, async (ftp) => {
+    const dirs = new Set(changed.map(([p]) => p.split('/').slice(0, -1).join('/')).filter(Boolean))
+    for (const d of Array.from(dirs).sort()) await ftp.mkdirs(`${base}/${d}`)
+    for (const [p, b] of changed) {
+      await ftp.put(`${base}/${p}`, b)
+      manifest.files[p] = hash(b)
+    }
+    for (const p of gone) {
+      await ftp.remove(`${base}/${p}`)
+      delete manifest.files[p]
+    }
+  })
+  manifest.at = new Date().toISOString()
+  await store.put('settings', manifest)
+  return { uploaded: changed.length, total: Object.keys(files).length }
+}
+
+/** Comprueba la conexión: entra, mira la carpeta de destino y sale. No sube nada. */
+export async function testConnection(s: BlogSettings): Promise<string> {
+  return withFtp(s.publish.secure, async (ftp) => {
+    const listing = await ftp.list(s.publish.remoteDir)
+    const hasIndex = /index\.html/i.test(listing)
+    return hasIndex
+      ? `Conexión correcta. La carpeta ${s.publish.remoteDir} contiene la web (index.html encontrado).`
+      : `Conexión correcta, pero en ${s.publish.remoteDir} no se ve index.html: revisa que sea la carpeta pública de buffaloia.com.`
+  })
 }

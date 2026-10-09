@@ -34,13 +34,48 @@ function orHeaders() {
 /** Saca el primer objeto JSON de una respuesta, aunque venga con texto alrededor. */
 export function parseJson<T>(text: string): T {
   const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+  const start = clean.indexOf('{')
+  const end = clean.lastIndexOf('}')
+  const candidates = [clean, start >= 0 && end > start ? clean.slice(start, end + 1) : '']
+  for (const c of candidates) {
+    if (!c) continue
+    try {
+      return JSON.parse(c) as T
+    } catch {
+      // Arreglos habituales: comas finales y marcas de cita de la búsqueda web pegadas tras una cadena ("texto"[1])
+      try {
+        return JSON.parse(c.replace(/,\s*([}\]])/g, '$1').replace(/"\s*\[\d+\](?=\s*[,}\]])/g, '"')) as T
+      } catch {
+        /* sigue */
+      }
+    }
+  }
+  throw new Error('JSON_INVALIDO')
+}
+
+/** Si la IA devuelve un JSON mal formado, se le pide que lo corrija (llamada barata, sin búsqueda). */
+async function repairJson<T>(model: string, broken: string): Promise<{ data: T; usd: number }> {
+  const res = await fetch(OR_URL, {
+    method: 'POST',
+    headers: orHeaders(),
+    body: JSON.stringify({
+      model,
+      max_tokens: 16000,
+      response_format: { type: 'json_object' },
+      usage: { include: true },
+      messages: [
+        { role: 'system', content: 'Corriges JSON. Devuelve exactamente el mismo contenido como JSON válido, sin texto alrededor, sin cambiar los valores.' },
+        { role: 'user', content: broken },
+      ],
+    }),
+  })
+  if (!res.ok) throw new Error('La IA devolvió una respuesta mal formada y no se pudo corregir')
+  const out = await res.json()
+  const text = out.choices?.[0]?.message?.content || ''
   try {
-    return JSON.parse(clean) as T
+    return { data: parseJson<T>(text), usd: Number(out.usage?.cost || 0) }
   } catch {
-    const start = clean.indexOf('{')
-    const end = clean.lastIndexOf('}')
-    if (start >= 0 && end > start) return JSON.parse(clean.slice(start, end + 1)) as T
-    throw new Error('La IA no devolvió un JSON válido')
+    throw new Error('La IA devolvió una respuesta mal formada dos veces. Vuelve a intentarlo.')
   }
 }
 
@@ -74,7 +109,9 @@ export async function askAi<T = unknown>(opts: {
       await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)))
       continue
     }
-    if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 400)}`)
+    if (res.status === 402) throw new Error('Sin saldo en OpenRouter. Recarga créditos en openrouter.ai/settings/credits y vuelve a intentarlo.')
+    if (res.status === 401) throw new Error('La clave de OpenRouter (OPENROUTER_API_KEY) no es válida.')
+    if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 300)}`)
     const out = await res.json()
     const msg = out.choices?.[0]?.message || {}
     const text: string = typeof msg.content === 'string' ? msg.content : ''
@@ -85,9 +122,19 @@ export async function askAi<T = unknown>(opts: {
         title: a.url_citation.title || a.url_citation.url,
         content: a.url_citation.content,
       }))
-    const usd = Number(out.usage?.cost || 0)
-    const data = opts.json ? parseJson<T>(text) : (text as unknown as T)
-    return { data, text, citations, usd }
+    let usd = Number(out.usage?.cost || 0)
+    if (!text.trim()) {
+      lastErr = 'La IA devolvió una respuesta vacía'
+      continue
+    }
+    if (!opts.json) return { data: text as unknown as T, text, citations, usd }
+    try {
+      return { data: parseJson<T>(text), text, citations, usd }
+    } catch {
+      const fixed = await repairJson<T>(opts.model, text)
+      usd += fixed.usd
+      return { data: fixed.data, text, citations, usd }
+    }
   }
   throw new Error(lastErr || 'OpenRouter no responde')
 }
@@ -131,6 +178,7 @@ export async function generateImage(opts: {
       usage: { include: true },
     }),
   })
+  if (res.status === 402) throw new Error("Sin saldo en OpenRouter para las imágenes. Recarga créditos en openrouter.ai/settings/credits.")
   if (!res.ok) throw new Error(`OpenRouter imágenes ${res.status}: ${(await res.text()).slice(0, 300)}`)
   const out = await res.json()
   const url: string | undefined = out.choices?.[0]?.message?.images?.[0]?.image_url?.url

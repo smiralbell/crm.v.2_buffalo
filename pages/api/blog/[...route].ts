@@ -6,8 +6,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdminAPI } from '@/lib/auth'
 import { getRules, getSettings, rulesHistory, saveRules, saveSettings } from '@/lib/blog/config'
-import { bootstrap, emptyPost, ensureRunner, isRunning, monthSpend, publishPost, record, startStep, tick, type Step } from '@/lib/blog/engine'
-import { buildPackage } from '@/lib/blog/publish'
+import { bootstrap, emptyPost, ensureRunner, isRunning, monthSpend, publishPost, record, startStep, syncWeb, tick, type Step } from '@/lib/blog/engine'
+import { buildPackage, testConnection } from '@/lib/blog/publish'
+import { ftpConfigured } from '@/lib/blog/ftp'
 import { articleHtml, indexHtml, type ImageResolver } from '@/lib/blog/render'
 import { findNews, proposeTopics } from '@/lib/blog/research'
 import { reshuffleWeek, ensurePlanned } from '@/lib/blog/schedule'
@@ -81,7 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         status: {
           store: st.mode,
           spend,
-          keys: { openrouter: !!process.env.OPENROUTER_API_KEY, openai: !!process.env.OPENAI_API_KEY, cron: !!process.env.CRON_SECRET },
+          keys: { openrouter: !!process.env.OPENROUTER_API_KEY, openai: !!process.env.OPENAI_API_KEY, cron: !!process.env.CRON_SECRET, ftp: ftpConfigured() },
         },
       })
     }
@@ -182,7 +183,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           t.status = 'usado'
           await store.put('topics', t)
           await store.put('posts', post)
-          return res.status(200).json({ post })
+          startStep(post.id, 'todo', by)
+          return res.status(200).json({ post, working: true })
         }
         await store.put('topics', t)
         return res.status(200).json({ topic: t })
@@ -194,18 +196,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const s = await getSettings()
       const rules = await getRules()
 
+      // Nuevo artículo: de un tema de la cola, de un tema escrito al momento, o escrito a mano
       if (b === 'new' && req.method === 'POST') {
-        const post = emptyPost({ title: String(req.body.title || 'Artículo sin título'), keyword: req.body.keyword, theme: req.body.theme || 'A', kind: req.body.kind || 'articulo' }, s)
+        let topic: Topic | null = req.body.topicId ? await store.get<Topic>('topics', String(req.body.topicId)) : null
+        const post = topic
+          ? emptyPost(topic, s)
+          : emptyPost({ title: String(req.body.title || 'Artículo sin título'), keyword: req.body.keyword, theme: req.body.theme || 'A', kind: req.body.kind || 'articulo' }, s)
+        if (topic) {
+          if (topic.source === 'noticia') post.kind = 'actualidad'
+          topic.status = 'usado'
+          await store.put('topics', topic)
+        } else if (!req.body.manual && req.body.notes) {
+          // Tema escrito al momento: se guarda como tema para que el brief tenga las notas
+          topic = {
+            id: store.newId('man-'), source: 'manual', order: 0, title: post.title, keyword: post.keyword, theme: post.theme, kind: post.kind,
+            destination: req.body.destination || '/auditoria/', ownMaterial: 'Banco de ideas', notes: String(req.body.notes), status: 'usado', createdAt: new Date().toISOString(),
+          }
+          await store.put('topics', topic)
+          post.topicId = topic.id
+        }
         if (req.body.manual) {
           post.manual = true
-          post.h1 = String(req.body.h1 || req.body.title || '')
+          post.h1 = String(req.body.title || '')
           post.slug = slugify(post.h1).slice(0, s.seo.slugMax)
           post.body = String(req.body.body || '')
           post.status = 'borrador'
           log(post, 'Escrito a mano', undefined, by)
         }
         await store.put('posts', post)
-        return res.status(200).json({ post })
+        // Con IA: se investiga, se escribe, se revisa y se ilustra en segundo plano
+        if (!req.body.manual) startStep(post.id, 'todo', by)
+        return res.status(200).json({ post, working: !req.body.manual })
       }
 
       const post = b ? await store.get<Post>('posts', b) : null
@@ -222,7 +243,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         post.score = r.score
         log(post, 'Editado', undefined, by)
         await store.put('posts', post)
-        return res.status(200).json({ post })
+        // Si ya estaba en la web, se actualiza también allí
+        const sync = post.status === 'publicado' ? await syncWeb() : null
+        return res.status(200).json({ post, message: sync?.message })
       }
       if (c === 'step' && req.method === 'POST') {
         const step = String(req.body.step) as Step
@@ -232,10 +255,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       if (c === 'approve' && req.method === 'POST') {
         if (/\[SERGI:/.test(post.body)) return res.status(400).json({ error: 'Quedan huecos [SERGI: …] por rellenar' })
+        if (!post.body) return res.status(400).json({ error: 'El artículo todavía no tiene texto' })
         post.status = 'aprobado'
-        log(post, 'Aprobado', req.body.note, by)
+        // Si no tenía fecha, ocupa el siguiente hueco libre del calendario
+        const slots = await store.list<Slot>('slots')
+        if (!slots.some((sl) => sl.postId === post.id)) {
+          const free = slots.filter((sl) => !sl.postId && sl.at > new Date().toISOString() && sl.kind === 'normal').sort((x, y) => x.at.localeCompare(y.at))[0]
+          if (free) {
+            free.postId = post.id
+            post.scheduledAt = free.at
+            await store.put('slots', free)
+          }
+        }
+        log(post, 'Aprobado', post.scheduledAt ? `Se publicará el ${new Date(post.scheduledAt).toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })}` : undefined, by)
         await store.put('posts', post)
-        return res.status(200).json({ post })
+        return res.status(200).json({ post, message: post.scheduledAt ? 'Aprobado. Se publicará y subirá a la web solo en su fecha.' : 'Aprobado. No hay huecos libres en el calendario: usa «Publicar ahora» o planifica más semanas.' })
       }
       if (c === 'reject' && req.method === 'POST') {
         post.status = 'rechazado'
@@ -254,14 +288,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       if (c === 'publish' && req.method === 'POST') {
         if (/\[SERGI:/.test(post.body)) return res.status(400).json({ error: 'Quedan huecos [SERGI: …] por rellenar' })
-        await publishPost(post, by)
-        return res.status(200).json({ post })
+        if (!post.body) return res.status(400).json({ error: 'El artículo todavía no tiene texto' })
+        const r = await publishPost(post, by)
+        return res.status(200).json({ post: await store.get<Post>('posts', post.id), message: r.message })
       }
       if (c === 'unpublish' && req.method === 'POST') {
         post.status = 'aprobado'
-        log(post, 'Despublicado', undefined, by)
+        delete post.uploadedAt
+        log(post, 'Despublicado', 'Se retira de la web', by)
         await store.put('posts', post)
-        return res.status(200).json({ post })
+        const r = await syncWeb()
+        return res.status(200).json({ post, message: r.uploaded ? 'Retirado de la web.' : r.message })
       }
       if (c === 'delete' && req.method === 'POST') {
         for (const sl of await store.list<Slot>('slots')) if (sl.postId === post.id) { delete sl.postId; await store.put('slots', sl) }
@@ -303,6 +340,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!post) return res.status(404).send('No encontrado')
       return res.status(200).send(articleHtml(post, posts, s, img, true))
     }
+    /* ---------- Conexión con la web (CDMON) ---------- */
+    if (a === 'web' && b === 'test' && req.method === 'POST') {
+      return res.status(200).json({ message: await testConnection(await getSettings()) })
+    }
+    if (a === 'web' && b === 'sync' && req.method === 'POST') {
+      return res.status(200).json(await syncWeb())
+    }
+
     if (a === 'package' && req.method === 'GET') {
       const s = await getSettings()
       const zip = await buildPackage(await store.list<Post>('posts'), s)

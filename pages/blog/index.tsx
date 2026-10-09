@@ -11,8 +11,8 @@ import Resumen from '@/components/blog/Resumen'
 import Articulos from '@/components/blog/Articulos'
 import Temas from '@/components/blog/Temas'
 import Calendario from '@/components/blog/Calendario'
-import Configuracion from '@/components/blog/Configuracion'
-import Reglas from '@/components/blog/Reglas'
+import Ajustes from '@/components/blog/Ajustes'
+import { Info } from '@/components/blog/shared'
 import { cn } from '@/lib/utils'
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -26,12 +26,11 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 }
 
 const TABS = [
-  ['resumen', 'Resumen'],
-  ['articulos', 'Artículos'],
-  ['calendario', 'Calendario'],
-  ['temas', 'Temas'],
-  ['configuracion', 'Configuración'],
-  ['reglas', 'Reglas y prompt'],
+  ['resumen', 'Inicio', 'Lo que hay que hacer hoy: artículos para revisar, próximas publicaciones y el interruptor del piloto automático.'],
+  ['articulos', 'Artículos', 'Todos los artículos clasificados por estado o por categoría. Desde aquí se crean y se abren para revisar.'],
+  ['calendario', 'Calendario', 'Qué sale cada día. Las fechas y horas las elige el sistema al azar (2-3 por semana); podéis moverlas o fijarlas.'],
+  ['temas', 'Temas', 'De qué se va a escribir: la cola de temas y la búsqueda de ideas nuevas y noticias.'],
+  ['ajustes', 'Ajustes', 'Publicación en la web, calendario, cómo escribe la IA, normas SEO e imágenes.'],
 ] as const
 
 export default function BlogPage() {
@@ -70,17 +69,19 @@ export default function BlogPage() {
           <div className="hidden w-40 lg:block" />
           <div className="flex flex-1 justify-center overflow-x-auto border-b border-gray-200 lg:border-b-0">
             <div className="flex min-w-0 flex-nowrap justify-start gap-0 sm:flex-wrap sm:justify-center">
-              {TABS.map(([id, label]) => (
-                <button
+              {TABS.map(([id, label, info]) => (
+                <div
                   key={id}
-                  onClick={() => go(id)}
                   className={cn(
-                    'whitespace-nowrap rounded-t-lg border-b-2 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4',
-                    tab === id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    'flex items-center gap-1.5 whitespace-nowrap rounded-t-lg border-b-2 px-3 transition-colors sm:px-4',
+                    tab === id ? 'border-gray-900' : 'border-transparent hover:border-gray-300'
                   )}
                 >
-                  {label}
-                </button>
+                  <button onClick={() => go(id)} className={cn('py-2.5 text-sm font-medium', tab === id ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700')}>
+                    {label}
+                  </button>
+                  {tab === id && <Info side="bottom">{info}</Info>}
+                </div>
               ))}
             </div>
           </div>
@@ -88,7 +89,7 @@ export default function BlogPage() {
             {state && (
               <span className={cn('inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium', state.settings.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500')}>
                 <span className={cn('h-1.5 w-1.5 rounded-full', state.settings.enabled ? 'bg-emerald-500' : 'bg-gray-400')} />
-                {state.settings.enabled ? 'Activo' : 'En pausa'}
+                {state.settings.enabled ? 'Piloto automático' : 'En pausa'}
               </span>
             )}
             <Button variant="outline" size="sm" className="rounded-xl" onClick={() => load()} disabled={loading} title="Actualizar">
@@ -107,8 +108,7 @@ export default function BlogPage() {
         {state && tab === 'articulos' && <Articulos state={state} reload={load} />}
         {state && tab === 'calendario' && <Calendario state={state} reload={load} />}
         {state && tab === 'temas' && <Temas state={state} reload={load} />}
-        {state && tab === 'configuracion' && <Configuracion state={state} reload={load} />}
-        {state && tab === 'reglas' && <Reglas state={state} reload={load} />}
+        {state && tab === 'ajustes' && <Ajustes state={state} reload={load} />}
       </div>
     </Layout>
   )

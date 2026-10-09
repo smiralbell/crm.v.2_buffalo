@@ -54,10 +54,11 @@ export async function makeBrief(post: Post, topic: Topic | null, s: BlogSettings
   addCost(post, usd)
 
   const candidates = internalCandidates(post, all, s)
-  const { data, usd: usd2 } = await askAi<Omit<Brief, 'research'>>({
+  const { data: raw, usd: usd2 } = await askAi<Partial<Omit<Brief, 'research'>>>({
     model: s.models.research,
     web: s.models.webSearchResults,
     json: true,
+    maxTokens: 16000,
     system: 'Eres el editor jefe del blog de BuffaloIA. Preparas briefs que un redactor puede seguir sin dudas. Solo usas URLs que existen. Respondes solo con JSON.',
     prompt: `Artículo: «${post.title}» (${post.kind}, tema ${post.theme}: ${theme?.name})
 Pregunta del lector en este tema: ${theme?.question}
@@ -84,33 +85,36 @@ Busca en la web 3 fuentes externas primarias y fiables en español (preferibleme
 Material propio disponible:
 ${rules.ownMaterial}
 
-Devuelve:
+Sé breve en las notas del esquema (máximo 25 palabras cada una): el redactor ya tiene las reglas. Rellena TODOS los campos, en este orden:
 {
  "h1": "máximo ${s.seo.h1Max} caracteres, con la palabra clave",
  "slug": "kebab-case, máximo ${s.seo.slugMax} caracteres, con la palabra clave",
  "metaDescription": "máximo ${s.seo.metaMax} caracteres, con la palabra clave",
- "angle": "qué hace distinto a este artículo",
- "outline": [{"h2": "", "h3": [""], "notes": "qué va aquí y qué material propio usar"}],
- "faq": ["3-5 preguntas reales"],
- "internalLinks": [{"url": "/ruta/", "anchorType": "h2|frase|palabra", "reason": ""}],
+ "angle": "qué hace distinto a este artículo, en 1-2 frases",
+ "internalLinks": [{"url": "/ruta/", "anchorType": "h2|frase|palabra", "reason": "breve"}],
  "externalLinks": [{"url": "https://...", "title": "", "reason": "qué dato respalda"}],
+ "faq": ["3-5 preguntas reales"],
  "ownMaterial": "qué material propio concreto va y dónde; si no hay, indica [SERGI: ...]",
- "cta": "el único CTA final, coherente con ${destination}",
- "imagePrompts": {"featured": "prompt de la imagen destacada", "infographic": "prompt de una infografía o diagrama que explique una idea del artículo"}
+ "cta": "el único CTA final, coherente con ${destination}, en una frase",
+ "imagePrompts": {"featured": "prompt de la imagen destacada", "infographic": "prompt de una infografía o diagrama que explique una idea del artículo"},
+ "outline": [{"h2": "", "h3": [""], "notes": "breve"}]
 }`,
   })
   addCost(post, usd2)
+  const data = await completeBrief(raw, { post, s, destination, candidates, research })
+  addCost(post, data.usd)
 
-  // Enlaces externos: solo los que responden
-  const alive = []
-  for (const l of data.externalLinks || []) if (await linkAlive(l.url)) alive.push(l)
-  if (alive.length < 3) {
-    for (const c of citations) {
-      if (alive.length >= 3) break
-      if (!alive.some((a) => a.url === c.url) && rules.trustedSources.some((d) => c.url.includes(d)) && (await linkAlive(c.url))) {
-        alive.push({ url: c.url, title: c.title, reason: 'Fuente encontrada en la investigación' })
-      }
-    }
+  // Enlaces externos: solo los que responden. Si no hay suficientes, búsqueda específica en fuentes fiables.
+  const alive: Brief['externalLinks'] = []
+  const tryAdd = async (l: { url: string; title: string; reason: string }) => {
+    if (alive.length < s.seo.externalLinks && l.url && !alive.some((a) => a.url === l.url) && !l.url.includes('buffaloia.com') && (await linkAlive(l.url))) alive.push(l)
+  }
+  for (const l of data.externalLinks) await tryAdd(l)
+  for (const c of citations) if (rules.trustedSources.some((d) => c.url.includes(d))) await tryAdd({ url: c.url, title: c.title, reason: 'Fuente encontrada en la investigación' })
+  if (alive.length < s.seo.externalLinks) {
+    const found = await findSources(post, research.keyword, s, rules, s.seo.externalLinks - alive.length + 2)
+    addCost(post, found.usd)
+    for (const l of found.links) await tryAdd(l)
   }
 
   const brief: Brief = { ...data, externalLinks: alive, research }
@@ -126,6 +130,92 @@ Devuelve:
   if (!post.manual) post.status = 'brief'
   log(post, 'Brief generado', `Palabra clave «${research.keyword}» · demanda ${research.demand} · ${alive.length} fuentes externas verificadas`)
   return post
+}
+
+/**
+ * Garantiza que el brief tiene todos los campos. Si la respuesta vino incompleta
+ * (por ejemplo, cortada), pide solo lo que falta y, en último caso, usa valores seguros.
+ */
+async function completeBrief(
+  raw: Partial<Omit<Brief, 'research'>>,
+  ctx: { post: Post; s: BlogSettings; destination: string; candidates: { path: string; title: string }[]; research: Brief['research'] }
+): Promise<Omit<Brief, 'research'> & { usd: number }> {
+  const { post, s, destination, candidates, research } = ctx
+  let usd = 0
+  const missing = (['h1', 'slug', 'metaDescription', 'faq', 'internalLinks', 'ownMaterial', 'cta', 'imagePrompts', 'outline'] as const).filter((k) => {
+    const v = raw[k]
+    return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0) || (k === 'imagePrompts' && !(v as Brief['imagePrompts'])?.featured)
+  })
+  if (missing.length) {
+    try {
+      const { data, usd: u } = await askAi<Partial<Omit<Brief, 'research'>>>({
+        model: s.models.research,
+        json: true,
+        maxTokens: 6000,
+        system: 'Completas briefs de blog. Respondes solo con JSON.',
+        prompt: `Artículo: «${post.title}». Palabra clave: «${research.keyword}». Página de venta: ${destination}.
+Páginas internas disponibles: ${candidates.slice(0, 25).map((c) => c.path).join(', ')}
+Brief actual: ${JSON.stringify({ ...raw, outline: raw.outline?.map((o) => o.h2) })}
+
+Devuelve SOLO estos campos que faltan, con el mismo formato del brief: ${missing.join(', ')}.
+- faq: 3-5 preguntas reales (texto).
+- internalLinks: exactamente 3 [{"url","anchorType":"h2|frase|palabra","reason"}], una de ellas ${destination}.
+- imagePrompts: {"featured","infographic"}.
+- outline: [{"h2","h3":[],"notes"}] con 5-7 H2.`,
+      })
+      usd += u
+      raw = { ...raw, ...data }
+    } catch {
+      // se usan los valores seguros de abajo
+    }
+  }
+
+  // Enlaces internos: exactamente 3 distintos, uno de cada tipo, y siempre la página de venta
+  const types: ('h2' | 'frase' | 'palabra')[] = ['h2', 'frase', 'palabra']
+  const valid = new Set(candidates.map((c) => c.path))
+  let links = (raw.internalLinks || []).filter((l) => l && valid.has(l.url))
+  if (!links.some((l) => l.url === destination) && valid.has(destination)) links.unshift({ url: destination, anchorType: 'h2', reason: 'Página de venta del tema' })
+  for (const fallback of ['/auditoria/', '/casos-de-exito/', '/servicios-ia/']) {
+    if (links.length >= 3) break
+    if (!links.some((l) => l.url === fallback)) links.push({ url: fallback, anchorType: 'frase', reason: 'Enlace de apoyo' })
+  }
+  links = links.filter((l, i, arr) => arr.findIndex((x) => x.url === l.url) === i).slice(0, 3)
+  links.forEach((l, i) => (l.anchorType = types[i]))
+
+  return {
+    h1: raw.h1 || post.title.slice(0, s.seo.h1Max),
+    slug: raw.slug || slugify(research.keyword),
+    metaDescription: raw.metaDescription || '',
+    angle: raw.angle || '',
+    outline: (raw.outline || []).map((o) => ({ h2: o.h2, h3: o.h3 || [], notes: o.notes || '' })),
+    faq: (raw.faq || research.questions || []).slice(0, 5),
+    internalLinks: links,
+    externalLinks: raw.externalLinks || [],
+    ownMaterial: raw.ownMaterial || '[SERGI: añadir un caso o dato propio]',
+    cta: raw.cta || 'En la auditoría revisamos tu caso contigo: media hora, sin coste.',
+    imagePrompts: raw.imagePrompts?.featured ? raw.imagePrompts : { featured: `Fotografía editorial de una oficina de servicios en España relacionada con: ${research.keyword}`, infographic: `Infografía sencilla que explique: ${post.title}` },
+    usd,
+  }
+}
+
+/** Búsqueda específica de fuentes primarias y fiables para los enlaces externos. */
+async function findSources(post: Post, keyword: string, s: BlogSettings, rules: BlogRules, n: number) {
+  try {
+    const { data, usd, citations } = await askAi<{ links: { url: string; title: string; reason: string }[] }>({
+      model: s.models.research,
+      web: 6,
+      json: true,
+      maxTokens: 3000,
+      system: 'Buscas fuentes primarias fiables en español. Solo devuelves URLs que has visto en la búsqueda. Respondes solo con JSON.',
+      prompt: `Necesito ${n} fuentes externas con autoridad para un artículo sobre «${post.title}» (palabra clave «${keyword}»), dirigido a empresas de servicios en España.
+Prioriza estos dominios: ${rules.trustedSources.join(', ')}. También valen organismos oficiales, colegios profesionales, estudios con metodología o medios de referencia. Nunca competidores (agencias o empresas de software de IA).
+Devuelve {"links":[{"url":"","title":"","reason":"qué dato o norma respalda"}]}`,
+    })
+    const links = [...(data.links || []), ...citations.map((c) => ({ url: c.url, title: c.title, reason: 'Fuente encontrada' }))]
+    return { links, usd }
+  } catch {
+    return { links: [], usd: 0 }
+  }
 }
 
 /* ---------------- 2. Borrador ---------------- */

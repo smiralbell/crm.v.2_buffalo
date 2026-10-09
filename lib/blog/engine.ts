@@ -15,6 +15,7 @@ import { getRules, getSettings } from './config'
 import { calendarTopics } from './calendar-seed'
 import { findNews } from './research'
 import { ensurePlanned } from './schedule'
+import { uploadSite } from './publish'
 import { blockingFailures, runChecks } from './seo'
 import * as store from './store'
 import type { BlogRules, BlogSettings, Post, RunLog, Slot, Topic } from './types'
@@ -169,11 +170,20 @@ export async function runStep(postId: string, step: Step, by?: string): Promise<
     }
     if (step !== 'brief' && post.body) afterChecks(post, s, rules)
     if (by) log(post, `Paso «${step}» lanzado a mano`, undefined, by)
+    delete post.lastError
     await store.put('posts', post)
     await record(step, true, `${post.h1 || post.title}`, { postId, usd: (post.cost?.usd || 0) - before })
     return post
   } catch (e) {
-    await record(step, false, e instanceof Error ? e.message : String(e), { postId })
+    const message = e instanceof Error ? e.message : String(e)
+    // El error queda guardado en el artículo para enseñarlo en su ficha
+    const post = await store.get<Post>('posts', postId)
+    if (post) {
+      post.lastError = { at: nowIso(), step, message }
+      log(post, 'Error', message)
+      await store.put('posts', post)
+    }
+    await record(step, false, message, { postId })
     throw e
   } finally {
     running.delete(postId)
@@ -197,12 +207,50 @@ function afterChecks(post: Post, s: BlogSettings, rules: BlogRules) {
   }
 }
 
-export async function publishPost(post: Post, by?: string) {
+export async function publishPost(post: Post, by?: string): Promise<{ uploaded: boolean; message: string }> {
   post.status = 'publicado'
   post.publishedAt = post.publishedAt || nowIso()
-  log(post, 'Publicado', 'Incluido en el paquete del blog', by)
+  log(post, 'Publicado', undefined, by)
   await store.put('posts', post)
   await record('publicar', true, post.h1, { postId: post.id })
+  return syncWeb()
+}
+
+let syncing = false
+
+/**
+ * Sube a CDMON todo lo que haya cambiado (artículos publicados, portada,
+ * categorías, sitemap y RSS). Si falla, lo apunta en los artículos
+ * pendientes de subir y se reintenta en la siguiente vuelta del motor.
+ */
+export async function syncWeb(): Promise<{ uploaded: boolean; message: string }> {
+  const s = await getSettings()
+  if (s.publish.method !== 'ftp') return { uploaded: false, message: 'Publicado. La subida a la web está en modo manual: descarga el paquete en Ajustes.' }
+  if (syncing) return { uploaded: false, message: 'Ya se está subiendo la web' }
+  syncing = true
+  const posts = await store.list<Post>('posts')
+  const pendingUpload = posts.filter((p) => p.status === 'publicado' && (!p.uploadedAt || p.uploadedAt < p.updatedAt))
+  try {
+    const r = await uploadSite(posts, s)
+    for (const p of pendingUpload) {
+      delete p.lastError
+      log(p, 'Subido a la web', `${s.site.domain}${s.site.blogPath}${p.slug}/`)
+      p.uploadedAt = p.updatedAt // después de log(), que actualiza updatedAt
+      await store.put('posts', p)
+    }
+    await record('subir', true, r.uploaded ? `${r.uploaded} ficheros subidos a CDMON` : 'La web ya estaba al día')
+    return { uploaded: true, message: r.uploaded ? `Publicado y subido a la web (${r.uploaded} ficheros).` : 'La web ya estaba al día.' }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    for (const p of pendingUpload) {
+      p.lastError = { at: nowIso(), step: 'subir', message: 'No se pudo subir a la web: ' + message }
+      await store.put('posts', p)
+    }
+    await record('subir', false, message)
+    return { uploaded: false, message: 'Publicado, pero no se pudo subir a la web: ' + message }
+  } finally {
+    syncing = false
+  }
 }
 
 /* ---------------- Tick ---------------- */
@@ -241,6 +289,9 @@ export async function tick(reason = 'programado'): Promise<{ ok: boolean; messag
         // ya queda registrado en runs; seguimos con el resto
       }
     }
+    // Reintento de subida si algún publicado no llegó a la web
+    const fresh = await store.list<Post>('posts')
+    if (s.publish.method === 'ftp' && fresh.some((p) => p.status === 'publicado' && !p.uploadedAt)) await syncWeb()
     if (overBudget) await record('presupuesto', false, `Gasto del mes ≥ ${s.budget.monthlyUsd} $: no se generan artículos nuevos`)
     return { ok: true, message: `Tick (${reason}) completado` }
   } finally {

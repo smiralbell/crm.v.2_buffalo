@@ -101,7 +101,8 @@ export const DEFAULT_SETTINGS: BlogSettings = {
     authorName: 'Sergi Masoliver',
     authorRole: 'Cofundador de BuffaloIA',
   },
-  publish: { method: 'paquete', sftpHost: '', sftpUser: '', sftpPath: '/web' },
+  // En CDMON la carpeta pública del dominio es /web
+  publish: { method: 'ftp', remoteDir: '/web', secure: true },
   budget: { monthlyUsd: 60 },
 }
 

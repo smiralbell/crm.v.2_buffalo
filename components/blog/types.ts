@@ -15,7 +15,7 @@ export interface BlogState {
   topics: Topic[]
   slots: Slot[]
   runs: RunLog[]
-  status: { store: 'file' | 'postgres'; spend: number; keys: { openrouter: boolean; openai: boolean; cron: boolean } }
+  status: { store: 'file' | 'postgres'; spend: number; keys: { openrouter: boolean; openai: boolean; cron: boolean; ftp: boolean } }
 }
 
 export interface TabProps {

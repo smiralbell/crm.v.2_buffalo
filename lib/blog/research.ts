@@ -140,7 +140,7 @@ Busca en la web qué páginas en español posicionan hoy para la palabra clave y
 
 Devuelve este JSON:
 {
- "keyword": "palabra clave principal final: 1 a 3 palabras significativas (sin contar artículos ni preposiciones), que la gente busque de verdad según el autocompletado y encaje con el tema. Puede ser distinta de la hipótesis si hay una mejor.",
+ "keyword": "palabra clave principal final: 1 a 3 palabras significativas (sin contar artículos ni preposiciones), que la gente busque de verdad según el autocompletado y encaje con el tema. Entre las que encajen de lleno con el tema y con quien lee (gerentes de empresas de servicios), elige la de MAYOR señal de demanda; no cambies a una más genérica o con menos demanda. Puede ser distinta de la hipótesis si hay una mejor.",
  "intent": "informativa | comercial | transaccional | navegacional",
  "demand": "alta | media | baja (según la señal del autocompletado)",
  "suggestions": ["10-15 búsquedas reales del listado relacionadas"],

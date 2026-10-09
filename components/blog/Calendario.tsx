@@ -4,7 +4,7 @@ import { CalendarPlus, ChevronLeft, ChevronRight, Loader2, Lock, Newspaper, Shuf
 import { Button } from '@/components/ui/button'
 import type { Slot } from '@/lib/blog/types'
 import { cn } from '@/lib/utils'
-import { api, fmt, Notice, Pill, STATUS, StatusPill, THEME_COLOR, THEME_NAMES, ThemePill, time } from './shared'
+import { api, fmt, Info, Notice, Pill, STATUS, StatusPill, THEME_COLOR, THEME_NAMES, ThemePill, time } from './shared'
 import type { PostLite, TabProps } from './types'
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -83,14 +83,14 @@ export default function Calendario({ state, reload }: TabProps) {
           <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft className="h-4 w-4" /></Button>
           <div className="min-w-[200px] text-center">
             <p className="text-lg font-semibold capitalize text-gray-900">{month.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</p>
-            <p className="text-xs text-gray-500">{monthCount} artículos este mes</p>
+            <p className="inline-flex items-center gap-1.5 text-xs text-gray-500">{monthCount} artículos este mes <Info side="bottom">Cada tarjeta es una fecha reservada: hora, color de su categoría y punto de su estado. Púlsala para abrir el artículo, fijar la fecha, pasarla a actualidad o quitarla. Al pasar el ratón por una semana aparece el botón para volver a sortear sus días y horas.</Info></p>
           </div>
           <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight className="h-4 w-4" /></Button>
           <Button variant="ghost" size="sm" className="rounded-xl" onClick={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>Hoy</Button>
         </div>
         <div className="flex justify-center lg:w-56 lg:justify-end">
           <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => call('plan', 'schedule/plan')} disabled={!!busy}>
-            {busy === 'plan' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />} Planificar semanas
+            {busy === 'plan' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />} Reservar fechas
           </Button>
         </div>
       </div>

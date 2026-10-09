@@ -88,12 +88,42 @@ export function ThemePill({ theme }: { theme: ThemeCode }) {
   )
 }
 
-export function Panel({ title, action, children, className, center }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; center?: boolean }) {
+/** La «i» de información: al pasar el ratón (o tocarla en el móvil) explica qué hace cada cosa. */
+export function Info({ children, className, side = 'top' }: { children: ReactNode; className?: string; side?: 'top' | 'bottom' }) {
+  return (
+    <span className={cn('group/info relative inline-flex align-middle', className)} tabIndex={0}>
+      <span className="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-gray-300 text-[10px] font-semibold leading-none text-gray-400 transition group-hover/info:border-gray-900 group-hover/info:text-gray-900 group-focus/info:border-gray-900 group-focus/info:text-gray-900">
+        i
+      </span>
+      <span
+        role="tooltip"
+        className={cn(
+          'pointer-events-none absolute left-1/2 z-50 w-72 -translate-x-1/2 rounded-xl bg-gray-900 px-3 py-2.5 text-left text-xs font-normal normal-case leading-relaxed tracking-normal text-white opacity-0 shadow-lg transition group-hover/info:opacity-100 group-focus/info:opacity-100',
+          side === 'top' ? 'bottom-6' : 'top-6'
+        )}
+      >
+        {children}
+      </span>
+    </span>
+  )
+}
+
+/** Título con su «i». */
+export function Title({ children, info, className }: { children: ReactNode; info?: ReactNode; className?: string }) {
+  return (
+    <span className={cn('inline-flex items-center gap-1.5', className)}>
+      {children}
+      {info && <Info side="bottom">{info}</Info>}
+    </span>
+  )
+}
+
+export function Panel({ title, info, action, children, className, center }: { title?: ReactNode; info?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; center?: boolean }) {
   return (
     <section className={cn('rounded-2xl border border-gray-200 bg-white p-5 shadow-sm', className)}>
       {(title || action) && (
         <div className={cn('mb-4 flex flex-wrap items-center gap-3', center ? 'flex-col justify-center text-center' : 'justify-between')}>
-          {title && <h2 className="text-sm font-semibold text-gray-900">{title}</h2>}
+          {title && <h2 className="text-sm font-semibold text-gray-900"><Title info={info}>{title}</Title></h2>}
           {action}
         </div>
       )}
@@ -102,23 +132,39 @@ export function Panel({ title, action, children, className, center }: { title?: 
   )
 }
 
-export function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
+export function Stat({ label, value, sub, info }: { label: string; value: ReactNode; sub?: ReactNode; info?: ReactNode }) {
   return (
     <div className="rounded-2xl border border-gray-200/80 bg-white px-5 py-4 text-center shadow-sm">
-      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className="text-xs font-medium text-gray-500"><Title info={info}>{label}</Title></p>
       <p className="mt-1 text-2xl font-semibold leading-tight text-gray-900">{value}</p>
       {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
     </div>
   )
 }
 
-export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+export function Field({ label, info, hint, children }: { label: string; info?: ReactNode; hint?: ReactNode; children: ReactNode }) {
   return (
-    <label className="block space-y-1.5">
-      {label && <span className="text-xs font-medium text-gray-600">{label}</span>}
+    <div className="block space-y-1.5">
+      {label && <span className="block text-xs font-medium text-gray-600"><Title info={info}>{label}</Title></span>}
       {children}
       {hint && <span className="block text-[11px] leading-snug text-gray-400">{hint}</span>}
-    </label>
+    </div>
+  )
+}
+
+/** Ventana emergente centrada, con el mismo aspecto que los diálogos del CRM. */
+export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; wide?: boolean }) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]" onClick={onClose}>
+      <div className={cn('max-h-[90vh] w-full overflow-y-auto rounded-2xl bg-white p-6 shadow-xl', wide ? 'max-w-3xl' : 'max-w-xl')} onClick={(e) => e.stopPropagation()}>
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <button onClick={onClose} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Cerrar">✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
   )
 }
 

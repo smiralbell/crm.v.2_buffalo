@@ -138,6 +138,10 @@ export interface Post {
   rejectReason?: string
   /** Escrito por una persona en «Escribir yo»: el motor no reescribe el texto */
   manual?: boolean
+  /** Último error del motor con este artículo, para enseñarlo en el panel */
+  lastError?: { at: string; step: string; message: string }
+  /** Cuándo se subió a la web por última vez */
+  uploadedAt?: string
 }
 
 /** Hueco del calendario aleatorio. */
@@ -212,10 +216,10 @@ export interface BlogSettings {
     authorRole: string
   }
   publish: {
-    method: 'paquete' | 'sftp'
-    sftpHost: string
-    sftpUser: string
-    sftpPath: string
+    /** ftp = se sube solo a CDMON al publicar; paquete = se descarga un ZIP y se sube a mano */
+    method: 'ftp' | 'paquete'
+    remoteDir: string
+    secure: boolean
   }
   budget: { monthlyUsd: number }
 }
