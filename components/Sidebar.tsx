@@ -75,6 +75,7 @@ const NAV: NavItem[] = [
     ],
   },
   { href: '/pipelines', label: 'Pipelines', icon: Workflow, roles: ['admin'] },
+  { href: '/blog', label: 'Blog', icon: FileText, roles: ['admin'] },
   {
     href: '/marketing',
     label: 'Marketing',

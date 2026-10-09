@@ -1,0 +1,44 @@
+<!-- Etiqueta de Google (GA4). IDs: GT-5N5N59N6 (etiqueta), G-LGW8DG4YC8 (propiedad). Ver README §4. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=GT-5N5N59N6"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+/* Consent Mode v2: todo denegado hasta que el visitante elija en el banner
+   (assets/js/cookies.js). Si ya eligió, se aplica aquí mismo antes de cargar. */
+gtag('consent', 'default', {
+  ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied',
+  analytics_storage: 'denied', functionality_storage: 'granted', security_storage: 'granted',
+  wait_for_update: 500
+});
+gtag('set', 'ads_data_redaction', true);
+try {
+  var bc = JSON.parse(localStorage.getItem('buffaloia-consent'));
+  if (bc && bc.v === 1 && Date.now() - bc.ts < 31536e6) {
+    gtag('consent', 'update', {
+      analytics_storage: bc.analytics ? 'granted' : 'denied',
+      ad_storage: bc.marketing ? 'granted' : 'denied',
+      ad_user_data: bc.marketing ? 'granted' : 'denied',
+      ad_personalization: bc.marketing ? 'granted' : 'denied'
+    });
+  }
+} catch (e) {}
+gtag('js', new Date());
+gtag('config', 'GT-5N5N59N6');
+gtag('config', 'G-LGW8DG4YC8');
+</script>
+<!-- Píxel de Meta. Arranca con el consentimiento revocado; assets/js/cookies.js hace
+     fbq('consent','grant') cuando el visitante acepta marketing (Consent Mode). Ver README §4. -->
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('consent', 'revoke');
+fbq('init', '1594958778777242');
+fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1594958778777242&ev=PageView&noscript=1" alt=""></noscript>
