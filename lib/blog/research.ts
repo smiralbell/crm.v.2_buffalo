@@ -188,7 +188,7 @@ Temas del blog (código: nombre → página de venta):
 ${THEMES.filter((t) => t.code !== 'N').map((t) => `${t.code}: ${t.name} → ${t.salesPage}`).join('\n')}
 
 Páginas de la web que se pueden enlazar:
-${SITE_PAGES.filter((p) => !p.noLink).map((p) => `${p.path} · ${p.title}: ${p.about}`).join('\n')}
+${SITE_PAGES.map((p) => `${p.path} · ${p.title}: ${p.about}`).join('\n')}
 
 Línea editorial (resumen): ${rules.voice.split('\n')[0]}
 

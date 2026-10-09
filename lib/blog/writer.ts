@@ -2,7 +2,7 @@
  * Del tema al artículo: brief → borrador → control → correcciones → imágenes.
  */
 import { askAi, generateImage } from './ai'
-import { allThemes, NO_CASES_RULE, SITE_PAGES } from './defaults'
+import { allThemes, SITE_PAGES } from './defaults'
 import { researchKeyword } from './research'
 import { blockingFailures, runChecks, slugify } from './seo'
 import type { BlogRules, BlogSettings, Brief, Post, Topic } from './types'
@@ -38,7 +38,7 @@ function internalCandidates(post: Post, all: Post[], s: BlogSettings) {
   const blog = all
     .filter((p) => p.id !== post.id && ['publicado', 'aprobado'].includes(p.status))
     .map((p) => ({ path: `${s.site.blogPath}${p.slug}/`, title: p.h1, about: `Artículo del tema ${p.theme}${p.kind === 'pilar' ? ' (guía pilar)' : ''}: ${p.keyword}` }))
-  return [...blog, ...SITE_PAGES.filter((p) => !p.noLink)]
+  return [...blog, ...SITE_PAGES]
 }
 
 /* ---------------- 1. Brief ---------------- */
@@ -59,9 +59,7 @@ export async function makeBrief(post: Post, topic: Topic | null, s: BlogSettings
     web: s.models.webSearchResults,
     json: true,
     maxTokens: 16000,
-    system: `Eres el editor jefe del blog de BuffaloIA. Preparas briefs que un redactor puede seguir sin dudas. Solo usas URLs que existen. Respondes solo con JSON.
-
-${NO_CASES_RULE}`,
+    system: 'Eres el editor jefe del blog de BuffaloIA. Preparas briefs que un redactor puede seguir sin dudas. Solo usas URLs que existen. Respondes solo con JSON.',
     prompt: `Artículo: «${post.title}» (${post.kind}, tema ${post.theme}: ${theme?.name})
 Pregunta del lector en este tema: ${theme?.question}
 Palabra clave principal validada: «${research.keyword}» (${research.intent}, demanda ${research.demand})
@@ -96,7 +94,7 @@ Sé breve en las notas del esquema (máximo 25 palabras cada una): el redactor y
  "internalLinks": [{"url": "/ruta/", "anchorType": "h2|frase|palabra", "reason": "breve"}],
  "externalLinks": [{"url": "https://...", "title": "", "reason": "qué dato respalda"}],
  "faq": ["3-5 preguntas reales"],
- "ownMaterial": "qué parte del método u opinión de BuffaloIA va y dónde, y qué ejemplo hipotético del sector se usa (nunca casos ni clientes propios)",
+ "ownMaterial": "qué material propio concreto va y dónde; si no hay, indica [SERGI: ...]",
  "cta": "el único CTA final, coherente con ${destination}, en una frase",
  "imagePrompts": {"featured": "prompt de la imagen destacada", "infographic": "prompt de una infografía o diagrama que explique una idea del artículo"},
  "outline": [{"h2": "", "h3": [""], "notes": "breve"}]
@@ -177,7 +175,7 @@ Devuelve SOLO estos campos que faltan, con el mismo formato del brief: ${missing
   const valid = new Set(candidates.map((c) => c.path))
   let links = (raw.internalLinks || []).filter((l) => l && valid.has(l.url))
   if (!links.some((l) => l.url === destination) && valid.has(destination)) links.unshift({ url: destination, anchorType: 'h2', reason: 'Página de venta del tema' })
-  for (const fallback of ['/auditoria/', '/servicios-ia/', '/contact/']) {
+  for (const fallback of ['/auditoria/', '/casos-de-exito/', '/servicios-ia/']) {
     if (links.length >= 3) break
     if (!links.some((l) => l.url === fallback)) links.push({ url: fallback, anchorType: 'frase', reason: 'Enlace de apoyo' })
   }
@@ -193,7 +191,7 @@ Devuelve SOLO estos campos que faltan, con el mismo formato del brief: ${missing
     faq: (raw.faq || research.questions || []).slice(0, 5),
     internalLinks: links,
     externalLinks: raw.externalLinks || [],
-    ownMaterial: raw.ownMaterial || 'Método de BuffaloIA (auditoría primero, fase pequeña y medible) y un ejemplo hipotético del sector',
+    ownMaterial: raw.ownMaterial || '[SERGI: añadir un caso o dato propio]',
     cta: raw.cta || 'En la auditoría revisamos tu caso contigo: media hora, sin coste.',
     imagePrompts: raw.imagePrompts?.featured ? raw.imagePrompts : { featured: `Fotografía editorial de una oficina de servicios en España relacionada con: ${research.keyword}`, infographic: `Infografía sencilla que explique: ${post.title}` },
     usd,
@@ -246,8 +244,6 @@ NUNCA DIGAS: ${rules.neverSay.join(' · ')}
 
 REGLAS DE CONTENIDO
 ${rules.ownMaterial}
-
-${NO_CASES_RULE}
 
 FORMATO
 - Devuelves SOLO el cuerpo del artículo en HTML limpio, sin \`\`\` ni explicaciones: <h2>, <h3>, <p>, <ul>/<ol>/<li>, <strong>, <a href="URL">texto</a>, <table> si compara cosas.

@@ -1,4 +1,4 @@
-import { DEFAULT_RULES, DEFAULT_SETTINGS, MODEL_PRESETS, OWN_MATERIAL } from './defaults'
+import { DEFAULT_RULES, DEFAULT_SETTINGS, MODEL_PRESETS } from './defaults'
 import * as store from './store'
 import type { BlogRules, BlogSettings } from './types'
 
@@ -34,13 +34,7 @@ export async function saveSettings(value: BlogSettings, by?: string): Promise<Bl
 
 export async function getRules(): Promise<BlogRules> {
   const doc = await store.get<Doc<BlogRules>>('rules', 'main')
-  const r = { ...DEFAULT_RULES, ...(doc?.value || {}) }
-  // Reglas guardadas con el material antiguo (casos de clientes que no se pueden citar): se cambian por el nuevo
-  if (/agendó dos citas reales|Los tres casos de Casos de éxito/.test(r.ownMaterial)) r.ownMaterial = OWN_MATERIAL
-  if (/un caso, una frase de cliente o un error nuestro/.test(r.structure)) r.structure = DEFAULT_RULES.structure
-  if (r.voice.includes('[SERGI: qué falta]')) r.voice = DEFAULT_RULES.voice
-  if (!/rótulos/.test(r.imageStyle)) r.imageStyle = r.imageStyle.trim() + ' Sin texto, rótulos, carteles, placas, logotipos ni nombres de empresas en la imagen.'
-  return r
+  return { ...DEFAULT_RULES, ...(doc?.value || {}) }
 }
 
 /** Las reglas guardan historial: si un cambio empeora los artículos, se vuelve atrás. */
