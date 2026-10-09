@@ -57,14 +57,14 @@
 .rd-hero { margin-bottom: clamp(2.5rem, 5vw, 3.5rem); }
 .rd-hero .ph { aspect-ratio: 16 / 9; border-radius: 20px; }
 
-.rd-body { font-size: 1.25rem; line-height: 1.75; color: var(--text); }
+.rd-body { font-size: 1.125rem; line-height: 1.75; color: var(--text); }
 .rd-body p, .rd-body li { font-size: inherit; text-wrap: pretty; }
 .rd-body > * + * { margin-top: 1.4em; }
 .rd-body strong { font-weight: var(--fw-bold); }
 .rd-body a:not(.btn) { color: var(--accent-ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
-.rd-body h2 { margin-top: 2.4em; font-size: clamp(1.75rem, 2.8vw, 2.25rem); line-height: 1.15; letter-spacing: -0.03em; font-weight: var(--fw-medium); color: var(--text); scroll-margin-top: calc(var(--header-h) + 1.5rem); }
+.rd-body h2 { margin-top: 2.4em; font-size: clamp(1.6rem, 2.5vw, 2rem); line-height: 1.15; letter-spacing: -0.03em; font-weight: var(--fw-medium); color: var(--text); scroll-margin-top: calc(var(--header-h) + 1.5rem); }
 .rd-body h2 a:not(.btn) { color: inherit; text-decoration-color: var(--accent); }
-.rd-body h3 { margin-top: 1.8em; font-size: 1.4rem; line-height: 1.3; letter-spacing: -0.02em; font-weight: var(--fw-medium); color: var(--text); }
+.rd-body h3 { margin-top: 1.8em; font-size: 1.25rem; line-height: 1.3; letter-spacing: -0.02em; font-weight: var(--fw-medium); color: var(--text); }
 .rd-body h2 + *, .rd-body h3 + * { margin-top: .6em; }
 .rd-body ul, .rd-body ol { padding-left: 1.4em; }
 .rd-body ul { list-style: disc; }
@@ -85,9 +85,9 @@
 .rd-cta p { margin: 0; }
 .rd-cta .btn { margin-top: 1.1rem; }
 .rd-faq h3 { margin-top: 1.4em; }
-.rd-foot { display: flex; gap: 1rem; align-items: flex-start; margin-top: 3em !important; padding-top: 1.6em; border-top: 1px solid var(--line-strong); }
+.rd-foot { display: flex; gap: 1rem; align-items: flex-start; margin-top: 3em !important; padding-top: 1.6em; padding-bottom: 4.5rem; border-top: 1px solid var(--line-strong); }
 .rd-foot img { flex: none; width: 56px; height: 56px; border-radius: 50%; object-fit: cover; background: var(--accent-soft); }
-.rd-foot p { font-size: 1.0625rem !important; color: var(--text-2); }
+.rd-foot p { font-size: 1rem !important; color: var(--text-2); }
 .rd-dates { font-size: .9375rem !important; color: var(--text-3); }
 
 @media (max-width: 960px) {
@@ -97,6 +97,6 @@
 @media (max-width: 640px) {
   .posts { grid-template-columns: 1fr; }
   .post--row .ph { width: 38%; }
-  .rd-body { font-size: 1.125rem; }
+  .rd-body { font-size: 1.0625rem; }
   .rd-body table { font-size: .95rem; }
 }

@@ -79,8 +79,9 @@ export class Ftp {
     const hello = await this.read()
     if (hello.code !== 220) throw new Error('FTP: ' + hello.text)
 
-    if (opts.secure) {
-      await this.send('AUTH TLS', [234])
+    // Si el servidor no admite cifrado (CDMON responde «500 AUTH not understood»), sigue en FTP normal
+    const tlsOk = opts.secure && (await this.send('AUTH TLS', [234]).then(() => true, () => false))
+    if (tlsOk) {
       sock.removeAllListeners('data')
       const secured = tls.connect({ socket: sock, servername: opts.host, rejectUnauthorized: false })
       await new Promise<void>((res, rej) => {
