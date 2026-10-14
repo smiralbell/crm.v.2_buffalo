@@ -109,7 +109,15 @@ export default function ChecklistPage() {
     }
   }
 
-  const onUpdate = async (id: number, patch: { title: string; remind_every_days: number }) => {
+  const onUpdate = async (
+    id: number,
+    patch: {
+      title: string
+      remind_every_days: number
+      remind_weekday: number | null
+      remind_time: string | null
+    }
+  ) => {
     setBusyId(id)
     setError('')
     try {

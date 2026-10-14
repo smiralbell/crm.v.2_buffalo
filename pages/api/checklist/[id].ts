@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
+import { normalizeRemindTime, normalizeWeekday } from '@/lib/checklist/remind'
 import {
   deleteChecklistItem,
   moveChecklistItem,
@@ -20,11 +21,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'PATCH') {
-      const { title, done, column_key, position, remind_every_days } = req.body || {}
+      const { title, done, column_key, position, remind_every_days, remind_weekday, remind_time } =
+        req.body || {}
       const remind =
         typeof remind_every_days === 'number' && Number.isFinite(remind_every_days)
           ? Math.max(0, Math.min(365, Math.floor(remind_every_days)))
           : undefined
+      const weekday =
+        remind_weekday === null || remind_weekday === ''
+          ? null
+          : remind_weekday !== undefined
+            ? normalizeWeekday(remind_weekday)
+            : undefined
+      if (remind_weekday !== undefined && remind_weekday !== null && remind_weekday !== '' && weekday == null) {
+        return res.status(400).json({ error: 'Día de la semana inválido' })
+      }
+      const time =
+        remind_time === null || remind_time === ''
+          ? null
+          : remind_time !== undefined
+            ? normalizeRemindTime(remind_time)
+            : undefined
+      if (remind_time !== undefined && remind_time !== null && remind_time !== '' && time == null) {
+        return res.status(400).json({ error: 'Hora inválida' })
+      }
 
       if (column_key != null || position != null) {
         if (!isChecklistColumnId(column_key)) {
@@ -37,11 +57,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
         if (!item) return res.status(404).json({ error: 'No encontrado' })
 
-        if (title != null || done != null || remind != null) {
+        if (title != null || done != null || remind != null || weekday !== undefined || time !== undefined) {
           const updated = await updateChecklistItem(id, {
             title: typeof title === 'string' ? title : undefined,
             done: typeof done === 'boolean' ? done : undefined,
-            remind_every_days: remind,
+            ...(remind != null ? { remind_every_days: remind } : {}),
+            ...(weekday !== undefined ? { remind_weekday: weekday } : {}),
+            ...(time !== undefined ? { remind_time: time } : {}),
           })
           return res.status(200).json({ item: updated })
         }
@@ -51,7 +73,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const item = await updateChecklistItem(id, {
         title: typeof title === 'string' ? title : undefined,
         done: typeof done === 'boolean' ? done : undefined,
-        remind_every_days: remind,
+        ...(remind != null ? { remind_every_days: remind } : {}),
+        ...(weekday !== undefined ? { remind_weekday: weekday } : {}),
+        ...(time !== undefined ? { remind_time: time } : {}),
       })
       if (!item) return res.status(404).json({ error: 'No encontrado' })
       return res.status(200).json({ item })

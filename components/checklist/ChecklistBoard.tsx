@@ -12,11 +12,13 @@ import {
 } from '@/components/ui/dialog'
 import {
   CHECKLIST_COLUMNS,
-  CHECKLIST_REMIND_OPTIONS,
+  WEEKDAY_OPTIONS,
   checklistRemindLabel,
   type ChecklistColumnId,
   type ChecklistItem,
+  type ChecklistRemindMode,
 } from '@/lib/checklist/types'
+import { checklistRemindMode } from '@/lib/checklist/remind'
 import { Check, GripVertical, Plus, Trash2 } from 'lucide-react'
 
 interface ChecklistBoardProps {
@@ -24,7 +26,15 @@ interface ChecklistBoardProps {
   onCreate: (title: string, column: ChecklistColumnId) => Promise<void>
   onToggle: (id: number, done: boolean) => Promise<void>
   onMove: (id: number, column: ChecklistColumnId, position: number) => Promise<void>
-  onUpdate: (id: number, patch: { title: string; remind_every_days: number }) => Promise<void>
+  onUpdate: (
+    id: number,
+    patch: {
+      title: string
+      remind_every_days: number
+      remind_weekday: number | null
+      remind_time: string | null
+    }
+  ) => Promise<void>
   onDelete: (id: number) => Promise<void>
   busyId?: number | null
 }
@@ -47,7 +57,10 @@ export default function ChecklistBoard({
   const [draggingId, setDraggingId] = useState<number | null>(null)
   const [editing, setEditing] = useState<ChecklistItem | null>(null)
   const [editTitle, setEditTitle] = useState('')
-  const [editRemind, setEditRemind] = useState('1')
+  const [editMode, setEditMode] = useState<ChecklistRemindMode>('every_days')
+  const [editDays, setEditDays] = useState('1')
+  const [editWeekday, setEditWeekday] = useState('1')
+  const [editTime, setEditTime] = useState('09:00')
   const [savingEdit, setSavingEdit] = useState(false)
 
   const byColumn = useMemo(() => {
@@ -91,19 +104,41 @@ export default function ChecklistBoard({
   const openEdit = (item: ChecklistItem) => {
     setEditing(item)
     setEditTitle(item.title)
-    setEditRemind(String(item.remind_every_days ?? 1))
+    setEditMode(checklistRemindMode(item))
+    setEditDays(String(item.remind_every_days > 0 ? item.remind_every_days : 1))
+    setEditWeekday(String(item.remind_weekday || 1))
+    setEditTime(item.remind_time || '09:00')
   }
 
   const saveEdit = async () => {
     if (!editing) return
     const title = editTitle.trim()
     if (!title) return
+    const days = Math.max(1, Math.min(365, Math.floor(Number(editDays) || 1)))
     setSavingEdit(true)
     try {
-      await onUpdate(editing.id, {
-        title,
-        remind_every_days: Number(editRemind) || 0,
-      })
+      if (editMode === 'off') {
+        await onUpdate(editing.id, {
+          title,
+          remind_every_days: 0,
+          remind_weekday: null,
+          remind_time: null,
+        })
+      } else if (editMode === 'weekly') {
+        await onUpdate(editing.id, {
+          title,
+          remind_every_days: 0,
+          remind_weekday: Number(editWeekday) || 1,
+          remind_time: editTime || '09:00',
+        })
+      } else {
+        await onUpdate(editing.id, {
+          title,
+          remind_every_days: days,
+          remind_weekday: null,
+          remind_time: editTime || '09:00',
+        })
+      }
       setEditing(null)
     } finally {
       setSavingEdit(false)
@@ -216,7 +251,7 @@ export default function ChecklistBoard({
                         </p>
                         {!item.done && (
                           <p className="text-[10px] text-gray-400 mt-0.5">
-                            {checklistRemindLabel(item.remind_every_days ?? 1)}
+                            {checklistRemindLabel(item)}
                           </p>
                         )}
                       </button>
@@ -259,17 +294,66 @@ export default function ChecklistBoard({
           <label className="block">
             <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Recordatorio</span>
             <select
-              value={editRemind}
-              onChange={(e) => setEditRemind(e.target.value)}
+              value={editMode}
+              onChange={(e) => setEditMode(e.target.value as ChecklistRemindMode)}
               className="mt-1 flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
             >
-              {CHECKLIST_REMIND_OPTIONS.map((o) => (
-                <option key={o.days} value={String(o.days)}>
-                  {o.label}
-                </option>
-              ))}
+              <option value="off">No recordar</option>
+              <option value="every_days">Cada X días</option>
+              <option value="weekly">Un día a una hora</option>
             </select>
           </label>
+          {editMode === 'every_days' && (
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Cada cuántos días</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={editDays}
+                  onChange={(e) => setEditDays(e.target.value)}
+                  className="mt-1 rounded-xl"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">A las</span>
+                <Input
+                  type="time"
+                  value={editTime}
+                  onChange={(e) => setEditTime(e.target.value)}
+                  className="mt-1 rounded-xl"
+                />
+              </label>
+            </div>
+          )}
+          {editMode === 'weekly' && (
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Día</span>
+                <select
+                  value={editWeekday}
+                  onChange={(e) => setEditWeekday(e.target.value)}
+                  className="mt-1 flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                >
+                  {WEEKDAY_OPTIONS.map((d) => (
+                    <option key={d.iso} value={String(d.iso)}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Hora</span>
+                <Input
+                  type="time"
+                  value={editTime}
+                  onChange={(e) => setEditTime(e.target.value)}
+                  className="mt-1 rounded-xl"
+                />
+              </label>
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" className="rounded-xl" onClick={() => setEditing(null)}>
               Cancelar

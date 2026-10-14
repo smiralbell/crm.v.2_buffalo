@@ -477,6 +477,27 @@ model InstantlyWebhook {
   @@map("instantly_webhooks")
 }
 
+model MetaLeadEvent {
+  id            Int       @id @default(autoincrement())
+  leadgen_id    String    @unique
+  page_id       String?
+  form_id       String?
+  ad_id         String?
+  payload       Json
+  graph_payload Json?
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  last_error    String?   @db.Text
+  contact_id    Int?
+  lead_id       Int?
+  next_retry_at DateTime?
+  created_at    DateTime  @default(now())
+  processed_at  DateTime?
+
+  @@index([status, next_retry_at])
+  @@map("meta_lead_events")
+}
+
 // ============================================
 // ENGRANAJE 5 — RETENCIÓN
 // ============================================

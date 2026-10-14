@@ -21,6 +21,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   void import('@/lib/ops-reminder-scheduler')
     .then((m) => m.startOpsReminderScheduler())
     .catch(() => {})
+  void import('@/lib/integrations/meta/scheduler')
+    .then((m) => m.startMetaLeadRetryScheduler())
+    .catch(() => {})
 
   try {
     let user = await requireAuthAPI(req, res)

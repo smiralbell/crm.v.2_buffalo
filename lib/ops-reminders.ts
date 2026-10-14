@@ -1,7 +1,9 @@
 import { query } from '@/lib/db'
+import { isChecklistReminderDue, normalizeRemindTime, normalizeWeekday } from '@/lib/checklist/remind'
 import { ensureChecklistSchema } from '@/lib/checklist/store'
 import { type ChecklistColumnId, isChecklistColumnId } from '@/lib/checklist/types'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 import { opsLink, sendOpsAlert } from '@/lib/ops-alerts'
 import { ensureIncidentsTable } from '@/lib/retencion/incidents'
 
@@ -96,31 +98,53 @@ async function claimDueIncidents(): Promise<DueIncident[]> {
 
 async function claimDueChecklist(): Promise<DueTask[]> {
   await ensureChecklistSchema()
-  const rows = await prisma.$queryRaw<
-    { id: number; title: string; column_key: string }[]
-  >`
-    WITH due AS (
-      SELECT id
+  return prisma.$transaction(async (tx) => {
+    const open = await tx.$queryRaw<
+      {
+        id: number
+        title: string
+        column_key: string
+        remind_every_days: number | null
+        remind_weekday: number | null
+        remind_time: string | null
+        last_reminded_at: Date | null
+        created_at: Date
+      }[]
+    >`
+      SELECT id, title, column_key, remind_every_days, remind_weekday, remind_time,
+             last_reminded_at, created_at
         FROM crm_checklist_items
        WHERE done = FALSE
-         AND remind_every_days > 0
-         AND (
-           (COALESCE(last_reminded_at, created_at) AT TIME ZONE 'Europe/Madrid')::date
-           + (remind_every_days * INTERVAL '1 day')
-         ) <= (NOW() AT TIME ZONE 'Europe/Madrid')::date
+         AND (remind_every_days > 0 OR remind_weekday IS NOT NULL)
        FOR UPDATE SKIP LOCKED
+    `
+    const now = new Date()
+    const due = open.filter((r) =>
+      isChecklistReminderDue(
+        {
+          remind_every_days: Number(r.remind_every_days) || 0,
+          remind_weekday: normalizeWeekday(r.remind_weekday),
+          remind_time: normalizeRemindTime(r.remind_time),
+          last_reminded_at: r.last_reminded_at ? r.last_reminded_at.toISOString() : null,
+          created_at: r.created_at.toISOString(),
+        },
+        now
+      )
     )
-    UPDATE crm_checklist_items i
-       SET last_reminded_at = NOW()
-      FROM due
-     WHERE i.id = due.id
-    RETURNING i.id, i.title, i.column_key
-  `
-  return rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    column_key: isChecklistColumnId(r.column_key) ? r.column_key : 'inbox',
-  }))
+    if (!due.length) return []
+
+    const ids = due.map((r) => r.id)
+    await tx.$executeRaw`
+      UPDATE crm_checklist_items
+         SET last_reminded_at = NOW()
+       WHERE id IN (${Prisma.join(ids)})
+    `
+    return due.map((r) => ({
+      id: r.id,
+      title: r.title,
+      column_key: isChecklistColumnId(r.column_key) ? r.column_key : 'inbox',
+    }))
+  })
 }
 
 function buildDigest(incidents: DueIncident[], tasks: DueTask[]): {

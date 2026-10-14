@@ -44,7 +44,9 @@ export function normalizeChannel(origen: string | null | undefined): ChannelKey 
     o.includes('chat') ||
     o.includes('landing') ||
     o.includes('widget') ||
-    o.includes('cal')
+    o.includes('cal') ||
+    o.includes('meta') ||
+    o.includes('facebook')
   ) {
     return 'web'
   }
