@@ -57,6 +57,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     },
   })
 
+  const { alertNewLead } = await import('@/lib/alerts/events')
+  await alertNewLead({
+    leadId: lead.id,
+    name: contact.nombre,
+    company: contact.empresa,
+    email: contact.email,
+    origin: 'cold_calling',
+  })
+
   // Marcar prospecto como convertido
   await prisma.coldCallProspect.update({
     where: { id: prospect.id },

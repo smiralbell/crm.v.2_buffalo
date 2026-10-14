@@ -49,6 +49,16 @@ async function processCalcom(payload: unknown): Promise<InboundProcessorResult> 
     title: booking.title,
     start: booking.start_time,
   })
+  if (booking.trigger_event === 'BOOKING_CREATED' || booking.trigger_event === 'BOOKING_RESCHEDULED') {
+    const { alertCalBooking } = await import('@/lib/alerts/events')
+    await alertCalBooking({
+      name: booking.attendee_name,
+      email: booking.attendee_email,
+      title: booking.title,
+      when: booking.start_time,
+      uid: booking.uid,
+    })
+  }
   return {
     status: 'processed',
     result: {

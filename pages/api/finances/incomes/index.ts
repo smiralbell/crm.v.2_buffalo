@@ -75,6 +75,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
       })
 
+      if (income.status === 'paid') {
+        const { alertMoneyIn } = await import('@/lib/alerts/events')
+        await alertMoneyIn({
+          title: `Ingreso cobrado: ${income.client_name}`,
+          amount: Number(income.total_amount),
+          detail: income.project,
+          dedupeKey: `income:${income.id}`,
+        })
+      }
+
       return res.status(201).json({
         income: {
           ...income,

@@ -266,13 +266,21 @@ export async function syncColdCallProspectToGlobalReunion(prospect: {
 
   let lead = await prisma.lead.findFirst({ where: { contact_id: contact.id } })
   if (!lead) {
-    await prisma.lead.create({
+    const created = await prisma.lead.create({
       data: {
         contact_id: contact.id,
         estado: 'reunion',
         origen_principal: 'cold_calling',
         ultima_interaccion: new Date(),
       },
+    })
+    const { alertNewLead } = await import('@/lib/alerts/events')
+    await alertNewLead({
+      leadId: created.id,
+      name: prospect.nombre,
+      company: prospect.empresa,
+      email: prospect.email,
+      origin: 'cold_calling',
     })
   } else if (lead.estado !== 'reunion') {
     await prisma.lead.update({

@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!projectId) return res.status(400).json({ error: 'ID de proyecto requerido' })
 
   try {
-    await requireProjectAccessAPI(req, res, projectId)
+    const user = await requireProjectAccessAPI(req, res, projectId)
 
     if (req.method === 'GET') {
       const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
@@ -81,7 +81,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           )
           RETURNING *
         `
-        return res.status(201).json(formatTask(rows[0]))
+        const created = rows[0]
+        if ((data.status || 'pending') === 'in_progress' && created) {
+          const { alertUserWorking } = await import('@/lib/alerts/events')
+          await alertUserWorking({
+            userName: user.name,
+            action: 'started',
+            title: String(created.title || data.title),
+            kind: 'tarea',
+            link: `/gestion-proyecto/proyectos/${projectId}`,
+            id: String(created.id),
+          })
+        }
+        return res.status(201).json(formatTask(created))
       } catch (insertError) {
         const msg = insertError instanceof Error ? insertError.message : ''
         if (msg.includes('due_date')) {

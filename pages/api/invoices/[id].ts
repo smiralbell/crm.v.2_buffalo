@@ -126,6 +126,17 @@ export default async function handler(
       }
 
       // Marcar enviada → FACTURA EMITIDA en embudo global
+      if (data.bank_transaction_id) {
+        const { alertMoneyIn } = await import('@/lib/alerts/events')
+        await alertMoneyIn({
+          title: `Cobro vinculado: ${updated.invoice_number}`,
+          amount: Number(updated.total),
+          detail: updated.client_name,
+          link: `/invoices/${id}/edit`,
+          dedupeKey: `invoice-bank:${id}:${data.bank_transaction_id}`,
+        })
+      }
+
       if (data.status === 'sent' && invoice.status !== 'sent') {
         try {
           const { advanceLeadOnGlobalByContactEmail } = await import(

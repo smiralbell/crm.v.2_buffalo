@@ -117,6 +117,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (status) {
         await updateTicketStatus(id, status)
+        if (status !== row.status && (status === 'in_progress' || status === 'resolved' || status === 'closed')) {
+          const { alertUserWorking } = await import('@/lib/alerts/events')
+          await alertUserWorking({
+            userName: user.name || userEmail,
+            action: status === 'in_progress' ? 'started' : 'done',
+            title: row.title,
+            kind: 'ticket',
+            link: `/tickets/${id}`,
+            id,
+          })
+        }
       }
 
       let notifyResult: { sent: boolean; error?: string } = { sent: false }

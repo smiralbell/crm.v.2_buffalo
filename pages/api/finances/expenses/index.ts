@@ -87,6 +87,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         } as any,
       })
 
+      const { alertMoneyOut } = await import('@/lib/alerts/events')
+      await alertMoneyOut({
+        title: `Gasto: ${expense.name}`,
+        amount: Number(expense.total_amount),
+        detail: expense.client_name || expense.project,
+        dedupeKey: `expense:${expense.id}`,
+      })
+
       return res.status(201).json({
         expense: {
           ...expense,

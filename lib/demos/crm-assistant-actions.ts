@@ -101,6 +101,15 @@ export async function createContactAndLead(input: {
     },
   })
 
+  const { alertNewLead } = await import('@/lib/alerts/events')
+  await alertNewLead({
+    leadId: lead.id,
+    name: contact.nombre,
+    company: contact.empresa,
+    email: contact.email,
+    origin: 'crm',
+  })
+
   return {
     ok: true,
     contact_id: contact.id,

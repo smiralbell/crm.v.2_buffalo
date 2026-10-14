@@ -242,6 +242,10 @@ async function syncOneAccount(
     const dbAfter = await getDbDateRange(accountId)
     return {
       inserted: 0,
+      insertedCredits: 0,
+      insertedDebits: 0,
+      creditEur: 0,
+      debitEur: 0,
       duplicates: 0,
       total: 0,
       repaired: 0,
@@ -265,6 +269,10 @@ async function syncOneAccount(
 
   let inserted = 0
   let duplicates = 0
+  let insertedCredits = 0
+  let insertedDebits = 0
+  let creditEur = 0
+  let debitEur = 0
 
   let repaired = await repairFromApiBatch(accountId, transactions)
   const balanceRepaired = await repairFromStoredBalances(accountId)
@@ -369,8 +377,16 @@ async function syncOneAccount(
         tx.entry_reference ?? null,
       ]
     )
-    if (result.rowCount && result.rowCount > 0) inserted++
-    else duplicates++
+    if (result.rowCount && result.rowCount > 0) {
+      inserted++
+      if (tx.amount >= 0) {
+        insertedCredits++
+        creditEur += tx.amount
+      } else {
+        insertedDebits++
+        debitEur += tx.amount
+      }
+    } else duplicates++
   }
 
   if (balancesRaw && typeof balancesRaw === 'object') {
@@ -398,6 +414,10 @@ async function syncOneAccount(
 
   return {
     inserted,
+    insertedCredits,
+    insertedDebits,
+    creditEur,
+    debitEur,
     duplicates,
     total: transactions.length,
     repaired,
@@ -503,6 +523,10 @@ export async function syncEnableBankingTransactions(options?: {
 
   let inserted = 0
   let duplicates = 0
+  let insertedCredits = 0
+  let insertedDebits = 0
+  let creditEur = 0
+  let debitEur = 0
   let total = 0
   let repaired = 0
   let balanceRepaired = 0
@@ -523,6 +547,10 @@ export async function syncEnableBankingTransactions(options?: {
       apiDebugSample: uid === session.account_uid ? apiDebugSample : null,
     })
     inserted += r.inserted
+    insertedCredits += r.insertedCredits
+    insertedDebits += r.insertedDebits
+    creditEur += r.creditEur
+    debitEur += r.debitEur
     duplicates += r.duplicates
     total += r.total
     repaired += r.repaired
@@ -548,6 +576,16 @@ export async function syncEnableBankingTransactions(options?: {
 
   const syncedAt = new Date()
   await updateBankLastSyncedAt(session.id, syncedAt)
+
+  if (insertedCredits || insertedDebits) {
+    const { alertBankDigest } = await import('@/lib/alerts/events')
+    await alertBankDigest({
+      credits: insertedCredits,
+      creditEur,
+      debits: insertedDebits,
+      debitEur,
+    })
+  }
 
   return {
     inserted,

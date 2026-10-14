@@ -64,10 +64,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (data.project !== undefined) updateData.project = data.project
       if (data.notes !== undefined) updateData.notes = data.notes
 
+      const prev = await prisma.financialIncome.findUnique({
+        where: { id: parseInt(id as string) },
+        select: { status: true },
+      })
+
       const income = await prisma.financialIncome.update({
         where: { id: parseInt(id as string) },
         data: updateData,
       })
+
+      if (income.status === 'paid' && prev?.status !== 'paid') {
+        const { alertMoneyIn } = await import('@/lib/alerts/events')
+        await alertMoneyIn({
+          title: `Ingreso cobrado: ${income.client_name}`,
+          amount: Number(income.total_amount),
+          detail: income.project,
+          dedupeKey: `income:${income.id}:paid`,
+        })
+      }
 
       return res.status(200).json({
         income: {

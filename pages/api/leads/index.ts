@@ -99,6 +99,17 @@ export default async function handler(
             prioridad: data.prioridad || 'media',
             score: data.score || null,
           },
+          include: {
+            contact: { select: { nombre: true, email: true, empresa: true } },
+          },
+        })
+        const { alertNewLead } = await import('@/lib/alerts/events')
+        await alertNewLead({
+          leadId: lead.id,
+          name: lead.contact?.nombre,
+          company: lead.contact?.empresa,
+          email: lead.contact?.email,
+          origin: lead.origen_principal || 'crm',
         })
         return res.status(201).json(lead)
       } catch (createError) {

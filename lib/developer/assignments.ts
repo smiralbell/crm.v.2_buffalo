@@ -163,7 +163,24 @@ export async function createAssignment(input: {
       RETURNING id, user_id, title, summary, scope_text, deliverables, reference_links,
                 status, due_date, created_at, updated_at
     `
-    return rows[0] ? mapRow(rows[0]) : null
+    const created = rows[0] ? mapRow(rows[0]) : null
+    if (created) {
+      const { findCrmUserById } = await import('@/lib/crm-users')
+      const { alertUserWorking } = await import('@/lib/alerts/events')
+      const user = await findCrmUserById(created.user_id)
+      const action = created.status === 'done' ? 'done' : created.status === 'in_progress' ? 'started' : null
+      if (action) {
+        await alertUserWorking({
+          userName: user?.name || `Usuario #${created.user_id}`,
+          action,
+          title: created.title,
+          kind: 'asignacion',
+          link: `/gestion-proyecto/asignaciones/${created.id}`,
+          id: created.id,
+        })
+      }
+    }
+    return created
   } catch {
     return null
   }
@@ -208,7 +225,25 @@ export async function updateAssignment(
       RETURNING id, user_id, title, summary, scope_text, deliverables, reference_links,
                 status, due_date, created_at, updated_at
     `
-    return rows[0] ? mapRow(rows[0]) : null
+    const updated = rows[0] ? mapRow(rows[0]) : null
+    if (updated && patch.status && patch.status !== current.status) {
+      const { findCrmUserById } = await import('@/lib/crm-users')
+      const { alertUserWorking } = await import('@/lib/alerts/events')
+      const user = await findCrmUserById(updated.user_id)
+      const action =
+        updated.status === 'done' ? 'done' : updated.status === 'in_progress' ? 'started' : null
+      if (action) {
+        await alertUserWorking({
+          userName: user?.name || `Usuario #${updated.user_id}`,
+          action,
+          title: updated.title,
+          kind: 'asignacion',
+          link: `/gestion-proyecto/asignaciones/${updated.id}`,
+          id: updated.id,
+        })
+      }
+    }
+    return updated
   } catch {
     return null
   }

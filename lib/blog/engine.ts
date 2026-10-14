@@ -272,6 +272,13 @@ function afterChecks(post: Post, s: BlogSettings, rules: BlogRules) {
   } else {
     post.status = 'revision'
     log(post, 'Pendiente de revisión', ok ? `Nota ${score}/100` : 'Con fallos de control: revisar antes de aprobar')
+    void import('@/lib/alerts/events').then(({ alertBlogNeedsReview }) =>
+      alertBlogNeedsReview(
+        post.h1 || post.title,
+        post.id,
+        ok ? `Nota ${score}/100` : 'Con fallos de control: revisar antes de aprobar'
+      )
+    )
   }
 }
 
@@ -281,6 +288,8 @@ export async function publishPost(post: Post, by?: string): Promise<{ uploaded: 
   log(post, 'Publicado', undefined, by)
   await store.put('posts', post)
   await record('publicar', true, post.h1, { postId: post.id })
+  const { alertBlogPublished } = await import('@/lib/alerts/events')
+  await alertBlogPublished(post.h1 || post.title, post.id)
   return syncWeb()
 }
 
@@ -315,6 +324,9 @@ export async function syncWeb(): Promise<{ uploaded: boolean; message: string }>
       await store.put('posts', p)
     }
     await record('subir', false, message)
+    const { alertBlogFailed } = await import('@/lib/alerts/events')
+    const first = pendingUpload[0]
+    if (first) await alertBlogFailed(first.h1 || first.title, first.id, message)
     return { uploaded: false, message: 'Publicado, pero no se pudo subir a la web: ' + message }
   } finally {
     syncing = false
@@ -360,7 +372,11 @@ export async function tick(reason = 'programado'): Promise<{ ok: boolean; messag
     // Reintento de subida si algún publicado no llegó a la web
     const fresh = await store.list<Post>('posts')
     if (s.publish.method === 'ftp' && fresh.some((p) => p.status === 'publicado' && !p.uploadedAt)) await syncWeb()
-    if (overBudget) await record('presupuesto', false, `Gasto del mes ≥ ${s.budget.monthlyUsd} $: no se generan artículos nuevos`)
+    if (overBudget) {
+      await record('presupuesto', false, `Gasto del mes ≥ ${s.budget.monthlyUsd} $: no se generan artículos nuevos`)
+      const { alertBlogBudget } = await import('@/lib/alerts/events')
+      await alertBlogBudget(s.budget.monthlyUsd, nowIso().slice(0, 7))
+    }
     return { ok: true, message: `Tick (${reason}) completado` }
   } finally {
     ticking = false

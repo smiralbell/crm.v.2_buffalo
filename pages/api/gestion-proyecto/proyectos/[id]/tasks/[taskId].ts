@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!projectId || !taskId) return res.status(400).json({ error: 'IDs requeridos' })
 
   try {
-    await requireProjectAccessAPI(req, res, projectId)
+    const user = await requireProjectAccessAPI(req, res, projectId)
 
     if (req.method === 'PATCH') {
       const data = updateTaskSchema.parse(req.body)
@@ -110,6 +110,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             : null
       const nextDueDate = data.due_date !== undefined ? data.due_date : currentDue
 
+      const notifyWork = async (title: string) => {
+        if (!statusChanged) return
+        const action =
+          nextStatus === 'in_progress'
+            ? 'started'
+            : nextStatus === 'buffalo_validation'
+              ? 'review'
+              : nextStatus === 'done'
+                ? 'done'
+                : null
+        if (!action) return
+        const { alertUserWorking } = await import('@/lib/alerts/events')
+        await alertUserWorking({
+          userName: user.name,
+          action,
+          title,
+          kind: 'tarea',
+          link: `/gestion-proyecto/proyectos/${projectId}`,
+          id: taskId,
+        })
+      }
+
       try {
         const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
           UPDATE project_dev_tasks SET
@@ -128,6 +150,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           WHERE id = ${taskId}::uuid AND project_id = ${projectId}::uuid
           RETURNING *
         `
+        await notifyWork(String(rows[0]?.title || current.title))
         return res.status(200).json(formatTaskResponse(rows[0]))
       } catch (updateError) {
         const msg = updateError instanceof Error ? updateError.message : ''
@@ -148,6 +171,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             WHERE id = ${taskId}::uuid AND project_id = ${projectId}::uuid
             RETURNING *
           `
+          await notifyWork(String(rows[0]?.title || current.title))
           return res.status(200).json({ ...formatTaskResponse(rows[0]), due_date: nextDueDate })
         }
         if (!msg.includes('estimated_hours') && !msg.includes('status_changed_at')) throw updateError
@@ -163,6 +187,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           WHERE id = ${taskId}::uuid AND project_id = ${projectId}::uuid
           RETURNING *
         `
+        await notifyWork(String(rows[0]?.title || current.title))
         return res.status(200).json(formatTaskResponse(rows[0]))
       }
     }
