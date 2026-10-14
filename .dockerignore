@@ -49,3 +49,11 @@ next-env.d.ts
 
 # SQL scripts (no necesarios en producción)
 *.sql
+# …salvo las migraciones versionadas, que se aplican al arrancar
+!db/migrations/*.sql
+
+# Material local y de trabajo
+_local
+.claude
+.data
+uploads

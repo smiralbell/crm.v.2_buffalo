@@ -1,28 +1,29 @@
-FROM node:20-alpine
-
-# Instalar dependencias del sistema
+# ---- Dependencias (todas, para compilar) ----
+FROM node:20-alpine AS deps
 RUN apk add --no-cache openssl
-
 WORKDIR /app
-
-# Copiar archivos de dependencias
 COPY package.json package-lock.json ./
-
-# Instalar dependencias
 RUN npm ci
 
-# Copiar código fuente
+# ---- Compilación ----
+FROM deps AS build
 COPY . .
-
-# Generar Prisma Client (requerido antes del build)
+# Prisma Client (requerido antes del build)
 RUN npx prisma generate
-
-# Construir aplicación Next.js
 RUN npm run build
+# La imagen final no necesita herramientas de desarrollo ni la caché de compilación
+RUN npm prune --omit=dev && rm -rf .next/cache
 
-# Exponer puerto
+# ---- Imagen final ----
+FROM node:20-alpine AS runner
+RUN apk add --no-cache openssl
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app ./
+
 EXPOSE 3000
 
-# Comando de inicio
-CMD ["npm", "start"]
-
+# Web: aplica migraciones pendientes (db/migrations) y arranca. Si una migración falla,
+# el CRM arranca igualmente y el error se ve en los logs y en /sistema.
+# Worker (segundo servicio en EasyPanel, misma imagen): comando `npm run worker`.
+CMD ["sh", "-c", "npm run db:migrate || echo '[migrate] fallo: el CRM arranca igualmente'; exec npm start"]

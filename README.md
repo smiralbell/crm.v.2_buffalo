@@ -72,11 +72,42 @@ Configura estas variables en EasyPanel:
 5. **Build Command:** (automático desde Dockerfile)
 6. **Start Command:** (automático desde Dockerfile)
 
+### Worker (tareas automáticas)
+
+Crea un **segundo servicio** en EasyPanel con la misma imagen y las mismas variables de entorno, sin puerto ni dominio, y con este comando:
+
+```
+npm run worker
+```
+
+Ejecuta la sincronización bancaria, Gmail, el motor del blog, los reintentos de webhooks, la cola de avisos, la conciliación automática, la vigilancia de integraciones y el briefing diario (lista completa en `lib/jobs/registry.ts`). Cada tarea se bloquea en Postgres, así que puede convivir con la web sin ejecutarse dos veces. Con el worker en marcha puedes poner `WEB_RUN_JOBS=0` en la web para que no las arranque también.
+
+### Migraciones
+
+- Los cambios de tablas nuevos van en `db/migrations/NNNN_nombre.sql`: numerados, idempotentes y sin editar los ya aplicados.
+- Se aplican solos al arrancar el contenedor (`npm run db:migrate`), al arrancar el worker y desde **Sistema → Migraciones**. Quedan registrados en la tabla `schema_migrations`.
+- `npm run db:migrate:status` muestra las pendientes.
+- Los SQL antiguos de `prisma/` y `prisma/history/` son anteriores a este sistema y se consideran ya aplicados.
+
+### Variables nuevas
+
+| Variable | Para qué |
+|---|---|
+| `SESSION_SECRET` | **Obligatoria en producción.** Sin ella el login falla a propósito. |
+| `CRON_SECRET` | Endpoints `/api/cron/*` (Bearer). |
+| `INGEST_TOKEN` | Bearer para `POST /api/ingest/web_chat` (bot de n8n → ficha del contacto). |
+| `CRM_ADMIN_WHATSAPP` | Número del admin de `.env` para avisos urgentes por WhatsApp. |
+| `WEB_RUN_JOBS=0` | La web no ejecuta tareas (cuando ya hay worker). |
+| `BRIEFING_HOUR` | Hora del briefing diario (por defecto 8, hora de Madrid). `DAILY_BRIEFING=0` lo apaga. |
+| `AUTO_RECONCILE=0` | Desactiva la conciliación automática de cobros. |
+| `AI_CALL_LOG=0` | Desactiva el registro de llamadas a la IA. |
+
+El estado de todo esto (integraciones, tareas, webhooks, gasto de IA, migraciones y auditoría) se ve en **Sistema** (`/sistema`, solo admin).
+
 ### Notas Importantes
 
 - **Base de datos:** La base de datos debe estar creada y accesible desde el contenedor
-- **Tablas:** Las tablas se crean manualmente en PostgreSQL (ver SQL en `prisma/`)
-- **Prisma:** El Dockerfile genera Prisma Client automáticamente, no ejecuta migraciones
+- **Prisma:** El Dockerfile genera Prisma Client automáticamente
 
 ## 🏗️ Estructura del Proyecto
 
@@ -104,6 +135,9 @@ CRM V.2/
 - `npm run lint` - Ejecuta ESLint
 - `npm run prisma:generate` - Genera Prisma Client
 - `npm run prisma:studio` - Abre Prisma Studio
+- `npm run worker` - Tareas automáticas (ver «Worker»)
+- `npm run db:migrate` / `npm run db:migrate:status` - Migraciones de `db/migrations`
+- `npm test` - Tests (Vitest)
 
 ## 🔐 Autenticación
 

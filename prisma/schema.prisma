@@ -30,6 +30,8 @@ model Contact {
   cif             String?
   iban            String?
   dni             String?
+  /// Atribución de primer contacto (UTM / gclid / fbclid). Migración db/migrations/0005.
+  attribution     Json?   @db.JsonB
   leads              Lead[]
   messages           Message[]
   tasks              Task[]

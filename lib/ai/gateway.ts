@@ -97,7 +97,7 @@ async function record(row: {
 export async function aiFetch(url: string, init: RequestInit = {}, meta: AiCallMeta = {}): Promise<Response> {
   if (!url.includes(OPENROUTER_HOST)) return fetch(url, init)
 
-  const module = meta.module || moduleFromStack()
+  const callerModule = meta.module || moduleFromStack()
   const title = headerValue(init.headers, 'X-OpenRouter-Title')
   const endpoint = endpointOf(url)
   let requestedModel: string | null = null
@@ -115,7 +115,7 @@ export async function aiFetch(url: string, init: RequestInit = {}, meta: AiCallM
     res = await fetch(url, { ...init, body: withUsageAccounting(url, init.body) })
   } catch (e) {
     void record({
-      module, title, endpoint, model: requestedModel, promptTokens: null, completionTokens: null,
+      module: callerModule, title, endpoint, model: requestedModel, promptTokens: null, completionTokens: null,
       costUsd: null, durationMs: Date.now() - started, ok: false, statusCode: null,
       error: e instanceof Error ? e.message : String(e),
     })
@@ -147,7 +147,7 @@ export async function aiFetch(url: string, init: RequestInit = {}, meta: AiCallM
       // cuerpo no JSON: se registra sin uso
     }
     await record({
-      module, title, endpoint, model, promptTokens, completionTokens, costUsd,
+      module: callerModule, title, endpoint, model, promptTokens, completionTokens, costUsd,
       durationMs, ok: res.ok, statusCode: res.status, error,
     })
   })()
