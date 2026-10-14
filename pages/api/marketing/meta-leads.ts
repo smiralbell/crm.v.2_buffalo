@@ -16,9 +16,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const now = new Date()
   const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const period = (req.query.period as string) || currentPeriod
+  const campaignId = typeof req.query.campaign_id === 'string' ? req.query.campaign_id.trim() : undefined
 
   try {
-    const data = await listMetaAdsLeads(period)
+    const data = await listMetaAdsLeads(period, 300, campaignId)
     return res.status(200).json({
       leads: data.rows,
       summary: data.summary,

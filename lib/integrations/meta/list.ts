@@ -60,11 +60,13 @@ function fromGraph(leadgenId: string, graph: unknown): ReturnType<typeof parseGr
 
 export async function listMetaAdsLeads(
   period: string,
-  limit = 300
+  limit = 300,
+  campaignId?: string
 ): Promise<{ rows: MetaAdsLeadRow[]; summary: MetaAdsLeadsSummary; period: string }> {
   await ensureMetaLeadEventsTable()
   const { start, end } = periodBounds(period)
   const cap = Math.max(1, Math.min(500, Math.floor(limit)))
+  const campaign = campaignId?.trim() || null
 
   const events = await prisma.$queryRawUnsafe<
     {
@@ -95,11 +97,13 @@ export async function listMetaAdsLeads(
             status, last_error, contact_id, lead_id, graph_payload, created_at, processed_at
        FROM meta_lead_events
       WHERE created_at >= $1 AND created_at <= $2
+        AND ($4::text IS NULL OR campaign_id = $4)
       ORDER BY created_at DESC
       LIMIT $3`,
     start,
     end,
-    cap
+    cap,
+    campaign
   )
 
   const contactIds = Array.from(new Set(events.map((e) => e.contact_id).filter((id): id is number => !!id)))
