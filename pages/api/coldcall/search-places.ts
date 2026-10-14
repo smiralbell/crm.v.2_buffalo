@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuthAPI } from '@/lib/auth'
+import { requireColdCallAPI } from '@/lib/auth'
 
 const PLACES_API = 'https://places.googleapis.com/v1/places:searchText'
 const FIELD_MASK = [
@@ -17,7 +17,11 @@ const FIELD_MASK = [
 ].join(',')
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!requireAuthAPI(req, res)) return
+  try {
+    await requireColdCallAPI(req, res)
+  } catch {
+    return
+  }
   if (req.method !== 'POST') return res.status(405).end()
 
   const { query, ciudad, pageToken } = req.body as {

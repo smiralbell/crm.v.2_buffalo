@@ -1,12 +1,10 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto'
+import { getSessionSecret } from '@/lib/session-secret'
 
 const ALGO = 'aes-256-gcm'
 
 function encryptionKey(): Buffer {
-  const secret =
-    process.env.GOOGLE_TOKEN_ENCRYPTION_KEY ||
-    process.env.SESSION_SECRET ||
-    'default-secret-change-in-production'
+  const secret = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY || getSessionSecret()
   return createHash('sha256').update(secret).digest()
 }
 

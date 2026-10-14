@@ -1,6 +1,8 @@
 import { GetServerSidePropsContext, NextApiRequest, NextApiResponse } from 'next'
-import { randomBytes, createHmac, timingSafeEqual } from 'crypto'
+import { randomBytes, createHash, createHmac, timingSafeEqual } from 'crypto'
 import { verifyCrmUserPassword } from '@/lib/crm-users'
+import { prisma } from '@/lib/prisma'
+import { getSessionSecret } from '@/lib/session-secret'
 
 export type CrmRole = 'admin' | 'developer' | 'comercial'
 
@@ -21,7 +23,7 @@ function getAdminCredentials(): { email: string; password: string; name: string 
 }
 
 function signToken(token: string): string {
-  const secret = process.env.SESSION_SECRET || 'default-secret-change-in-production'
+  const secret = getSessionSecret()
   const hmac = createHmac('sha256', secret)
   hmac.update(token)
   return `${token}.${hmac.digest('hex')}`
@@ -34,7 +36,7 @@ export function verifyToken(signedToken: string): { valid: boolean; token?: stri
     const [token, signature] = parts
     if (!token || !signature) return { valid: false }
 
-    const secret = process.env.SESSION_SECRET || 'default-secret-change-in-production'
+    const secret = getSessionSecret()
     const hmac = createHmac('sha256', secret)
     hmac.update(token)
     const expectedBuffer = Buffer.from(hmac.digest('hex'), 'hex')
@@ -88,12 +90,53 @@ function getUserFromSignedToken(signedToken: string): AuthUser | null {
   return decodeSessionPayload(verification.token)
 }
 
+/** Comparación en tiempo constante (no deja adivinar la contraseña midiendo tiempos). */
+function safeEqual(a: string, b: string): boolean {
+  const ha = createHash('sha256').update(a).digest()
+  const hb = createHash('sha256').update(b).digest()
+  return timingSafeEqual(ha, hb)
+}
+
+/**
+ * La cookie dura 7 días y lleva el rol dentro. Para que desactivar a alguien o cambiarle
+ * el rol tenga efecto en menos de un minuto, se contrasta con crm_users (caché corta).
+ * Si la BD no responde, se respeta la sesión para no tumbar el CRM.
+ */
+const LIVE_USER_TTL_MS = 60_000
+type LiveUserRow = { role: CrmRole; active: boolean }
+const liveUserCache = new Map<number, { at: number; row: LiveUserRow | null }>()
+
+async function applyLiveUserState(user: AuthUser): Promise<AuthUser | null> {
+  if (!user.id || user.id <= 0) return user // admin definido en .env
+  const cached = liveUserCache.get(user.id)
+  let row: LiveUserRow | null | undefined =
+    cached && Date.now() - cached.at < LIVE_USER_TTL_MS ? cached.row : undefined
+  if (row === undefined) {
+    try {
+      const rows = await prisma.$queryRaw<LiveUserRow[]>`
+        SELECT role, active FROM crm_users WHERE id = ${user.id} LIMIT 1
+      `
+      row = rows[0] ?? null
+      liveUserCache.set(user.id, { at: Date.now(), row })
+    } catch {
+      return user
+    }
+  }
+  if (!row || !row.active) return null
+  return { ...user, role: row.role }
+}
+
+/** Olvida el estado cacheado de un usuario (tras desactivarlo o cambiarle el rol). */
+export function invalidateLiveUser(userId: number): void {
+  liveUserCache.delete(userId)
+}
+
 export async function authenticateCredentials(
   email: string,
   password: string
 ): Promise<AuthUser | null> {
   const admin = getAdminCredentials()
-  if (admin && email === admin.email && password === admin.password) {
+  if (admin && email === admin.email && safeEqual(password, admin.password)) {
     return { id: 0, email: admin.email, name: admin.name, role: 'admin' }
   }
   const crmUser = await verifyCrmUserPassword(email, password)
@@ -115,7 +158,8 @@ export async function requireAuth(
     context.res.end()
     throw new Error('No session')
   }
-  const user = getUserFromSignedToken(signedToken)
+  const tokenUser = getUserFromSignedToken(signedToken)
+  const user = tokenUser ? await applyLiveUserState(tokenUser) : null
   if (!user) {
     context.res.writeHead(302, { Location: '/login' })
     context.res.end()
@@ -133,7 +177,8 @@ export async function requireAuthAPI(
     res.status(401).json({ error: 'No session' })
     throw new Error('No session')
   }
-  const user = getUserFromSignedToken(signedToken)
+  const tokenUser = getUserFromSignedToken(signedToken)
+  const user = tokenUser ? await applyLiveUserState(tokenUser) : null
   if (!user) {
     res.status(401).json({ error: 'Invalid session' })
     throw new Error('Invalid session')

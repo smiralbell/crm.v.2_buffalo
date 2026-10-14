@@ -7,7 +7,11 @@ import { prisma } from '@/lib/prisma'
  * Obtiene los webhooks recibidos de Instantly
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!requireAuthAPI(req, res)) return
+  try {
+    await requireAuthAPI(req, res)
+  } catch {
+    return
+  }
   if (req.method !== 'GET') return res.status(405).end()
 
   const { limit = '100', offset = '0', event_type = '', email = '' } = req.query as Record<string, string>

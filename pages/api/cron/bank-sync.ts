@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { isCronAuthorized } from '@/lib/cron-auth'
 import { EnableBankingApiError, EnableBankingConfigError } from '@/lib/enable-banking/client'
 import {
   isBankSyncStale,
@@ -16,17 +17,7 @@ import { syncEnableBankingTransactions } from '@/lib/enable-banking/sync-transac
  *
  * GET o POST.
  */
-function authorize(req: NextApiRequest): boolean {
-  const expected = process.env.CRON_SECRET?.trim()
-  if (!expected) return false
-
-  const header = req.headers.authorization || ''
-  const bearer = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
-  const querySecret =
-    typeof req.query.secret === 'string' ? req.query.secret.trim() : ''
-  const provided = bearer || querySecret
-  return provided.length > 0 && provided === expected
-}
+const authorize = isCronAuthorized
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') {

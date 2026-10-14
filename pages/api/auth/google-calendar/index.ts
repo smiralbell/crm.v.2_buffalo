@@ -3,8 +3,12 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { getAuthUrl } from '@/lib/google-calendar'
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!requireAuthAPI(req, res)) return
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  try {
+    await requireAuthAPI(req, res)
+  } catch {
+    return
+  }
   const url = getAuthUrl()
   res.redirect(url)
 }

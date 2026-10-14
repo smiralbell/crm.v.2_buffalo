@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual, randomBytes } from 'crypto'
 import { google } from 'googleapis'
+import { getSessionSecret } from '@/lib/session-secret'
 import type { AuthUser } from '@/lib/auth'
 
 const DEFAULT_ADMIN_EMAILS = [
@@ -39,7 +40,7 @@ export function isGoogleAdminEmail(email: string | null | undefined): boolean {
 }
 
 function stateSecret(): string {
-  return process.env.SESSION_SECRET || 'default-secret-change-in-production'
+  return getSessionSecret()
 }
 
 /** state firmado para login: login|nonce|exp|sig */

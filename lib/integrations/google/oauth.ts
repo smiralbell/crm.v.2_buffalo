@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual, randomBytes } from 'crypto'
 import { google } from 'googleapis'
+import { getSessionSecret } from '@/lib/session-secret'
 import type { AuthUser } from '@/lib/auth'
 import { googleOwnerKey } from '@/lib/integrations/google/owner'
 
@@ -30,7 +31,7 @@ export function getGoogleOAuth2Client() {
 }
 
 function stateSecret(): string {
-  return process.env.SESSION_SECRET || 'default-secret-change-in-production'
+  return getSessionSecret()
 }
 
 /** state firmado: ownerKey|nonce|exp|sig */

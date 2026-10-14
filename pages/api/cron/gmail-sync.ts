@@ -1,19 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { isCronAuthorized } from '@/lib/cron-auth'
 import { runGmailSyncOnce } from '@/lib/integrations/google/gmail-sync-scheduler'
 
 /**
  * Sync Gmail → historial CRM (crontab / EasyPanel), además del scheduler interno.
  * Auth: Authorization: Bearer <CRON_SECRET>  o  ?secret=<CRON_SECRET>
  */
-function authorize(req: NextApiRequest): boolean {
-  const expected = process.env.CRON_SECRET?.trim()
-  if (!expected) return false
-  const header = req.headers.authorization || ''
-  const bearer = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
-  const querySecret = typeof req.query.secret === 'string' ? req.query.secret.trim() : ''
-  const provided = bearer || querySecret
-  return provided.length > 0 && provided === expected
-}
+const authorize = isCronAuthorized
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') {

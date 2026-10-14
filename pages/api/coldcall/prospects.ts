@@ -1,9 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { requireAuthAPI } from '@/lib/auth'
+import { requireColdCallAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!requireAuthAPI(req, res)) return
+  try {
+    await requireColdCallAPI(req, res)
+  } catch {
+    return
+  }
 
   // ── GET — listar prospectos ─────────────────────────────────────────────────
   if (req.method === 'GET') {
