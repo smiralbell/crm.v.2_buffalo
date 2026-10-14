@@ -7,6 +7,7 @@ import {
   type MetaPageConfig,
 } from '@/lib/integrations/meta/config'
 import { signMetaBody, verifyMetaSignature, verifyMetaSubscription } from '@/lib/integrations/meta/crypto'
+import { formatMetaLeadAlert } from '@/lib/integrations/meta/alerts'
 import {
   extraMetaAnswers,
   extractLeadgenEvents,
@@ -231,5 +232,39 @@ describe('Meta Lead Ads — páginas, negocio y Graph fields', () => {
     expect(merged.form_id).toBe('F-new')
     expect(merged.ad_id).toBe('A-new')
     expect(merged.adset_id).toBe('S-new')
+  })
+})
+
+describe('Meta Lead Ads — aviso Gmail + Telegram', () => {
+  it('monta el aviso con contacto, campaña y enlace a la ficha', () => {
+    const msg = formatMetaLeadAlert({
+      leadId: 57,
+      lead: {
+        leadgen_id: 'L-av',
+        created_time: null,
+        page_id: '111',
+        page_name: 'Buffalo',
+        platform: 'ig',
+        is_organic: false,
+        ad_id: null,
+        ad_name: null,
+        adset_id: null,
+        adset_name: null,
+        campaign_id: 'C9',
+        campaign_name: 'Q4 Abogados',
+        form_id: 'F9',
+        form_name: 'Demo',
+        nombre: 'Ana López',
+        email: 'ana@empresa.com',
+        telefono: '+34600111222',
+        empresa: 'Acme',
+        answers: [],
+      },
+    })
+    expect(msg.subject).toContain('Ana López')
+    expect(msg.text).toContain('ana@empresa.com')
+    expect(msg.text).toContain('Q4 Abogados')
+    expect(msg.text).toContain('/leads/57')
+    expect(msg.telegramHtml).toContain('<b>')
   })
 })

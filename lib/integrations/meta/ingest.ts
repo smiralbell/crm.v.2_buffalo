@@ -20,6 +20,7 @@ import {
   type MetaLeadEventRow,
 } from '@/lib/integrations/meta/store'
 import { BUFFALO_STAGE_COLORS, defaultStageColor } from '@/lib/pipelines/defaults'
+import { alertMetaLead } from '@/lib/integrations/meta/alerts'
 import { ensureWebContact, getWebPipelineId } from '@/lib/pipelines/web'
 
 function leadNotes(parsed: ParsedMetaLead, origen: string): string {
@@ -187,6 +188,7 @@ export async function processPersistedMetaEvent(
       last_error: null,
       attribution: lead,
     })
+    void alertMetaLead({ lead, leadId: saved.leadId })
     return { status: 'processed', contactId: saved.contactId, leadId: saved.leadId }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error Graph/CRM'
