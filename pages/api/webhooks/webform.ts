@@ -5,7 +5,9 @@ import { webFormExternalId } from '@/lib/ingest/web-form'
 
 /**
  * POST /api/webhooks/webform
- * Formularios de la web (n8n). Preferible a INSERT directo en Postgres.
+ * Un webhook para todas las webs Buffalo. Cuerpo canónico:
+ *   { site: "agenciabuffalo.es", page: "/contacto", form: { nombre, email, … } }
+ * Sigue aceptando el formato viejo { cuerpo, etiqueta }.
  * Auth: Bearer WEBFORM_WEBHOOK_TOKEN o INGEST_TOKEN.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -13,7 +15,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       ok: true,
       service: 'webform-webhook',
-      hint: 'POST el JSON del formulario (cuerpo + etiqueta). Authorization: Bearer <WEBFORM_WEBHOOK_TOKEN o INGEST_TOKEN>.',
+      auth: 'Authorization: Bearer <WEBFORM_WEBHOOK_TOKEN o INGEST_TOKEN>',
+      example: {
+        site: 'agenciabuffalo.es',
+        page: '/contacto',
+        form: { nombre: 'Ana López', email: 'ana@empresa.com', telefono: '+34600000000', empresa: 'Empresa' },
+      },
     })
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

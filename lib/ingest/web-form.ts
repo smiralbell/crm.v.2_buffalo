@@ -12,7 +12,9 @@ import { syncWebFormToPipeline } from '@/lib/pipelines/web'
 export function webFormExternalId(payload: unknown): string {
   const item = normalizeWebFormPayload(payload)
   const c = item.cuerpo ?? {}
-  const hint = [c.email, c.phone, c.timestamp, c.page_url].filter(Boolean).join('|')
+  const hint = [item.site, item.page, c.email, c.phone, c.timestamp, c.page_url]
+    .filter(Boolean)
+    .join('|')
   return `wf:${createHash('sha256').update(hint || JSON.stringify(payload ?? null)).digest('hex').slice(0, 32)}`
 }
 
@@ -66,7 +68,9 @@ export async function processWebForm(payload: unknown): Promise<InboundProcessor
     to: { roles: ['admin'] },
     kind: 'lead.webform',
     title: `Formulario web: ${row.fullname || row.email || row.company || `#${row.id}`}`,
-    body: [row.company, row.service, row.etiqueta].filter(Boolean).join(' · ') || 'Nuevo envío',
+    body:
+      [row.site, row.page, row.company, row.service, row.etiqueta].filter(Boolean).join(' · ') ||
+      'Nuevo envío',
     link: '/marketing',
     severity: 'info',
     dedupeKey: `webform:${row.id}`,

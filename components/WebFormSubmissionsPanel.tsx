@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import {
   ESTADO_LABELS,
   ETIQUETA_LABELS,
+  SITE_LABELS,
   type WebFormSubmissionRow,
 } from '@/lib/marketing/web-form-submissions.types'
 import {
@@ -40,6 +41,7 @@ function fmtDate(iso: string) {
 }
 
 function pageLabel(row: WebFormSubmissionRow) {
+  if (row.page) return row.page
   if (row.page_url) {
     try {
       const u = new URL(row.page_url)
@@ -49,6 +51,11 @@ function pageLabel(row: WebFormSubmissionRow) {
     }
   }
   return row.source || '—'
+}
+
+function siteLabel(row: WebFormSubmissionRow) {
+  if (!row.site) return null
+  return SITE_LABELS[row.site] || row.site
 }
 
 type UnifiedItem =
@@ -135,6 +142,7 @@ export default function WebFormSubmissionsPanel({ period }: { period: string }) 
         <CardContent className="py-4 text-sm text-amber-950/90">
           Ejecuta <code className="text-xs">prisma/CREATE_WEB_FORM_SUBMISSIONS.sql</code> en PostgreSQL
           y manda los envíos a <code className="text-xs">POST /api/webhooks/webform</code>
+          {' '}como <code className="text-xs">{'{ site, page, form }'}</code>
           {' '}(Bearer WEBFORM_WEBHOOK_TOKEN o INGEST_TOKEN). Ya no hace falta que n8n escriba en Postgres.
           {!formacionAvailable && (
             <>
@@ -152,8 +160,8 @@ export default function WebFormSubmissionsPanel({ period }: { period: string }) 
     return (
       <Card className="border-gray-200/80">
         <CardContent className="py-10 text-center text-sm text-gray-500">
-          Sin formularios en este período. Incluye web (agenciabuffalo.es) y formación
-          (formacion.agenciabuffalo.es).
+          Sin formularios en este período. Todas las webs (agenciabuffalo.es, formación…)
+          entran por el mismo webhook con site + page.
         </CardContent>
       </Card>
     )
@@ -216,6 +224,9 @@ export default function WebFormSubmissionsPanel({ period }: { period: string }) 
                         )}
                       </td>
                       <td className="p-3 min-w-[120px] max-w-[200px]">
+                        {siteLabel(row) && (
+                          <p className="text-[11px] font-medium text-gray-800">{siteLabel(row)}</p>
+                        )}
                         <p
                           className="text-xs text-gray-700 truncate"
                           title={row.page_url || row.source || ''}
