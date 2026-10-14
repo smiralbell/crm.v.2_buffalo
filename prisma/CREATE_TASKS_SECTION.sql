@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS "public"."team_members" (
 );
 
 -- Ampliar tabla de tareas existente para nueva sección de Tareas
--- (en @bases.md ya existe "public"."tasks" con columnas antiguas)
+-- (en docs/bases.md ya existe "public"."tasks" con columnas antiguas)
 ALTER TABLE "public"."tasks"
   ADD COLUMN IF NOT EXISTS "client_id" INTEGER,
   ADD COLUMN IF NOT EXISTS "assignee_id" INTEGER,

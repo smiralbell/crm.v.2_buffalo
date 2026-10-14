@@ -60,3 +60,8 @@ Thumbs.db
 # Datos locales del módulo Blog (BLOG_STORE=file)
 .data/
 .data-run.ts
+
+# Material local de trabajo (mapas, informes, borradores, documentos de clientes). No se sube a GitHub.
+/_local/
+*.local.html
+*.local.md
