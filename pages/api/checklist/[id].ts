@@ -20,7 +20,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'PATCH') {
-      const { title, done, column_key, position } = req.body || {}
+      const { title, done, column_key, position, remind_every_days } = req.body || {}
+      const remind =
+        typeof remind_every_days === 'number' && Number.isFinite(remind_every_days)
+          ? Math.max(0, Math.min(365, Math.floor(remind_every_days)))
+          : undefined
 
       if (column_key != null || position != null) {
         if (!isChecklistColumnId(column_key)) {
@@ -33,11 +37,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
         if (!item) return res.status(404).json({ error: 'No encontrado' })
 
-        // Si solo mueven, y también mandan done/title, aplicar el resto
-        if (title != null || done != null) {
+        if (title != null || done != null || remind != null) {
           const updated = await updateChecklistItem(id, {
             title: typeof title === 'string' ? title : undefined,
             done: typeof done === 'boolean' ? done : undefined,
+            remind_every_days: remind,
           })
           return res.status(200).json({ item: updated })
         }
@@ -47,6 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const item = await updateChecklistItem(id, {
         title: typeof title === 'string' ? title : undefined,
         done: typeof done === 'boolean' ? done : undefined,
+        remind_every_days: remind,
       })
       if (!item) return res.status(404).json({ error: 'No encontrado' })
       return res.status(200).json({ item })

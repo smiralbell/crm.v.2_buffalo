@@ -109,6 +109,26 @@ export default function ChecklistPage() {
     }
   }
 
+  const onUpdate = async (id: number, patch: { title: string; remind_every_days: number }) => {
+    setBusyId(id)
+    setError('')
+    try {
+      const res = await fetch(`/api/checklist/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'No se pudo guardar')
+      if (data.item) setItems((prev) => prev.map((i) => (i.id === id ? data.item : i)))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error')
+      throw e
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const onDelete = async (id: number) => {
     setBusyId(id)
     setError('')
@@ -161,6 +181,7 @@ export default function ChecklistPage() {
             onCreate={onCreate}
             onToggle={onToggle}
             onMove={onMove}
+            onUpdate={onUpdate}
             onDelete={onDelete}
             busyId={busyId}
           />

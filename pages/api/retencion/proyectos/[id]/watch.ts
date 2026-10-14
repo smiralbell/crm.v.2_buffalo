@@ -5,7 +5,7 @@ import { assertProjectAccess } from '@/lib/project-access'
 import { assertRetencionEligible } from '@/lib/retencion/eligibility'
 import { clearDbUrl, saveDbUrl } from '@/lib/retencion/agent-config-store'
 import { probeConnection } from '@/lib/retencion/readonly-postgres'
-import { getWatchPublic, saveWatchSettings, WATCH_INTERVALS } from '@/lib/retencion/watch-store'
+import { getWatchPublic, saveWatchSettings } from '@/lib/retencion/watch-store'
 import { runWatchForProject } from '@/lib/retencion/watch-agent'
 
 const patchSchema = z.object({
@@ -14,7 +14,7 @@ const patchSchema = z.object({
   knowledge: z.string().max(200000).optional(),
   agent_prompt: z.string().max(20000).optional(),
   watch_prompt: z.string().max(20000).optional(),
-  every_minutes: z.number().int().min(0).max(10080).optional(),
+  every_minutes: z.number().int().min(0).max(86400).optional(),
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -29,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'GET') {
       const watch = await getWatchPublic(proyectoId)
-      return res.status(200).json({ watch, intervals: WATCH_INTERVALS })
+      return res.status(200).json({ watch })
     }
 
     if (user.role !== 'admin') {
@@ -67,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         knowledge: parsed.knowledge,
         agent_prompt: parsed.agent_prompt,
       })
-      return res.status(200).json({ watch, intervals: WATCH_INTERVALS })
+      return res.status(200).json({ watch })
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

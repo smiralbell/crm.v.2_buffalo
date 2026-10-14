@@ -1,12 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { listOpenAlerts, type CrmActivityRow } from '@/lib/crm/activities'
 import { countPendingWebFormSubmissions, isWebFormSubmissionsTableAvailable } from '@/lib/marketing/web-form-submissions'
-import {
-  FORMACION_INTENT_LABELS,
-} from '@/lib/marketing/formacion-diagnosticos.types'
-import {
-  listRecentFormacionDiagnosticos,
-} from '@/lib/marketing/formacion-diagnosticos'
 
 export type DashboardAlertItem = {
   id: string
@@ -150,27 +144,6 @@ async function loadFormAlerts(): Promise<DashboardAlertItem[]> {
   const periodQs = `?period=${encodeURIComponent(period)}`
   const href = `/marketing/web/formularios${periodQs}`
   const items: DashboardAlertItem[] = []
-
-  try {
-    const recent = await listRecentFormacionDiagnosticos(3, 20)
-    for (const r of recent) {
-      const intentLabel = FORMACION_INTENT_LABELS[r.intent]
-      items.push({
-        id: `formacion-${r.id}`,
-        source: 'form',
-        severity: 'warn',
-        title: `Nueva respuesta · Formación (${intentLabel})`,
-        message: r.objetivo
-          ? r.objetivo.slice(0, 140) + (r.objetivo.length > 140 ? '…' : '')
-          : `${r.email}${r.telefono ? ` · ${r.telefono}` : ''}`,
-        client_name: [r.nombre, r.empresa].filter(Boolean).join(' · ') || null,
-        at: r.created_at,
-        href,
-      })
-    }
-  } catch {
-    /* ignore */
-  }
 
   try {
     if (await isWebFormSubmissionsTableAvailable()) {

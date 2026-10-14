@@ -18,7 +18,7 @@ Ruta: \`/marketing?tab=…\`
 | Tab | Contenido |
 |-----|-----------|
 | **global** | Vista agregada de captación |
-| **web** | Formularios, calendario Cal.com, chat web |
+| **web** | Formularios, calendario Cal.com |
 | **email** | Outreach Instantly (métricas / logs) |
 | **coldcalling** | Puente al mundo cold call |
 | **meta** | Meta Ads (métricas) |
@@ -26,9 +26,8 @@ Ruta: \`/marketing?tab=…\`
 
 ## Subpáginas web
 
-- \`/marketing/web/formularios\` — envíos de formularios web
+- \`/marketing/web/formularios\` — envíos de formularios web (webhook \`POST /api/webhooks/webform\`)
 - \`/marketing/web/calendario\` — reservas Cal.com
-- \`/marketing/web/chat\` — métricas de chat web
 
 ## APIs útiles
 

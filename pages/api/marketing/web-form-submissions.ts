@@ -4,12 +4,10 @@ import { requireAuthAPI } from '@/lib/auth'
 import {
   listWebFormSubmissions,
   updateWebFormSubmissionStatus,
+  webFormWebhookToken,
   type WebFormSubmissionEstado,
 } from '@/lib/marketing/web-form-submissions'
-import {
-  isFormacionDiagnosticosAvailable,
-  listFormacionDiagnosticos,
-} from '@/lib/marketing/formacion-diagnosticos'
+import { buildWebFormMarkdown, webFormWebhookUrl } from '@/lib/marketing/web-form-submissions.types'
 
 const patchSchema = z.object({
   id: z.number().int().positive(),
@@ -30,38 +28,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === 'GET') {
     try {
-      const [submissions, formacionAvailable] = await Promise.all([
-        listWebFormSubmissions(period),
-        isFormacionDiagnosticosAvailable(),
-      ])
-      const formacion = formacionAvailable
-        ? await listFormacionDiagnosticos(period)
-        : []
+      const token = webFormWebhookToken()
+      if (req.query.download === '1' || req.query.format === 'md') {
+        const markdown = buildWebFormMarkdown(token)
+        res.setHeader('Content-Type', 'text/markdown; charset=utf-8')
+        res.setHeader('Content-Disposition', 'attachment; filename="webhook-formularios.md"')
+        return res.status(200).send(markdown)
+      }
+      const submissions = await listWebFormSubmissions(period)
       return res.status(200).json({
         submissions,
-        formacion,
-        formacion_available: formacionAvailable,
+        webhook_url: webFormWebhookUrl(),
+        webhook_token: token,
+        markdown: buildWebFormMarkdown(token),
         period,
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error interno'
-      if (msg.includes('web_form_submissions') && msg.includes('does not exist')) {
-        let formacion: Awaited<ReturnType<typeof listFormacionDiagnosticos>> = []
-        let formacionAvailable = false
-        try {
-          formacionAvailable = await isFormacionDiagnosticosAvailable()
-          if (formacionAvailable) formacion = await listFormacionDiagnosticos(period)
-        } catch {
-          /* ignore */
-        }
-        return res.status(200).json({
-          submissions: [],
-          formacion,
-          formacion_available: formacionAvailable,
-          period,
-          table_missing: true,
-        })
-      }
       console.error('[api/marketing/web-form-submissions GET]', err)
       return res.status(500).json({ error: msg })
     }

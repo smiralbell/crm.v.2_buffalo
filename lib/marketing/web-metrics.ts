@@ -1,6 +1,4 @@
 import { prisma } from '@/lib/prisma'
-import { queryChat } from '@/lib/db-chat'
-import { AGENT_CHAT_HISTORY_TABLE } from '@/lib/agent-chat-history'
 import {
   countPendingWebFormSubmissions,
   countWebFormSubmissions,
@@ -74,37 +72,13 @@ function formLeadWhere() {
   }
 }
 
-async function fetchChatMetrics(): Promise<{
-  chat_sessions: number
-  chat_replied: number
-  available: boolean
-}> {
-  try {
-    const { rows } = await queryChat<{ session_id: string; has_user: boolean }>(
-      `SELECT session_id,
-              BOOL_OR(
-                COALESCE(message->>'type', '') IN ('human', 'user')
-                OR LOWER(COALESCE(message->>'role', '')) IN ('human', 'user')
-                OR COALESCE(message #>> '{id,-1}', '') = 'HumanMessage'
-              ) AS has_user
-       FROM ${AGENT_CHAT_HISTORY_TABLE}
-       GROUP BY session_id`
-    )
-    const chat_sessions = rows.length
-    const chat_replied = rows.filter((r) => r.has_user).length
-    return { chat_sessions, chat_replied, available: true }
-  } catch {
-    return { chat_sessions: 0, chat_replied: 0, available: false }
-  }
-}
-
 export async function getWebMarketingMetrics(period: string): Promise<WebMarketingMetrics> {
   const { start, end } = periodBounds(period)
   const dateFilter = { created_at: { gte: start, lte: end } }
 
   const calReady = await isCalBookingsReady()
 
-  const [web_leads, formFromTable, formFromLeads, recentRaw, chat, formsTableOk, cal_bookings, cal_upcoming] =
+  const [web_leads, formFromTable, formFromLeads, recentRaw, formsTableOk, cal_bookings, cal_upcoming] =
     await Promise.all([
       prisma.lead.count({
         where: { ...dateFilter, ...webLeadWhere() },
@@ -121,7 +95,6 @@ export async function getWebMarketingMetrics(period: string): Promise<WebMarketi
         orderBy: { created_at: 'desc' },
         take: 12,
       }),
-      fetchChatMetrics(),
       isWebFormSubmissionsTableAvailable(),
       calReady ? countCalBookings(period) : Promise.resolve(0),
       calReady ? countUpcomingCalBookings() : Promise.resolve(0),
@@ -132,19 +105,15 @@ export async function getWebMarketingMetrics(period: string): Promise<WebMarketi
 
   const conversion_form_pct =
     web_leads > 0 ? Math.round((form_submissions / web_leads) * 1000) / 10 : null
-  const conversion_chat_pct =
-    chat.chat_sessions > 0
-      ? Math.round((chat.chat_replied / chat.chat_sessions) * 1000) / 10
-      : null
 
   return {
     period,
     web_leads,
     form_submissions,
-    chat_sessions: chat.chat_sessions,
-    chat_replied: chat.chat_replied,
+    chat_sessions: 0,
+    chat_replied: 0,
     conversion_form_pct,
-    conversion_chat_pct,
+    conversion_chat_pct: null,
     recent_web_leads: recentRaw.map((l) => ({
       id: l.id,
       estado: l.estado,
@@ -152,7 +121,7 @@ export async function getWebMarketingMetrics(period: string): Promise<WebMarketi
       created_at: l.created_at.toISOString(),
       contact: l.contact,
     })),
-    chat_available: chat.available,
+    chat_available: false,
     form_submissions_available: formsTableOk,
     form_submissions_pending,
     cal_bookings,

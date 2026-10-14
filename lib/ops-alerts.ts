@@ -1,0 +1,88 @@
+import { isSmtpConfigured, sendMail } from '@/lib/mail/smtp'
+
+function envList(name: string): string[] {
+  return (process.env[name] || '')
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+export function adminAlertEmails(): string[] {
+  const listed = envList('ADMIN_ALERT_EMAILS')
+  if (listed.length) return listed
+  const fallback = (process.env.CRM_ADMIN_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim()
+  return fallback ? [fallback] : []
+}
+
+function telegramChatIds(): string[] {
+  return envList('TELEGRAM_CHAT_IDS').length ? envList('TELEGRAM_CHAT_IDS') : envList('TELEGRAM_CHAT_ID')
+}
+
+export function crmPublicBaseUrl(): string {
+  const base = (process.env.NEXT_PUBLIC_BASE_URL || process.env.APP_BASE_URL || '').replace(/\/$/, '')
+  return base || 'https://n8n-crmv2-buffalo.zedf6b.easypanel.host'
+}
+
+function absLink(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path
+  return `${crmPublicBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`
+}
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+async function sendTelegram(text: string): Promise<void> {
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim()
+  const chats = telegramChatIds()
+  if (!token || !chats.length) return
+  for (const chatId of chats) {
+    try {
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+        }),
+      })
+    } catch (e) {
+      console.warn('[ops-alerts] telegram', e)
+    }
+  }
+}
+
+/** Gmail (SMTP) + Telegram. El mismo canal que incidencias. */
+export async function sendOpsAlert(input: {
+  subject: string
+  text: string
+  html?: string
+  telegramHtml?: string
+}): Promise<void> {
+  try {
+    if (isSmtpConfigured()) {
+      const to = adminAlertEmails()
+      if (to.length) {
+        await sendMail({
+          to,
+          subject: input.subject.startsWith('[CRM]') ? input.subject : `[CRM] ${input.subject}`,
+          text: input.text,
+          html: input.html || `<pre style="font-family:inherit;white-space:pre-wrap">${escHtml(input.text)}</pre>`,
+        })
+      }
+    }
+  } catch (e) {
+    console.warn('[ops-alerts] email', e)
+  }
+  try {
+    await sendTelegram(input.telegramHtml || escHtml(input.text))
+  } catch (e) {
+    console.warn('[ops-alerts] telegram', e)
+  }
+}
+
+export function opsLink(path: string): string {
+  return absLink(path)
+}

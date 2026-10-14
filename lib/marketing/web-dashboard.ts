@@ -1,14 +1,7 @@
 import { query } from '@/lib/db'
-import { queryChat } from '@/lib/db-chat'
-import { AGENT_CHAT_HISTORY_TABLE } from '@/lib/agent-chat-history'
 import { countPendingWebFormSubmissions, isWebFormSubmissionsTableAvailable } from '@/lib/marketing/web-form-submissions'
 import { countUpcomingCalBookings, isCalBookingsReady, listCalBookings } from '@/lib/marketing/cal-bookings'
 import { listWebFormSubmissions } from '@/lib/marketing/web-form-submissions'
-import {
-  countFormacionDiagnosticosToday,
-  isFormacionDiagnosticosAvailable,
-  listFormacionDiagnosticos,
-} from '@/lib/marketing/formacion-diagnosticos'
 import type { WebDashboardMetrics, WebDashboardAlert, WebTimelinePoint } from '@/lib/marketing/web-dashboard.types'
 import { getWebPipelineInfo, syncAllWebSourcesToPipeline } from '@/lib/pipelines/web'
 
@@ -28,8 +21,7 @@ function dayKey(iso: string): string {
 function buildTimeline(
   period: string,
   formByDay: Record<string, number>,
-  calByDay: Record<string, number>,
-  chatByDay: Record<string, number>
+  calByDay: Record<string, number>
 ): WebTimelinePoint[] {
   const { start, end } = periodBounds(period)
   const points: WebTimelinePoint[] = []
@@ -42,7 +34,7 @@ function buildTimeline(
       label: cursor.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
       form: formByDay[key] || 0,
       cal: calByDay[key] || 0,
-      chat: chatByDay[key] || 0,
+      chat: 0,
     })
     cursor.setDate(cursor.getDate() + 1)
   }
@@ -60,26 +52,6 @@ async function countCalBookingsToday(): Promise<number> {
   return parseInt(result.rows[0]?.count || '0', 10)
 }
 
-async function countChatRepliedInPeriod(_period: string): Promise<number> {
-  try {
-    const { rows } = await queryChat<{ count: string }>(
-      `SELECT COUNT(*)::text AS count FROM (
-         SELECT session_id FROM ${AGENT_CHAT_HISTORY_TABLE}
-         GROUP BY session_id
-         HAVING BOOL_OR(
-           COALESCE(message->>'type', '') IN ('human', 'user')
-           OR LOWER(COALESCE(message->>'role', '')) IN ('human', 'user')
-           OR COALESCE(message #>> '{id,-1}', '') = 'HumanMessage'
-         )
-       ) s`,
-      []
-    )
-    return parseInt(rows[0]?.count || '0', 10)
-  } catch {
-    return 0
-  }
-}
-
 function isToday(iso: string): boolean {
   return dayKey(iso) === dayKey(new Date().toISOString())
 }
@@ -87,11 +59,9 @@ function isToday(iso: string): boolean {
 function buildAlerts(input: {
   formPending: number
   formsToday: number
-  formacionToday: number
   calToday: number
   calBookedToday: number
   calUpcoming: number
-  chatReplied: number
   newLeadsToday: number
   period: string
   webPipelineId: string | null
@@ -106,16 +76,6 @@ function buildAlerts(input: {
       title: `${input.newLeadsToday} lead${input.newLeadsToday > 1 ? 's' : ''} nuevo${input.newLeadsToday > 1 ? 's' : ''} hoy`,
       message: 'Entradas web de hoy (formulario o calendario) listas para revisar.',
       href: input.webPipelineId ? `/pipelines/${input.webPipelineId}` : '/pipelines',
-    })
-  }
-
-  if (input.formacionToday > 0) {
-    alerts.push({
-      id: 'formacion-today',
-      severity: 'warning',
-      title: `${input.formacionToday} respuesta${input.formacionToday > 1 ? 's' : ''} de Formación hoy`,
-      message: 'Nuevos envíos desde formacion.agenciabuffalo.es (diagnóstico / FUNDAE).',
-      href: `/marketing/web/formularios${periodQs}`,
     })
   }
 
@@ -159,16 +119,6 @@ function buildAlerts(input: {
     })
   }
 
-  if (input.chatReplied > 0) {
-    alerts.push({
-      id: 'chat-attention',
-      severity: 'warning',
-      title: `${input.chatReplied} chat${input.chatReplied > 1 ? 's' : ''} con respuesta del visitante`,
-      message: 'Revisa el widget: puede haber conversaciones pendientes de seguimiento humano.',
-      href: '/marketing/web/chat',
-    })
-  }
-
   if (alerts.length === 0) {
     alerts.push({
       id: 'all-clear',
@@ -190,11 +140,9 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
   const pipelineAvailable = !!pipelineInfo.web_pipeline_id
 
   const formsOk = await isWebFormSubmissionsTableAvailable()
-  const formacionOk = await isFormacionDiagnosticosAvailable()
   const calOk = await isCalBookingsReady()
 
   const forms = formsOk ? await listWebFormSubmissions(period, 500) : []
-  const formacion = formacionOk ? await listFormacionDiagnosticos(period, 500) : []
   const bookings = calOk
     ? (await listCalBookings(period, 500)).filter(
         (b) => b.status !== 'cancelled' && b.status !== 'rejected'
@@ -206,34 +154,17 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
     const k = dayKey(f.submitted_at)
     formByDay[k] = (formByDay[k] || 0) + 1
   }
-  for (const f of formacion) {
-    const k = dayKey(f.created_at)
-    formByDay[k] = (formByDay[k] || 0) + 1
-  }
-
   const calByDay: Record<string, number> = {}
   for (const b of bookings) {
     const k = dayKey(b.created_at)
     calByDay[k] = (calByDay[k] || 0) + 1
   }
 
-  const chatReplied = await countChatRepliedInPeriod(period)
-  const chatByDay: Record<string, number> = {}
-  // Sin fechas en chat DB: repartimos el total en los últimos 7 días del mes para visualización
-  if (chatReplied > 0) {
-    const timelineDays = buildTimeline(period, {}, {}, {})
-    const lastDays = timelineDays.slice(-7)
-    const perDay = Math.max(1, Math.round(chatReplied / Math.max(lastDays.length, 1)))
-    for (const d of lastDays) {
-      chatByDay[d.date] = perDay
-    }
-  }
-
   const totals = {
-    form: forms.length + formacion.length,
+    form: forms.length,
     cal: bookings.length,
-    chat: chatReplied,
-    total: forms.length + formacion.length + bookings.length + chatReplied,
+    chat: 0,
+    total: forms.length + bookings.length,
   }
 
   const totalAll = totals.total || 1
@@ -241,25 +172,19 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
   const calUpcoming = calOk ? await countUpcomingCalBookings() : 0
   const calToday = calOk ? await countCalBookingsToday() : 0
   const formsToday = forms.filter((f) => isToday(f.submitted_at)).length
-  const formacionToday = formacionOk
-    ? (await countFormacionDiagnosticosToday()) ||
-      formacion.filter((f) => isToday(f.created_at)).length
-    : 0
   const calBookedToday = bookings.filter((b) => isToday(b.created_at)).length
-  const newLeadsToday = formsToday + formacionToday + calBookedToday
+  const newLeadsToday = formsToday + calBookedToday
 
   return {
     period,
     totals,
-    timeline: buildTimeline(period, formByDay, calByDay, chatByDay),
+    timeline: buildTimeline(period, formByDay, calByDay),
     alerts: buildAlerts({
       formPending,
       formsToday,
-      formacionToday,
       calToday,
       calBookedToday,
       calUpcoming,
-      chatReplied,
       newLeadsToday,
       period,
       webPipelineId: pipelineInfo.web_pipeline_id,
@@ -267,9 +192,9 @@ export async function getWebDashboardMetrics(period: string): Promise<WebDashboa
     form_pending: formPending,
     cal_upcoming: calUpcoming,
     cal_upcoming_today: calToday,
-    chat_replied: chatReplied,
-    chat_available: chatReplied > 0 || totals.chat >= 0,
-    form_available: formsOk || formacionOk,
+    chat_replied: 0,
+    chat_available: false,
+    form_available: formsOk,
     cal_available: calOk,
     pipeline_synced: syncResult.synced,
     pipeline_available: pipelineAvailable,

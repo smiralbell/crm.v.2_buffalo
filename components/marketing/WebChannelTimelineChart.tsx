@@ -14,7 +14,6 @@ import type { WebTimelinePoint } from '@/lib/marketing/web-dashboard.types'
 const SERIES = [
   { key: 'form' as const, label: 'Formulario', stroke: '#111827' },
   { key: 'cal' as const, label: 'Calendario', stroke: '#6B7280' },
-  { key: 'chat' as const, label: 'Widget', stroke: '#9CA3AF' },
 ]
 
 function TooltipContent({
@@ -43,7 +42,7 @@ function TooltipContent({
 }
 
 export default function WebChannelTimelineChart({ data }: { data: WebTimelinePoint[] }) {
-  const hasData = data.some((d) => d.form > 0 || d.cal > 0 || d.chat > 0)
+  const hasData = data.some((d) => d.form > 0 || d.cal > 0)
 
   if (!hasData) {
     return (

@@ -16,11 +16,17 @@ export interface WebFormCuerpo {
 export interface WebFormPayloadItem {
   cuerpo?: WebFormCuerpo | null
   etiqueta?: string | null
+  /** Dominio de la web que envió el formulario (agenciabuffalo.es, formacion…). */
+  site?: string | null
+  /** Ruta o URL de la página (/contacto, /agentes…). */
+  page?: string | null
 }
 
 export interface WebFormSubmissionRow {
   id: number
   etiqueta: string
+  site: string | null
+  page: string | null
   fullname: string | null
   email: string | null
   company: string | null
@@ -34,7 +40,46 @@ export interface WebFormSubmissionRow {
   notas: string | null
   responded_at: string | null
   created_at: string
+  /** UTM / gclid / fbclid del envío (campos del formulario o parámetros de page_url). */
+  attribution: WebAttribution | null
+  extra_fields: { key: string; value: string }[]
   payload: WebFormPayloadItem
+}
+
+export type WebAttribution = Partial<
+  Record<
+    'utm_source' | 'utm_medium' | 'utm_campaign' | 'utm_term' | 'utm_content' | 'gclid' | 'fbclid' | 'referrer' | 'landing_page',
+    string
+  >
+>
+
+const ATTRIBUTION_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid'] as const
+
+/**
+ * Atribución de un envío: primero los campos ocultos del formulario y, si faltan,
+ * los parámetros de la URL desde la que se envió (page_url).
+ */
+export function extractWebAttribution(cuerpo: WebFormCuerpo | null | undefined): WebAttribution | null {
+  const out: WebAttribution = {}
+  const c = cuerpo ?? {}
+  let params: URLSearchParams | null = null
+  const pageUrl = typeof c.page_url === 'string' ? c.page_url : ''
+  if (pageUrl) {
+    try {
+      params = new URL(pageUrl, 'https://placeholder.local').searchParams
+      out.landing_page = pageUrl.split('?')[0]
+    } catch {
+      params = null
+    }
+  }
+  for (const k of ATTRIBUTION_KEYS) {
+    const v = str(c[k]) ?? (params ? str(params.get(k)) : null)
+    if (v) out[k] = v.slice(0, 300)
+  }
+  const ref = str(c.referrer) ?? str(c.referer)
+  if (ref) out.referrer = ref.slice(0, 300)
+  const meaningful = ATTRIBUTION_KEYS.some((k) => out[k]) || Boolean(out.referrer)
+  return meaningful ? out : null
 }
 
 export const ETIQUETA_LABELS: Record<string, string> = {
@@ -44,6 +89,38 @@ export const ETIQUETA_LABELS: Record<string, string> = {
   agente_texto: 'Agente texto',
   automatizaciones: 'Automatizaciones',
 }
+
+export const SITE_LABELS: Record<string, string> = {
+  'agenciabuffalo.es': 'Web Buffalo',
+  'www.agenciabuffalo.es': 'Web Buffalo',
+  'formacion.agenciabuffalo.es': 'Formación',
+  'forms.agenciabuffalo.es': 'Formularios cliente',
+}
+
+const META_KEYS = new Set([
+  'site',
+  'website',
+  'web',
+  'host',
+  'dominio',
+  'domain',
+  'page',
+  'pagina',
+  'page_url',
+  'url',
+  'pathname',
+  'landing',
+  'landing_page',
+  'etiqueta',
+  'form_name',
+  'formName',
+  'form_id',
+  'cuerpo',
+  'form',
+  'data',
+  'fields',
+  'payload',
+])
 
 export const ESTADO_LABELS: Record<WebFormSubmissionEstado, string> = {
   pendiente: 'Pendiente',
@@ -57,27 +134,118 @@ function str(v: unknown): string | null {
   return s || null
 }
 
-/** Normaliza payload: array n8n [{ cuerpo, etiqueta }] u objeto suelto */
-export function normalizeWebFormPayload(raw: unknown): WebFormPayloadItem {
-  if (raw == null) return { cuerpo: {}, etiqueta: 'automatizaciones' }
+function rec(v: unknown): Record<string, unknown> | null {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null
+}
 
-  if (Array.isArray(raw)) {
-    const first = raw[0]
-    if (first && typeof first === 'object') return first as WebFormPayloadItem
-    return { cuerpo: {}, etiqueta: 'automatizaciones' }
+function hostFromUrl(raw: string | null): string | null {
+  if (!raw) return null
+  try {
+    const u = new URL(raw.includes('://') ? raw : `https://${raw}`)
+    return u.hostname.replace(/^www\./, '').toLowerCase() || null
+  } catch {
+    return null
   }
+}
 
-  if (typeof raw === 'object') return raw as WebFormPayloadItem
+function pathFromUrl(raw: string | null): string | null {
+  if (!raw) return null
+  if (raw.startsWith('/')) return raw.split('?')[0] || '/'
+  try {
+    const u = new URL(raw.includes('://') ? raw : `https://${raw}`)
+    return `${u.pathname}${u.search}` || '/'
+  } catch {
+    return raw
+  }
+}
+
+function absolutePageUrl(site: string | null, page: string | null): string | null {
+  if (page && (page.startsWith('http://') || page.startsWith('https://'))) return page
+  if (site && page) {
+    const path = page.startsWith('/') ? page : `/${page}`
+    return `https://${site}${path}`
+  }
+  if (page && page.includes('.')) return page.startsWith('http') ? page : `https://${page}`
+  return page
+}
+
+function pick(obj: Record<string, unknown>, keys: string[]): string | null {
+  for (const k of keys) {
+    const v = str(obj[k])
+    if (v) return v
+  }
+  return null
+}
+
+function asFormFields(obj: Record<string, unknown>): WebFormCuerpo {
+  const cuerpo: WebFormCuerpo = { ...obj }
+  cuerpo.fullname = pick(obj, ['fullname', 'nombre', 'name', 'full_name', 'nombre_completo']) || str(obj.fullname)
+  cuerpo.email = pick(obj, ['email', 'correo', 'mail']) || str(obj.email)
+  cuerpo.phone = pick(obj, ['phone', 'telefono', 'tel', 'whatsapp', 'mobile']) || str(obj.phone)
+  cuerpo.company = pick(obj, ['company', 'empresa', 'company_name']) || str(obj.company)
+  cuerpo.service = pick(obj, ['service', 'servicio', 'interes']) || str(obj.service)
+  return cuerpo
+}
+
+/**
+ * Un webhook, todas las webs. Acepta:
+ *   { site, page, form: { nombre, email, … } }
+ *   { site, page, nombre, email, … }          (campos planos)
+ *   { cuerpo, etiqueta }                      (formato viejo de n8n)
+ */
+export function normalizeWebFormPayload(raw: unknown): WebFormPayloadItem {
+  if (raw == null) return { cuerpo: {}, etiqueta: 'automatizaciones', site: null, page: null }
 
   if (typeof raw === 'string') {
     try {
       return normalizeWebFormPayload(JSON.parse(raw))
     } catch {
-      return { cuerpo: {}, etiqueta: 'automatizaciones' }
+      return { cuerpo: {}, etiqueta: 'automatizaciones', site: null, page: null }
     }
   }
 
-  return { cuerpo: {}, etiqueta: 'automatizaciones' }
+  if (Array.isArray(raw)) {
+    const first = raw[0]
+    if (first && typeof first === 'object') return normalizeWebFormPayload(first)
+    return { cuerpo: {}, etiqueta: 'automatizaciones', site: null, page: null }
+  }
+
+  const obj = rec(raw)
+  if (!obj) return { cuerpo: {}, etiqueta: 'automatizaciones', site: null, page: null }
+
+  const nested =
+    rec(obj.form) ||
+    rec(obj.cuerpo) ||
+    rec(obj.data) ||
+    rec(obj.fields) ||
+    rec(obj.payload) ||
+    null
+
+  const formSrc = nested || Object.fromEntries(Object.entries(obj).filter(([k]) => !META_KEYS.has(k)))
+  const cuerpo = asFormFields(formSrc)
+
+  const pageRaw =
+    pick(obj, ['page_url', 'page', 'pagina', 'url', 'pathname', 'landing', 'landing_page']) ||
+    pick(cuerpo, ['page_url', 'page', 'pagina', 'url']) ||
+    null
+  const siteRaw =
+    pick(obj, ['site', 'website', 'web', 'host', 'dominio', 'domain']) ||
+    hostFromUrl(pageRaw) ||
+    hostFromUrl(str(cuerpo.page_url)) ||
+    null
+
+  const site = hostFromUrl(siteRaw) || siteRaw
+  const page = pathFromUrl(pageRaw)
+  const page_url = absolutePageUrl(site, pageRaw || page)
+  if (page_url) cuerpo.page_url = page_url
+
+  const etiqueta = (
+    pick(obj, ['etiqueta', 'form_name', 'formName']) ||
+    pick(formSrc, ['etiqueta', 'form_name', 'formName']) ||
+    'automatizaciones'
+  ).toLowerCase()
+
+  return { cuerpo, etiqueta, site, page }
 }
 
 export function parseWebFormSubmission(
@@ -93,6 +261,9 @@ export function parseWebFormSubmission(
   const item = normalizeWebFormPayload(payloadRaw)
   const cuerpo = item.cuerpo ?? {}
   const etiqueta = (item.etiqueta || 'automatizaciones').toLowerCase()
+  const page_url = str(cuerpo.page_url)
+  const site = item.site || hostFromUrl(page_url)
+  const page = item.page || pathFromUrl(page_url)
 
   let submittedAt: Date
   if (cuerpo.timestamp) {
@@ -106,6 +277,8 @@ export function parseWebFormSubmission(
   return {
     id,
     etiqueta,
+    site,
+    page,
     fullname: str(cuerpo.fullname),
     email: str(cuerpo.email),
     company: str(cuerpo.company),
@@ -113,7 +286,7 @@ export function parseWebFormSubmission(
     service: str(cuerpo.service),
     calls: str(cuerpo.calls),
     source: str(cuerpo.source),
-    page_url: str(cuerpo.page_url),
+    page_url,
     submitted_at: submittedAt.toISOString(),
     estado: meta.estado as WebFormSubmissionEstado,
     notas: meta.notas,
@@ -122,12 +295,123 @@ export function parseWebFormSubmission(
         ? meta.responded_at.toISOString()
         : new Date(meta.responded_at).toISOString()
       : null,
+    attribution: extractWebAttribution(cuerpo),
+    extra_fields: extraFormFields(cuerpo),
     created_at:
       meta.created_at instanceof Date
         ? meta.created_at.toISOString()
         : new Date(meta.created_at).toISOString(),
     payload: item,
   }
+}
+
+const KNOWN_FIELD_KEYS = new Set([
+  'fullname',
+  'nombre',
+  'name',
+  'full_name',
+  'nombre_completo',
+  'email',
+  'correo',
+  'mail',
+  'phone',
+  'telefono',
+  'tel',
+  'whatsapp',
+  'mobile',
+  'company',
+  'empresa',
+  'company_name',
+  'service',
+  'servicio',
+  'interes',
+  'calls',
+  'source',
+  'page_url',
+  'page',
+  'pagina',
+  'timestamp',
+  'site',
+  'etiqueta',
+  'form_name',
+  'formName',
+])
+
+export function extraFormFields(cuerpo: WebFormCuerpo | null | undefined): { key: string; value: string }[] {
+  const out: { key: string; value: string }[] = []
+  if (!cuerpo) return out
+  for (const [k, v] of Object.entries(cuerpo)) {
+    if (KNOWN_FIELD_KEYS.has(k) || META_KEYS.has(k)) continue
+    if (v == null || typeof v === 'object') continue
+    const s = String(v).trim()
+    if (!s) continue
+    out.push({ key: k, value: s })
+  }
+  return out
+}
+
+export function isWebFormEmpty(item: WebFormPayloadItem): boolean {
+  const c = item.cuerpo || {}
+  return !c.fullname && !c.email && !c.phone && !c.company && extraFormFields(c).length === 0
+}
+
+export function webFormWebhookUrl(): string {
+  const base = (process.env.NEXT_PUBLIC_BASE_URL || process.env.APP_BASE_URL || '').replace(/\/$/, '')
+  return `${base || 'https://TU_CRM'}/api/webhooks/webform`
+}
+
+export function buildWebFormMarkdown(token?: string | null): string {
+  const url = webFormWebhookUrl()
+  const bearer = token?.trim() || '<WEBFORM_WEBHOOK_TOKEN>'
+  return `# Formularios Buffalo CRM
+
+Enviad cada envío de formulario a este webhook. Ya no hace falta n8n ni INSERT en Postgres.
+
+## Endpoint
+
+\`POST ${url}\`
+
+\`\`\`
+Authorization: Bearer ${bearer}
+Content-Type: application/json
+\`\`\`
+
+## JSON
+
+Cada web puede mandar los campos que quiera dentro de \`form\`. Lo único fijo es la web y la página:
+
+\`\`\`json
+{
+  "site": "agenciabuffalo.es",
+  "page": "/contacto",
+  "form": {
+    "nombre": "Ana López",
+    "email": "ana@empresa.com",
+    "telefono": "+34600000000",
+    "empresa": "Empresa",
+    "mensaje": "Quiero una demo",
+    "tipo": "Agente de llamadas",
+    "sexo": "mujer"
+  }
+}
+\`\`\`
+
+- \`site\`: dominio de la web (agenciabuffalo.es, formacion.agenciabuffalo.es, …)
+- \`page\`: ruta o URL de la página donde estaba el formulario
+- \`form\`: objeto con los campos. Cada web puede tener campos distintos.
+
+También vale el formato plano:
+
+\`\`\`json
+{
+  "site": "formacion.agenciabuffalo.es",
+  "page": "/diagnostico",
+  "nombre": "Luis",
+  "email": "luis@empresa.com",
+  "objetivo": "Formar al equipo"
+}
+\`\`\`
+`
 }
 
 export function periodBounds(period: string): { start: Date; end: Date } {

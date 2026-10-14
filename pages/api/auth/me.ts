@@ -18,6 +18,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   void import('@/lib/retencion/watch-scheduler')
     .then((m) => m.startRetencionWatchScheduler())
     .catch(() => {})
+  void import('@/lib/ops-reminder-scheduler')
+    .then((m) => m.startOpsReminderScheduler())
+    .catch(() => {})
 
   try {
     let user = await requireAuthAPI(req, res)

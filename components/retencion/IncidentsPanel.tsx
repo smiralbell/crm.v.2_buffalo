@@ -198,6 +198,8 @@ export default function IncidentsPanel({
                       <p className="whitespace-pre-wrap break-words text-sm text-gray-900">{inc.error_text}</p>
                       <p className="mt-1 text-xs text-gray-500">
                         {inc.occurrences} vez{inc.occurrences === 1 ? '' : 'es'} · última {fmt(inc.last_seen_at)}
+                        {' · '}
+                        cada día abierta nos avisa por Gmail y Telegram
                       </p>
                     </div>
                   </div>

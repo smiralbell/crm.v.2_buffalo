@@ -70,6 +70,10 @@ export async function ensureIncidentsTable(): Promise<void> {
       ON retencion_incidents (proyecto_id, error_hash)
       WHERE status = 'open'
   `)
+  await query(`
+    ALTER TABLE retencion_incidents
+      ADD COLUMN IF NOT EXISTS last_nagged_at TIMESTAMPTZ
+  `)
   incidentsEnsured = true
 }
 
@@ -128,6 +132,7 @@ El campo \`client_id\` **tiene que ser este** (id del proyecto en el CRM):
 ## Notas
 
 - Si llega **el mismo error** otra vez y aún no está marcado como solucionado en el CRM, **no avisamos de nuevo** (solo sumamos ocurrencias).
+- Cada **día calendario** que siga abierta (sin solucionar) avisamos otra vez por Gmail y Telegram.
 - Cuando lo marquemos como solucionado, el mismo error volverá a avisar.
 - Errores **distintos** sí avisan siempre.
 `

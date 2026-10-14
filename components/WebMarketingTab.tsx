@@ -136,7 +136,7 @@ export default function WebMarketingTab({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <KpiLink
           label="Agendaron en el calendario"
           value={data.cal_available ? fmt(data.totals.cal) : '—'}
@@ -157,15 +157,9 @@ export default function WebMarketingTab({
               ? data.form_pending > 0
                 ? `${data.form_pending} pendientes`
                 : 'Todos gestionados'
-              : 'Tabla de formularios no disponible'
+              : 'Webhook de formularios pendiente'
           }
           href={`/marketing/web/formularios${periodQs}`}
-        />
-        <KpiLink
-          label="Respondieron al chat"
-          value={fmt(data.totals.chat)}
-          sub="Widget IA · sesiones con respuesta"
-          href="/marketing/web/chat"
         />
       </div>
 
@@ -173,12 +167,11 @@ export default function WebMarketingTab({
         <Card className="shadow-sm border-gray-200/80">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold text-gray-900">Embudo web</CardTitle>
-            <p className="text-xs text-gray-500 font-normal">Calendario · formulario · widget</p>
+            <p className="text-xs text-gray-500 font-normal">Calendario · formulario</p>
           </CardHeader>
           <CardContent className="space-y-4">
             <FunnelBar label="Calendario Cal.com" count={data.totals.cal} total={total} color="bg-gray-800" />
             <FunnelBar label="Formulario completado" count={data.totals.form} total={total} color="bg-slate-600" />
-            <FunnelBar label="Chat con respuesta" count={data.totals.chat} total={total} color="bg-slate-400" />
             {data.cal_from_form_pct != null && data.totals.form > 0 && (
               <p className="text-xs text-gray-500 pt-1 border-t border-gray-100">
                 Formulario → calendario:{' '}
@@ -205,7 +198,7 @@ export default function WebMarketingTab({
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-semibold text-gray-900">Actividad diaria</CardTitle>
           <p className="text-xs text-gray-500 font-normal">
-            {fmt(total)} entradas en el período · formulario, calendario y widget
+            {fmt(total)} entradas en el período · formulario y calendario
           </p>
         </CardHeader>
         <CardContent className="pb-2">

@@ -2,6 +2,7 @@ import { openRouterToolTurn, type ORMessage, type ORTool } from '@/lib/openroute
 import { getDecryptedDbUrl, getOrCreateAgentConfig, toPublicConfig } from '@/lib/retencion/agent-config-store'
 import { listOpenIncidentsForWatch } from '@/lib/retencion/incidents'
 import { runReadOnlySelect } from '@/lib/retencion/readonly-postgres'
+import { collectWatchDbDelta, saveWatchMemory } from '@/lib/retencion/watch-db-memory'
 import {
   DEFAULT_WATCH_PROMPT,
   ensureWatchColumns,
@@ -15,7 +16,8 @@ import { query } from '@/lib/db'
 const TOOLS: ORTool[] = [
   {
     name: 'query_db',
-    description: 'SELECT de solo lectura contra la PostgreSQL del cliente. Una sentencia.',
+    description:
+      'SELECT puntual de solo lectura. El volcado incremental ya viene en el mensaje: no extraigas tablas enteras.',
     parameters: {
       type: 'object',
       properties: { sql: { type: 'string', description: 'SELECT o WITH … SELECT' } },
@@ -78,6 +80,19 @@ export async function runWatchForProject(proyectoId: string): Promise<{
   )
   const name = proj[0]?.name || proyectoId
 
+  let dbBriefing = 'Base de datos: NO configurada.'
+  let pendingMemory: Awaited<ReturnType<typeof collectWatchDbDelta>>['nextMemory'] | null = null
+  if (dbUrl) {
+    try {
+      const collected = await collectWatchDbDelta(proyectoId, dbUrl)
+      pendingMemory = collected.nextMemory
+      dbBriefing = collected.briefing
+      used.add('db')
+    } catch (e) {
+      dbBriefing = `No se pudo leer el delta de la base: ${e instanceof Error ? e.message : String(e)}`
+    }
+  }
+
   const messages: ORMessage[] = [
     { role: 'system', content: watchPrompt },
     {
@@ -85,11 +100,11 @@ export async function runWatchForProject(proyectoId: string): Promise<{
       content: [
         `Proyecto: ${name}`,
         `id: ${proyectoId}`,
-        `Base de datos: ${dbUrl ? 'conectada (usa query_db)' : 'NO configurada'}`,
+        dbBriefing,
         `Knowledge: ${cfg.audit_knowledge?.trim() ? 'hay texto (usa get_knowledge)' : 'vacía'}`,
         `Prompt de agentes: ${cfg.report_prompt?.trim() ? 'hay texto (usa get_agent_prompt)' : 'vacío'}`,
-        'Revisa el estado reciente y entrega el informe.',
-      ].join('\n'),
+        'Revisa lo NUEVO + tu resumen acumulado y entrega el informe. No reextraigas el histórico.',
+      ].join('\n\n'),
     },
   ]
 
@@ -145,6 +160,13 @@ export async function runWatchForProject(proyectoId: string): Promise<{
     }
     const graph: WatchGraph = { used: Array.from(used), at: new Date().toISOString() }
     await saveWatchRun({ proyectoId, ok: true, report, graph })
+    if (pendingMemory) {
+      await saveWatchMemory(proyectoId, {
+        ...pendingMemory,
+        summary: clip(report, 18000),
+        last_delta_at: pendingMemory.last_delta_at || new Date().toISOString(),
+      })
+    }
     return { ok: true, report, graph }
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e)

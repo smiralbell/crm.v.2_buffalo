@@ -78,7 +78,7 @@ export default function DashboardAlertsPanel({ initialItems = [] }: Props) {
             Alertas y reuniones
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Follow-ups, reuniones próximas y respuestas de formularios web / formación
+            Follow-ups, reuniones próximas y respuestas de formularios web
           </p>
         </div>
         <span className="text-xs text-muted-foreground tabular-nums">

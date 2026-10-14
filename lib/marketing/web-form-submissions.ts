@@ -1,6 +1,10 @@
+import { createHash, timingSafeEqual } from 'crypto'
+import type { NextApiRequest } from 'next'
 import { query } from '@/lib/db'
 import {
   inWebFormPeriod,
+  isWebFormEmpty,
+  normalizeWebFormPayload,
   parseWebFormSubmission,
   type WebFormSubmissionEstado,
   type WebFormSubmissionRow,
@@ -16,8 +20,13 @@ export type {
 export {
   ESTADO_LABELS,
   ETIQUETA_LABELS,
+  SITE_LABELS,
+  buildWebFormMarkdown,
+  extraFormFields,
+  isWebFormEmpty,
   normalizeWebFormPayload,
   parseWebFormSubmission,
+  webFormWebhookUrl,
 } from '@/lib/marketing/web-form-submissions.types'
 
 type DbRow = {
@@ -38,13 +47,77 @@ function mapDbRow(row: DbRow): WebFormSubmissionRow {
   })
 }
 
+function envSecret(name: string): string | null {
+  return process.env[name]?.trim() || null
+}
+
+export function webFormWebhookToken(): string | null {
+  return envSecret('WEBFORM_WEBHOOK_TOKEN') || envSecret('INGEST_TOKEN') || 'buf-webform-2026'
+}
+
+export function webFormBearerMatches(req: NextApiRequest): boolean {
+  const expected = webFormWebhookToken()
+  if (!expected) return false
+  const provided = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+  if (!provided) return false
+  const a = createHash('sha256').update(provided).digest()
+  const b = createHash('sha256').update(expected).digest()
+  return timingSafeEqual(a, b)
+}
+
+let tableEnsured = false
+export async function ensureWebFormSubmissionsTable(): Promise<void> {
+  if (tableEnsured) return
+  await query(`
+    CREATE TABLE IF NOT EXISTS web_form_submissions (
+      id            SERIAL PRIMARY KEY,
+      payload       JSONB NOT NULL,
+      estado        TEXT NOT NULL DEFAULT 'pendiente'
+                    CHECK (estado IN ('pendiente', 'contactado', 'descartado')),
+      notas         TEXT,
+      responded_at  TIMESTAMPTZ,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_web_form_submissions_created_at
+      ON web_form_submissions (created_at DESC)
+  `)
+  tableEnsured = true
+}
+
 export async function isWebFormSubmissionsTableAvailable(): Promise<boolean> {
   try {
+    await ensureWebFormSubmissionsTable()
     await query(`SELECT 1 FROM web_form_submissions LIMIT 1`)
     return true
   } catch {
     return false
   }
+}
+
+export async function insertWebFormSubmission(raw: unknown): Promise<WebFormSubmissionRow> {
+  await ensureWebFormSubmissionsTable()
+  const item = normalizeWebFormPayload(raw)
+  if (isWebFormEmpty(item)) {
+    throw new Error('El formulario está vacío: hace falta al menos un campo en form')
+  }
+  const stored = {
+    site: item.site,
+    page: item.page,
+    etiqueta: item.etiqueta,
+    form: item.cuerpo,
+    cuerpo: item.cuerpo,
+  }
+  const result = await query<DbRow>(
+    `INSERT INTO web_form_submissions (payload)
+     VALUES ($1::jsonb)
+     RETURNING id, payload, estado, notas, responded_at, created_at`,
+    [JSON.stringify(stored)]
+  )
+  const row = result.rows[0]
+  if (!row) throw new Error('No se pudo guardar el formulario')
+  return mapDbRow(row)
 }
 
 export async function countWebFormSubmissions(period: string): Promise<number> {

@@ -11,6 +11,8 @@ type Row = {
   done: boolean
   column_key: string
   position: number
+  remind_every_days: number | null
+  last_reminded_at: Date | null
   created_at: Date
   updated_at: Date
   completed_at: Date | null
@@ -23,15 +25,30 @@ function mapRow(r: Row): ChecklistItem {
     done: r.done,
     column_key: isChecklistColumnId(r.column_key) ? r.column_key : 'inbox',
     position: r.position,
+    remind_every_days: Number.isFinite(Number(r.remind_every_days)) ? Number(r.remind_every_days) : 1,
+    last_reminded_at: r.last_reminded_at ? r.last_reminded_at.toISOString() : null,
     created_at: r.created_at.toISOString(),
     updated_at: r.updated_at.toISOString(),
     completed_at: r.completed_at ? r.completed_at.toISOString() : null,
   }
 }
 
+let schemaEnsured = false
+export async function ensureChecklistSchema(): Promise<void> {
+  if (schemaEnsured) return
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE crm_checklist_items ADD COLUMN IF NOT EXISTS remind_every_days INT NOT NULL DEFAULT 1`
+  )
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE crm_checklist_items ADD COLUMN IF NOT EXISTS last_reminded_at TIMESTAMPTZ`
+  )
+  schemaEnsured = true
+}
+
 export async function listChecklistItems(): Promise<ChecklistItem[]> {
+  await ensureChecklistSchema()
   const rows = await prisma.$queryRaw<Row[]>`
-    SELECT id, title, done, column_key, position, created_at, updated_at, completed_at
+    SELECT id, title, done, column_key, position, remind_every_days, last_reminded_at, created_at, updated_at, completed_at
     FROM crm_checklist_items
     ORDER BY column_key ASC, position ASC, id ASC
   `
@@ -43,6 +60,7 @@ export async function createChecklistItem(input: {
   column_key?: ChecklistColumnId
   createdByUserId?: number | null
 }): Promise<ChecklistItem> {
+  await ensureChecklistSchema()
   const title = input.title.trim()
   if (!title) throw new Error('El título es obligatorio')
   const column = input.column_key && isChecklistColumnId(input.column_key) ? input.column_key : 'inbox'
@@ -55,9 +73,9 @@ export async function createChecklistItem(input: {
   const position = Number(posRows[0]?.next ?? 0)
 
   const rows = await prisma.$queryRaw<Row[]>`
-    INSERT INTO crm_checklist_items (title, column_key, position, created_by_user_id)
-    VALUES (${title}, ${column}, ${position}, ${input.createdByUserId ?? null})
-    RETURNING id, title, done, column_key, position, created_at, updated_at, completed_at
+    INSERT INTO crm_checklist_items (title, column_key, position, created_by_user_id, remind_every_days)
+    VALUES (${title}, ${column}, ${position}, ${input.createdByUserId ?? null}, 1)
+    RETURNING id, title, done, column_key, position, remind_every_days, last_reminded_at, created_at, updated_at, completed_at
   `
   return mapRow(rows[0])
 }
@@ -69,10 +87,12 @@ export async function updateChecklistItem(
     done?: boolean
     column_key?: ChecklistColumnId
     position?: number
+    remind_every_days?: number
   }
 ): Promise<ChecklistItem | null> {
+  await ensureChecklistSchema()
   const existing = await prisma.$queryRaw<Row[]>`
-    SELECT id, title, done, column_key, position, created_at, updated_at, completed_at
+    SELECT id, title, done, column_key, position, remind_every_days, last_reminded_at, created_at, updated_at, completed_at
     FROM crm_checklist_items WHERE id = ${id} LIMIT 1
   `
   const cur = existing[0]
@@ -85,6 +105,10 @@ export async function updateChecklistItem(
   const column =
     patch.column_key && isChecklistColumnId(patch.column_key) ? patch.column_key : cur.column_key
   const position = patch.position ?? cur.position
+  const remindEvery =
+    patch.remind_every_days != null && Number.isFinite(patch.remind_every_days)
+      ? Math.max(0, Math.min(365, Math.floor(patch.remind_every_days)))
+      : Number(cur.remind_every_days ?? 1)
   const completedAt = done ? cur.completed_at ?? new Date() : null
 
   const rows = await prisma.$queryRaw<Row[]>`
@@ -93,10 +117,11 @@ export async function updateChecklistItem(
       done = ${done},
       column_key = ${column},
       position = ${position},
+      remind_every_days = ${remindEvery},
       completed_at = ${completedAt},
       updated_at = NOW()
     WHERE id = ${id}
-    RETURNING id, title, done, column_key, position, created_at, updated_at, completed_at
+    RETURNING id, title, done, column_key, position, remind_every_days, last_reminded_at, created_at, updated_at, completed_at
   `
   return rows[0] ? mapRow(rows[0]) : null
 }

@@ -1,8 +1,5 @@
 import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
-import { queryChat } from '@/lib/db-chat'
-import { AGENT_CHAT_HISTORY_TABLE } from '@/lib/agent-chat-history'
-import { parseAgentChatMessage } from '@/lib/agent-chat-history'
 import { listWebFormSubmissions } from '@/lib/marketing/web-form-submissions'
 import { listCalBookings } from '@/lib/marketing/cal-bookings'
 import { BUFFALO_STAGE_COLORS, defaultStageColor } from '@/lib/pipelines/defaults'
@@ -329,6 +326,8 @@ export async function syncWebFormToPipeline(submission: {
   phone: string | null
   service: string | null
   etiqueta: string
+  site?: string | null
+  page?: string | null
 }): Promise<string | null> {
   const { contactId } = await ensureWebContact({
     nombre: submission.fullname,
@@ -338,99 +337,10 @@ export async function syncWebFormToPipeline(submission: {
     origen: 'formulario_web',
   })
 
-  const notes = [submission.company, submission.service, submission.etiqueta].filter(Boolean).join(' · ')
+  const notes = [submission.site, submission.page, submission.company, submission.service, submission.etiqueta]
+    .filter(Boolean)
+    .join(' · ')
   return syncWebContactToPipeline(contactId, 'form', notes || `Formulario #${submission.id}`)
-}
-
-const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/
-
-async function extractEmailFromChatSession(sessionId: string): Promise<string | null> {
-  try {
-    const { rows } = await queryChat<{ message: unknown }>(
-      `SELECT message FROM ${AGENT_CHAT_HISTORY_TABLE}
-       WHERE session_id = $1
-       ORDER BY id ASC
-       LIMIT 40`,
-      [sessionId]
-    )
-    for (const row of rows) {
-      const parsed = parseAgentChatMessage(row.message)
-      if (parsed.role !== 'user') continue
-      const match = parsed.text.match(EMAIL_RE)
-      if (match) return match[0].toLowerCase()
-    }
-  } catch {
-    return null
-  }
-  return null
-}
-
-async function listChatSessionsWithUserReply(limit = 300): Promise<string[]> {
-  try {
-    const { rows } = await queryChat<{ session_id: string }>(
-      `SELECT session_id
-       FROM ${AGENT_CHAT_HISTORY_TABLE}
-       GROUP BY session_id
-       HAVING BOOL_OR(
-         COALESCE(message->>'type', '') IN ('human', 'user')
-         OR LOWER(COALESCE(message->>'role', '')) IN ('human', 'user')
-         OR COALESCE(message #>> '{id,-1}', '') = 'HumanMessage'
-       )
-       ORDER BY MAX(id) DESC
-       LIMIT $1`,
-      [limit]
-    )
-    return rows.map((r) => r.session_id)
-  } catch {
-    return []
-  }
-}
-
-async function isChatSessionSynced(sessionId: string): Promise<boolean> {
-  try {
-    const result = await query<{ pipeline_card_id: string | null }>(
-      `SELECT pipeline_card_id FROM web_chat_pipeline_sync WHERE session_id = $1 LIMIT 1`,
-      [sessionId]
-    )
-    return !!result.rows[0]?.pipeline_card_id
-  } catch {
-    return false
-  }
-}
-
-async function markChatSessionSynced(sessionId: string, contactId: number, cardId: string | null): Promise<void> {
-  try {
-    await query(
-      `INSERT INTO web_chat_pipeline_sync (session_id, contact_id, pipeline_card_id)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (session_id) DO UPDATE SET
-         contact_id = EXCLUDED.contact_id,
-         pipeline_card_id = EXCLUDED.pipeline_card_id,
-         synced_at = NOW()`,
-      [sessionId, contactId, cardId]
-    )
-  } catch {
-    // tabla opcional
-  }
-}
-
-export async function syncChatSessionToWebPipeline(sessionId: string): Promise<string | null> {
-  if (await isChatSessionSynced(sessionId)) return null
-
-  const email = await extractEmailFromChatSession(sessionId)
-  const { contactId } = await ensureWebContact({
-    nombre: email ? undefined : `Chat web ${sessionId.slice(0, 8)}`,
-    email,
-    origen: 'web_chat',
-  })
-
-  const cardId = await syncWebContactToPipeline(
-    contactId,
-    'chat',
-    email ? `Widget web · ${sessionId.slice(0, 12)}` : `Sesión chat ${sessionId.slice(0, 12)}`
-  )
-  if (cardId) await markChatSessionSynced(sessionId, contactId, cardId)
-  return cardId
 }
 
 export interface WebPipelineSyncResult {
@@ -438,7 +348,7 @@ export interface WebPipelineSyncResult {
   errors: string[]
 }
 
-/** Sincroniza formularios, calendario y chat al pipeline WEB. */
+/** Sincroniza formularios y calendario al pipeline WEB. */
 export async function syncAllWebSourcesToPipeline(period?: string): Promise<WebPipelineSyncResult> {
   const pipelineId = await getWebPipelineId()
   if (!pipelineId) {
@@ -475,16 +385,6 @@ export async function syncAllWebSourcesToPipeline(period?: string): Promise<WebP
       if (cardId) synced++
     } catch (e) {
       errors.push(`Cal ${booking.uid}: ${e instanceof Error ? e.message : 'error'}`)
-    }
-  }
-
-  const sessions = await listChatSessionsWithUserReply(200)
-  for (const sessionId of sessions) {
-    try {
-      const cardId = await syncChatSessionToWebPipeline(sessionId)
-      if (cardId) synced++
-    } catch (e) {
-      errors.push(`Chat ${sessionId.slice(0, 8)}: ${e instanceof Error ? e.message : 'error'}`)
     }
   }
 

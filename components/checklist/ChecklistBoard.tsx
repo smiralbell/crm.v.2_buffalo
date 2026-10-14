@@ -4,7 +4,16 @@ import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   CHECKLIST_COLUMNS,
+  CHECKLIST_REMIND_OPTIONS,
+  checklistRemindLabel,
   type ChecklistColumnId,
   type ChecklistItem,
 } from '@/lib/checklist/types'
@@ -15,6 +24,7 @@ interface ChecklistBoardProps {
   onCreate: (title: string, column: ChecklistColumnId) => Promise<void>
   onToggle: (id: number, done: boolean) => Promise<void>
   onMove: (id: number, column: ChecklistColumnId, position: number) => Promise<void>
+  onUpdate: (id: number, patch: { title: string; remind_every_days: number }) => Promise<void>
   onDelete: (id: number) => Promise<void>
   busyId?: number | null
 }
@@ -24,6 +34,7 @@ export default function ChecklistBoard({
   onCreate,
   onToggle,
   onMove,
+  onUpdate,
   onDelete,
   busyId,
 }: ChecklistBoardProps) {
@@ -34,6 +45,10 @@ export default function ChecklistBoard({
   })
   const [creatingCol, setCreatingCol] = useState<ChecklistColumnId | null>(null)
   const [draggingId, setDraggingId] = useState<number | null>(null)
+  const [editing, setEditing] = useState<ChecklistItem | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editRemind, setEditRemind] = useState('1')
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const byColumn = useMemo(() => {
     const map: Record<ChecklistColumnId, ChecklistItem[]> = {
@@ -73,7 +88,30 @@ export default function ChecklistBoard({
     await onMove(id, column, position)
   }
 
+  const openEdit = (item: ChecklistItem) => {
+    setEditing(item)
+    setEditTitle(item.title)
+    setEditRemind(String(item.remind_every_days ?? 1))
+  }
+
+  const saveEdit = async () => {
+    if (!editing) return
+    const title = editTitle.trim()
+    if (!title) return
+    setSavingEdit(true)
+    try {
+      await onUpdate(editing.id, {
+        title,
+        remind_every_days: Number(editRemind) || 0,
+      })
+      setEditing(null)
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   return (
+    <>
     <div className="grid gap-4 lg:grid-cols-3">
       {CHECKLIST_COLUMNS.map((col) => {
         const colItems = byColumn[col.id]
@@ -162,13 +200,26 @@ export default function ChecklistBoard({
                       >
                         {item.done && <Check className="h-3 w-3" />}
                       </button>
-                      <p
-                        className={`flex-1 text-sm leading-snug pt-0.5 ${
-                          item.done ? 'text-gray-400 line-through' : 'text-gray-900'
-                        }`}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => openEdit(item)}
+                        className="flex-1 text-left min-w-0"
+                        title="Editar tarea y recordatorio"
                       >
-                        {item.title}
-                      </p>
+                        <p
+                          className={`text-sm leading-snug pt-0.5 ${
+                            item.done ? 'text-gray-400 line-through' : 'text-gray-900'
+                          }`}
+                        >
+                          {item.title}
+                        </p>
+                        {!item.done && (
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {checklistRemindLabel(item.remind_every_days ?? 1)}
+                          </p>
+                        )}
+                      </button>
                       <button
                         type="button"
                         disabled={busy}
@@ -187,5 +238,54 @@ export default function ChecklistBoard({
         )
       })}
     </div>
+
+    <Dialog open={!!editing} onOpenChange={(open) => { if (!open) setEditing(null) }}>
+      <DialogContent className="max-w-md rounded-[28px] border-2 border-white sm:rounded-[28px]">
+        <DialogHeader>
+          <DialogTitle>Tarea</DialogTitle>
+          <DialogDescription>
+            Cambia el texto y cada cuánto te recordamos por Gmail y Telegram si sigue abierta.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Qué hay que hacer</span>
+            <Input
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="mt-1 rounded-xl"
+            />
+          </label>
+          <label className="block">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Recordatorio</span>
+            <select
+              value={editRemind}
+              onChange={(e) => setEditRemind(e.target.value)}
+              className="mt-1 flex h-10 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
+            >
+              {CHECKLIST_REMIND_OPTIONS.map((o) => (
+                <option key={o.days} value={String(o.days)}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="ghost" className="rounded-xl" onClick={() => setEditing(null)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="rounded-xl"
+              disabled={savingEdit || !editTitle.trim()}
+              onClick={() => void saveEdit()}
+            >
+              Guardar
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }

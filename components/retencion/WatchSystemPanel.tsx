@@ -5,22 +5,18 @@ import WatchSystemMap, { type WatchNodeId } from '@/components/retencion/WatchSy
 import styles from './WatchSystemMap.module.css'
 import type { WatchPublic } from '@/lib/retencion/watch-store'
 import {
+  formatWatchInterval,
+  minutesToParts,
+  partsToMinutes,
+  type WatchIntervalUnit,
+} from '@/lib/retencion/watch-interval'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-
-const INTERVALS = [
-  { minutes: 0, label: 'Pausado' },
-  { minutes: 15, label: 'Cada 15 minutos' },
-  { minutes: 30, label: 'Cada 30 minutos' },
-  { minutes: 60, label: 'Cada hora' },
-  { minutes: 180, label: 'Cada 3 horas' },
-  { minutes: 360, label: 'Cada 6 horas' },
-  { minutes: 1440, label: 'Cada día' },
-]
 
 const TITLES: Record<WatchNodeId, string> = {
   agent: 'Agente de vigilancia',
@@ -55,7 +51,9 @@ export default function WatchSystemPanel({
   const [knowledge, setKnowledge] = useState('')
   const [agentPrompt, setAgentPrompt] = useState('')
   const [watchPrompt, setWatchPrompt] = useState('')
-  const [every, setEvery] = useState(60)
+  const [paused, setPaused] = useState(true)
+  const [amount, setAmount] = useState(1)
+  const [unit, setUnit] = useState<WatchIntervalUnit>('hours')
   const [selected, setSelected] = useState<WatchNodeId | null>(null)
   const [openIncidents, setOpenIncidents] = useState(0)
   const [recenter, setRecenter] = useState(0)
@@ -65,9 +63,11 @@ export default function WatchSystemPanel({
     setKnowledge(w.knowledge || '')
     setAgentPrompt(w.agent_prompt || '')
     setWatchPrompt(w.watch_prompt || '')
-    const mins = w.every_minutes && w.every_minutes > 0 ? w.every_minutes : 0
-    setEvery(mins)
-    onIntervalLabel?.(INTERVALS.find((i) => i.minutes === mins)?.label || 'Pausado')
+    const parts = minutesToParts(w.every_minutes && w.every_minutes > 0 ? w.every_minutes : 0)
+    setPaused(parts.paused)
+    setAmount(parts.amount)
+    setUnit(parts.unit)
+    onIntervalLabel?.(formatWatchInterval(w.every_minutes))
   }
 
   const load = useCallback(async () => {
@@ -114,7 +114,7 @@ export default function WatchSystemPanel({
         knowledge,
         agent_prompt: agentPrompt,
         watch_prompt: watchPrompt,
-        every_minutes: every,
+        every_minutes: paused ? 0 : partsToMinutes(amount, unit),
       }
       if (dbUrl.trim()) body.client_db_url = dbUrl.trim()
       const res = await fetch(`/api/retencion/proyectos/${proyectoId}/watch`, {
@@ -158,13 +158,13 @@ export default function WatchSystemPanel({
 
   const labels = useMemo<Record<WatchNodeId, string>>(
     () => ({
-      agent: INTERVALS.find((i) => i.minutes === every)?.label || 'Pausado',
+      agent: formatWatchInterval(paused ? 0 : partsToMinutes(amount, unit)),
       db: watch?.db_connected ? watch.db_name || watch.db_host || 'conectada' : 'sin conectar',
       knowledge: knowledge.trim() ? `${knowledge.trim().length} caracteres` : 'vacía',
       prompt: agentPrompt.trim() ? 'configurado' : 'sin prompt',
       incidents: openIncidents ? `${openIncidents} abierta${openIncidents === 1 ? '' : 's'}` : 'ninguna abierta',
     }),
-    [every, watch, knowledge, agentPrompt, openIncidents]
+    [paused, amount, unit, watch, knowledge, agentPrompt, openIncidents]
   )
 
   return (
@@ -234,21 +234,36 @@ export default function WatchSystemPanel({
               )}
 
               {selected === 'db' && (
-                <div className={styles.field}>
-                  <label>URL PostgreSQL externa</label>
-                  <input
-                    type="text"
-                    value={dbUrl}
-                    onChange={(e) => setDbUrl(e.target.value)}
-                    disabled={!isAdmin}
-                    placeholder={watch?.db_connected ? `${watch.db_host || ''} / ${watch.db_name || ''}` : 'postgresql://…'}
-                  />
-                  <p className="mt-1.5 text-xs text-gray-400">
-                    {watch?.db_connected
-                      ? 'Ya hay una conexión. Pega otra URL solo si quieres cambiarla. Solo lectura (SELECT).'
-                      : 'Solo lectura (SELECT).'}
-                  </p>
-                </div>
+                <>
+                  <div className={styles.field}>
+                    <label>URL PostgreSQL externa</label>
+                    <input
+                      type="text"
+                      value={dbUrl}
+                      onChange={(e) => setDbUrl(e.target.value)}
+                      disabled={!isAdmin}
+                      placeholder={watch?.db_connected ? `${watch.db_host || ''} / ${watch.db_name || ''}` : 'postgresql://…'}
+                    />
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      {watch?.db_connected
+                        ? 'Conectada. En cada cron el agente solo lee filas nuevas desde la última pasada y guarda un resumen en su memoria.'
+                        : 'Solo lectura. En cada pasada extrae lo nuevo y deja un resumen; no vuelve a volcar todo el histórico.'}
+                    </p>
+                  </div>
+                  {watch?.db_summary && (
+                    <div className={styles.field}>
+                      <label>
+                        Memoria del agente
+                        {watch.db_last_delta_at
+                          ? ` · ${new Date(watch.db_last_delta_at).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}`
+                          : ''}
+                      </label>
+                      <pre className="mt-1.5 max-h-56 overflow-auto whitespace-pre-wrap rounded-2xl bg-gray-50 px-3 py-2 text-[12px] text-gray-800">
+                        {watch.db_summary}
+                      </pre>
+                    </div>
+                  )}
+                </>
               )}
 
               {selected === 'knowledge' && (
@@ -313,20 +328,49 @@ export default function WatchSystemPanel({
           <DialogHeader>
             <DialogTitle>Frecuencia del agente</DialogTitle>
             <DialogDescription>
-              Cada cuánto tiempo el agente revisa la base de datos, la knowledge y los prompts de este proyecto.
+              Pon el intervalo que quieras. El agente revisa solo datos nuevos desde la última pasada.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className={styles.field}>
-              <label>Ejecutar</label>
-              <select value={every} onChange={(e) => setEvery(Number(e.target.value))} disabled={!isAdmin}>
-                {INTERVALS.map((i) => (
-                  <option key={i.minutes} value={i.minutes}>
-                    {i.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-800">
+              <input
+                type="checkbox"
+                checked={paused}
+                onChange={(e) => setPaused(e.target.checked)}
+                disabled={!isAdmin}
+              />
+              Pausado
+            </label>
+            {!paused && (
+              <div className="grid grid-cols-[1fr_140px] gap-2">
+                <div className={styles.field}>
+                  <label>Cada</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={999}
+                    value={amount}
+                    disabled={!isAdmin}
+                    onChange={(e) => setAmount(Math.max(1, Number(e.target.value) || 1))}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label>Unidad</label>
+                  <select
+                    value={unit}
+                    disabled={!isAdmin}
+                    onChange={(e) => setUnit(e.target.value as WatchIntervalUnit)}
+                  >
+                    <option value="minutes">minutos</option>
+                    <option value="hours">horas</option>
+                    <option value="days">días</option>
+                  </select>
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-gray-400">
+              {paused ? 'El cron no corre hasta que lo actives.' : formatWatchInterval(partsToMinutes(amount, unit))}
+            </p>
             <button
               type="button"
               onClick={async () => {
