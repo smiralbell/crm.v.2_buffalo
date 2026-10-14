@@ -34,6 +34,11 @@ import {
 } from '@/lib/leads/lead-detail-bundle'
 import { cn } from '@/lib/utils'
 import { estadoLabel, estadoBadgeClass } from '@/lib/leads/estados'
+import { getMetaAttributionByLeadId } from '@/lib/integrations/meta/store'
+import { parseGraphLead } from '@/lib/integrations/meta/parse'
+import MetaAdsAttributionCard, {
+  type MetaAdsAttributionView,
+} from '@/components/leads/MetaAdsAttributionCard'
 
 interface LeadDetailProps {
   lead: {
@@ -56,6 +61,7 @@ interface LeadDetailProps {
     } | null
   }
   bundle: LeadDetailBundle
+  metaAds: MetaAdsAttributionView | null
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -91,6 +97,32 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       leadEstado: lead.estado,
     })
 
+    let metaAds: MetaAdsAttributionView | null = null
+    try {
+      const ev = await getMetaAttributionByLeadId(lead.id)
+      if (ev) {
+        const parsed = ev.graph_payload ? parseGraphLead(ev.leadgen_id, ev.graph_payload) : null
+        metaAds = {
+          leadgen_id: ev.leadgen_id,
+          page_id: ev.page_id,
+          page_name: ev.page_name,
+          platform: ev.platform,
+          is_organic: ev.is_organic,
+          form_id: ev.form_id,
+          form_name: ev.form_name,
+          campaign_id: ev.campaign_id,
+          campaign_name: ev.campaign_name,
+          adset_id: ev.adset_id,
+          adset_name: ev.adset_name,
+          ad_id: ev.ad_id,
+          ad_name: ev.ad_name,
+          answers: parsed?.answers || [],
+        }
+      }
+    } catch {
+      metaAds = null
+    }
+
     return {
       props: {
         lead: {
@@ -106,6 +138,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           contact: lead.contact,
         },
         bundle: JSON.parse(JSON.stringify(bundle)),
+        metaAds,
       },
     }
   } catch {
@@ -279,7 +312,7 @@ function LeadContextEditor({
   )
 }
 
-export default function LeadDetail({ lead, bundle }: LeadDetailProps) {
+export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
   const router = useRouter()
   const [editOpen, setEditOpen] = useState(false)
   const displayName = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
@@ -508,6 +541,8 @@ export default function LeadDetail({ lead, bundle }: LeadDetailProps) {
             </CardContent>
           </Card>
         </div>
+
+        {metaAds && <MetaAdsAttributionCard data={metaAds} />}
 
         <LeadContextEditor leadId={lead.id} initial={lead.notas || ''} />
 

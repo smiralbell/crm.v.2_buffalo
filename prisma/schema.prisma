@@ -478,23 +478,33 @@ model InstantlyWebhook {
 }
 
 model MetaLeadEvent {
-  id            Int       @id @default(autoincrement())
-  leadgen_id    String    @unique
-  page_id       String?
-  form_id       String?
-  ad_id         String?
-  payload       Json
-  graph_payload Json?
-  status        String    @default("pending")
-  attempts      Int       @default(0)
-  last_error    String?   @db.Text
-  contact_id    Int?
-  lead_id       Int?
-  next_retry_at DateTime?
-  created_at    DateTime  @default(now())
-  processed_at  DateTime?
+  id             Int       @id @default(autoincrement())
+  leadgen_id     String    @unique
+  page_id        String?
+  page_name      String?
+  platform       String?
+  form_id        String?
+  form_name      String?
+  ad_id          String?
+  ad_name        String?
+  adset_id       String?
+  adset_name     String?
+  campaign_id    String?
+  campaign_name  String?
+  is_organic     Boolean?
+  payload        Json
+  graph_payload  Json?
+  status         String    @default("pending")
+  attempts       Int       @default(0)
+  last_error     String?   @db.Text
+  contact_id     Int?
+  lead_id        Int?
+  next_retry_at  DateTime?
+  created_at     DateTime  @default(now())
+  processed_at   DateTime?
 
   @@index([status, next_retry_at])
+  @@index([lead_id])
   @@map("meta_lead_events")
 }
 

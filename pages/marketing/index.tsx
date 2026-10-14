@@ -17,6 +17,7 @@ import ColdCallTeamDashboard from '@/components/coldcall/ColdCallTeamDashboard'
 import ColdCallingCampanasTab from '@/components/ColdCallingCampanasTab'
 import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
 import ChannelCostsEditor from '@/components/leads/ChannelCostsEditor'
+import MetaAdsLeadsPanel from '@/components/marketing/MetaAdsLeadsPanel'
 import { parseColdCallFilterParam } from '@/lib/coldcall/api-query'
 import type { ColdCallFilter } from '@/lib/coldcall/scope'
 import { useAuth } from '@/components/AuthContext'
@@ -489,7 +490,7 @@ export default function MarketingPage() {
         )}
 
         {/* No data yet — no tapa Métricas Globales (ahí vive la analítica de leads) */}
-        {!loading && !data && tab !== 'global' && tab !== 'web' && tab !== 'coldcalling' && (
+        {!loading && !data && tab !== 'global' && tab !== 'web' && tab !== 'coldcalling' && tab !== 'meta' && (
           <div className="rounded-xl border border-dashed border-gray-200 p-16 text-center">
             <p className="text-gray-400 text-sm">No hay datos de marketing todavía.</p>
             <p className="text-gray-400 text-xs mt-1">Conecta Instantly para que los datos empiecen a llegar automáticamente.</p>
@@ -821,7 +822,7 @@ export default function MarketingPage() {
         {/* ── META ADS TAB ─────────────────────────────────────────────────── */}
         {tab === 'meta' && (
           <div className="space-y-6">
-            <ComingSoon name="Meta Ads" />
+            <MetaAdsLeadsPanel period={effectivePeriod} />
           </div>
         )}
 

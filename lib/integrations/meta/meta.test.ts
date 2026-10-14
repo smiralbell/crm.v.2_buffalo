@@ -8,7 +8,10 @@ import {
 } from '@/lib/integrations/meta/config'
 import { signMetaBody, verifyMetaSignature, verifyMetaSubscription } from '@/lib/integrations/meta/crypto'
 import {
+  extraMetaAnswers,
   extractLeadgenEvents,
+  formatMetaRef,
+  mergeWebhookIntoLead,
   nextMetaEventAction,
   parseGraphLead,
 } from '@/lib/integrations/meta/parse'
@@ -130,9 +133,14 @@ describe('Meta Lead Ads — páginas, negocio y Graph fields', () => {
     const parsed = parseGraphLead('L9', {
       id: 'L9',
       created_time: '2026-10-14T10:00:00+0000',
+      ad_id: 'A9',
       ad_name: 'Demo ads',
+      adset_id: 'S9',
+      adset_name: 'Lookalike ES',
+      campaign_id: 'C9',
       campaign_name: 'Q4',
       form_id: 'F9',
+      platform: 'ig',
       field_data: [
         { name: 'full_name', values: ['Ana López'] },
         { name: 'email', values: ['Ana@Empresa.com'] },
@@ -145,6 +153,83 @@ describe('Meta Lead Ads — páginas, negocio y Graph fields', () => {
     expect(parsed.email).toBe('ana@empresa.com')
     expect(parsed.telefono).toBe('+34600111222')
     expect(parsed.empresa).toBe('Acme')
+    expect(parsed.campaign_id).toBe('C9')
+    expect(parsed.adset_name).toBe('Lookalike ES')
+    expect(parsed.ad_id).toBe('A9')
+    expect(parsed.form_id).toBe('F9')
+    expect(parsed.platform).toBe('ig')
     expect(parsed.answers.some((a) => a.name === 'tipo' && a.values[0] === 'Clínica')).toBe(true)
+  })
+
+  it('acepta leads de prueba u orgánicos sin campaña, anuncio ni formulario', () => {
+    const parsed = parseGraphLead('L-test', {
+      id: 'L-test',
+      is_organic: true,
+      field_data: [
+        { name: 'full_name', values: ['<test lead: dummy data for full_name>'] },
+        { name: 'email', values: ['test@meta.com'] },
+      ],
+    })
+    expect(parsed.campaign_id).toBeNull()
+    expect(parsed.ad_id).toBeNull()
+    expect(parsed.form_id).toBeNull()
+    expect(parsed.form_name).toBeNull()
+    expect(parsed.is_organic).toBe(true)
+    expect(formatMetaRef(parsed.campaign_name, parsed.campaign_id)).toBeNull()
+  })
+
+  it('acepta automáticamente un formulario nuevo de una página autorizada', () => {
+    const events = extractLeadgenEvents({
+      object: 'page',
+      entry: [
+        {
+          id: '111',
+          changes: [
+            {
+              field: 'leadgen',
+              value: {
+                leadgen_id: 'L-nuevo',
+                page_id: '111',
+                form_id: 'formulario-nunca-visto-antes',
+                ad_id: 'ad-nuevo',
+                adgroup_id: 'adset-nuevo',
+              },
+            },
+          ],
+        },
+      ],
+    })
+    expect(events).toHaveLength(1)
+    expect(events[0].form_id).toBe('formulario-nunca-visto-antes')
+    expect(isMetaPageAllowed(events[0].page_id, cfg())).toBe(true)
+  })
+
+  it('conserva preguntas extra del formulario sin mapeo previo', () => {
+    const parsed = parseGraphLead('L10', {
+      id: 'L10',
+      field_data: [
+        { name: 'email', values: ['a@b.com'] },
+        { name: 'presupuesto_mensual', values: ['3000'] },
+        { name: 'horario_preferido', values: ['mañana'] },
+      ],
+    })
+    const extra = extraMetaAnswers(parsed.answers)
+    expect(extra.map((a) => a.name).sort()).toEqual(['horario_preferido', 'presupuesto_mensual'])
+  })
+
+  it('completa IDs del webhook si Graph no los trae', () => {
+    const fromGraph = parseGraphLead('L11', { id: 'L11', field_data: [] })
+    const merged = mergeWebhookIntoLead(fromGraph, {
+      leadgen_id: 'L11',
+      page_id: '111',
+      form_id: 'F-new',
+      ad_id: 'A-new',
+      adgroup_id: 'S-new',
+      created_time: null,
+    })
+    expect(merged.page_id).toBe('111')
+    expect(merged.form_id).toBe('F-new')
+    expect(merged.ad_id).toBe('A-new')
+    expect(merged.adset_id).toBe('S-new')
   })
 })

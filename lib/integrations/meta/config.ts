@@ -61,6 +61,7 @@ export function getMetaPageConfig(): MetaPageConfig {
   }
 }
 
+/** Solo páginas. Cualquier formulario o campaña de una página autorizada entra. */
 export function isMetaPageAllowed(pageId: string, cfg = getMetaPageConfig()): boolean {
   const id = pageId.trim()
   if (!id) return false

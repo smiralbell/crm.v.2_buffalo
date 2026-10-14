@@ -6,9 +6,11 @@ import {
   pageOrigen,
   pagePipelineId,
 } from '@/lib/integrations/meta/config'
-import { fetchMetaLeadFromGraph } from '@/lib/integrations/meta/graph'
+import { enrichMetaLeadAttribution, fetchMetaLeadFromGraph } from '@/lib/integrations/meta/graph'
 import {
   formatMetaAnswers,
+  formatMetaAttributionLines,
+  mergeWebhookIntoLead,
   type MetaLeadgenChange,
   type ParsedMetaLead,
 } from '@/lib/integrations/meta/parse'
@@ -20,13 +22,10 @@ import {
 import { BUFFALO_STAGE_COLORS, defaultStageColor } from '@/lib/pipelines/defaults'
 import { ensureWebContact, getWebPipelineId } from '@/lib/pipelines/web'
 
-function leadNotes(parsed: ParsedMetaLead, change: MetaLeadgenChange, origen: string): string {
+function leadNotes(parsed: ParsedMetaLead, origen: string): string {
   const lines = [
     `Origen: ${origen}`,
-    parsed.campaign_name ? `Campaña: ${parsed.campaign_name}` : null,
-    parsed.ad_name ? `Anuncio: ${parsed.ad_name}` : null,
-    parsed.form_id ? `Formulario: ${parsed.form_id}` : change.form_id ? `Formulario: ${change.form_id}` : null,
-    parsed.platform ? `Plataforma: ${parsed.platform}` : null,
+    ...formatMetaAttributionLines(parsed),
     `Meta leadgen: ${parsed.leadgen_id}`,
     formatMetaAnswers(parsed.answers),
   ].filter(Boolean)
@@ -126,7 +125,7 @@ export async function upsertMetaLeadInCrm(
     empresa: parsed.empresa,
     origen,
   })
-  const notes = leadNotes(parsed, change, origen)
+  const notes = leadNotes(parsed, origen)
   await appendLeadNotes(leadId, parsed.leadgen_id, notes)
   await logCrmActivity({
     contactId,
@@ -137,11 +136,19 @@ export async function upsertMetaLeadInCrm(
     meta: {
       source: 'meta_lead_ads',
       leadgen_id: parsed.leadgen_id,
-      page_id: change.page_id,
-      form_id: parsed.form_id || change.form_id,
-      answers: parsed.answers,
+      page_id: parsed.page_id || change.page_id,
+      page_name: parsed.page_name,
+      platform: parsed.platform,
+      is_organic: parsed.is_organic,
+      form_id: parsed.form_id,
+      form_name: parsed.form_name,
+      campaign_id: parsed.campaign_id,
       campaign_name: parsed.campaign_name,
+      adset_id: parsed.adset_id,
+      adset_name: parsed.adset_name,
+      ad_id: parsed.ad_id,
       ad_name: parsed.ad_name,
+      answers: parsed.answers,
     },
     createdBy: 'meta-lead-ads',
   })
@@ -162,21 +169,23 @@ export async function processPersistedMetaEvent(
     return { status: 'ignored' }
   }
   try {
-    const { lead, raw } = await fetchMetaLeadFromGraph(
-      change.leadgen_id,
-      change.page_id || event.page_id || '',
-      cfg
-    )
-    const saved = await upsertMetaLeadInCrm(lead, {
-      ...change,
-      page_id: change.page_id || event.page_id || '',
-    })
+    const pageId = change.page_id || event.page_id || ''
+    const { lead: fetched, raw } = await fetchMetaLeadFromGraph(change.leadgen_id, pageId, cfg)
+    const merged = mergeWebhookIntoLead(fetched, { ...change, page_id: pageId })
+    let lead = merged
+    try {
+      lead = await enrichMetaLeadAttribution(merged, pageId, cfg)
+    } catch {
+      lead = merged
+    }
+    const saved = await upsertMetaLeadInCrm(lead, { ...change, page_id: pageId })
     await markMetaLeadEvent(event.id, {
       status: 'processed',
       graph_payload: raw,
       contact_id: saved.contactId,
       lead_id: saved.leadId,
       last_error: null,
+      attribution: lead,
     })
     return { status: 'processed', contactId: saved.contactId, leadId: saved.leadId }
   } catch (err) {
