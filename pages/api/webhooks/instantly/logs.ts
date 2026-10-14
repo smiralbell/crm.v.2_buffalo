@@ -17,20 +17,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { limit = '100', offset = '0', event_type = '', email = '' } = req.query as Record<string, string>
 
   try {
-    // Crear tabla si no existe
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "instantly_webhooks" (
-        "id" SERIAL NOT NULL PRIMARY KEY,
-        "event_type" VARCHAR(255),
-        "email" VARCHAR(255),
-        "campaign_id" VARCHAR(255),
-        "campaign_name" VARCHAR(255),
-        "payload" JSONB,
-        "status" VARCHAR(100),
-        "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
-
     // Construir WHERE
     let where = ''
     const params: (string | number)[] = []
@@ -67,6 +53,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.json({ logs, total, limit: parseInt(limit), offset: parseInt(offset) })
 
   } catch (err: unknown) {
+    const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : ''
+    if (code === '42P01' || (err instanceof Error && err.message.includes('does not exist'))) {
+      return res.json({ logs: [], total: 0, limit: parseInt(limit), offset: parseInt(offset) })
+    }
     console.error('Webhook logs error:', err)
     const msg = err instanceof Error ? err.message : 'Error'
     return res.status(500).json({ error: msg })

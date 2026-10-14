@@ -203,3 +203,55 @@ export async function inboundEventStats(): Promise<
     last_received_at: r.last_received_at,
   }))
 }
+
+export type AcceptInboundResult = {
+  ok: true
+  event_id: string | null
+  duplicate: boolean
+  status: string
+  result?: Record<string, unknown>
+  error?: string
+}
+
+/**
+ * Camino común de todos los webhooks: guarda (idempotente) y procesa.
+ * `defer`: responde «aceptado» y procesa en segundo plano (Fireflies, Retell).
+ */
+export async function acceptInbound(input: {
+  source: string
+  externalId: string
+  eventType?: string | null
+  payload: unknown
+  mode?: 'sync' | 'defer'
+}): Promise<AcceptInboundResult> {
+  const processor = INBOUND_PROCESSORS[input.source]
+  if (!processor) throw new Error(`No hay procesador para la fuente «${input.source}»`)
+
+  const recorded = await recordInboundEvent({
+    source: input.source,
+    externalId: input.externalId,
+    eventType: input.eventType,
+    payload: input.payload,
+  })
+
+  if (!recorded) {
+    const out = await processor(input.payload)
+    return { ok: true, event_id: null, duplicate: false, status: out.status, result: out.result }
+  }
+  if (recorded.duplicate && recorded.status !== 'failed') {
+    return { ok: true, event_id: recorded.id, duplicate: true, status: recorded.status }
+  }
+  if (input.mode === 'defer') {
+    void processInboundEvent(recorded.id)
+    return { ok: true, event_id: recorded.id, duplicate: false, status: 'accepted' }
+  }
+  const out = await processInboundEvent(recorded.id)
+  return {
+    ok: true,
+    event_id: recorded.id,
+    duplicate: false,
+    status: out?.status ?? recorded.status,
+    result: out?.result,
+    error: out?.error,
+  }
+}

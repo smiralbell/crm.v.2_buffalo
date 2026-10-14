@@ -105,6 +105,8 @@ Ejecuta la sincronización bancaria, Gmail, el motor del blog, los reintentos de
 | `APP_BASE_URL` | URL pública del CRM (éxito/cancelación de Stripe). |
 | `META_ADS_ACCESS_TOKEN` / `META_ADS_ACCOUNT_ID` | Gasto diario de Meta Ads (tarea `ads-sync`). |
 | `GOOGLE_ADS_DEVELOPER_TOKEN` / `GOOGLE_ADS_CUSTOMER_ID` / `GOOGLE_ADS_REFRESH_TOKEN` | Gasto diario de Google Ads. El refresh token necesita el alcance `adwords`. |
+| `WEBFORM_WEBHOOK_TOKEN` | `POST /api/webhooks/webform` — n8n envía los formularios de la web aquí (ya no hace falta INSERT en Postgres). |
+| `ONBOARDING_FORM_WEBHOOK_TOKEN` | Si no está, el webhook de onboarding queda abierto. Conviene ponerlo. |
 
 El estado de todo esto (integraciones, tareas, webhooks, gasto de IA, migraciones y auditoría) se ve en **Sistema** (`/sistema`, solo admin).
 

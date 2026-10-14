@@ -134,7 +134,8 @@ export default function WebFormSubmissionsPanel({ period }: { period: string }) 
       <Card className="border-amber-200/80 bg-amber-50/40">
         <CardContent className="py-4 text-sm text-amber-950/90">
           Ejecuta <code className="text-xs">prisma/CREATE_WEB_FORM_SUBMISSIONS.sql</code> en PostgreSQL
-          y configura n8n para insertar en <code className="text-xs">web_form_submissions</code>.
+          y manda los envíos a <code className="text-xs">POST /api/webhooks/webform</code>
+          {' '}(Bearer WEBFORM_WEBHOOK_TOKEN o INGEST_TOKEN). Ya no hace falta que n8n escriba en Postgres.
           {!formacionAvailable && (
             <>
               {' '}

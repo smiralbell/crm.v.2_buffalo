@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { processInboundEvent, recordInboundEvent } from '@/lib/ingest/events'
+import { acceptInbound } from '@/lib/ingest/events'
 import { parseStripeEvent, verifyStripeSignature } from '@/lib/payments/stripe'
-import { INBOUND_PROCESSORS } from '@/lib/ingest/processors'
 
 export const config = {
   api: { bodyParser: false },
@@ -58,26 +57,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!parsed) return res.status(400).json({ error: 'Evento Stripe no reconocido' })
 
   try {
-    const recorded = await recordInboundEvent({
+    const out = await acceptInbound({
       source: 'stripe',
       externalId: parsed.eventId,
       eventType: parsed.type,
       payload,
     })
-    if (!recorded) {
-      const out = await INBOUND_PROCESSORS.stripe(payload)
-      return res.status(200).json({ ok: true, ...out })
-    }
-    if (recorded.duplicate && recorded.status !== 'failed') {
-      return res.status(200).json({ ok: true, duplicate: true, event_id: recorded.id })
-    }
-    const out = await processInboundEvent(recorded.id)
-    return res.status(200).json({
-      ok: true,
-      event_id: recorded.id,
-      status: out?.status ?? recorded.status,
-      result: out?.result,
-    })
+    return res.status(200).json(out)
   } catch (e) {
     console.error('[webhooks/stripe]', e)
     return res.status(500).json({ error: e instanceof Error ? e.message : 'Error interno' })

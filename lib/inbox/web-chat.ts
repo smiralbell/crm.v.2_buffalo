@@ -7,7 +7,7 @@
 import { createHash } from 'crypto'
 import { query } from '@/lib/db'
 import { findContactByIdentity } from '@/lib/identity/resolve'
-import type { InboundProcessorResult } from '@/lib/ingest/processors'
+import type { InboundProcessorResult } from '@/lib/ingest/types'
 
 export type WebChatPayload = {
   session_id: string

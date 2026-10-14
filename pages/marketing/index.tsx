@@ -777,7 +777,7 @@ export default function MarketingPage() {
                   POST https://n8n-crmv2-buffalo.zedf6b.easypanel.host/api/webhooks/instantly
                 </code>
                 <p className="text-gray-400 text-xs mt-1">
-                  Header: <code>Authorization: Bearer buf-instantly-2026</code>
+                  Header: <code>Authorization: Bearer {'<INSTANTLY_WEBHOOK_TOKEN>'}</code>
                 </p>
               </div>
             </div>

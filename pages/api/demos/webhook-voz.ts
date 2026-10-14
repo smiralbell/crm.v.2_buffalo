@@ -1,27 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { acceptInbound, hashBody } from '@/lib/ingest/events'
 import { findActiveVoiceDemoByPhone, findPrincipalActiveVoiceDemo } from '@/lib/demos/store'
 import { normalizePhoneNumber } from '@/lib/demos/phone'
-
-function extractFromNumber(body: unknown): string | null {
-  if (!body || typeof body !== 'object') return null
-  const root = body as Record<string, unknown>
-
-  const inbound = root.call_inbound
-  if (inbound && typeof inbound === 'object') {
-    const from = (inbound as Record<string, unknown>).from_number
-    if (typeof from === 'string' && from.trim()) return from.trim()
-  }
-
-  if (typeof root.from_number === 'string' && root.from_number.trim()) {
-    return root.from_number.trim()
-  }
-
-  return null
-}
+import { retellFromNumber } from '@/lib/ingest/whatsapp'
 
 /**
  * POST /api/demos/webhook-voz
- * Webhook inbound de Retell AI para enrutar llamadas a la demo correcta.
+ * Webhook inbound de Retell AI: hay que responder YA con el agente.
+ * El evento se guarda en la ingesta para reintentos/depuración, sin retrasar la respuesta.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -29,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const fromRaw = extractFromNumber(req.body)
+    const fromRaw = retellFromNumber(req.body)
     if (!fromRaw) {
       return res.status(200).json({})
     }
@@ -57,11 +43,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({})
     }
 
-    return res.status(200).json({
-      call_inbound: {
-        override_agent_id: demo.retell_agent_id,
-      },
-    })
+    const payload = { override_agent_id: demo.retell_agent_id }
+    res.status(200).json({ call_inbound: payload })
+
+    void acceptInbound({
+      source: 'retell',
+      externalId: `retell:${hashBody(JSON.stringify(req.body ?? {}))}`,
+      eventType: 'call_inbound',
+      payload: req.body,
+      mode: 'defer',
+    }).catch((err) => console.warn('[demos/webhook-voz] ingest', err))
+
+    return
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error interno'
     if (process.env.NODE_ENV === 'development') console.error('[demos/webhook-voz]', err)

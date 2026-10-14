@@ -5,8 +5,7 @@ import {
   parseFirefliesWebhookPayload,
   verifyFirefliesWebhookSignature,
 } from '@/lib/integrations/fireflies/client'
-import { syncFirefliesMeetingById } from '@/lib/integrations/fireflies/sync'
-import { processInboundEvent, recordInboundEvent } from '@/lib/ingest/events'
+import { acceptInbound } from '@/lib/ingest/events'
 
 export const config = {
   api: {
@@ -98,49 +97,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ ok: true, ignored: true, event })
   }
 
-  // Ingesta unificada: guardamos el evento antes de contestar para poder reintentarlo
-  let recorded: Awaited<ReturnType<typeof recordInboundEvent>> = null
-  try {
-    recorded = await recordInboundEvent({
-      source: 'fireflies',
-      externalId: `${meetingId}:${event || 'ready'}`,
-      eventType: event || null,
-      payload: parsedJson,
-    })
-  } catch (err) {
+  // ACK inmediato — Fireflies corta a los 10s. El worker reprocesa si esto falla.
+  const out = await acceptInbound({
+    source: 'fireflies',
+    externalId: `${meetingId}:${event || 'ready'}`,
+    eventType: event || null,
+    payload: parsedJson,
+    mode: 'defer',
+  }).catch((err) => {
     console.error('[webhooks/fireflies] no se pudo guardar el evento', err)
+    return null
+  })
+
+  if (!out) {
+    const { syncFirefliesMeetingById } = await import('@/lib/integrations/fireflies/sync')
+    void syncFirefliesMeetingById(meetingId).catch((err) => console.error('[webhooks/fireflies] sync error', err))
   }
 
-  // ACK inmediato — Fireflies corta a los 10s
-  res.status(200).json({
+  return res.status(200).json({
     ok: true,
     accepted: true,
     event: event || null,
     meeting_id: meetingId,
-    ...(recorded ? { event_id: recorded.id, duplicate: recorded.duplicate } : {}),
+    ...(out ? { event_id: out.event_id, duplicate: out.duplicate } : {}),
   })
-
-  if (recorded) {
-    if (recorded.duplicate && (recorded.status === 'processed' || recorded.status === 'ignored')) return
-    void processInboundEvent(recorded.id)
-      .then((out) => logFf(out?.status === 'failed' ? 'queued_retry' : 'synced', { event_id: recorded!.id, ...(out?.result || {}), error: out?.error }))
-      .catch((err) => console.error('[webhooks/fireflies] sync error', err))
-    return
-  }
-
-  void syncFirefliesMeetingById(meetingId)
-    .then((row) => {
-      logFf('synced', {
-        fireflies_id: row.fireflies_id,
-        lead_id: row.lead_id,
-        contact_id: row.contact_id,
-        status: row.status,
-        match_reason: row.match_reason,
-        has_transcript: Boolean(row.transcript),
-        has_summary: Boolean(row.summary_overview),
-      })
-    })
-    .catch((err) => {
-      console.error('[webhooks/fireflies] sync error', err)
-    })
 }

@@ -12,8 +12,14 @@ export const CRM_BASE_URL_DEFAULT = 'https://n8n-crmv2-buffalo.zedf6b.easypanel.
 
 export const TICKETS_WEBHOOK_PATH = '/api/webhooks/tickets'
 
-export const TICKETS_WEBHOOK_TOKEN =
-  process.env.TICKETS_WEBHOOK_TOKEN || 'buf-tickets-2026'
+const LEGACY_TICKETS_WEBHOOK_TOKEN = 'buf-tickets-2026'
+
+export function ticketsWebhookToken(): string {
+  return process.env.TICKETS_WEBHOOK_TOKEN?.trim() || LEGACY_TICKETS_WEBHOOK_TOKEN
+}
+
+/** @deprecated usa ticketsWebhookToken() */
+export const TICKETS_WEBHOOK_TOKEN = ticketsWebhookToken()
 
 type ReqHeaders = {
   host?: string

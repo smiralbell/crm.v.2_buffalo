@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { handleDemoWasenderWebhook } from '@/lib/demos/webhook-handler'
+import { acceptInbound, hashBody } from '@/lib/ingest/events'
 import { logDemoWebhook } from '@/lib/demos/webhook-log'
+import { wasenderExternalId } from '@/lib/ingest/whatsapp'
 
 /**
  * POST /api/demos/webhook
@@ -49,13 +50,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ ok: true, ignored: true })
     }
 
-    const result = await handleDemoWasenderWebhook(body)
-
-    if (!result.handled) {
-      return res.status(200).json({ ok: true, ignored: true, reason: result.reason })
+    const out = await acceptInbound({
+      source: 'whatsapp',
+      externalId: wasenderExternalId(body) || `wa:${hashBody(JSON.stringify(body))}`,
+      eventType: typeof (body as { event?: string }).event === 'string' ? (body as { event: string }).event : 'message',
+      payload: body,
+    })
+    if (out.status === 'ignored') {
+      return res.status(200).json({ ok: true, ignored: true, reason: out.result?.reason, event_id: out.event_id })
     }
-
-    return res.status(200).json({ ok: true, replied: true })
+    return res.status(200).json({ ok: true, replied: true, event_id: out.event_id, duplicate: out.duplicate })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error interno'
     await logDemoWebhook({

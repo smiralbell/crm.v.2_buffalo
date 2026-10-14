@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from 'crypto'
 import { processInboundEvent, recordInboundEvent } from '@/lib/ingest/events'
 import { INBOUND_PROCESSORS } from '@/lib/ingest/processors'
 import { parseWebChatPayload, webChatMessageKey } from '@/lib/inbox/web-chat'
+import { webFormExternalId } from '@/lib/ingest/web-form'
 
 /**
  * Entrada genérica a la ingesta unificada para sistemas propios (n8n…).
@@ -15,6 +16,7 @@ const SOURCES: Record<string, (body: unknown) => { externalId: string; eventType
     const p = parseWebChatPayload(body)
     return p ? { externalId: webChatMessageKey(p), eventType: p.role } : null
   },
+  web_form: (body) => ({ externalId: webFormExternalId(body), eventType: 'submission' }),
 }
 
 function authorized(req: NextApiRequest): boolean {
@@ -38,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!describe || !INBOUND_PROCESSORS[source]) return res.status(404).json({ error: `Fuente desconocida: ${source}` })
 
   const meta = describe(req.body)
-  if (!meta) return res.status(400).json({ error: 'Faltan campos obligatorios (session_id y text)' })
+  if (!meta) return res.status(400).json({ error: 'Payload no válido para esta fuente' })
 
   try {
     const recorded = await recordInboundEvent({ source, externalId: meta.externalId, eventType: meta.eventType, payload: req.body })

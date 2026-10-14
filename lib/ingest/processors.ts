@@ -18,13 +18,14 @@ import {
 import { syncFirefliesMeetingById } from '@/lib/integrations/fireflies/sync'
 import { processWebChat } from '@/lib/inbox/web-chat'
 import { applyStripePayment, parseStripeEvent } from '@/lib/payments/stripe'
+import { processInstantly } from '@/lib/ingest/instantly'
+import { processWebForm } from '@/lib/ingest/web-form'
+import { processOnboardingForm } from '@/lib/ingest/onboarding-form'
+import { processTickets } from '@/lib/ingest/tickets-inbound'
+import { processRetell, processWhatsapp } from '@/lib/ingest/whatsapp'
+import type { InboundProcessor, InboundProcessorResult } from '@/lib/ingest/types'
 
-export type InboundProcessorResult = {
-  status: 'processed' | 'ignored'
-  result?: Record<string, unknown>
-}
-
-export type InboundProcessor = (payload: unknown) => Promise<InboundProcessorResult>
+export type { InboundProcessor, InboundProcessorResult }
 
 async function processCalcom(payload: unknown): Promise<InboundProcessorResult> {
   const body = payload as CalWebhookBody
@@ -93,4 +94,10 @@ export const INBOUND_PROCESSORS: Record<string, InboundProcessor> = {
   fireflies: processFireflies,
   web_chat: processWebChat,
   stripe: processStripe,
+  instantly: processInstantly,
+  web_form: processWebForm,
+  onboarding_form: processOnboardingForm,
+  tickets: processTickets,
+  whatsapp: processWhatsapp,
+  retell: processRetell,
 }

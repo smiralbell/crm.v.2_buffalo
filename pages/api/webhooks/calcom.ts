@@ -4,8 +4,7 @@ import {
   verifyCalWebhookSignature,
   type CalWebhookBody,
 } from '@/lib/marketing/cal-bookings-webhook'
-import { hashBody, processInboundEvent, recordInboundEvent } from '@/lib/ingest/events'
-import { INBOUND_PROCESSORS, type InboundProcessorResult } from '@/lib/ingest/processors'
+import { acceptInbound, hashBody } from '@/lib/ingest/events'
 
 export const config = {
   api: {
@@ -75,34 +74,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Ingesta unificada: se guarda el evento crudo antes de procesarlo (reintentable)
-    const recorded = await recordInboundEvent({
+    const out = await acceptInbound({
       source: 'calcom',
       externalId: hashBody(rawBody),
       eventType: trigger,
       payload: body,
     })
-    if (recorded?.duplicate && (recorded.status === 'processed' || recorded.status === 'ignored')) {
-      logCal('duplicate', { event_id: recorded.id })
-      return res.status(200).json({ ok: true, duplicate: true, event_id: recorded.id })
+    if (out.duplicate) {
+      logCal('duplicate', { event_id: out.event_id })
+      return res.status(200).json({ ok: true, duplicate: true, event_id: out.event_id })
     }
-
-    if (!recorded) {
-      // Migraciones sin aplicar: procesa directo, como antes
-      const out = await INBOUND_PROCESSORS.calcom(body)
-      return res.status(200).json(calResponse(out))
-    }
-
-    const out = await processInboundEvent(recorded.id)
-    if (!out) return res.status(200).json({ ok: true, accepted: true, event_id: recorded.id })
     if (out.status === 'failed') {
-      // Guardado: el worker lo reintenta. Cal.com no necesita volver a enviarlo.
-      logCal('queued_retry', { event_id: recorded.id, error: out.error })
-      return res.status(200).json({ ok: true, saved: false, queued_retry: true, event_id: recorded.id })
+      logCal('queued_retry', { event_id: out.event_id, error: out.error })
+      return res.status(200).json({ ok: true, saved: false, queued_retry: true, event_id: out.event_id })
     }
-    logCal(out.status === 'processed' ? 'saved' : 'ignored', { event_id: recorded.id, ...(out.result || {}) })
-    const status = out.status === 'ignored' ? 'ignored' : 'processed'
-    return res.status(200).json({ ...calResponse({ status, result: out.result }), event_id: recorded.id })
+    logCal(out.status === 'processed' ? 'saved' : 'ignored', { event_id: out.event_id, ...(out.result || {}) })
+    return res.status(200).json({
+      ok: true,
+      saved: out.status === 'processed',
+      ignored: out.status === 'ignored',
+      event_id: out.event_id,
+      ...(out.result || {}),
+    })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error interno'
     if (msg.includes('cal_bookings') && msg.includes('does not exist')) {
@@ -114,9 +107,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('[webhooks/calcom] save error', err)
     return res.status(500).json({ error: msg })
   }
-}
-
-function calResponse(out: InboundProcessorResult) {
-  if (out.status === 'ignored') return { ok: true, ignored: true, ...(out.result || {}) }
-  return { ok: true, saved: true, ...(out.result || {}) }
 }

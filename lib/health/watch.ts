@@ -6,6 +6,7 @@ import { query } from '@/lib/db'
 import { notify } from '@/lib/notifications'
 import { isSessionSecretConfigured } from '@/lib/session-secret'
 import { isCronSecretConfigured } from '@/lib/cron-auth'
+import { usesLegacyWebhookToken } from '@/lib/ingest/auth'
 
 export type IntegrationState = 'ok' | 'warning' | 'error' | 'off'
 
@@ -111,6 +112,48 @@ function openrouterHealth(): IntegrationHealth {
     : { key: 'openrouter', name: 'IA (OpenRouter)', state: 'error', detail: 'Falta OPENROUTER_API_KEY' }
 }
 
+async function instantlyInboundHealth(): Promise<IntegrationHealth> {
+  const last = await lastInbound('instantly')
+  const legacy = usesLegacyWebhookToken('INSTANTLY_WEBHOOK_TOKEN')
+  return {
+    key: 'instantly',
+    name: 'Instantly (email)',
+    state: legacy ? 'warning' : last ? 'ok' : 'ok',
+    detail: `${legacy ? 'Token por defecto · ' : ''}${last ? `último evento ${last.toLocaleString('es-ES')}` : 'sin eventos aún'}`,
+    at: last?.toISOString() ?? null,
+    link: '/marketing',
+  }
+}
+
+async function ticketsInboundHealth(): Promise<IntegrationHealth> {
+  const last = await lastInbound('tickets')
+  return {
+    key: 'tickets-in',
+    name: 'Tickets (webhook)',
+    state: last ? 'ok' : usesLegacyWebhookToken('TICKETS_WEBHOOK_TOKEN') ? 'warning' : 'ok',
+    detail: last ? `último ticket ${last.toLocaleString('es-ES')}` : 'sin eventos aún',
+    at: last?.toISOString() ?? null,
+    link: '/tickets',
+  }
+}
+
+async function webformInboundHealth(): Promise<IntegrationHealth> {
+  const last = await lastInbound('web_form')
+  const token = Boolean(process.env.WEBFORM_WEBHOOK_TOKEN?.trim() || process.env.INGEST_TOKEN?.trim())
+  return {
+    key: 'webform',
+    name: 'Formularios web',
+    state: token ? 'ok' : 'warning',
+    detail: token
+      ? last
+        ? `último envío ${last.toLocaleString('es-ES')}`
+        : 'POST /api/webhooks/webform listo (n8n ya no necesita escribir en Postgres)'
+      : 'Falta WEBFORM_WEBHOOK_TOKEN o INGEST_TOKEN',
+    at: last?.toISOString() ?? null,
+    link: '/marketing',
+  }
+}
+
 function stripeHealth(): IntegrationHealth {
   const key = process.env.STRIPE_SECRET_KEY?.trim()
   const wh = process.env.STRIPE_WEBHOOK_SECRET?.trim()
@@ -151,8 +194,9 @@ function securityHealth(): IntegrationHealth {
   const problems: string[] = []
   if (!isSessionSecretConfigured()) problems.push('falta SESSION_SECRET')
   if (!isCronSecretConfigured()) problems.push('falta CRON_SECRET (endpoints de cron desactivados)')
-  if (!process.env.INSTANTLY_WEBHOOK_TOKEN?.trim()) problems.push('INSTANTLY_WEBHOOK_TOKEN usa el valor por defecto')
-  if (!process.env.TICKETS_WEBHOOK_TOKEN?.trim()) problems.push('TICKETS_WEBHOOK_TOKEN usa el valor por defecto')
+  if (usesLegacyWebhookToken('INSTANTLY_WEBHOOK_TOKEN')) problems.push('INSTANTLY_WEBHOOK_TOKEN usa el valor por defecto')
+  if (usesLegacyWebhookToken('TICKETS_WEBHOOK_TOKEN')) problems.push('TICKETS_WEBHOOK_TOKEN usa el valor por defecto')
+  if (!process.env.ONBOARDING_FORM_WEBHOOK_TOKEN?.trim()) problems.push('ONBOARDING_FORM_WEBHOOK_TOKEN no está definido (webhook abierto)')
   return {
     key: 'security',
     name: 'Claves y secretos',
@@ -187,6 +231,9 @@ export async function integrationHealth(): Promise<IntegrationHealth[]> {
     googleHealth(),
     calcomHealth(),
     firefliesHealth(),
+    instantlyInboundHealth(),
+    ticketsInboundHealth(),
+    webformInboundHealth(),
     Promise.resolve(whatsappHealth()),
     smtpHealth(),
     Promise.resolve(openrouterHealth()),
