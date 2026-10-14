@@ -42,3 +42,5 @@ CREATE INDEX IF NOT EXISTS idx_meta_lead_events_retry
   ON meta_lead_events (status, next_retry_at);
 CREATE INDEX IF NOT EXISTS idx_meta_lead_events_lead
   ON meta_lead_events (lead_id);
+CREATE INDEX IF NOT EXISTS idx_meta_lead_events_campaign
+  ON meta_lead_events (campaign_id);

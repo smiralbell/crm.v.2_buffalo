@@ -18,6 +18,7 @@ import ColdCallingCampanasTab from '@/components/ColdCallingCampanasTab'
 import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
 import ChannelCostsEditor from '@/components/leads/ChannelCostsEditor'
 import MetaAdsLeadsPanel from '@/components/marketing/MetaAdsLeadsPanel'
+import MetaAdsCampaignsPanel from '@/components/marketing/MetaAdsCampaignsPanel'
 import { parseColdCallFilterParam } from '@/lib/coldcall/api-query'
 import type { ColdCallFilter } from '@/lib/coldcall/scope'
 import { useAuth } from '@/components/AuthContext'
@@ -205,11 +206,17 @@ const COLD_CALLING_SECTIONS = [
   { id: 'campanas', label: 'Campañas' },
 ] as const
 
+const META_SECTIONS = [
+  { id: 'campanas', label: 'Campañas' },
+  { id: 'leads', label: 'Leads' },
+] as const
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 const VALID_TABS = ['global', 'web', 'email', 'coldcalling', 'meta', 'google'] as const
 type TabId = typeof VALID_TABS[number]
 type ColdCallingSection = typeof COLD_CALLING_SECTIONS[number]['id']
+type MetaSection = typeof META_SECTIONS[number]['id']
 
 function resolveTab(queryTab: string | string[] | undefined): TabId {
   const t = Array.isArray(queryTab) ? queryTab[0] : queryTab
@@ -233,16 +240,24 @@ function resolveColdCallingSection(
   return 'dashboard'
 }
 
+function resolveMetaSection(queryMeta: string | string[] | undefined): MetaSection {
+  const m = Array.isArray(queryMeta) ? queryMeta[0] : queryMeta
+  if (m === 'leads') return 'leads'
+  return 'campanas'
+}
+
 export default function MarketingPage() {
   const router = useRouter()
   const { user } = useAuth()
   const tabFromUrl = resolveTab(router.query.tab)
   const ccFromUrl = resolveColdCallingSection(router.query.cc)
+  const metaFromUrl = resolveMetaSection(router.query.meta)
   const ccFilterFromUrl = resolveColdCallingFilter(router.query.ccUser, user?.id ?? 0)
   const chatSectionOpen =
     router.query.section === 'chat' || router.query.tab === 'chat'
   const [tab, setTab] = useState<TabId>(tabFromUrl)
   const [ccSection, setCcSection] = useState<ColdCallingSection>(ccFromUrl)
+  const [metaSection, setMetaSection] = useState<MetaSection>(metaFromUrl)
   const [ccHover, setCcHover] = useState(false)
   const [ccMenuPos, setCcMenuPos] = useState<{ top: number; left: number } | null>(null)
   const ccTabRef = useRef<HTMLDivElement>(null)
@@ -261,6 +276,10 @@ export default function MarketingPage() {
   useEffect(() => {
     if (ccFromUrl !== ccSection) setCcSection(ccFromUrl)
   }, [ccFromUrl])
+
+  useEffect(() => {
+    if (metaFromUrl !== metaSection) setMetaSection(metaFromUrl)
+  }, [metaFromUrl])
 
   useEffect(() => {
     setCcFilter(ccFilterFromUrl)
@@ -308,7 +327,21 @@ export default function MarketingPage() {
       router.push({ pathname: '/marketing', query }, undefined, { shallow: true })
       return
     }
+    if (tabId === 'meta') {
+      router.push(
+        { pathname: '/marketing', query: { tab: tabId, meta: metaSection } },
+        undefined,
+        { shallow: true }
+      )
+      return
+    }
     router.push({ pathname: '/marketing', query: { tab: tabId } }, undefined, { shallow: true })
+  }
+
+  const goToMetaSection = (section: MetaSection) => {
+    setTab('meta')
+    setMetaSection(section)
+    router.push({ pathname: '/marketing', query: { tab: 'meta', meta: section } }, undefined, { shallow: true })
   }
 
   const setColdCallFilter = (filter: ColdCallFilter) => {
@@ -822,7 +855,28 @@ export default function MarketingPage() {
         {/* ── META ADS TAB ─────────────────────────────────────────────────── */}
         {tab === 'meta' && (
           <div className="space-y-6">
-            <MetaAdsLeadsPanel period={effectivePeriod} />
+            <div className="flex gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 w-fit">
+              {META_SECTIONS.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => goToMetaSection(section.id)}
+                  className={cn(
+                    'px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
+                    metaSection === section.id
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-800'
+                  )}
+                >
+                  {section.label}
+                </button>
+              ))}
+            </div>
+            {metaSection === 'campanas' ? (
+              <MetaAdsCampaignsPanel period={effectivePeriod} />
+            ) : (
+              <MetaAdsLeadsPanel period={effectivePeriod} />
+            )}
           </div>
         )}
 

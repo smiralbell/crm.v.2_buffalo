@@ -86,3 +86,57 @@ export function pageOrigen(pageId: string, cfg = getMetaPageConfig()): string {
 export function graphApiBase(cfg = getMetaPageConfig()): string {
   return `https://graph.facebook.com/${cfg.graphVersion}`
 }
+
+export type MetaAdsTokenSource =
+  | 'META_ADS_ACCESS_TOKEN'
+  | 'META_PAGE_ACCESS_TOKEN'
+  | 'META_PAGE_TOKENS'
+
+export type MetaAdsConfig = {
+  graphVersion: string
+  adsToken: string | null
+  adsTokenSource: MetaAdsTokenSource | null
+  adAccountIds: string[]
+  appId: string | null
+  appSecret: string | null
+  businessId: string | null
+}
+
+export function normalizeAdAccountId(raw: string): string | null {
+  const digits = raw.trim().replace(/^act_/i, '').replace(/\s+/g, '')
+  if (!/^\d+$/.test(digits)) return null
+  return `act_${digits}`
+}
+
+export function getMetaAdsConfig(): MetaAdsConfig {
+  const pages = getMetaPageConfig()
+  const dedicated = process.env.META_ADS_ACCESS_TOKEN?.trim() || null
+  const pageTokenKeys = Object.keys(pages.pageTokens)
+  const mapped = pageTokenKeys.length ? pages.pageTokens[pageTokenKeys[0]] : null
+  let adsToken: string | null = null
+  let adsTokenSource: MetaAdsTokenSource | null = null
+  if (dedicated) {
+    adsToken = dedicated
+    adsTokenSource = 'META_ADS_ACCESS_TOKEN'
+  } else if (pages.defaultPageToken) {
+    adsToken = pages.defaultPageToken
+    adsTokenSource = 'META_PAGE_ACCESS_TOKEN'
+  } else if (mapped) {
+    adsToken = mapped
+    adsTokenSource = 'META_PAGE_TOKENS'
+  }
+
+  const adAccountIds = csvList(process.env.META_AD_ACCOUNT_IDS)
+    .map((id) => normalizeAdAccountId(id))
+    .filter((id): id is string => Boolean(id))
+
+  return {
+    graphVersion: pages.graphVersion,
+    adsToken,
+    adsTokenSource,
+    adAccountIds: Array.from(new Set(adAccountIds)),
+    appId: process.env.META_APP_ID?.trim() || null,
+    appSecret: pages.appSecret,
+    businessId: process.env.META_BUSINESS_ID?.trim() || null,
+  }
+}

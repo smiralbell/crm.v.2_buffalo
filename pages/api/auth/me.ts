@@ -24,6 +24,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   void import('@/lib/integrations/meta/scheduler')
     .then((m) => m.startMetaLeadRetryScheduler())
     .catch(() => {})
+  void import('@/lib/integrations/meta/ads-scheduler')
+    .then((m) => m.startMetaAdsSyncScheduler())
+    .catch(() => {})
 
   try {
     let user = await requireAuthAPI(req, res)

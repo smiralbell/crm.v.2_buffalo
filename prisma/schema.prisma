@@ -505,7 +505,74 @@ model MetaLeadEvent {
 
   @@index([status, next_retry_at])
   @@index([lead_id])
+  @@index([campaign_id])
   @@map("meta_lead_events")
+}
+
+model MetaAdCampaign {
+  id               String    @id
+  ad_account_id    String
+  name             String
+  status           String?
+  effective_status String?
+  objective        String?
+  daily_budget     Decimal?  @db.Decimal(14, 2)
+  lifetime_budget  Decimal?  @db.Decimal(14, 2)
+  budget_remaining Decimal?  @db.Decimal(14, 2)
+  currency         String?
+  start_time       DateTime?
+  stop_time        DateTime?
+  created_time     DateTime?
+  updated_time     DateTime?
+  last_synced_at   DateTime?
+  created_at       DateTime  @default(now())
+
+  @@index([ad_account_id])
+  @@map("meta_ad_campaigns")
+}
+
+model MetaAdCampaignDailyStat {
+  campaign_id        String
+  stat_date          DateTime  @db.Date
+  ad_account_id      String
+  spend              Decimal?  @db.Decimal(14, 2)
+  impressions        BigInt?
+  reach              BigInt?
+  link_clicks        BigInt?
+  landing_page_views BigInt?
+  leads              BigInt?
+  cpc                Decimal?  @db.Decimal(14, 4)
+  cost_per_lead      Decimal?  @db.Decimal(14, 4)
+  currency           String?
+  synced_at          DateTime  @default(now())
+
+  @@id([campaign_id, stat_date])
+  @@index([ad_account_id, stat_date])
+  @@map("meta_ad_campaign_daily_stats")
+}
+
+model MetaAdPeriodReach {
+  campaign_id   String
+  ad_account_id String
+  date_start    DateTime @db.Date
+  date_stop     DateTime @db.Date
+  reach         BigInt?
+  fetched_at    DateTime @default(now())
+
+  @@id([campaign_id, date_start, date_stop])
+  @@map("meta_ad_period_reach")
+}
+
+model MetaAdSyncState {
+  ad_account_id  String    @id
+  last_synced_at DateTime?
+  last_since     DateTime? @db.Date
+  last_until     DateTime? @db.Date
+  last_error     String?   @db.Text
+  campaigns      Int       @default(0)
+  days           Int       @default(0)
+
+  @@map("meta_ad_sync_state")
 }
 
 // ============================================
