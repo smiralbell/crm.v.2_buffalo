@@ -143,12 +143,12 @@ export async function runWatchForProject(proyectoId: string): Promise<{
       const last = [...messages].reverse().find((m) => m.role === 'assistant' && m.content)
       report = (last && last.role === 'assistant' && last.content) || 'El agente no devolvió informe.'
     }
-    const graph: WatchGraph = { used: [...used], at: new Date().toISOString() }
+    const graph: WatchGraph = { used: Array.from(used), at: new Date().toISOString() }
     await saveWatchRun({ proyectoId, ok: true, report, graph })
     return { ok: true, report, graph }
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e)
-    const graph: WatchGraph = { used: [...used], at: new Date().toISOString() }
+    const graph: WatchGraph = { used: Array.from(used), at: new Date().toISOString() }
     await saveWatchRun({ proyectoId, ok: false, report: report || null, graph, error })
     return { ok: false, report: report || error, graph, error }
   }
