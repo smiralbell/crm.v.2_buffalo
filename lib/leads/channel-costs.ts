@@ -53,7 +53,7 @@ export const COST_CHANNEL_META: Record<
   },
 }
 
-export type SpendSource = 'manual' | 'bank' | 'marketing_metrics' | 'default_email' | 'none' | 'mixed'
+export type SpendSource = 'manual' | 'bank' | 'ads_api' | 'marketing_metrics' | 'default_email' | 'none' | 'mixed'
 
 export type CostLineDetail = {
   channel: CostChannelKey
@@ -230,6 +230,21 @@ async function loadMetricsByCostChannel(
   return map
 }
 
+async function loadAdsApiSpend(period: string): Promise<Map<CostChannelKey, number>> {
+  const map = new Map<CostChannelKey, number>()
+  try {
+    const { periodSpendFromAdsApi } = await import('@/lib/ads/sync')
+    const fromApi = await periodSpendFromAdsApi(period)
+    const meta = fromApi.get('meta') || 0
+    const google = fromApi.get('google') || 0
+    if (meta > 0) map.set('meta', meta)
+    if (google > 0) map.set('google', google)
+  } catch {
+    // tabla aún no existe
+  }
+  return map
+}
+
 async function loadManualLines(
   period: string
 ): Promise<Map<LineKey, { spend: number; notes: string | null }>> {
@@ -266,11 +281,14 @@ function resolveLine(
   manual: Map<LineKey, { spend: number; notes: string | null }>,
   bankTotals: Map<LineKey, number>,
   bankItems: Map<LineKey, Array<{ description: string; amount: number; date: string }>>,
-  metricsTotal: Map<CostChannelKey, number>
+  metricsTotal: Map<CostChannelKey, number>,
+  adsApiTotal: Map<CostChannelKey, number>
 ): CostLineDetail {
   const key = lineKey(ch, kind)
   const man = manual.get(key)
   const bankEur = bankTotals.get(key) || 0
+  const adsApiEur =
+    kind === 'monthly' && (ch === 'meta' || ch === 'google') ? adsApiTotal.get(ch) || 0 : 0
   // metrics only as monthly fallback when no setup/monthly split
   const metricsEur =
     kind === 'monthly' || kind === 'commission' ? metricsTotal.get(ch) || 0 : 0
@@ -283,6 +301,9 @@ function resolveLine(
   } else if (bankEur > 0) {
     spend = bankEur
     source = 'bank'
+  } else if (adsApiEur > 0) {
+    spend = adsApiEur
+    source = 'ads_api'
   } else if (metricsEur > 0) {
     spend = metricsEur
     source = 'marketing_metrics'
@@ -317,10 +338,11 @@ export async function getChannelCostsDetail(
   end: Date,
   filterChannel?: CostChannelKey | null
 ): Promise<CostChannelDetail[]> {
-  const [manual, bankPack, metrics] = await Promise.all([
+  const [manual, bankPack, metrics, adsApi] = await Promise.all([
     loadManualLines(period),
     loadBankLines(start, end),
     loadMetricsByCostChannel(period),
+    loadAdsApiSpend(period),
   ])
   const { totals: bankTotals, items: bankItems } = bankPack
 
@@ -329,7 +351,7 @@ export async function getChannelCostsDetail(
   const details = keys.map((channel) => {
     const meta = COST_CHANNEL_META[channel]
     const lines = meta.kinds.map((kind) =>
-      resolveLine(channel, kind, manual, bankTotals, bankItems, metrics)
+      resolveLine(channel, kind, manual, bankTotals, bankItems, metrics, adsApi)
     )
     // Email default 500 on monthly if nothing else
     if (

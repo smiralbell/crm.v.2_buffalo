@@ -111,6 +111,23 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     },
   },
   {
+    name: 'ads-sync',
+    label: 'Gasto Meta / Google Ads',
+    everyMs: 24 * HOUR,
+    leaseMs: 15 * MIN,
+    enabled: () =>
+      process.env.ADS_SYNC !== '0' &&
+      Boolean(
+        (process.env.META_ADS_ACCESS_TOKEN?.trim() && process.env.META_ADS_ACCOUNT_ID?.trim()) ||
+          (process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim() && process.env.GOOGLE_ADS_CUSTOMER_ID?.trim())
+      ),
+    run: async () => {
+      const { syncAdSpend } = await import('@/lib/ads/sync')
+      const r = await syncAdSpend({ days: Number(process.env.ADS_SYNC_DAYS || 14) })
+      return `meta ${r.meta} · google ${r.google}`
+    },
+  },
+  {
     name: 'housekeeping',
     label: 'Limpieza (cola, avisos, registros IA)',
     everyMs: 24 * HOUR,

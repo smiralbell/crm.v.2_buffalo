@@ -101,6 +101,10 @@ Ejecuta la sincronización bancaria, Gmail, el motor del blog, los reintentos de
 | `BRIEFING_HOUR` | Hora del briefing diario (por defecto 8, hora de Madrid). `DAILY_BRIEFING=0` lo apaga. |
 | `AUTO_RECONCILE=0` | Desactiva la conciliación automática de cobros. |
 | `AI_CALL_LOG=0` | Desactiva el registro de llamadas a la IA. |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Enlace de pago en facturas. Webhook: `/api/webhooks/stripe`. Sin ellas el CRM queda listo y el botón lo indica. |
+| `APP_BASE_URL` | URL pública del CRM (éxito/cancelación de Stripe). |
+| `META_ADS_ACCESS_TOKEN` / `META_ADS_ACCOUNT_ID` | Gasto diario de Meta Ads (tarea `ads-sync`). |
+| `GOOGLE_ADS_DEVELOPER_TOKEN` / `GOOGLE_ADS_CUSTOMER_ID` / `GOOGLE_ADS_REFRESH_TOKEN` | Gasto diario de Google Ads. El refresh token necesita el alcance `adwords`. |
 
 El estado de todo esto (integraciones, tareas, webhooks, gasto de IA, migraciones y auditoría) se ve en **Sistema** (`/sistema`, solo admin).
 

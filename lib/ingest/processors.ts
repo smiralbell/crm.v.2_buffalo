@@ -17,6 +17,7 @@ import {
 } from '@/lib/integrations/fireflies/client'
 import { syncFirefliesMeetingById } from '@/lib/integrations/fireflies/sync'
 import { processWebChat } from '@/lib/inbox/web-chat'
+import { applyStripePayment, parseStripeEvent } from '@/lib/payments/stripe'
 
 export type InboundProcessorResult = {
   status: 'processed' | 'ignored'
@@ -81,8 +82,15 @@ async function processFireflies(payload: unknown): Promise<InboundProcessorResul
   }
 }
 
+async function processStripe(payload: unknown): Promise<InboundProcessorResult> {
+  const parsed = parseStripeEvent(payload)
+  if (!parsed) return { status: 'ignored', result: { reason: 'unparsed' } }
+  return applyStripePayment(parsed)
+}
+
 export const INBOUND_PROCESSORS: Record<string, InboundProcessor> = {
   calcom: processCalcom,
   fireflies: processFireflies,
   web_chat: processWebChat,
+  stripe: processStripe,
 }

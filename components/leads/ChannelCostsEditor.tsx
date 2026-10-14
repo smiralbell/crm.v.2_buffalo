@@ -48,6 +48,7 @@ type CostChannel = {
 const SOURCE_LABEL: Record<string, string> = {
   manual: 'Manual',
   bank: 'Banco',
+  ads_api: 'API Ads',
   marketing_metrics: 'Metrics',
   default_email: 'Estimado 500 €',
   none: 'Sin coste',

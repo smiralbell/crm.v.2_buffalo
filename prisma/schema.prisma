@@ -176,6 +176,11 @@ model Invoice {
   pdf_drive_url     String?   @db.Text
   sent_to_drive     Boolean?  @default(false)
   bank_transaction_id String?  @db.Uuid // Movimiento bancario (cobro) vinculado a esta factura
+  /// Enlace Stripe (migración db/migrations/0007). paid_via = bank | stripe.
+  payment_url         String?  @db.Text
+  stripe_checkout_session_id String?
+  paid_via            String?
+  stripe_paid_at      DateTime?
   /// Lead / onboarding de origen (si se creó desde un proyecto)
   lead_id           Int?
   crm_user_id       Int?

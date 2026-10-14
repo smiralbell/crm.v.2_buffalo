@@ -22,6 +22,7 @@ import InvoicePreview from '@/components/InvoicePreview'
 import { useRef } from 'react'
 import { getNextBufInvoiceNumber } from '@/lib/invoices/numbers'
 import InvoiceFeedbackDialog from '@/components/invoices/InvoiceFeedbackDialog'
+import InvoicePaymentLinkCard from '@/components/invoices/InvoicePaymentLinkCard'
 
 interface Service {
   description: string
@@ -632,6 +633,8 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
               </div>
             </CardContent>
           </Card>
+
+              <InvoicePaymentLinkCard invoiceId={invoice.id} />
 
               {error && (
                 <div className="rounded-md bg-red-50 p-3 text-sm text-red-800 border border-red-200">

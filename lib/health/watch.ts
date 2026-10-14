@@ -111,6 +111,42 @@ function openrouterHealth(): IntegrationHealth {
     : { key: 'openrouter', name: 'IA (OpenRouter)', state: 'error', detail: 'Falta OPENROUTER_API_KEY' }
 }
 
+function stripeHealth(): IntegrationHealth {
+  const key = process.env.STRIPE_SECRET_KEY?.trim()
+  const wh = process.env.STRIPE_WEBHOOK_SECRET?.trim()
+  if (!key && !wh) {
+    return { key: 'stripe', name: 'Stripe (pagos)', state: 'off', detail: 'Sin configurar · el CRM ya tiene enlace de pago y webhook listos', link: '/invoices' }
+  }
+  if (!key) return { key: 'stripe', name: 'Stripe (pagos)', state: 'warning', detail: 'Falta STRIPE_SECRET_KEY', link: '/invoices' }
+  if (!wh) return { key: 'stripe', name: 'Stripe (pagos)', state: 'warning', detail: 'Falta STRIPE_WEBHOOK_SECRET (los cobros no se marcarán solos)', link: '/invoices' }
+  return { key: 'stripe', name: 'Stripe (pagos)', state: 'ok', detail: 'Clave y webhook configurados', link: '/invoices' }
+}
+
+async function adsHealth(channel: 'meta' | 'google'): Promise<IntegrationHealth> {
+  const name = channel === 'meta' ? 'Meta Ads' : 'Google Ads'
+  const configured =
+    channel === 'meta'
+      ? Boolean(process.env.META_ADS_ACCESS_TOKEN?.trim() && process.env.META_ADS_ACCOUNT_ID?.trim())
+      : Boolean(
+          process.env.GOOGLE_ADS_DEVELOPER_TOKEN?.trim() &&
+            process.env.GOOGLE_ADS_CUSTOMER_ID?.trim() &&
+            (process.env.GOOGLE_ADS_REFRESH_TOKEN?.trim() || process.env.GOOGLE_REFRESH_TOKEN?.trim())
+        )
+  if (!configured) {
+    return { key: `${channel}-ads`, name, state: 'off', detail: 'Sin tokens · el gasto se sigue pudiendo poner a mano', link: '/marketing' }
+  }
+  const { lastAdsSyncAt } = await import('@/lib/ads/sync')
+  const last = await lastAdsSyncAt(channel)
+  return {
+    key: `${channel}-ads`,
+    name,
+    state: last ? 'ok' : 'warning',
+    detail: last ? `Última sync ${last.toLocaleString('es-ES')}` : 'Configurado, aún no hay sync (lanza «Gasto Meta / Google Ads» en Sistema)',
+    at: last?.toISOString() ?? null,
+    link: '/marketing',
+  }
+}
+
 function securityHealth(): IntegrationHealth {
   const problems: string[] = []
   if (!isSessionSecretConfigured()) problems.push('falta SESSION_SECRET')
@@ -154,6 +190,9 @@ export async function integrationHealth(): Promise<IntegrationHealth[]> {
     Promise.resolve(whatsappHealth()),
     smtpHealth(),
     Promise.resolve(openrouterHealth()),
+    Promise.resolve(stripeHealth()),
+    adsHealth('meta'),
+    adsHealth('google'),
     Promise.resolve(securityHealth()),
   ])
 }
