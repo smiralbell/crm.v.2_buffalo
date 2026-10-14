@@ -10,7 +10,8 @@ FROM deps AS build
 COPY . .
 # Prisma Client (requerido antes del build)
 RUN npx prisma generate
-RUN npm run build
+# El chequeo de tipos de next build supera el límite de memoria por defecto de Node
+RUN NODE_OPTIONS=--max-old-space-size=4096 NEXT_TELEMETRY_DISABLED=1 npm run build
 # La imagen final no necesita herramientas de desarrollo ni la caché de compilación
 RUN npm prune --omit=dev && rm -rf .next/cache
 
