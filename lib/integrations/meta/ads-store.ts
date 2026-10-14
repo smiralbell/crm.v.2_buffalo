@@ -185,7 +185,7 @@ export async function upsertPeriodReach(
   reachByCampaign: Map<string, number | null>
 ): Promise<void> {
   await ensureMetaAdsTables()
-  for (const [campaignId, reach] of reachByCampaign) {
+  for (const [campaignId, reach] of Array.from(reachByCampaign.entries())) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO meta_ad_period_reach (campaign_id, ad_account_id, date_start, date_stop, reach, fetched_at)
        VALUES ($1, $2, $3::date, $4::date, $5, NOW())
