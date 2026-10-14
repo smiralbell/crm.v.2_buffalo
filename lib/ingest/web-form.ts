@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 import { query } from '@/lib/db'
-import { notify } from '@/lib/notifications'
+import { notify } from '@/lib/alerts'
 import type { InboundProcessorResult } from '@/lib/ingest/types'
 import {
   extractWebAttribution,
@@ -65,7 +65,6 @@ export async function processWebForm(payload: unknown): Promise<InboundProcessor
   })
 
   await notify({
-    to: { roles: ['admin'] },
     kind: 'lead.webform',
     title: `Formulario web: ${row.fullname || row.email || row.company || `#${row.id}`}`,
     body:

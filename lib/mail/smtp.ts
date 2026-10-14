@@ -1,126 +1,51 @@
 import nodemailer from 'nodemailer'
-import type SMTPTransport from 'nodemailer/lib/smtp-transport'
 
-export interface SmtpConfig {
-  host: string
-  port: number
-  secure: boolean
-  user: string
-  pass: string
-  from: string
-  fromName: string
+function env(name: string): string {
+  return process.env[name]?.trim() || ''
 }
 
-export class SmtpConfigError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'SmtpConfigError'
-  }
+export function smtpPort(): number {
+  const n = Number(env('SMTP_PORT') || 465)
+  return Number.isFinite(n) && n > 0 ? n : 465
 }
 
-function parseBool(value: string | undefined, fallback: boolean): boolean {
-  if (value == null || value.trim() === '') return fallback
-  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())
-}
-
-export function getSmtpConfig(): SmtpConfig {
-  const host = process.env.SMTP_HOST?.trim()
-  const user = process.env.SMTP_USER?.trim()
-  const pass = process.env.SMTP_PASS?.trim()
-  const from = process.env.SMTP_FROM?.trim() || user
-  const port = Number(process.env.SMTP_PORT || '465')
-  const secure = parseBool(process.env.SMTP_SECURE, port === 465)
-
-  if (!host) throw new SmtpConfigError('Falta SMTP_HOST en las variables de entorno')
-  if (!user) throw new SmtpConfigError('Falta SMTP_USER en las variables de entorno')
-  if (!pass) throw new SmtpConfigError('Falta SMTP_PASS en las variables de entorno')
-  if (!from) throw new SmtpConfigError('Falta SMTP_FROM o SMTP_USER en las variables de entorno')
-  if (!Number.isFinite(port) || port <= 0) {
-    throw new SmtpConfigError('SMTP_PORT no es válido')
-  }
-
-  return {
-    host,
-    port,
-    secure,
-    user,
-    pass,
-    from,
-    fromName: process.env.SMTP_FROM_NAME?.trim() || 'Buffalo CRM',
-  }
+export function smtpSecure(): boolean {
+  const raw = env('SMTP_SECURE').toLowerCase()
+  if (raw === 'false' || raw === '0') return false
+  if (raw === 'true' || raw === '1') return true
+  return smtpPort() === 465
 }
 
 export function isSmtpConfigured(): boolean {
-  try {
-    getSmtpConfig()
-    return true
-  } catch {
-    return false
-  }
+  return Boolean(env('SMTP_HOST') && env('SMTP_USER') && env('SMTP_PASS'))
 }
 
-export function getSmtpPublicStatus() {
-  try {
-    const cfg = getSmtpConfig()
-    return {
-      configured: true,
-      host: cfg.host,
-      port: cfg.port,
-      secure: cfg.secure,
-      user: cfg.user,
-      from: cfg.from,
-      fromName: cfg.fromName,
-    }
-  } catch (error) {
-    return {
-      configured: false,
-      error: error instanceof Error ? error.message : 'SMTP no configurado',
-    }
-  }
+export function smtpFrom(): string {
+  const name = env('SMTP_FROM_NAME') || 'Buffalo CRM'
+  const addr = env('SMTP_FROM') || env('SMTP_USER')
+  return `"${name.replace(/"/g, '')}" <${addr}>`
 }
 
-export function createSmtpTransporter() {
-  const cfg = getSmtpConfig()
-  const options: SMTPTransport.Options = {
-    host: cfg.host,
-    port: cfg.port,
-    secure: cfg.secure,
-    auth: {
-      user: cfg.user,
-      pass: cfg.pass,
-    },
-  }
-  return nodemailer.createTransport(options)
-}
-
-export function formatFromAddress(cfg: SmtpConfig = getSmtpConfig()): string {
-  return `"${cfg.fromName}" <${cfg.from}>`
-}
-
-export interface SendMailInput {
+export async function sendMail(input: {
   to: string | string[]
   subject: string
-  text?: string
+  text: string
   html?: string
-  cc?: string | string[]
-  bcc?: string | string[]
-}
-
-export async function sendMail(input: SendMailInput) {
-  const cfg = getSmtpConfig()
-  const transporter = createSmtpTransporter()
-  return transporter.sendMail({
-    from: formatFromAddress(cfg),
-    to: input.to,
-    cc: input.cc,
-    bcc: input.bcc,
+}): Promise<void> {
+  if (!isSmtpConfigured()) throw new Error('SMTP no configurado (SMTP_HOST, SMTP_USER, SMTP_PASS)')
+  const to = Array.isArray(input.to) ? input.to.filter(Boolean).join(', ') : input.to
+  if (!to) throw new Error('Sin destinatario de correo')
+  const transporter = nodemailer.createTransport({
+    host: env('SMTP_HOST'),
+    port: smtpPort(),
+    secure: smtpSecure(),
+    auth: { user: env('SMTP_USER'), pass: env('SMTP_PASS') },
+  })
+  await transporter.sendMail({
+    from: smtpFrom(),
+    to,
     subject: input.subject,
     text: input.text,
-    html: input.html,
+    html: input.html || undefined,
   })
-}
-
-export async function verifySmtpConnection() {
-  const transporter = createSmtpTransporter()
-  await transporter.verify()
 }

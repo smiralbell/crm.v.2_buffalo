@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
-import UserWhatsappSettings from '@/components/UserWhatsappSettings'
 import { requireAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -359,8 +358,6 @@ export default function UsuarioDetailPage() {
                 </p>
               </div>
             )}
-
-            <UserWhatsappSettings userId={user.id} isComercial={user.role === 'comercial'} />
 
             {stats && isDeveloperUser && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -2,9 +2,10 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdminAPI } from '@/lib/auth'
 
 /**
- * GET  /api/sistema                       → estado completo (integraciones, tareas, ingesta, IA, migraciones, auditoría)
+ * GET  /api/sistema                       → estado completo (integraciones, avisos, tareas, ingesta, IA, migraciones)
  * POST /api/sistema { action: 'run_job', name }          → ejecuta una tarea ya
  * POST /api/sistema { action: 'reprocess_event', id }    → reprocesa un webhook guardado
+ * POST /api/sistema { action: 'test_alert' }             → envía un aviso de prueba (correo + Telegram)
  */
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<{ data: T; error?: string }> {
   try {
@@ -38,6 +39,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const { runMigrations } = await import('@/lib/migrations/runner')
         return res.status(200).json(await runMigrations())
       }
+      if (action === 'test_alert') {
+        const { sendTestAlert } = await import('@/lib/alerts')
+        const result = await sendTestAlert()
+        if (result.error && result.email !== 'sent' && result.telegram !== 'sent') {
+          return res.status(400).json({ error: result.error, ...result })
+        }
+        return res.status(200).json({
+          outcome: 'ran',
+          message: `Correo ${result.email} · Telegram ${result.telegram}${result.error ? ` · ${result.error}` : ''}`,
+          ...result,
+        })
+      }
       return res.status(400).json({ error: 'Acción desconocida' })
     } catch (e) {
       return res.status(500).json({ error: e instanceof Error ? e.message : String(e) })
@@ -46,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method !== 'GET') return res.status(405).json({ error: 'Método no permitido' })
 
-  const [{ integrationHealth }, scheduler, registry, queue, ingest, ai, migrations, audit] = await Promise.all([
+  const [{ integrationHealth }, scheduler, registry, queue, ingest, ai, migrations, audit, alerts] = await Promise.all([
     import('@/lib/health/watch'),
     import('@/lib/jobs/scheduler'),
     import('@/lib/jobs/registry'),
@@ -55,9 +68,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     import('@/lib/ai/gateway'),
     import('@/lib/migrations/runner'),
     import('@/lib/audit/log'),
+    import('@/lib/alerts'),
   ])
 
-  const [integrations, jobsRows, queueStats, inboundStats, failedEvents, recentEvents, aiUsage, migrationState, auditRows] =
+  const [integrations, jobsRows, queueStats, inboundStats, failedEvents, recentEvents, aiUsage, migrationState, auditRows, recentAlerts] =
     await Promise.all([
       safe(() => integrationHealth(), []),
       safe(() => scheduler.listSystemJobs(), []),
@@ -68,6 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       safe(() => ai.aiUsageByModule(30), []),
       safe(() => migrations.migrationStatus(), { files: 0, applied: [], pending: [], changedAfterApply: [] }),
       safe(() => audit.listAuditLog(30), []),
+      safe(() => alerts.listRecentAlerts(8), []),
     ])
 
   const byName = new Map(jobsRows.data.map((j) => [j.name, j]))
@@ -83,6 +98,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     generated_at: new Date().toISOString(),
     runner_active_here: Boolean(globalThis.__buffaloJobsRunnerActive),
     integrations: integrations.data,
+    alerts: { ...alerts.alertsStatus(), recent: recentAlerts.data },
     jobs,
     queue: queueStats.data,
     inbound: { stats: inboundStats.data, failed: failedEvents.data, recent: recentEvents.data },

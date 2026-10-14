@@ -27,7 +27,6 @@ import {
   Video,
   Activity,
 } from 'lucide-react'
-import NotificationBell from '@/components/NotificationBell'
 import { getLastCampaignId, lastCampaignCallHref } from '@/lib/coldcall/last-campaign'
 import ComercialSidebarBrand from '@/components/coldcall/ComercialSidebarBrand'
 import { Button } from '@/components/ui/button'
@@ -557,13 +556,6 @@ export default function Sidebar({
       </div>
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-2 shrink-0 space-y-0.5">
-        {user && (
-          <NotificationBell
-            showLabel={showLabels}
-            onNavigate={onNavigate}
-            className={cn(itemClass(false), 'w-full')}
-          />
-        )}
         {isAdmin && (
           <Link
             href="/sistema"

@@ -6,7 +6,7 @@
  */
 import { createHmac, timingSafeEqual } from 'crypto'
 import { query } from '@/lib/db'
-import { notify } from '@/lib/notifications'
+import { notify } from '@/lib/alerts'
 
 export type StripeEventKind = 'checkout.session.completed' | 'payment_intent.succeeded' | 'other'
 
@@ -158,7 +158,6 @@ export async function applyStripePayment(
     }
   }
   await notify({
-    to: { roles: ['admin'] },
     kind: 'finanzas.stripe',
     title: `${row.invoice_number} cobrada por Stripe`,
     body: `${row.client_name} · ${Number(row.total).toFixed(2)} €`,

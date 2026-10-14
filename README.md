@@ -96,9 +96,11 @@ Ejecuta la sincronización bancaria, Gmail, el motor del blog, los reintentos de
 | `SESSION_SECRET` | **Obligatoria en producción.** Sin ella el login falla a propósito. |
 | `CRON_SECRET` | Endpoints `/api/cron/*` (Bearer). |
 | `INGEST_TOKEN` | Bearer para `POST /api/ingest/web_chat` (bot de n8n → ficha del contacto). |
-| `CRM_ADMIN_WHATSAPP` | Número del admin de `.env` para avisos urgentes por WhatsApp. |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` | Correo saliente para avisos a administradores. |
+| `ADMIN_ALERT_EMAILS` | Destinatarios de avisos (coma-separados). |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | Telegram para los mismos avisos. |
 | `WEB_RUN_JOBS=0` | La web no ejecuta tareas (cuando ya hay worker). |
-| `BRIEFING_HOUR` | Hora del briefing diario (por defecto 8, hora de Madrid). `DAILY_BRIEFING=0` lo apaga. |
+| `BRIEFING_HOUR` | Hora del briefing diario a admins (por defecto 8, hora de Madrid). `DAILY_BRIEFING=0` lo apaga. |
 | `AUTO_RECONCILE=0` | Desactiva la conciliación automática de cobros. |
 | `AI_CALL_LOG=0` | Desactiva el registro de llamadas a la IA. |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Enlace de pago en facturas. Webhook: `/api/webhooks/stripe`. Sin ellas el CRM queda listo y el botón lo indica. |

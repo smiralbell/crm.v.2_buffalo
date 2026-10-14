@@ -8,7 +8,7 @@
  */
 import { query } from '@/lib/db'
 import { rankInvoiceLinkSuggestions } from '@/lib/finance/invoice-link-suggestions'
-import { notify } from '@/lib/notifications'
+import { notify } from '@/lib/alerts'
 
 type IncomeRow = { id: string; date: Date | string; amount: string | number; description: string | null }
 type InvoiceRow = {
@@ -96,7 +96,6 @@ export async function autoReconcileIncomes(): Promise<{ linked: number; ambiguou
 
   if (linked) {
     await notify({
-      to: { roles: ['admin'] },
       kind: 'finanzas.conciliado',
       title: `${linked} cobro(s) conciliados automáticamente`,
       body: details.slice(0, 8).join('\n'),

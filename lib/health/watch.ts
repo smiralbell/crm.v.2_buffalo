@@ -3,7 +3,7 @@
  * Lo usan la pantalla /sistema y la tarea «health-watch» (cada 6 h).
  */
 import { query } from '@/lib/db'
-import { notify } from '@/lib/notifications'
+import { notify } from '@/lib/alerts'
 import { isSessionSecretConfigured } from '@/lib/session-secret'
 import { isCronSecretConfigured } from '@/lib/cron-auth'
 import { usesLegacyWebhookToken } from '@/lib/ingest/auth'
@@ -94,9 +94,28 @@ async function calcomHealth(): Promise<IntegrationHealth> {
 
 async function smtpHealth(): Promise<IntegrationHealth> {
   const { isSmtpConfigured } = await import('@/lib/mail/smtp')
-  return isSmtpConfigured()
-    ? { key: 'smtp', name: 'Correo saliente (SMTP)', state: 'ok', detail: 'Configurado' }
-    : { key: 'smtp', name: 'Correo saliente (SMTP)', state: 'off', detail: 'Sin configurar' }
+  const { adminAlertEmails } = await import('@/lib/alerts')
+  const emails = adminAlertEmails()
+  if (!isSmtpConfigured()) {
+    return { key: 'smtp', name: 'Avisos por correo', state: 'off', detail: 'Faltan SMTP_HOST / SMTP_USER / SMTP_PASS' }
+  }
+  if (!emails.length) {
+    return { key: 'smtp', name: 'Avisos por correo', state: 'warning', detail: 'SMTP listo, falta ADMIN_ALERT_EMAILS' }
+  }
+  return { key: 'smtp', name: 'Avisos por correo', state: 'ok', detail: `Envía a ${emails.join(', ')}` }
+}
+
+function telegramHealth(): IntegrationHealth {
+  const token = Boolean(process.env.TELEGRAM_BOT_TOKEN?.trim())
+  const chats = (process.env.TELEGRAM_CHAT_IDS || process.env.TELEGRAM_CHAT_ID || '')
+    .split(/[,;\s]+/)
+    .filter(Boolean)
+  if (!token && !chats.length) {
+    return { key: 'telegram', name: 'Avisos por Telegram', state: 'off', detail: 'Sin bot ni chat' }
+  }
+  if (!token) return { key: 'telegram', name: 'Avisos por Telegram', state: 'warning', detail: 'Falta TELEGRAM_BOT_TOKEN' }
+  if (!chats.length) return { key: 'telegram', name: 'Avisos por Telegram', state: 'warning', detail: 'Falta TELEGRAM_CHAT_ID' }
+  return { key: 'telegram', name: 'Avisos por Telegram', state: 'ok', detail: `${chats.length} chat(s)` }
 }
 
 function whatsappHealth(): IntegrationHealth {
@@ -236,6 +255,7 @@ export async function integrationHealth(): Promise<IntegrationHealth[]> {
     webformInboundHealth(),
     Promise.resolve(whatsappHealth()),
     smtpHealth(),
+    Promise.resolve(telegramHealth()),
     Promise.resolve(openrouterHealth()),
     Promise.resolve(stripeHealth()),
     adsHealth('meta'),
@@ -252,7 +272,6 @@ export async function watchIntegrationHealth(): Promise<{ warnings: string[] }> 
     if (it.state !== 'warning' && it.state !== 'error') continue
     warnings.push(`${it.name}: ${it.detail}`)
     await notify({
-      to: { roles: ['admin'] },
       kind: `salud.${it.key}`,
       title: it.state === 'error' ? `${it.name}: requiere atención` : `${it.name}: aviso`,
       body: it.detail,

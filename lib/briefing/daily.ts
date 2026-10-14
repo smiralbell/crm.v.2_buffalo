@@ -1,13 +1,12 @@
 /**
- * Briefing diario por WhatsApp (primer paso: comerciales).
- * Cada mañana laborable, a la hora BRIEFING_HOUR (8 por defecto, hora de Madrid), cada comercial
- * con WhatsApp y el briefing activados en Usuarios recibe su resumen: devoluciones de llamada
- * vencidas y de hoy, y reuniones por confirmar. Se envía por la cola (reintentos) y una vez al día.
+ * Briefing diario a los administradores (correo + Telegram).
+ * Cada mañana laborable, a BRIEFING_HOUR (8 por defecto, hora de Madrid):
+ * devoluciones de llamada vencidas/de hoy y reuniones por confirmar.
  */
-import { query } from '@/lib/db'
-import { enqueueJob } from '@/lib/jobs/queue'
+import { notify } from '@/lib/alerts'
 import type { ColdCallCallbackRow } from '@/lib/coldcall/callbacks'
 import type { MeetingReminderRow } from '@/lib/coldcall/meeting-reminders'
+import { getColdCallTeamUserIds } from '@/lib/coldcall/scope'
 
 const TZ = 'Europe/Madrid'
 
@@ -33,41 +32,36 @@ const madridDate = (iso: string) => madridParts(new Date(iso)).date
 const hhmm = (iso: string) =>
   new Date(iso).toLocaleTimeString('es-ES', { timeZone: TZ, hour: '2-digit', minute: '2-digit' })
 
-export function buildComercialBriefing(input: {
-  name: string
+export function buildAdminBriefing(input: {
   today: string
   callbacks: ColdCallCallbackRow[]
   toConfirm: MeetingReminderRow[]
-  baseUrl: string
-}): string {
+}): { title: string; body: string } {
   const overdue = input.callbacks.filter((c) => madridDate(c.at) < input.today)
   const today = input.callbacks.filter((c) => madridDate(c.at) === input.today)
   const who = (c: { nombre: string; empresa: string | null }) => (c.empresa ? `${c.nombre} (${c.empresa})` : c.nombre)
 
-  const lines: string[] = [`☀️ *Buenos días, ${input.name.split(' ')[0]}*`, '']
+  const lines: string[] = []
   if (!overdue.length && !today.length && !input.toConfirm.length) {
-    lines.push('Hoy no tienes devoluciones ni reuniones pendientes de confirmar. ¡A por la cola de llamadas!')
-  } else {
-    if (today.length) {
-      lines.push(`📞 *Devoluciones de hoy (${today.length})*`)
-      for (const c of today.slice(0, 8)) lines.push(`• ${hhmm(c.at)} · ${who(c)}`)
-      if (today.length > 8) lines.push(`• …y ${today.length - 8} más`)
-      lines.push('')
-    }
-    if (overdue.length) {
-      lines.push(`⏰ *Vencidas (${overdue.length})*`)
-      for (const c of overdue.slice(0, 5)) lines.push(`• ${who(c)}`)
-      if (overdue.length > 5) lines.push(`• …y ${overdue.length - 5} más`)
-      lines.push('')
-    }
-    if (input.toConfirm.length) {
-      lines.push(`🤝 *Reuniones por confirmar (${input.toConfirm.length})*`)
-      for (const m of input.toConfirm.slice(0, 5)) lines.push(`• ${hhmm(m.at)} · ${who(m)}`)
-      lines.push('')
-    }
+    return { title: `Briefing comercial · ${input.today}`, body: 'Sin devoluciones ni reuniones pendientes de confirmar.' }
   }
-  if (input.baseUrl) lines.push(`${input.baseUrl}/comercial`)
-  return lines.join('\n').trim()
+  if (today.length) {
+    lines.push(`Devoluciones de hoy (${today.length})`)
+    for (const c of today.slice(0, 8)) lines.push(`• ${hhmm(c.at)} · ${who(c)}`)
+    if (today.length > 8) lines.push(`• …y ${today.length - 8} más`)
+    lines.push('')
+  }
+  if (overdue.length) {
+    lines.push(`Vencidas (${overdue.length})`)
+    for (const c of overdue.slice(0, 5)) lines.push(`• ${who(c)}`)
+    if (overdue.length > 5) lines.push(`• …y ${overdue.length - 5} más`)
+    lines.push('')
+  }
+  if (input.toConfirm.length) {
+    lines.push(`Reuniones por confirmar (${input.toConfirm.length})`)
+    for (const m of input.toConfirm.slice(0, 5)) lines.push(`• ${hhmm(m.at)} · ${who(m)}`)
+  }
+  return { title: `Briefing comercial · ${input.today}`, body: lines.join('\n').trim() }
 }
 
 export async function sendDueBriefings(now = new Date()): Promise<{ sent: number; reason: string }> {
@@ -78,32 +72,23 @@ export async function sendDueBriefings(now = new Date()): Promise<{ sent: number
     return { sent: 0, reason: 'fin de semana' }
   }
 
-  const { rows: users } = await query<{ id: number; name: string; whatsapp_phone: string }>(
-    `SELECT id, name, whatsapp_phone FROM crm_users
-      WHERE active = TRUE AND role = 'comercial'
-        AND COALESCE(briefing_whatsapp, FALSE) = TRUE
-        AND COALESCE(whatsapp_phone, '') <> ''`
-  )
-  if (!users.length) return { sent: 0, reason: 'nadie con briefing activado' }
-
+  const teamIds = await getColdCallTeamUserIds()
+  if (!teamIds.length) return { sent: 0, reason: 'sin equipo comercial' }
+  const scope = { mode: 'team' as const, userIds: teamIds }
   const { listColdCallCallbacks } = await import('@/lib/coldcall/callbacks')
   const { listConfirmReminders } = await import('@/lib/coldcall/meeting-reminders')
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '') || ''
-
-  let sent = 0
-  for (const u of users) {
-    const scope = { mode: 'user' as const, userId: u.id }
-    const [callbacks, toConfirm] = await Promise.all([
-      listColdCallCallbacks(scope, { daysBack: 7, daysAhead: 1 }),
-      listConfirmReminders(scope).then((r) => r.filter((m) => !m.confirm_status || m.confirm_status === 'pending')),
-    ])
-    const text = buildComercialBriefing({ name: u.name, today: date, callbacks, toConfirm, baseUrl })
-    const { duplicate } = await enqueueJob(
-      'notify.whatsapp',
-      { phone: u.whatsapp_phone, text },
-      { dedupeKey: `briefing:${u.id}:${date}` }
-    )
-    if (!duplicate) sent++
-  }
-  return { sent, reason: sent ? 'enviados' : 'ya enviados hoy' }
+  const [callbacks, toConfirm] = await Promise.all([
+    listColdCallCallbacks(scope, { daysBack: 7, daysAhead: 1 }),
+    listConfirmReminders(scope).then((r) => r.filter((m) => !m.confirm_status || m.confirm_status === 'pending')),
+  ])
+  const { title, body } = buildAdminBriefing({ today: date, callbacks, toConfirm })
+  await notify({
+    kind: 'briefing.diario',
+    title,
+    body,
+    link: '/comercial',
+    severity: 'info',
+    dedupeKey: `briefing:${date}`,
+  })
+  return { sent: 1, reason: 'enviado' }
 }

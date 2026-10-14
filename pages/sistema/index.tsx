@@ -2,7 +2,7 @@ import { GetServerSideProps } from 'next'
 import { useCallback, useEffect, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Loader2, Play, RefreshCw, RotateCcw } from 'lucide-react'
+import { Loader2, Play, RefreshCw, RotateCcw, Send } from 'lucide-react'
 import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
@@ -61,6 +61,22 @@ type SystemData = {
   migrations: { files: number; applied: string[]; pending: string[]; changedAfterApply: string[] }
   audit: Array<{ id: string; actor: string; action: string; target_table: string | null; ok: boolean; created_at: string }>
   errors: Record<string, string>
+  alerts?: {
+    smtp: boolean
+    telegram: boolean
+    emails: string[]
+    telegram_chats: number
+    ready: boolean
+    recent: Array<{
+      id: string
+      kind: string
+      title: string
+      email_status: string | null
+      telegram_status: string | null
+      last_error: string | null
+      created_at: string
+    }>
+  }
 }
 
 const stateStyle: Record<State, { dot: string; label: string }> = {
@@ -174,6 +190,54 @@ export default function SistemaPage() {
 
         {data && (
           <>
+            {data.alerts && (
+            <Section
+              title="Avisos a administradores"
+              hint="Correo y Telegram. Las credenciales van en EasyPanel / .env."
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <ul className="space-y-1 text-sm text-gray-700">
+                  <li>
+                    Correo:{' '}
+                    {data.alerts.smtp
+                      ? data.alerts.emails.length
+                        ? `listo · ${data.alerts.emails.join(', ')}`
+                        : 'SMTP listo, falta ADMIN_ALERT_EMAILS'
+                      : 'sin configurar (SMTP_HOST, SMTP_USER, SMTP_PASS)'}
+                  </li>
+                  <li>
+                    Telegram:{' '}
+                    {data.alerts.telegram
+                      ? `listo · ${data.alerts.telegram_chats} chat(s)`
+                      : 'sin configurar (TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)'}
+                  </li>
+                </ul>
+                <Button
+                  size="sm"
+                  className="gap-1.5 rounded-xl"
+                  disabled={busy !== null || !data.alerts.ready}
+                  onClick={() => void post('test_alert', { action: 'test_alert' })}
+                >
+                  {busy === 'test_alert' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  Enviar prueba
+                </Button>
+              </div>
+              {data.alerts.recent.length > 0 && (
+                <ul className="mt-4 divide-y divide-gray-100">
+                  {data.alerts.recent.map((a) => (
+                    <li key={a.id} className="py-2 text-sm">
+                      <p className="text-gray-900">{a.title}</p>
+                      <p className="text-xs text-gray-500">
+                        {a.kind} · correo {a.email_status || '—'} · telegram {a.telegram_status || '—'} · {ago(a.created_at)}
+                      </p>
+                      {a.last_error && <p className="text-xs text-red-600">{a.last_error}</p>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+            )}
+
             <Section title="Integraciones" hint="Se revisan cada 6 h y avisan a los admins antes de caducar.">
               <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {data.integrations.map((i) => (

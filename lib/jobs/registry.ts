@@ -101,7 +101,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
   },
   {
     name: 'daily-briefing',
-    label: 'Briefing diario por WhatsApp',
+    label: 'Briefing diario a administradores',
     everyMs: 15 * MIN,
     enabled: () => process.env.DAILY_BRIEFING !== '0',
     run: async () => {
@@ -132,10 +132,10 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     label: 'Limpieza (cola, avisos, registros IA)',
     everyMs: 24 * HOUR,
     run: async () => {
-      const { pruneNotifications } = await import('@/lib/notifications')
+      const { pruneAlerts } = await import('@/lib/alerts')
       const { query } = await import('@/lib/db')
       const q = await pruneQueue()
-      const n = await pruneNotifications()
+      const n = await pruneAlerts()
       const ai = await query(`DELETE FROM ai_calls WHERE created_at < NOW() - INTERVAL '180 days'`)
       const ev = await query(
         `DELETE FROM inbound_events WHERE status IN ('processed', 'ignored') AND received_at < NOW() - INTERVAL '90 days'`
@@ -146,13 +146,9 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
 ]
 
 function registerQueueHandlers() {
-  registerQueueHandler('notify.whatsapp', async (payload) => {
-    const { sendWasenderTextMessage } = await import('@/lib/demos/wasender')
-    const { phoneToWasenderRecipient } = await import('@/lib/demos/phone')
-    const phone = String(payload.phone || '')
-    const text = String(payload.text || '')
-    if (!phone || !text) return
-    await sendWasenderTextMessage(phoneToWasenderRecipient(phone), text)
+  registerQueueHandler('admin.alert', async (payload) => {
+    const { deliverQueuedAlert } = await import('@/lib/alerts')
+    await deliverQueuedAlert(payload)
   })
 }
 
@@ -160,9 +156,8 @@ function registerFailureAlerts() {
   onScheduledJobFailure(async (job, message, consecutive) => {
     // Al tercer fallo seguido se avisa (y no se repite el mismo aviso en el día)
     if (consecutive !== 3) return
-    const { notify } = await import('@/lib/notifications')
+    const { notify } = await import('@/lib/alerts')
     await notify({
-      to: { roles: ['admin'] },
       kind: 'sistema.fallo',
       title: `Falla «${job.label}» (3 veces seguidas)`,
       body: message.slice(0, 400),

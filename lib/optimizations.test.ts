@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { extractWebAttribution } from '@/lib/marketing/web-form-submissions.types'
 import { canonicalStage } from '@/lib/pipelines/unified-funnel'
 import { pickCertainInvoice } from '@/lib/finance/auto-reconcile'
-import { buildComercialBriefing } from '@/lib/briefing/daily'
+import { buildAdminBriefing } from '@/lib/briefing/daily'
 import { moduleFromStack } from '@/lib/ai/gateway'
 import { retryDelayMs } from '@/lib/jobs/queue'
 import { parseWebChatPayload, webChatMessageKey } from '@/lib/inbox/web-chat'
@@ -71,23 +71,20 @@ describe('conciliación automática: solo sin dudas', () => {
   })
 })
 
-describe('briefing del comercial', () => {
+describe('briefing a administradores', () => {
   it('resume devoluciones de hoy, vencidas y reuniones por confirmar', () => {
     const cb = (nombre: string, at: string) => ({
       id: 1, nombre, empresa: null, telefono: null, email: null, campaign_id: null, campaign_name: null, at, notas: null,
     })
-    const text = buildComercialBriefing({
-      name: 'Ana López',
+    const { title, body } = buildAdminBriefing({
       today: '2026-10-14',
       callbacks: [cb('Pepe', '2026-10-14T09:00:00Z'), cb('Luis', '2026-10-10T09:00:00Z')],
       toConfirm: [],
-      baseUrl: 'https://crm.test',
     })
-    expect(text).toContain('Buenos días, Ana')
-    expect(text).toContain('Devoluciones de hoy (1)')
-    expect(text).toContain('11:00 · Pepe') // hora de Madrid
-    expect(text).toContain('Vencidas (1)')
-    expect(text).toContain('https://crm.test/comercial')
+    expect(title).toContain('2026-10-14')
+    expect(body).toContain('Devoluciones de hoy (1)')
+    expect(body).toContain('11:00 · Pepe')
+    expect(body).toContain('Vencidas (1)')
   })
 })
 
