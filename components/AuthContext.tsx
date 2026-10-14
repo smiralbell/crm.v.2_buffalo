@@ -39,7 +39,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (pathname === '/login') {
+    // Login y páginas públicas (formularios, portal del cliente): sin sesión CRM
+    if (pathname === '/login' || pathname.startsWith('/f/') || pathname.startsWith('/p/')) {
       setLoading(false)
       return
     }

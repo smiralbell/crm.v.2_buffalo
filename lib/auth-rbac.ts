@@ -71,6 +71,7 @@ export function canAccessPage(pathname: string, role: CrmRole): boolean {
   if (pathname === '/login') return true
   // Páginas públicas (formulario cliente) — no redirigir aunque haya sesión CRM
   if (pathname === '/f' || pathname.startsWith('/f/')) return true
+  if (pathname.startsWith('/p/')) return true // portal del cliente
   if (pathname === '/formulario' || pathname.startsWith('/formulario/')) return true
   if (role === 'admin') return true
   if (role === 'comercial') {

@@ -16,6 +16,7 @@ import {
   parseFirefliesWebhookPayload,
 } from '@/lib/integrations/fireflies/client'
 import { syncFirefliesMeetingById } from '@/lib/integrations/fireflies/sync'
+import { processWebChat } from '@/lib/inbox/web-chat'
 
 export type InboundProcessorResult = {
   status: 'processed' | 'ignored'
@@ -83,4 +84,5 @@ async function processFireflies(payload: unknown): Promise<InboundProcessorResul
 export const INBOUND_PROCESSORS: Record<string, InboundProcessor> = {
   calcom: processCalcom,
   fireflies: processFireflies,
+  web_chat: processWebChat,
 }

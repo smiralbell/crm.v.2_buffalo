@@ -21,6 +21,9 @@ function formsHostFromEnv(): string | null {
 function isAllowedOnFormsHost(pathname: string): boolean {
   if (pathname === '/f' || pathname.startsWith('/f/')) return true
   if (pathname.startsWith('/api/f/') || pathname === '/api/f') return true
+  // Portal del cliente (enlace mágico)
+  if (pathname.startsWith('/p/') || pathname.startsWith('/api/p/')) return true
+  if (pathname.startsWith('/brand/')) return true
   if (pathname.startsWith('/_next/')) return true
   if (pathname === '/favicon.ico') return true
   if (pathname.startsWith('/public-forms')) return true

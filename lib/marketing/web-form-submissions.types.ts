@@ -34,7 +34,45 @@ export interface WebFormSubmissionRow {
   notas: string | null
   responded_at: string | null
   created_at: string
+  /** UTM / gclid / fbclid del envío (campos del formulario o parámetros de page_url). */
+  attribution: WebAttribution | null
   payload: WebFormPayloadItem
+}
+
+export type WebAttribution = Partial<
+  Record<
+    'utm_source' | 'utm_medium' | 'utm_campaign' | 'utm_term' | 'utm_content' | 'gclid' | 'fbclid' | 'referrer' | 'landing_page',
+    string
+  >
+>
+
+const ATTRIBUTION_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid'] as const
+
+/**
+ * Atribución de un envío: primero los campos ocultos del formulario y, si faltan,
+ * los parámetros de la URL desde la que se envió (page_url).
+ */
+export function extractWebAttribution(cuerpo: WebFormCuerpo | null | undefined): WebAttribution | null {
+  const out: WebAttribution = {}
+  const c = cuerpo ?? {}
+  let params: URLSearchParams | null = null
+  const pageUrl = typeof c.page_url === 'string' ? c.page_url : ''
+  if (pageUrl) {
+    try {
+      params = new URL(pageUrl, 'https://placeholder.local').searchParams
+      out.landing_page = pageUrl.split('?')[0]
+    } catch {
+      params = null
+    }
+  }
+  for (const k of ATTRIBUTION_KEYS) {
+    const v = str(c[k]) ?? (params ? str(params.get(k)) : null)
+    if (v) out[k] = v.slice(0, 300)
+  }
+  const ref = str(c.referrer) ?? str(c.referer)
+  if (ref) out.referrer = ref.slice(0, 300)
+  const meaningful = ATTRIBUTION_KEYS.some((k) => out[k]) || Boolean(out.referrer)
+  return meaningful ? out : null
 }
 
 export const ETIQUETA_LABELS: Record<string, string> = {
@@ -122,6 +160,7 @@ export function parseWebFormSubmission(
         ? meta.responded_at.toISOString()
         : new Date(meta.responded_at).toISOString()
       : null,
+    attribution: extractWebAttribution(cuerpo),
     created_at:
       meta.created_at instanceof Date
         ? meta.created_at.toISOString()

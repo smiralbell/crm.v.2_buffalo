@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import EditLeadDialog from '@/components/EditLeadDialog'
 import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
+import LeadConversationsPanel from '@/components/crm/LeadConversationsPanel'
 import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
 import {
   getLeadDetailBundle,
@@ -571,6 +572,8 @@ export default function LeadDetail({ lead, bundle }: LeadDetailProps) {
         />
 
         <LeadMeetingsPanel leadId={lead.id} />
+
+        <LeadConversationsPanel leadId={lead.id} />
 
         {lead.valor == null && !hasConfig && (
           <div className="rounded-2xl border border-dashed border-gray-200 p-6 text-center">

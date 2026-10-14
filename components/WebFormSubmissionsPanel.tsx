@@ -221,6 +221,21 @@ export default function WebFormSubmissionsPanel({ period }: { period: string }) 
                         >
                           {pageLabel(row)}
                         </p>
+                        {row.attribution && (row.attribution.utm_source || row.attribution.gclid || row.attribution.fbclid) && (
+                          <p
+                            className="mt-0.5 truncate text-[11px] font-medium text-emerald-700"
+                            title={Object.entries(row.attribution)
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join('\n')}
+                          >
+                            {row.attribution.gclid
+                              ? 'Google Ads'
+                              : row.attribution.fbclid
+                                ? 'Meta Ads'
+                                : row.attribution.utm_source}
+                            {row.attribution.utm_campaign ? ` · ${row.attribution.utm_campaign}` : ''}
+                          </p>
+                        )}
                         {row.page_url && (
                           <a
                             href={row.page_url}

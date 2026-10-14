@@ -316,6 +316,18 @@ export async function syncCalBookingToWebPipeline(input: {
   return syncWebContactToPipeline(contactId, 'cal', notes)
 }
 
+/** Atribución de primer contacto: solo se guarda si el contacto aún no tenía. */
+async function saveFirstTouchAttribution(contactId: number, attribution: Partial<Record<string, string>>): Promise<void> {
+  try {
+    await query(
+      `UPDATE contacts SET attribution = $2::jsonb WHERE id = $1 AND attribution IS NULL`,
+      [contactId, JSON.stringify({ ...attribution, captured_at: new Date().toISOString() })]
+    )
+  } catch {
+    // columna aún sin crear (migración 0005 pendiente)
+  }
+}
+
 export async function syncWebFormToPipeline(submission: {
   id: number
   fullname: string | null
@@ -324,6 +336,7 @@ export async function syncWebFormToPipeline(submission: {
   phone: string | null
   service: string | null
   etiqueta: string
+  attribution?: Partial<Record<string, string>> | null
 }): Promise<string | null> {
   const { contactId } = await ensureWebContact({
     nombre: submission.fullname,
@@ -332,6 +345,7 @@ export async function syncWebFormToPipeline(submission: {
     empresa: submission.company,
     origen: 'formulario_web',
   })
+  if (submission.attribution) await saveFirstTouchAttribution(contactId, submission.attribution)
 
   const notes = [submission.company, submission.service, submission.etiqueta].filter(Boolean).join(' · ')
   return syncWebContactToPipeline(contactId, 'form', notes || `Formulario #${submission.id}`)

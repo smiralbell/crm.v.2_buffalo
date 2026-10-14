@@ -120,6 +120,16 @@ export default function PipelinesPage({ pipelines }: PipelinesPageProps) {
             <Plus className="h-5 w-5" />
             <span className="text-sm font-medium">Nuevo pipeline</span>
           </button>
+          <Link href="/pipelines/embudo">
+            <Card className="h-full cursor-pointer border-foreground/15 bg-foreground/[0.03] transition-all hover:shadow-sm">
+              <CardContent className="pt-6">
+                <h3 className="mb-3 text-base font-semibold text-foreground">Embudo único</h3>
+                <p className="text-sm text-muted-foreground">
+                  Todos los pipelines juntos, un cliente una sola vez en su etapa más avanzada. Filtra por canal.
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
           {pipelines.map((pipeline) => (
             <Link key={pipeline.id} href={`/pipelines/${pipeline.id}`}>
               <Card className="hover:shadow-sm hover:border-foreground/15 transition-all cursor-pointer h-full">

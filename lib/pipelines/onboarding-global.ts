@@ -44,7 +44,8 @@ function normalize(name: string): string {
     .trim()
 }
 
-function stageRank(name: string): number {
+/** Posición de una columna en el embudo canónico Buffalo (-1 si no encaja). */
+export function stageRank(name: string): number {
   const n = normalize(name)
   const idx = STAGE_ORDER.findIndex((s) => normalize(s) === n)
   if (idx >= 0) return idx

@@ -7,6 +7,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, AlertCircle, Check, Save, Search } from 'lucide-react'
 import TicketsWebhookGuideDownload from '@/components/tickets/TicketsWebhookGuideDownload'
+import PortalLinksCard from '@/components/tickets/PortalLinksCard'
+import { useAuth } from '@/components/AuthContext'
 
 interface ProjectConfig {
   id: string
@@ -27,6 +29,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 }
 
 export default function TicketsConfigPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [projects, setProjects] = useState<ProjectConfig[]>([])
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -218,6 +222,7 @@ export default function TicketsConfigPage() {
                       <><Save className="h-4 w-4 mr-2" /> Guardar</>
                     )}
                   </Button>
+                  {isAdmin && <PortalLinksCard projectId={selected.id} />}
                 </CardContent>
               </Card>
             )}
