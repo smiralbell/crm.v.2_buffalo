@@ -373,6 +373,7 @@ const g = globalThis as unknown as { __blogTimer?: NodeJS.Timeout }
 
 /** Arranca el programador la primera vez que se usa el módulo. En EasyPanel también se puede llamar a /api/blog/cron. */
 export function ensureRunner() {
-  if (g.__blogTimer || process.env.BLOG_SCHEDULER === '0') return
+  // Con el runner de tareas activo (lib/jobs/registry) el blog ya se programa allí
+  if (g.__blogTimer || process.env.BLOG_SCHEDULER === '0' || globalThis.__buffaloJobsRunnerActive) return
   g.__blogTimer = setInterval(() => void tick('programado').catch(() => undefined), 10 * 60 * 1000)
 }

@@ -1,3 +1,4 @@
+import { aiFetch } from '@/lib/ai/gateway'
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 
 type MultimodalPart =
@@ -36,7 +37,7 @@ export async function openRouterTranscribeAudio(
 ): Promise<string> {
   const model = process.env.DEMO_STT_MODEL || 'openai/whisper-large-v3'
 
-  const res = await fetch('https://openrouter.ai/api/v1/audio/transcriptions', {
+  const res = await aiFetch('https://openrouter.ai/api/v1/audio/transcriptions', {
     method: 'POST',
     headers: openRouterHeaders(),
     body: JSON.stringify({
@@ -80,7 +81,7 @@ export async function openRouterDescribeImage(
   let lastError = 'OpenRouter vision sin respuesta'
 
   for (const model of models) {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await aiFetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: openRouterHeaders(),
       body: JSON.stringify({
@@ -132,7 +133,7 @@ export async function openRouterChatCompletion(
   const model = options?.model || resolveModel('fast')
   const siteUrl = process.env.OPENROUTER_HTTP_REFERER || process.env.NEXT_PUBLIC_BASE_URL || ''
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await aiFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -187,7 +188,7 @@ export async function openRouterEmbedTexts(
 
   for (let i = 0; i < texts.length; i += BATCH) {
     const batch = texts.slice(i, i + BATCH)
-    const res = await fetch('https://openrouter.ai/api/v1/embeddings', {
+    const res = await aiFetch('https://openrouter.ai/api/v1/embeddings', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -295,7 +296,7 @@ export async function openRouterToolTurn(
   const model = options?.model || resolveModel('heavy')
   const siteUrl = process.env.OPENROUTER_HTTP_REFERER || process.env.NEXT_PUBLIC_BASE_URL || ''
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await aiFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,

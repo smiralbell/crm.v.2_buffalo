@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   assertIdent,
+  auditLog,
   quoteIdent,
   query,
   serializeRows,
@@ -59,10 +60,49 @@ ENG1 Marketing → ENG2 Onboarding → ENG3 Proyectos (es_buffalo) → ENG4 Rete
 - Responde en español.
 `
 
+/**
+ * Toda herramienta que escribe deja rastro en audit_log (qué tabla, qué datos, si fue bien).
+ * En las de doble confirmación solo se audita el paso que ejecuta.
+ */
+const AUDITED_TOOLS = new Set([
+  'crm_insert_row',
+  'crm_update_row',
+  'crm_execute_sql',
+  'crm_delete_rows',
+  'crm_execute_destructive',
+])
+
+type ToolHandler = (args: Record<string, unknown>, extra: unknown) => Promise<{ isError?: boolean }>
+
+function withAudit(server: { tool: (...args: any[]) => unknown }) {
+  return {
+    tool: (...a: any[]) => {
+      const name = a[0] as string
+      const handler = a[a.length - 1] as ToolHandler
+      if (!AUDITED_TOOLS.has(name) || typeof handler !== 'function') return server.tool(...a)
+      const audited: ToolHandler = async (args, extra) => {
+        const result = await handler(args, extra)
+        const executes = args.confirm_step === undefined || Number(args.confirm_step) === 2
+        if (executes) {
+          await auditLog({
+            action: name,
+            targetTable: typeof args.table === 'string' ? args.table : null,
+            ok: !result?.isError,
+            detail: { args },
+          })
+        }
+        return result
+      }
+      return server.tool(...a.slice(0, -1), audited)
+    },
+  }
+}
+
 /** Registro de todas las tools en el McpServer. */
-export function registerTools(server: {
+export function registerTools(mcpServer: {
   tool: (...args: any[]) => unknown
 }) {
+  const server = withAudit(mcpServer)
   server.tool(
     'crm_help',
     'Documentación del MCP y del CRM Buffalo: cómo usar las tools, doble confirmación y tablas clave.',

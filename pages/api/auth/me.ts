@@ -3,18 +3,11 @@ import { requireAuthAPI } from '@/lib/auth'
 import { findCrmUserById } from '@/lib/crm-users'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Arranca el sync bancario diario una vez (idempotente), sin instrumentation.
-  void import('@/lib/enable-banking/daily-sync-scheduler')
-    .then((m) => m.startBankSyncScheduler())
-    .catch(() => {})
-  // Correos Gmail → historial CRM (idempotente).
-  void import('@/lib/integrations/google/gmail-sync-scheduler')
-    .then((m) => m.startGmailSyncScheduler())
-    .catch(() => {})
-  // Motor del blog: revisa cada 10 min si toca escribir o publicar (idempotente).
-  void import('@/lib/blog/engine')
-    .then((m) => m.ensureRunner())
-    .catch(() => {})
+  // Tareas automáticas (banco, Gmail, blog, reintentos, avisos…) y migraciones pendientes.
+  // Idempotente; con worker desplegado se puede desactivar aquí con WEB_RUN_JOBS=0.
+  void import('@/lib/jobs/registry')
+    .then((m) => m.startJobsRunner('web'))
+    .catch((e) => console.warn('[jobs] no arrancó en web:', e instanceof Error ? e.message : e))
 
   try {
     let user = await requireAuthAPI(req, res)

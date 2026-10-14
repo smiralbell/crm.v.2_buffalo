@@ -1,5 +1,4 @@
-import { createHash } from 'crypto'
-import { v4 as uuidv4 } from 'uuid'
+import { createHash, randomUUID } from 'crypto'
 import { query } from '@/lib/db'
 import {
   extractOwnAccountIban,
@@ -54,7 +53,7 @@ async function getOrCreateEnableBankingAccount(
     return existing.rows[0].id
   }
 
-  const id = uuidv4()
+  const id = randomUUID()
   const label = realIban
     ? `CaixaBank ···${realIban.replace(/\s/g, '').slice(-4)}`
     : 'Cuenta Enable Banking'
@@ -273,7 +272,7 @@ async function syncOneAccount(
 
   const periodStart = sortedDates[0]
   const periodEnd = sortedDates[sortedDates.length - 1]
-  const statementId = uuidv4()
+  const statementId = randomUUID()
   const fileHash = createHash('sha256')
     .update(
       `${accountUid}:${periodStart}:${periodEnd}:${transactions.length}:v4:${normalizeIban(ownIban) || ''}`
@@ -359,7 +358,7 @@ async function syncOneAccount(
          balance = COALESCE(EXCLUDED.balance, bank_transactions.balance),
          entry_reference = COALESCE(EXCLUDED.entry_reference, bank_transactions.entry_reference)`,
       [
-        uuidv4(),
+        randomUUID(),
         accountId,
         statementId,
         tx.date,

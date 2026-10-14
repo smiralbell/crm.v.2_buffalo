@@ -652,7 +652,36 @@ export const CRM_ASSISTANT_TOOLS = [
   },
 ]
 
+/** Herramientas del asistente que modifican datos o envían algo: quedan en audit_log. */
+const AUDITED_ASSISTANT_TOOLS = new Set([
+  'checklist_add',
+  'checklist_complete',
+  'append_lead_note',
+  'update_lead_estado',
+  'create_contact_and_lead',
+  'ticket_reply',
+  'ticket_set_status',
+  'create_project_task',
+  'update_proyecto_status',
+  'send_email',
+  'create_calendar_meeting',
+])
+
 export async function executeCrmAssistantTool(
+  name: string,
+  args: Record<string, unknown>,
+  ctx?: AssistantRequestContext
+): Promise<unknown> {
+  const result = await runCrmAssistantTool(name, args, ctx)
+  if (AUDITED_ASSISTANT_TOOLS.has(name)) {
+    const failed = Boolean(result && typeof result === 'object' && 'error' in (result as Record<string, unknown>))
+    const { auditLog } = await import('@/lib/audit/log')
+    await auditLog({ actor: 'asistente', action: name, ok: !failed, detail: { args, result } })
+  }
+  return result
+}
+
+async function runCrmAssistantTool(
   name: string,
   args: Record<string, unknown>,
   ctx?: AssistantRequestContext

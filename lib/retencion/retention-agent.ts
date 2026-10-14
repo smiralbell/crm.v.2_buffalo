@@ -23,6 +23,7 @@ import {
   toolSeedKnowledgeFromCrm,
   toolUpdateAuditChecklist,
 } from './knowledge'
+import { aiFetch } from '@/lib/ai/gateway'
 
 const MODEL =
   process.env.RETENCION_OPENROUTER_MODEL ||
@@ -135,7 +136,7 @@ async function chatWithTools(
     body.tool_choice = toolChoice
   }
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await aiFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: openRouterHeaders(),
     body: JSON.stringify(body),
@@ -565,7 +566,7 @@ Devuelve SOLO JSON válido:
 }`
 
   const callModel = async (model: string): Promise<string> => {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await aiFetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: openRouterHeaders(),
       body: JSON.stringify({

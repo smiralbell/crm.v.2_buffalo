@@ -19,6 +19,7 @@ import { derivePeriods, runMetrics } from '@/lib/retencion/metrics/run-metrics'
 import { formatMetrics } from '@/lib/retencion/metrics/format-metrics'
 import { parseJsonFromModelOutput } from '@/lib/openrouter'
 import { BRM_SYNTAX_BLOCK } from '@/lib/retencion/report-prompt'
+import { aiFetch } from '@/lib/ai/gateway'
 
 const MODEL =
   process.env.RETENCION_OPENROUTER_MODEL ||
@@ -106,7 +107,7 @@ async function chat(
     body.tools = DB_TOOLS
     body.tool_choice = 'auto'
   }
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await aiFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: openRouterHeaders(),
     body: JSON.stringify(body),

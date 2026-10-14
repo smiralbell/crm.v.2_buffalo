@@ -1,6 +1,7 @@
 import { openRouterChatCompletion } from '@/lib/openrouter'
 import { demoUsesRagTool, searchDemoKnowledge } from '@/lib/demos/kb-rag'
 import type { DemoMessage } from './types'
+import { aiFetch } from '@/lib/ai/gateway'
 
 /** Modelo para demos — configurable en EasyPanel con DEMO_OPENROUTER_MODEL */
 const DEMO_MODEL_PRIMARY =
@@ -79,7 +80,7 @@ async function chatWithKnowledgeTool(
     body.tool_choice = toolChoice
   }
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await aiFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: openRouterHeaders(),
     body: JSON.stringify(body),

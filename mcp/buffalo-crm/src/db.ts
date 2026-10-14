@@ -78,3 +78,22 @@ export function assertIdent(name: string, label = 'identificador'): string {
 export function quoteIdent(name: string): string {
   return `"${assertIdent(name).replace(/"/g, '')}"`
 }
+
+/** Registro de auditoría (tabla audit_log, migración 0005). Nunca lanza. */
+export async function auditLog(entry: {
+  action: string
+  targetTable?: string | null
+  ok: boolean
+  detail?: unknown
+}): Promise<void> {
+  try {
+    let detail = JSON.stringify(entry.detail ?? null)
+    if (detail.length > 4000) detail = JSON.stringify({ truncated: true, preview: detail.slice(0, 4000) })
+    await query(
+      'INSERT INTO audit_log (actor, action, target_table, ok, detail) VALUES ($1, $2, $3, $4, $5::jsonb)',
+      ['mcp', entry.action, entry.targetTable ?? null, entry.ok, detail]
+    )
+  } catch {
+    // tabla aún sin crear: la herramienta sigue funcionando
+  }
+}

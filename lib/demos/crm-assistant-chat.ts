@@ -11,6 +11,7 @@ import {
   type AssistantRequestContext,
 } from './assistant-attachments'
 import type { CrmDomain } from './crm-assistant-tools'
+import { aiFetch } from '@/lib/ai/gateway'
 
 const DEMO_MODEL_PRIMARY =
   process.env.DEMO_OPENROUTER_MODEL ||
@@ -71,7 +72,7 @@ async function chatWithTools(
     body.tool_choice = toolChoice
   }
 
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const res = await aiFetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: openRouterHeaders(),
     body: JSON.stringify(body),

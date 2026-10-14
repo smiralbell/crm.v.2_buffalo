@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { phoneKey } from '@/lib/identity/normalize'
 
 export interface OtherCampaignLeadMatch {
   prospect_id: number
@@ -8,13 +9,9 @@ export interface OtherCampaignLeadMatch {
   match_type: 'dedupe_key' | 'phone'
 }
 
+/** Clave de teléfono para duplicados: normalizador común (lib/identity). */
 export function normalizePhoneDigits(telefono: string | null | undefined): string | null {
-  if (!telefono?.trim()) return null
-  let digits = telefono.replace(/\D/g, '')
-  if (digits.startsWith('00')) digits = digits.slice(2)
-  if (digits.length === 9 && /^[6789]/.test(digits)) digits = `34${digits}`
-  if (digits.length < 9) return null
-  return digits
+  return phoneKey(telefono)
 }
 
 type LeadRef = { dedupeKey: string; telefono: string | null; nombre: string }

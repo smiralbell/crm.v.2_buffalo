@@ -12,6 +12,7 @@
  */
 
 import { AsyncLocalStorage } from 'async_hooks'
+import { aiFetch } from '@/lib/ai/gateway'
 
 export interface AiResult<T> {
   data: T
@@ -56,7 +57,7 @@ function charge(usd: number) {
 async function jobFetch(url: string, init: RequestInit): Promise<Response> {
   const j = job()
   try {
-    return await fetch(url, { ...init, signal: j?.signal })
+    return await aiFetch(url, { ...init, signal: j?.signal }, { module: 'blog' })
   } catch (e) {
     if (j?.signal.aborted) throw new CancelledError()
     throw e

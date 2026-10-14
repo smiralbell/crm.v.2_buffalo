@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { TICKETS_WEBHOOK_TOKEN } from '@/lib/tickets/config'
 import { ingestTicketPayload } from '@/lib/tickets/ingest'
+import { alertTeamOfNewTicket } from '@/lib/tickets/team-alerts'
 import {
   deleteTicketById,
   findTicketForDelete,
@@ -88,6 +89,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const result = await insertTicket(project.id, ticket)
+
+    if (!result.duplicate) {
+      void alertTeamOfNewTicket({
+        ticketId: result.id,
+        projectId: project.id,
+        projectName: project.name,
+        title: ticket.title,
+        priority: ticket.priority,
+      })
+    }
 
     return res.status(result.duplicate ? 200 : 201).json({
       ok: true,

@@ -25,7 +25,9 @@ import {
   Sparkles,
   HelpCircle,
   Video,
+  Activity,
 } from 'lucide-react'
+import NotificationBell from '@/components/NotificationBell'
 import { getLastCampaignId, lastCampaignCallHref } from '@/lib/coldcall/last-campaign'
 import ComercialSidebarBrand from '@/components/coldcall/ComercialSidebarBrand'
 import { Button } from '@/components/ui/button'
@@ -555,6 +557,24 @@ export default function Sidebar({
       </div>
 
       <div className="border-t border-[hsl(var(--sidebar-border))] p-2 shrink-0 space-y-0.5">
+        {user && (
+          <NotificationBell
+            showLabel={showLabels}
+            onNavigate={onNavigate}
+            className={cn(itemClass(false), 'w-full')}
+          />
+        )}
+        {isAdmin && (
+          <Link
+            href="/sistema"
+            title="Salud del sistema"
+            onClick={() => onNavigate?.()}
+            className={itemClass(router.pathname.startsWith('/sistema'))}
+          >
+            <Activity className="h-4 w-4 shrink-0" />
+            {showLabels && <span className="flex-1 truncate">Sistema</span>}
+          </Link>
+        )}
         {isAdmin && (
           <Link
             href="/usuarios"

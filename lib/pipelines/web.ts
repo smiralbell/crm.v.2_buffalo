@@ -7,6 +7,7 @@ import { listWebFormSubmissions } from '@/lib/marketing/web-form-submissions'
 import { listCalBookings } from '@/lib/marketing/cal-bookings'
 import { BUFFALO_STAGE_COLORS, defaultStageColor } from '@/lib/pipelines/defaults'
 import { isReunionStageName, syncContactToGlobalReunion } from '@/lib/pipelines/global-funnel'
+import { findContactByIdentity } from '@/lib/identity/resolve'
 
 export const WEB_PIPELINE_NAME = 'WEB'
 export const WEB_TAG = 'web'
@@ -170,15 +171,9 @@ export async function ensureWebContact(input: {
   const telefono = input.telefono?.trim() || null
   const nombre = input.nombre?.trim() || email || telefono || 'Lead web'
 
-  let contact = null
-  if (email) {
-    contact = await prisma.contact.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } },
-    })
-  }
-  if (!contact && telefono) {
-    contact = await prisma.contact.findFirst({ where: { telefono } })
-  }
+  // Resolver de identidad común: email o teléfono normalizado (últimos 9 dígitos)
+  const match = await findContactByIdentity({ email, phone: telefono })
+  let contact = match ? await prisma.contact.findUnique({ where: { id: match.contactId } }) : null
 
   if (!contact) {
     contact = await prisma.contact.create({
