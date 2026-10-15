@@ -3,9 +3,9 @@ import { cn } from '@/lib/utils'
 
 export type OnboardingSectionTab = 'projects' | 'configure' | 'demos'
 
-const TABS: { id: OnboardingSectionTab; label: string; href: string }[] = [
+const TABS: { id: OnboardingSectionTab; label: string; short?: string; href: string }[] = [
   { id: 'projects', label: 'Proyectos', href: '/onboarding?tab=projects' },
-  { id: 'configure', label: 'Configurar nuevo proyecto', href: '/onboarding?tab=configure' },
+  { id: 'configure', label: 'Configurar nuevo proyecto', short: 'Nuevo', href: '/onboarding?tab=configure' },
   { id: 'demos', label: 'Demos', href: '/demos' },
 ]
 
@@ -17,7 +17,7 @@ export default function OnboardingSectionTabs({
   projectsCount?: number
 }) {
   return (
-    <div className="flex items-center justify-center gap-1 border-b border-gray-200">
+    <div className="flex items-center gap-1 border-b border-gray-200 sm:justify-center">
       {TABS.map((tab) => {
         const isActive = active === tab.id
         return (
@@ -25,13 +25,20 @@ export default function OnboardingSectionTabs({
             key={tab.id}
             href={tab.href}
             className={cn(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-lg',
+              'flex flex-1 items-center justify-center gap-2 whitespace-nowrap px-2 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-lg sm:flex-initial sm:px-4',
               isActive
                 ? 'border-gray-900 text-gray-900'
                 : 'border-transparent text-gray-400 hover:text-gray-700 hover:border-gray-300'
             )}
           >
-            {tab.label}
+            {tab.short ? (
+              <>
+                <span className="sm:hidden">{tab.short}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
+              </>
+            ) : (
+              tab.label
+            )}
             {tab.id === 'projects' && projectsCount != null && projectsCount > 0 && (
               <span
                 className={cn(
