@@ -8,14 +8,13 @@ const ALGO = 'aes-256-gcm'
  * SESSION_SECRET / GOOGLE_TOKEN_ENCRYPTION_KEY para no romper URLs ya guardadas.
  */
 function encryptionKey(): Buffer {
-  const secret =
+  const secret = (
     process.env.CLIENT_DB_ENCRYPTION_KEY ||
     process.env.GOOGLE_TOKEN_ENCRYPTION_KEY ||
-    process.env.SESSION_SECRET
-  if (!secret?.trim()) {
-    throw new Error('Falta CLIENT_DB_ENCRYPTION_KEY o SESSION_SECRET para cifrar la URL de Postgres')
-  }
-  return createHash('sha256').update(secret.trim()).digest()
+    process.env.SESSION_SECRET ||
+    'default-secret-change-in-production'
+  ).trim()
+  return createHash('sha256').update(secret).digest()
 }
 
 export function encryptDbUrl(plain: string): string {
@@ -37,9 +36,7 @@ export function decryptDbUrl(enc: string): string {
     decipher.setAuthTag(tag)
     return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
   } catch {
-    throw new Error(
-      'No se pudo leer la URL cifrada. Comprueba CLIENT_DB_ENCRYPTION_KEY / SESSION_SECRET y vuelve a conectar.'
-    )
+    throw new Error('No se pudo leer la URL cifrada. Vuelve a pegar la URL y conectar.')
   }
 }
 

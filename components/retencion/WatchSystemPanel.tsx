@@ -408,7 +408,7 @@ export default function WatchSystemPanel({
                       }
                     />
                     <p className="mt-1.5 text-xs text-gray-400">
-                      EasyPanel: pestaña Credentials → URL <b>externa</b> (IP del servidor + puerto de Expose, suele llevar ?sslmode=disable). No uses la URL interna ni el dominio del panel.
+                      URL <b>externa</b>. Si ese Postgres tiene varias bases, indica cuál en la URL: …:5432/<b>preico_v2</b>?sslmode=disable. Eso es el nombre de la base, no de una tabla.
                     </p>
                   </div>
 
