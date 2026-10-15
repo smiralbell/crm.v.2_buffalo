@@ -57,7 +57,7 @@ export async function alertNewTicket(input: {
 }): Promise<void> {
   const msg = formatNewTicketAlert(input)
   try {
-    await sendOpsAlert(msg)
+    await sendOpsAlert({ ...msg, url: `/tickets/${input.ticketId}` })
   } catch (e) {
     console.warn('[tickets] aviso', e instanceof Error ? e.message : e)
   }

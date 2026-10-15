@@ -241,7 +241,7 @@ export async function runDueOpsReminders(): Promise<{
   })
   const digest = buildDigest(incidents, tasks)
   if (!digest) return { incidents: 0, checklist: 0, sent: false }
-  await sendOpsAlert(digest)
+  await sendOpsAlert({ ...digest, url: incidents.length ? '/alertas' : '/checklist' })
   return { incidents: incidents.length, checklist: tasks.length, sent: true }
 }
 
