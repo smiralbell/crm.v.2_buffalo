@@ -1,4 +1,7 @@
 import { lookup } from 'node:dns/promises'
+import { readFileSync } from 'node:fs'
+import { connect as tcpConnect } from 'node:net'
+import { networkInterfaces } from 'node:os'
 import { Client } from 'pg'
 import { maskDbUrl } from '@/lib/retencion/db-url-crypto'
 
@@ -65,13 +68,14 @@ export function pgSslConfig(connectionString: string): SslOption {
   return undefined
 }
 
-function sslAttempts(parsed: ParsedPgUrl): Array<false | { rejectUnauthorized: false; servername: string }> {
+type SslAttempt = undefined | false | { rejectUnauthorized: false; servername: string }
+
+function sslAttempts(parsed: ParsedPgUrl): SslAttempt[] {
   if (parsed.sslmode === 'require') {
     return [{ rejectUnauthorized: false, servername: parsed.host }]
   }
-  // sslmode=disable (EasyPanel) o sin param: primero sin TLS.
-  if (parsed.sslmode === 'disable') return [false]
-  return [false, { rejectUnauthorized: false, servername: parsed.host }]
+  // Igual que Prisma/MCP: ssl undefined + sslmode=disable en la URL.
+  return [undefined]
 }
 
 async function resolveIpv4(host: string): Promise<string> {
@@ -84,39 +88,93 @@ async function resolveIpv4(host: string): Promise<string> {
   }
 }
 
+/** Little-endian hex de /proc/net/route → IPv4. */
+export function hexGatewayToIpv4(hex: string): string {
+  const h = hex.trim()
+  if (!/^[0-9a-fA-F]{8}$/.test(h) || h === '00000000') return ''
+  const n = parseInt(h, 16)
+  return `${n & 255}.${(n >> 8) & 255}.${(n >> 16) & 255}.${(n >> 24) & 255}`
+}
+
+/** Gateways reales del contenedor (EasyPanel) + localhost. */
+export function dockerGatewayHosts(): string[] {
+  const hosts: string[] = []
+  const add = (h: string) => {
+    if (h && hosts.indexOf(h) === -1) hosts.push(h)
+  }
+  add('127.0.0.1')
+  add('172.17.0.1')
+  add('172.18.0.1')
+  add('172.19.0.1')
+  add('host.docker.internal')
+  try {
+    const text = readFileSync('/proc/net/route', 'utf8')
+    const lines = text.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const cols = lines[i].split('\t')
+      if (cols.length >= 3) add(hexGatewayToIpv4(cols[2] || ''))
+    }
+  } catch {
+    /* Windows / sin /proc */
+  }
+  const ifs = networkInterfaces()
+  const names = Object.keys(ifs)
+  for (let i = 0; i < names.length; i++) {
+    const addrs = ifs[names[i]] || []
+    for (let j = 0; j < addrs.length; j++) {
+      const a = addrs[j]
+      const v4 = a.family === 'IPv4' || (a.family as unknown) === 4
+      if (!v4 || a.internal) continue
+      const parts = a.address.split('.')
+      if (parts.length === 4) add(`${parts[0]}.${parts[1]}.${parts[2]}.1`)
+    }
+  }
+  return hosts
+}
+
 /**
  * EasyPanel pone panel.dominio como Host externo. Eso es válido.
- * Desde fuera del VPS entra por la IP; desde un contenedor en el mismo VPS
- * hay que entrar por el gateway de Docker. Se prueban a la vez.
+ * Desde fuera del VPS entra por la IP; en el mismo VPS, por 127.0.0.1 / gateway Docker.
  */
 export function connectHostCandidates(hostname: string, resolved: string): string[] {
   const hosts: string[] = []
   const add = (h: string) => {
     if (h && hosts.indexOf(h) === -1) hosts.push(h)
   }
+  const extra = dockerGatewayHosts()
+  for (let i = 0; i < extra.length; i++) add(extra[i])
   add(resolved)
   add(hostname)
-  add('172.17.0.1')
-  add('172.18.0.1')
-  add('host.docker.internal')
   return hosts
 }
 
-function tryOpenOnHost(
-  host: string,
-  parsed: ParsedPgUrl,
-  ssl: false | { rejectUnauthorized: false; servername: string },
-  timeoutMs: number
-): Promise<Client> {
-  const client = new Client({
-    host,
-    port: parsed.port,
-    user: parsed.user,
-    password: parsed.password,
-    database: parsed.database,
-    ssl,
-    connectionTimeoutMillis: timeoutMs,
+function tcpOpen(host: string, port: number, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (ok: boolean) => {
+      if (settled) return
+      settled = true
+      resolve(ok)
+    }
+    const sock = tcpConnect({ host, port, family: 4 })
+    const t = setTimeout(() => {
+      sock.destroy()
+      finish(false)
+    }, ms)
+    sock.once('connect', () => {
+      clearTimeout(t)
+      sock.destroy()
+      finish(true)
+    })
+    sock.once('error', () => {
+      clearTimeout(t)
+      sock.destroy()
+      finish(false)
+    })
   })
+}
+
+function bindClient(client: Client): Promise<Client> {
   return client.connect().then(
     () => client,
     (err: unknown) => {
@@ -126,23 +184,46 @@ function tryOpenOnHost(
   )
 }
 
-/** Primera conexión que responda; el resto se cierra. */
-function firstOpenClient(
-  hosts: string[],
+function tryOpenOnHost(
+  host: string,
   parsed: ParsedPgUrl,
-  ssl: false | { rejectUnauthorized: false; servername: string },
+  ssl: SslAttempt,
   timeoutMs: number
 ): Promise<Client> {
+  return bindClient(
+    new Client({
+      host,
+      port: parsed.port,
+      user: parsed.user,
+      password: parsed.password,
+      database: parsed.database,
+      ssl,
+      connectionTimeoutMillis: timeoutMs,
+    })
+  )
+}
+
+function tryOpenConnectionString(cs: string, ssl: SslAttempt, timeoutMs: number): Promise<Client> {
+  return bindClient(
+    new Client({
+      connectionString: normalizePgUrl(cs),
+      ssl,
+      connectionTimeoutMillis: timeoutMs,
+    })
+  )
+}
+
+function raceClients(start: Array<() => Promise<Client>>): Promise<Client> {
   return new Promise((resolve, reject) => {
-    let remaining = hosts.length
+    let remaining = start.length
     let done = false
     let last: unknown
     if (!remaining) {
       reject(new Error('No se pudo conectar'))
       return
     }
-    for (let i = 0; i < hosts.length; i++) {
-      tryOpenOnHost(hosts[i], parsed, ssl, timeoutMs).then(
+    for (let i = 0; i < start.length; i++) {
+      start[i]().then(
         (client) => {
           if (done) {
             client.end().catch(() => undefined)
@@ -165,13 +246,27 @@ function firstOpenClient(
 
 async function openPgClient(
   parsed: ParsedPgUrl,
-  ssl: false | { rejectUnauthorized: false; servername: string },
-  timeoutMs: number
+  ssl: SslAttempt,
+  timeoutMs: number,
+  connectionString?: string
 ): Promise<Client> {
   const resolved = await resolveIpv4(parsed.host)
   const hosts = connectHostCandidates(parsed.host, resolved)
-  const perHost = Math.min(Math.max(timeoutMs, 4000), 10000)
-  return firstOpenClient(hosts, parsed, ssl, perHost)
+  const perHost = Math.min(Math.max(timeoutMs, 5000), 15000)
+  const starters: Array<() => Promise<Client>> = []
+  if (connectionString) {
+    starters.push(() => tryOpenConnectionString(connectionString, ssl, perHost))
+  }
+  for (let i = 0; i < hosts.length; i++) {
+    const host = hosts[i]
+    starters.push(() =>
+      tcpOpen(host, parsed.port, 2500).then((ok) => {
+        if (!ok) return Promise.reject(new Error('timeout expired'))
+        return tryOpenOnHost(host, parsed, ssl, perHost)
+      })
+    )
+  }
+  return raceClients(starters)
 }
 
 export function explainPgConnectError(e: unknown, connectionString?: string): string {
@@ -236,7 +331,7 @@ async function withReadOnlyClient<T>(
   for (let i = 0; i < attempts.length; i++) {
     let client: Client | null = null
     try {
-      client = await openPgClient(parsed, attempts[i], connectMs)
+      client = await openPgClient(parsed, attempts[i], connectMs, connectionString)
       try {
         await client.query(`SET statement_timeout = ${timeoutMs}`)
       } catch {
@@ -316,7 +411,7 @@ export async function probeConnection(connectionString: string): Promise<{
   for (let i = 0; i < attempts.length; i++) {
     let client: Client | null = null
     try {
-      client = await openPgClient(parsed, attempts[i], 10000)
+      client = await openPgClient(parsed, attempts[i], 15000, connectionString)
       await client.query('SELECT 1 AS ok')
       try {
         await client.end()

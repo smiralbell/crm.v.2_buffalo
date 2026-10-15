@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   connectHostCandidates,
+  dockerGatewayHosts,
   explainPgConnectError,
+  hexGatewayToIpv4,
   parsePgUrl,
   pgSslConfig,
   redactDbError,
@@ -43,12 +45,20 @@ describe('pgSslConfig', () => {
   })
 })
 
+describe('hexGatewayToIpv4', () => {
+  it('lee el gateway little-endian de Linux', () => {
+    expect(hexGatewayToIpv4('010011AC')).toBe('172.17.0.1')
+  })
+})
+
 describe('connectHostCandidates', () => {
-  it('usa la IP pública y el gateway de docker a la vez', () => {
+  it('usa localhost, gateway docker e IP pública a la vez', () => {
     const hosts = connectHostCandidates('panel.example.com', '203.0.113.10')
-    expect(hosts[0]).toBe('203.0.113.10')
-    expect(hosts).toContain('panel.example.com')
+    expect(hosts).toContain('127.0.0.1')
     expect(hosts).toContain('172.17.0.1')
+    expect(hosts).toContain('203.0.113.10')
+    expect(hosts).toContain('panel.example.com')
+    expect(dockerGatewayHosts()).toContain('127.0.0.1')
   })
 })
 
