@@ -1,5 +1,8 @@
 import { query } from '@/lib/db'
-import { loadWatchMemory } from '@/lib/retencion/watch-db-memory'
+import {
+  loadWatchMemory,
+  type SchemaTable,
+} from '@/lib/retencion/watch-db-memory'
 import {
   getOrCreateAgentConfig,
   toPublicConfig,
@@ -7,20 +10,55 @@ import {
   type RetencionAgentConfigRow,
 } from '@/lib/retencion/agent-config-store'
 
-export const DEFAULT_WATCH_PROMPT = `Eres el agente de vigilancia de un sistema de un cliente Buffalo.
-En cada pasada recibes: (1) tu resumen acumulado de pasadas anteriores y (2) solo los datos NUEVOS de la base desde la última ingestión.
-No vuelvas a extraer el histórico completo. No hagas SELECT * de tablas enteras: query_db es solo para una consulta puntual.
-Escribe un informe claro en markdown: qué ha cambiado, anomalías, riesgos y si hace falta actuar.
-Al final, deja un apartado breve «Memoria» con el estado actual del sistema para la próxima pasada.
-No inventes tablas ni datos. Si falta la URL de la base de datos, dilo.`
+export const DEFAULT_WATCH_PROMPT = `Eres un analista de sistemas de Buffalo. Recibes un paquete ya limpio y estructurado:
+(1) filas NUEVAS de la base del cliente desde la última pasada,
+(2) incidencias nuevas desde el último cron,
+(3) extractos de los últimos informes de este mismo flujo.
+
+No inventes tablas ni datos. No pidas el histórico completo. Escribe un informe en markdown: qué ha cambiado, anomalías, riesgos y si hace falta actuar. Sé concreto y breve.`
 
 export { formatWatchInterval, WATCH_MAX_MINUTES } from '@/lib/retencion/watch-interval'
 
-export type WatchNodeId = 'agent' | 'db' | 'knowledge' | 'prompt' | 'incidents'
+export type WatchNodeId = 'cron' | 'db' | 'incidents' | 'reports' | 'clean' | 'ai'
+
+export const WATCH_NODE_IDS: WatchNodeId[] = ['cron', 'db', 'incidents', 'reports', 'clean', 'ai']
 
 export type WatchGraph = {
   used: WatchNodeId[]
   at: string
+  db_new_rows?: number
+  incidents_new?: number
+}
+
+export type WatchRunPublic = {
+  id: string
+  ok: boolean
+  created_at: string
+  report: string | null
+  error: string | null
+}
+
+export type WatchPack = {
+  generated_at: string
+  db: {
+    connected: boolean
+    last_delta_at: string | null
+    tables: {
+      name: string
+      new_rows: number
+      truncated: boolean
+      note?: string
+      sample: Record<string, unknown>[]
+    }[]
+  }
+  incidents: {
+    id: string
+    error: string
+    occurrences: number
+    last_seen_at: string
+    status: string
+  }[]
+  previous_reports: { at: string; ok: boolean; excerpt: string }[]
 }
 
 export type WatchPublic = {
@@ -28,6 +66,7 @@ export type WatchPublic = {
   last_at: string | null
   last_report: string | null
   last_graph: WatchGraph | null
+  last_pack: WatchPack | null
   watch_prompt: string
   agent_prompt: string
   knowledge: string
@@ -36,6 +75,10 @@ export type WatchPublic = {
   db_name: string | null
   db_summary: string | null
   db_last_delta_at: string | null
+  schema: SchemaTable[]
+  excluded_tables: string[]
+  excluded_columns: string[]
+  runs: WatchRunPublic[]
 }
 
 type WatchCols = {
@@ -44,6 +87,9 @@ type WatchCols = {
   watch_last_report: string | null
   watch_last_graph: WatchGraph | null
   watch_prompt: string | null
+  watch_last_pack: WatchPack | null
+  excluded_tables: string[]
+  excluded_columns: string[]
 }
 
 let watchColsEnsured = false
@@ -56,7 +102,10 @@ export async function ensureWatchColumns(): Promise<void> {
       ADD COLUMN IF NOT EXISTS watch_last_at TIMESTAMPTZ,
       ADD COLUMN IF NOT EXISTS watch_last_report TEXT,
       ADD COLUMN IF NOT EXISTS watch_last_graph JSONB,
-      ADD COLUMN IF NOT EXISTS watch_prompt TEXT
+      ADD COLUMN IF NOT EXISTS watch_prompt TEXT,
+      ADD COLUMN IF NOT EXISTS watch_excluded_tables JSONB,
+      ADD COLUMN IF NOT EXISTS watch_excluded_columns JSONB,
+      ADD COLUMN IF NOT EXISTS watch_last_pack JSONB
   `)
   await query(`
     CREATE TABLE IF NOT EXISTS retencion_watch_runs (
@@ -69,24 +118,73 @@ export async function ensureWatchColumns(): Promise<void> {
       created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `)
+  await query(`
+    CREATE INDEX IF NOT EXISTS retencion_watch_runs_proyecto
+      ON retencion_watch_runs (proyecto_id, created_at DESC)
+  `)
   watchColsEnsured = true
+}
+
+function asStringList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (let i = 0; i < raw.length; i++) {
+    if (typeof raw[i] === 'string' && raw[i]) out.push(raw[i] as string)
+  }
+  return out
+}
+
+function isWatchNode(x: unknown): x is WatchNodeId {
+  return (
+    x === 'cron' ||
+    x === 'db' ||
+    x === 'incidents' ||
+    x === 'reports' ||
+    x === 'clean' ||
+    x === 'ai'
+  )
 }
 
 function parseGraph(raw: unknown): WatchGraph | null {
   if (!raw || typeof raw !== 'object') return null
   const o = raw as Record<string, unknown>
-  const used = Array.isArray(o.used)
-    ? o.used.filter((x): x is WatchNodeId =>
-        x === 'agent' || x === 'db' || x === 'knowledge' || x === 'prompt' || x === 'incidents'
-      )
-    : []
-  return { used, at: typeof o.at === 'string' ? o.at : new Date().toISOString() }
+  const used: WatchNodeId[] = []
+  if (Array.isArray(o.used)) {
+    for (let i = 0; i < o.used.length; i++) {
+      const x = o.used[i]
+      if (isWatchNode(x)) used.push(x)
+      else if (x === 'agent' || x === 'prompt') used.push('ai')
+    }
+  }
+  return {
+    used,
+    at: typeof o.at === 'string' ? o.at : new Date().toISOString(),
+    db_new_rows: typeof o.db_new_rows === 'number' ? o.db_new_rows : undefined,
+    incidents_new: typeof o.incidents_new === 'number' ? o.incidents_new : undefined,
+  }
+}
+
+function parsePack(raw: unknown): WatchPack | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as WatchPack
+  if (typeof o.generated_at !== 'string' || !o.db || !Array.isArray(o.incidents)) return null
+  return o
 }
 
 async function selectWatchCols(proyectoId: string): Promise<WatchCols> {
   await ensureWatchColumns()
-  const { rows } = await query<WatchCols>(
-    `SELECT watch_every_minutes, watch_last_at, watch_last_report, watch_last_graph, watch_prompt
+  const { rows } = await query<{
+    watch_every_minutes: number | null
+    watch_last_at: Date | null
+    watch_last_report: string | null
+    watch_last_graph: unknown
+    watch_prompt: string | null
+    watch_last_pack: unknown
+    watch_excluded_tables: unknown
+    watch_excluded_columns: unknown
+  }>(
+    `SELECT watch_every_minutes, watch_last_at, watch_last_report, watch_last_graph, watch_prompt,
+            watch_last_pack, watch_excluded_tables, watch_excluded_columns
        FROM retencion_agent_configs
       WHERE proyecto_id = $1::uuid
       LIMIT 1`,
@@ -99,13 +197,46 @@ async function selectWatchCols(proyectoId: string): Promise<WatchCols> {
     watch_last_report: row?.watch_last_report ?? null,
     watch_last_graph: parseGraph(row?.watch_last_graph),
     watch_prompt: row?.watch_prompt ?? null,
+    watch_last_pack: parsePack(row?.watch_last_pack),
+    excluded_tables: asStringList(row?.watch_excluded_tables),
+    excluded_columns: asStringList(row?.watch_excluded_columns),
   }
+}
+
+export async function listWatchRuns(proyectoId: string, limit = 5): Promise<WatchRunPublic[]> {
+  await ensureWatchColumns()
+  const { rows } = await query<{
+    id: string
+    ok: boolean
+    report: string | null
+    error: string | null
+    created_at: Date
+  }>(
+    `SELECT id::text, ok, report, error, created_at
+       FROM retencion_watch_runs
+      WHERE proyecto_id = $1::uuid
+      ORDER BY created_at DESC
+      LIMIT $2`,
+    [proyectoId, Math.min(20, Math.max(1, limit))]
+  )
+  return rows.map((r) => ({
+    id: r.id,
+    ok: r.ok,
+    report: r.report,
+    error: r.error,
+    created_at: new Date(r.created_at).toISOString(),
+  }))
 }
 
 export function toWatchPublic(
   row: RetencionAgentConfigRow,
   watch: WatchCols,
-  memory?: { summary: string; last_delta_at: string | null }
+  extra: {
+    summary?: string
+    last_delta_at?: string | null
+    schema?: SchemaTable[]
+    runs?: WatchRunPublic[]
+  }
 ): WatchPublic {
   const cfg = toPublicConfig(row)
   return {
@@ -113,22 +244,38 @@ export function toWatchPublic(
     last_at: watch.watch_last_at ? new Date(watch.watch_last_at).toISOString() : null,
     last_report: watch.watch_last_report,
     last_graph: watch.watch_last_graph,
+    last_pack: watch.watch_last_pack,
     watch_prompt: watch.watch_prompt?.trim() || DEFAULT_WATCH_PROMPT,
     agent_prompt: row.report_prompt?.trim() || '',
     knowledge: cfg.audit_knowledge,
     db_connected: cfg.db_connected,
     db_host: cfg.db_host,
     db_name: cfg.db_name,
-    db_summary: memory?.summary || null,
-    db_last_delta_at: memory?.last_delta_at || null,
+    db_summary: extra.summary || null,
+    db_last_delta_at: extra.last_delta_at || null,
+    schema: extra.schema || [],
+    excluded_tables: watch.excluded_tables,
+    excluded_columns: watch.excluded_columns,
+    runs: extra.runs || [],
   }
 }
 
 export async function getWatchPublic(proyectoId: string): Promise<WatchPublic> {
   const row = await getOrCreateAgentConfig(proyectoId)
   const watch = await selectWatchCols(proyectoId)
-  const memory = await loadWatchMemory(proyectoId).catch(() => ({ summary: '', last_delta_at: null, watermarks: [] }))
-  return toWatchPublic(row, watch, memory)
+  const memory = await loadWatchMemory(proyectoId).catch(() => ({
+    summary: '',
+    last_delta_at: null,
+    watermarks: [],
+    schema_snapshot: [] as SchemaTable[],
+  }))
+  const runs = await listWatchRuns(proyectoId, 5).catch(() => [])
+  return toWatchPublic(row, watch, {
+    summary: memory.summary,
+    last_delta_at: memory.last_delta_at,
+    schema: memory.schema_snapshot,
+    runs,
+  })
 }
 
 export async function saveWatchSettings(
@@ -138,6 +285,8 @@ export async function saveWatchSettings(
     watch_prompt?: string
     knowledge?: string
     agent_prompt?: string
+    excluded_tables?: string[]
+    excluded_columns?: string[]
   }
 ): Promise<WatchPublic> {
   await getOrCreateAgentConfig(proyectoId)
@@ -164,6 +313,18 @@ export async function saveWatchSettings(
       [proyectoId, patch.watch_prompt]
     )
   }
+  if (patch.excluded_tables != null) {
+    await query(
+      `UPDATE retencion_agent_configs SET watch_excluded_tables = $2::jsonb, updated_at = NOW() WHERE proyecto_id = $1::uuid`,
+      [proyectoId, JSON.stringify(patch.excluded_tables)]
+    )
+  }
+  if (patch.excluded_columns != null) {
+    await query(
+      `UPDATE retencion_agent_configs SET watch_excluded_columns = $2::jsonb, updated_at = NOW() WHERE proyecto_id = $1::uuid`,
+      [proyectoId, JSON.stringify(patch.excluded_columns)]
+    )
+  }
   return getWatchPublic(proyectoId)
 }
 
@@ -173,6 +334,7 @@ export async function saveWatchRun(input: {
   report?: string | null
   graph?: WatchGraph | null
   error?: string | null
+  pack?: WatchPack | null
 }): Promise<void> {
   await ensureWatchColumns()
   await query(
@@ -191,9 +353,15 @@ export async function saveWatchRun(input: {
        watch_last_at = NOW(),
        watch_last_report = $2,
        watch_last_graph = $3::jsonb,
+       watch_last_pack = $4::jsonb,
        updated_at = NOW()
      WHERE proyecto_id = $1::uuid`,
-    [input.proyectoId, input.report ?? null, JSON.stringify(input.graph ?? null)]
+    [
+      input.proyectoId,
+      input.report ?? null,
+      JSON.stringify(input.graph ?? null),
+      JSON.stringify(input.pack ?? null),
+    ]
   )
 }
 
@@ -210,4 +378,12 @@ export async function listDueWatchProjects(): Promise<string[]> {
         )`
   )
   return rows.map((r) => r.proyecto_id)
+}
+
+export function tableKey(schema: string, table: string): string {
+  return `${schema}.${table}`
+}
+
+export function columnKey(schema: string, table: string, column: string): string {
+  return `${schema}.${table}.${column}`
 }

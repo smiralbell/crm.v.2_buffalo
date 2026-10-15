@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
-import { AlertTriangle, BookOpen, Bot, Database, MessageSquare } from 'lucide-react'
+import { AlertTriangle, Clock, Database, FileText, Filter, Sparkles } from 'lucide-react'
 import type { WatchNodeId } from '@/lib/retencion/watch-store'
 import styles from './WatchSystemMap.module.css'
 
@@ -12,29 +12,32 @@ export type MapNode = {
 }
 
 const DEFAULT_NODES: MapNode[] = [
-  { id: 'agent', label: 'Agente', sub: 'vigilancia', x: 0, y: -24 },
-  { id: 'prompt', label: 'Prompts', sub: 'agentes', x: -260, y: -170 },
-  { id: 'knowledge', label: 'Knowledge', sub: 'contexto', x: 270, y: -130 },
-  { id: 'db', label: 'Base de datos', sub: 'PostgreSQL', x: -250, y: 170 },
-  { id: 'incidents', label: 'Incidencias', sub: 'abiertas', x: 240, y: 190 },
+  { id: 'cron', label: 'Cron', sub: 'dispara', x: -525, y: 0 },
+  { id: 'db', label: 'Base de datos', sub: 'PostgreSQL', x: -315, y: 0 },
+  { id: 'incidents', label: 'Incidencias', sub: 'nuevas', x: -105, y: 0 },
+  { id: 'reports', label: 'Últimos 5 informes', sub: 'este flujo', x: 105, y: 0 },
+  { id: 'clean', label: 'Limpieza', sub: 'estructura', x: 315, y: 0 },
+  { id: 'ai', label: 'IA · Informe', sub: 'prompt', x: 525, y: 0 },
 ]
 
 const EDGES: [WatchNodeId, WatchNodeId][] = [
-  ['agent', 'db'],
-  ['agent', 'knowledge'],
-  ['agent', 'prompt'],
-  ['agent', 'incidents'],
+  ['cron', 'db'],
+  ['db', 'incidents'],
+  ['incidents', 'reports'],
+  ['reports', 'clean'],
+  ['clean', 'ai'],
 ]
 
-const ICONS: Record<WatchNodeId, typeof Bot> = {
-  agent: Bot,
+const ICONS: Record<WatchNodeId, typeof Clock> = {
+  cron: Clock,
   db: Database,
-  knowledge: BookOpen,
-  prompt: MessageSquare,
   incidents: AlertTriangle,
+  reports: FileText,
+  clean: Filter,
+  ai: Sparkles,
 }
 
-const STORAGE = (proyectoId: string) => `retencion-map:${proyectoId}`
+const STORAGE = (proyectoId: string) => `retencion-flow-v2:${proyectoId}`
 
 function clamp(n: number, a: number, b: number) {
   return Math.min(b, Math.max(a, n))
@@ -54,17 +57,21 @@ function loadPositions(proyectoId: string): MapNode[] {
   }
 }
 
-function curve(a: MapNode, b: MapNode): string {
-  const mx = (a.x + b.x) / 2
-  const my = (a.y + b.y) / 2
+function edgePath(a: MapNode, b: MapNode): string {
   const dx = b.x - a.x
   const dy = b.y - a.y
-  return `M ${a.x} ${a.y} Q ${mx - dy * 0.12} ${my + dx * 0.12} ${b.x} ${b.y}`
+  const len = Math.hypot(dx, dy) || 1
+  const pad = 108
+  const x1 = a.x + (dx / len) * pad
+  const y1 = a.y + (dy / len) * pad
+  const x2 = b.x - (dx / len) * pad
+  const y2 = b.y - (dy / len) * pad
+  return `M ${x1} ${y1} L ${x2} ${y2}`
 }
 
 type Drag =
-  | { kind: 'pan'; x: number; y: number; camX: number; camY: number }
   | { kind: 'node'; id: WatchNodeId; x: number; y: number; origX: number; origY: number; moved: boolean }
+  | { kind: 'pan'; x: number; y: number; camX: number; camY: number }
 
 export default function WatchSystemMap({
   proyectoId,
@@ -85,14 +92,17 @@ export default function WatchSystemMap({
 }) {
   const stageRef = useRef<HTMLDivElement>(null)
   const [nodes, setNodes] = useState<MapNode[]>(DEFAULT_NODES)
-  const [cam, setCam] = useState({ x: 0, y: 0, scale: 1 })
+  const [cam, setCam] = useState({ x: 0, y: 0, scale: 0.58 })
   const drag = useRef<Drag | null>(null)
   const [panning, setPanning] = useState(false)
-  const usedSet = useMemo(() => new Set(used?.length ? used : ['agent']), [used])
+  const usedSet = useMemo(() => new Set(used?.length ? used : ['cron']), [used])
 
   useEffect(() => {
     setNodes(loadPositions(proyectoId))
-    setCam({ x: 0, y: 0, scale: 1 })
+    const el = stageRef.current
+    const span = 1240
+    const w = el?.clientWidth || 900
+    setCam({ x: 0, y: 0, scale: clamp((w - 48) / span, 0.5, 1) })
   }, [proyectoId])
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -155,7 +165,7 @@ export default function WatchSystemMap({
     const rect = el.getBoundingClientRect()
     const cx = e.clientX - rect.left
     const cy = e.clientY - rect.top
-    const next = clamp(cam.scale * (e.deltaY > 0 ? 0.92 : 1.08), 0.55, 1.7)
+    const next = clamp(cam.scale * (e.deltaY > 0 ? 0.92 : 1.08), 0.5, 1.7)
     const wx = (cx - rect.width / 2 - cam.x) / cam.scale
     const wy = (cy - rect.height / 2 - cam.y) / cam.scale
     setCam({
@@ -181,6 +191,14 @@ export default function WatchSystemMap({
       >
         <div className={styles.grid} />
         <svg className={styles.wires} viewBox="-2400 -2400 4800 4800">
+          <defs>
+            <marker id="flow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill="#111827" />
+            </marker>
+            <marker id="flow-arrow-dim" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill="#d4d4d8" />
+            </marker>
+          </defs>
           {EDGES.map(([from, to]) => {
             const a = nodes.find((n) => n.id === from)
             const b = nodes.find((n) => n.id === to)
@@ -189,11 +207,12 @@ export default function WatchSystemMap({
             return (
               <path
                 key={`${from}-${to}`}
-                d={curve(a, b)}
+                d={edgePath(a, b)}
                 fill="none"
                 stroke={lit ? '#111827' : '#d4d4d8'}
-                strokeWidth={lit ? 1.6 : 1.2}
+                strokeWidth={lit ? 1.8 : 1.3}
                 strokeLinecap="round"
+                markerEnd={lit ? 'url(#flow-arrow)' : 'url(#flow-arrow-dim)'}
               />
             )
           })}
@@ -228,7 +247,7 @@ export default function WatchSystemMap({
 
       {children}
 
-      <p className={styles.hint}>Arrastra el mapa o las cajas · rueda para zoom · clic para configurar</p>
+      <p className={styles.hint}>El cron dispara el flujo · arrastra el mapa · clic en una caja para configurar</p>
     </div>
   )
 }

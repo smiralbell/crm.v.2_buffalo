@@ -245,3 +245,24 @@ export async function listOpenIncidentsForWatch(proyectoId: string, limit = 20):
   )
   return rows
 }
+
+/** Incidencias nuevas o actualizadas desde la última pasada del cron. */
+export async function listIncidentsSince(
+  proyectoId: string,
+  sinceIso: string | null,
+  limit = 40
+): Promise<IncidentRow[]> {
+  if (!sinceIso) return listOpenIncidentsForWatch(proyectoId, limit)
+  await ensureIncidentsTable()
+  const { rows } = await query<IncidentRow>(
+    `SELECT id::text, proyecto_id::text, error_text, error_hash, payload, status,
+            occurrences, last_seen_at, solved_at, created_at
+       FROM retencion_incidents
+      WHERE proyecto_id = $1::uuid
+        AND (last_seen_at > $2::timestamptz OR created_at > $2::timestamptz)
+      ORDER BY last_seen_at DESC
+      LIMIT $3`,
+    [proyectoId, sinceIso, limit]
+  )
+  return rows
+}

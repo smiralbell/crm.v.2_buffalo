@@ -1,61 +1,63 @@
-import { openRouterToolTurn, type ORMessage, type ORTool } from '@/lib/openrouter'
-import { getDecryptedDbUrl, getOrCreateAgentConfig, toPublicConfig } from '@/lib/retencion/agent-config-store'
-import { listOpenIncidentsForWatch } from '@/lib/retencion/incidents'
-import { runReadOnlySelect } from '@/lib/retencion/readonly-postgres'
+import { openRouterChatCompletion } from '@/lib/openrouter'
+import { getDecryptedDbUrl, getOrCreateAgentConfig } from '@/lib/retencion/agent-config-store'
+import { listIncidentsSince } from '@/lib/retencion/incidents'
 import { collectWatchDbDelta, saveWatchMemory } from '@/lib/retencion/watch-db-memory'
 import {
   DEFAULT_WATCH_PROMPT,
   ensureWatchColumns,
+  getWatchPublic,
   listDueWatchProjects,
+  listWatchRuns,
   saveWatchRun,
   type WatchGraph,
   type WatchNodeId,
+  type WatchPack,
 } from '@/lib/retencion/watch-store'
 import { query } from '@/lib/db'
 
-const TOOLS: ORTool[] = [
-  {
-    name: 'query_db',
-    description:
-      'SELECT puntual de solo lectura. El volcado incremental ya viene en el mensaje: no extraigas tablas enteras.',
-    parameters: {
-      type: 'object',
-      properties: { sql: { type: 'string', description: 'SELECT o WITH … SELECT' } },
-      required: ['sql'],
-    },
-  },
-  {
-    name: 'get_knowledge',
-    description: 'Lee la knowledge del proyecto configurada en el CRM.',
-    parameters: { type: 'object', properties: {} },
-  },
-  {
-    name: 'get_agent_prompt',
-    description: 'Lee el prompt de los agentes de producción del proyecto.',
-    parameters: { type: 'object', properties: {} },
-  },
-  {
-    name: 'list_open_incidents',
-    description: 'Lista incidencias abiertas de este proyecto (las que aún no están solucionadas).',
-    parameters: { type: 'object', properties: {} },
-  },
-]
-
-function toolArg(raw: unknown): Record<string, unknown> {
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>
-  if (typeof raw === 'string') {
-    try {
-      const p = JSON.parse(raw)
-      if (p && typeof p === 'object') return p as Record<string, unknown>
-    } catch {
-      return {}
-    }
-  }
-  return {}
+function clip(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max)}\n…[truncado]` : s
 }
 
-function clip(s: string, max = 6000): string {
-  return s.length > max ? `${s.slice(0, max)}\n…[truncado]` : s
+function excerpt(s: string | null, max = 400): string {
+  if (!s) return ''
+  const t = s.trim()
+  return t.length > max ? `${t.slice(0, max)}…` : t
+}
+
+function buildCleanPack(input: {
+  connected: boolean
+  lastDeltaAt: string | null
+  deltas: Awaited<ReturnType<typeof collectWatchDbDelta>>['deltas']
+  incidents: Awaited<ReturnType<typeof listIncidentsSince>>
+  runs: Awaited<ReturnType<typeof listWatchRuns>>
+}): WatchPack {
+  return {
+    generated_at: new Date().toISOString(),
+    db: {
+      connected: input.connected,
+      last_delta_at: input.lastDeltaAt,
+      tables: input.deltas.map((d) => ({
+        name: `${d.schema}.${d.table}`,
+        new_rows: d.new_rows,
+        truncated: d.truncated,
+        note: d.note,
+        sample: d.sample,
+      })),
+    },
+    incidents: input.incidents.map((x) => ({
+      id: x.id,
+      error: x.error_text,
+      occurrences: x.occurrences,
+      last_seen_at: new Date(x.last_seen_at).toISOString(),
+      status: x.status,
+    })),
+    previous_reports: input.runs.map((r) => ({
+      at: r.created_at,
+      ok: r.ok,
+      excerpt: excerpt(r.report || r.error, 500),
+    })),
+  }
 }
 
 export async function runWatchForProject(proyectoId: string): Promise<{
@@ -64,102 +66,91 @@ export async function runWatchForProject(proyectoId: string): Promise<{
   graph: WatchGraph
   error?: string
 }> {
-  const used = new Set<WatchNodeId>(['agent'])
+  const used: WatchNodeId[] = ['cron']
   await ensureWatchColumns()
   const cfgRow = await getOrCreateAgentConfig(proyectoId)
-  const cfg = toPublicConfig(cfgRow)
-  const { rows: watchRows } = await query<{ watch_prompt: string | null }>(
-    `SELECT watch_prompt FROM retencion_agent_configs WHERE proyecto_id = $1::uuid LIMIT 1`,
-    [proyectoId]
-  )
-  const watchPrompt = watchRows[0]?.watch_prompt?.trim() || DEFAULT_WATCH_PROMPT
-  const dbUrl = await getDecryptedDbUrl(proyectoId)
+  const watch = await getWatchPublic(proyectoId)
   const { rows: proj } = await query<{ name: string }>(
     `SELECT name FROM proyectos WHERE id = $1::uuid LIMIT 1`,
     [proyectoId]
   )
   const name = proj[0]?.name || proyectoId
+  const watchPrompt = watch.watch_prompt?.trim() || cfgRow.report_prompt?.trim() || DEFAULT_WATCH_PROMPT
 
-  let dbBriefing = 'Base de datos: NO configurada.'
+  let deltas: Awaited<ReturnType<typeof collectWatchDbDelta>>['deltas'] = []
   let pendingMemory: Awaited<ReturnType<typeof collectWatchDbDelta>>['nextMemory'] | null = null
+  const dbUrl = await getDecryptedDbUrl(proyectoId)
+
   if (dbUrl) {
     try {
-      const collected = await collectWatchDbDelta(proyectoId, dbUrl)
+      const collected = await collectWatchDbDelta(proyectoId, dbUrl, {
+        tables: watch.excluded_tables,
+        columns: watch.excluded_columns,
+      })
       pendingMemory = collected.nextMemory
-      dbBriefing = collected.briefing
-      used.add('db')
+      deltas = collected.deltas
+      used.push('db')
     } catch (e) {
-      dbBriefing = `No se pudo leer el delta de la base: ${e instanceof Error ? e.message : String(e)}`
+      deltas = [
+        {
+          schema: 'public',
+          table: '_error',
+          cursor: null,
+          new_rows: 0,
+          truncated: false,
+          sample: [],
+          note: `No se pudo leer el delta: ${e instanceof Error ? e.message : String(e)}`,
+        },
+      ]
     }
   }
 
-  const messages: ORMessage[] = [
-    { role: 'system', content: watchPrompt },
-    {
-      role: 'user',
-      content: [
-        `Proyecto: ${name}`,
-        `id: ${proyectoId}`,
-        dbBriefing,
-        `Knowledge: ${cfg.audit_knowledge?.trim() ? 'hay texto (usa get_knowledge)' : 'vacía'}`,
-        `Prompt de agentes: ${cfg.report_prompt?.trim() ? 'hay texto (usa get_agent_prompt)' : 'vacío'}`,
-        'Revisa lo NUEVO + tu resumen acumulado y entrega el informe. No reextraigas el histórico.',
-      ].join('\n\n'),
-    },
-  ]
+  const incidents = await listIncidentsSince(proyectoId, watch.last_at, 40)
+  used.push('incidents')
+
+  const previousRuns = await listWatchRuns(proyectoId, 5)
+  used.push('reports')
+
+  const pack = buildCleanPack({
+    connected: Boolean(dbUrl),
+    lastDeltaAt: pendingMemory?.last_delta_at || watch.db_last_delta_at,
+    deltas,
+    incidents,
+    runs: previousRuns,
+  })
+  used.push('clean')
+
+  const dbNewRows = deltas.reduce((acc, d) => acc + (d.new_rows || 0), 0)
+  const graph: WatchGraph = {
+    used: [],
+    at: new Date().toISOString(),
+    db_new_rows: dbNewRows,
+    incidents_new: incidents.length,
+  }
 
   let report = ''
   try {
-    for (let i = 0; i < 6; i++) {
-      const turn = await openRouterToolTurn(messages, TOOLS, { temperature: 0.2, maxTokens: 2500 })
-      messages.push(turn.assistantMessage)
-      if (!turn.toolCalls.length) {
-        report = turn.text.trim()
-        break
-      }
-      for (const call of turn.toolCalls) {
-        const args = toolArg(call.arguments)
-        let content = ''
-        try {
-          if (call.name === 'query_db') {
-            used.add('db')
-            if (!dbUrl) content = JSON.stringify({ error: 'No hay URL de base de datos configurada' })
-            else {
-              const sql = typeof args.sql === 'string' ? args.sql : ''
-              const r = await runReadOnlySelect(dbUrl, sql, { limit: 40 })
-              content = clip(JSON.stringify({ columns: r.columns, rowCount: r.rowCount, truncated: r.truncated, rows: r.rows }))
-            }
-          } else if (call.name === 'get_knowledge') {
-            used.add('knowledge')
-            content = clip(cfg.audit_knowledge || '(knowledge vacía)')
-          } else if (call.name === 'get_agent_prompt') {
-            used.add('prompt')
-            content = clip(cfgRow.report_prompt?.trim() || '(prompt vacío)')
-          } else if (call.name === 'list_open_incidents') {
-            used.add('incidents')
-            const open = await listOpenIncidentsForWatch(proyectoId, 15)
-            content = JSON.stringify(
-              open.map((x) => ({
-                error: x.error_text,
-                occurrences: x.occurrences,
-                last_seen_at: x.last_seen_at,
-              }))
-            )
-          } else {
-            content = JSON.stringify({ error: `Herramienta desconocida: ${call.name}` })
-          }
-        } catch (e) {
-          content = JSON.stringify({ error: e instanceof Error ? e.message : String(e) })
-        }
-        messages.push({ role: 'tool', tool_call_id: call.id, content })
-      }
-    }
-    if (!report) {
-      const last = [...messages].reverse().find((m) => m.role === 'assistant' && m.content)
-      report = (last && last.role === 'assistant' && last.content) || 'El agente no devolvió informe.'
-    }
-    const graph: WatchGraph = { used: Array.from(used), at: new Date().toISOString() }
-    await saveWatchRun({ proyectoId, ok: true, report, graph })
+    const packed = clip(JSON.stringify(pack, null, 2), 24000)
+    report = (
+      await openRouterChatCompletion(
+        [
+          { role: 'system', content: watchPrompt },
+          {
+            role: 'user',
+            content: [
+              `Proyecto: ${name}`,
+              `id: ${proyectoId}`,
+              'Paquete limpio del flujo (solo datos nuevos + últimos informes):',
+              packed,
+              'Entrega el informe en markdown.',
+            ].join('\n\n'),
+          },
+        ],
+        { temperature: 0.2, maxTokens: 2800 }
+      )
+    ).trim()
+    used.push('ai')
+    graph.used = used
     if (pendingMemory) {
       await saveWatchMemory(proyectoId, {
         ...pendingMemory,
@@ -167,11 +158,19 @@ export async function runWatchForProject(proyectoId: string): Promise<{
         last_delta_at: pendingMemory.last_delta_at || new Date().toISOString(),
       })
     }
+    await saveWatchRun({ proyectoId, ok: true, report, graph, pack })
     return { ok: true, report, graph }
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e)
-    const graph: WatchGraph = { used: Array.from(used), at: new Date().toISOString() }
-    await saveWatchRun({ proyectoId, ok: false, report: report || null, graph, error })
+    graph.used = used
+    await saveWatchRun({
+      proyectoId,
+      ok: false,
+      report: report || null,
+      graph,
+      error,
+      pack,
+    })
     return { ok: false, report: report || error, graph, error }
   }
 }
@@ -180,8 +179,8 @@ export async function runDueWatches(): Promise<{ ran: number; ok: number; failed
   const ids = await listDueWatchProjects()
   let ok = 0
   let failed = 0
-  for (const id of ids) {
-    const r = await runWatchForProject(id)
+  for (let i = 0; i < ids.length; i++) {
+    const r = await runWatchForProject(ids[i])
     if (r.ok) ok += 1
     else failed += 1
   }

@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Play, Save, X, Focus } from 'lucide-react'
+import { Copy, FileDown, FileText, Focus, Play, RefreshCw, Save, X } from 'lucide-react'
 import { useAuth } from '@/components/AuthContext'
 import WatchSystemMap, { type WatchNodeId } from '@/components/retencion/WatchSystemMap'
 import styles from './WatchSystemMap.module.css'
-import type { WatchPublic } from '@/lib/retencion/watch-store'
+import type { WatchPublic, WatchRunPublic } from '@/lib/retencion/watch-store'
 import {
   formatWatchInterval,
   minutesToParts,
   partsToMinutes,
   type WatchIntervalUnit,
 } from '@/lib/retencion/watch-interval'
+import {
+  copyText,
+  downloadMarkdown,
+  exportWatchReportPdf,
+} from '@/lib/retencion/export-watch-report'
 import {
   Dialog,
   DialogContent,
@@ -19,11 +24,74 @@ import {
 } from '@/components/ui/dialog'
 
 const TITLES: Record<WatchNodeId, string> = {
-  agent: 'Agente de vigilancia',
+  cron: 'Cron',
   db: 'Base de datos',
-  knowledge: 'Knowledge',
-  prompt: 'Prompts de los agentes',
   incidents: 'Incidencias',
+  reports: 'Últimos 5 informes',
+  clean: 'Limpieza',
+  ai: 'IA · Informe',
+}
+
+function tableKey(schema: string, table: string) {
+  return `${schema}.${table}`
+}
+
+function colKey(schema: string, table: string, column: string) {
+  return `${schema}.${table}.${column}`
+}
+
+function ReportActions({
+  markdown,
+  title,
+  disabled,
+}: {
+  markdown: string
+  title: string
+  disabled?: boolean
+}) {
+  const [msg, setMsg] = useState('')
+  if (!markdown.trim()) return null
+  return (
+    <div className="space-y-1.5">
+      <div className={styles.actions}>
+        <button
+          type="button"
+          className={styles.hudBtn}
+          disabled={disabled}
+          onClick={async () => {
+            try {
+              await copyText(markdown)
+              setMsg('Copiado')
+            } catch {
+              setMsg('No se pudo copiar')
+            }
+          }}
+        >
+          <Copy className="h-3.5 w-3.5" />
+          Copiar
+        </button>
+        <button
+          type="button"
+          className={styles.hudBtn}
+          disabled={disabled}
+          onClick={() => downloadMarkdown(`${title}.md`, markdown)}
+        >
+          <FileText className="h-3.5 w-3.5" />
+          Markdown
+        </button>
+        <button
+          type="button"
+          className={styles.hudBtn}
+          disabled={disabled}
+          onClick={() => void exportWatchReportPdf(title, markdown)}
+        >
+          <FileDown className="h-3.5 w-3.5" />
+          PDF
+        </button>
+      </div>
+      {msg && <p className="text-xs text-emerald-700">{msg}</p>}
+    </div>
+  )
 }
 
 export default function WatchSystemPanel({
@@ -44,12 +112,11 @@ export default function WatchSystemPanel({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [running, setRunning] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
   const [okMsg, setOkMsg] = useState('')
   const [watch, setWatch] = useState<WatchPublic | null>(null)
   const [dbUrl, setDbUrl] = useState('')
-  const [knowledge, setKnowledge] = useState('')
-  const [agentPrompt, setAgentPrompt] = useState('')
   const [watchPrompt, setWatchPrompt] = useState('')
   const [paused, setPaused] = useState(true)
   const [amount, setAmount] = useState(1)
@@ -57,12 +124,16 @@ export default function WatchSystemPanel({
   const [selected, setSelected] = useState<WatchNodeId | null>(null)
   const [openIncidents, setOpenIncidents] = useState(0)
   const [recenter, setRecenter] = useState(0)
+  const [excludedTables, setExcludedTables] = useState<string[]>([])
+  const [excludedColumns, setExcludedColumns] = useState<string[]>([])
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [openRun, setOpenRun] = useState<WatchRunPublic | null>(null)
 
   const apply = (w: WatchPublic) => {
     setWatch(w)
-    setKnowledge(w.knowledge || '')
-    setAgentPrompt(w.agent_prompt || '')
     setWatchPrompt(w.watch_prompt || '')
+    setExcludedTables(w.excluded_tables || [])
+    setExcludedColumns(w.excluded_columns || [])
     const parts = minutesToParts(w.every_minutes && w.every_minutes > 0 ? w.every_minutes : 0)
     setPaused(parts.paused)
     setAmount(parts.amount)
@@ -80,7 +151,17 @@ export default function WatchSystemPanel({
       ])
       const data = await wRes.json()
       if (!wRes.ok) throw new Error(data.error || 'Error al cargar')
-      apply(data.watch as WatchPublic)
+      const w = data.watch as WatchPublic
+      apply(w)
+      if (w.db_connected && !(w.schema && w.schema.length)) {
+        const sRes = await fetch(`/api/retencion/proyectos/${proyectoId}/watch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'sync_schema' }),
+        })
+        const sData = await sRes.json()
+        if (sRes.ok && sData.watch) apply(sData.watch as WatchPublic)
+      }
       if (iRes.ok) {
         const inc = await iRes.json()
         const list = Array.isArray(inc.incidents) ? inc.incidents : []
@@ -105,16 +186,17 @@ export default function WatchSystemPanel({
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const save = async () => {
+  const save = async (extra: Record<string, unknown> = {}) => {
     setSaving(true)
     setError('')
     setOkMsg('')
     try {
       const body: Record<string, unknown> = {
-        knowledge,
-        agent_prompt: agentPrompt,
         watch_prompt: watchPrompt,
         every_minutes: paused ? 0 : partsToMinutes(amount, unit),
+        excluded_tables: excludedTables,
+        excluded_columns: excludedColumns,
+        ...extra,
       }
       if (dbUrl.trim()) body.client_db_url = dbUrl.trim()
       const res = await fetch(`/api/retencion/proyectos/${proyectoId}/watch`, {
@@ -126,7 +208,7 @@ export default function WatchSystemPanel({
       if (!res.ok) throw new Error(data.error || 'No se pudo guardar')
       apply(data.watch as WatchPublic)
       setDbUrl('')
-      setOkMsg('Guardado')
+      setOkMsg(data.warning ? String(data.warning) : 'Guardado')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar')
     } finally {
@@ -145,26 +227,100 @@ export default function WatchSystemPanel({
         body: JSON.stringify({ action: 'run' }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Falló la revisión')
+      if (!res.ok) throw new Error(data.error || 'Falló el flujo')
       apply(data.watch as WatchPublic)
-      setOkMsg(data.result?.ok ? 'Revisión hecha' : data.result?.error || 'Revisión con errores')
-      setSelected('agent')
+      setOkMsg(data.result?.ok ? 'Flujo ejecutado' : data.result?.error || 'Flujo con errores')
+      setSelected('ai')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Falló la revisión')
+      setError(e instanceof Error ? e.message : 'Falló el flujo')
     } finally {
       setRunning(false)
     }
   }
 
+  const syncSchema = async () => {
+    setSyncing(true)
+    setError('')
+    setOkMsg('')
+    try {
+      const res = await fetch(`/api/retencion/proyectos/${proyectoId}/watch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync_schema' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo sincronizar')
+      apply(data.watch as WatchPublic)
+      setOkMsg('Esquema sincronizado')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo sincronizar')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const labels = useMemo<Record<WatchNodeId, string>>(
     () => ({
-      agent: formatWatchInterval(paused ? 0 : partsToMinutes(amount, unit)),
-      db: watch?.db_connected ? watch.db_name || watch.db_host || 'conectada' : 'sin conectar',
-      knowledge: knowledge.trim() ? `${knowledge.trim().length} caracteres` : 'vacía',
-      prompt: agentPrompt.trim() ? 'configurado' : 'sin prompt',
-      incidents: openIncidents ? `${openIncidents} abierta${openIncidents === 1 ? '' : 's'}` : 'ninguna abierta',
+      cron: formatWatchInterval(paused ? 0 : partsToMinutes(amount, unit)),
+      db: watch?.db_connected
+        ? `${watch.schema.length} tablas`
+        : 'sin conectar',
+      incidents: watch?.last_graph?.incidents_new != null
+        ? `${watch.last_graph.incidents_new} nuevas`
+        : openIncidents
+          ? `${openIncidents} abiertas`
+          : 'sin nuevas',
+      reports: watch?.runs?.length ? `${watch.runs.length} últimos` : 'ninguno',
+      clean: watch?.last_pack ? 'listo' : 'pendiente',
+      ai: watch?.last_report ? 'informe listo' : 'sin informe',
     }),
-    [paused, amount, unit, watch, knowledge, agentPrompt, openIncidents]
+    [paused, amount, unit, watch, openIncidents]
+  )
+
+  const scheduleFields = (
+    <>
+      <label className="flex items-center gap-2 text-sm text-gray-800">
+        <input
+          type="checkbox"
+          checked={paused}
+          onChange={(e) => setPaused(e.target.checked)}
+          disabled={!isAdmin}
+        />
+        Pausado
+      </label>
+      {!paused && (
+        <div className="grid grid-cols-[1fr_140px] gap-2">
+          <div className={styles.field}>
+            <label>Cada</label>
+            <input
+              type="number"
+              min={1}
+              max={999}
+              value={amount}
+              disabled={!isAdmin}
+              onChange={(e) => setAmount(Math.max(1, Number(e.target.value) || 1))}
+            />
+          </div>
+          <div className={styles.field}>
+            <label>Unidad</label>
+            <select
+              value={unit}
+              disabled={!isAdmin}
+              onChange={(e) => setUnit(e.target.value as WatchIntervalUnit)}
+            >
+              <option value="minutes">minutos</option>
+              <option value="hours">horas</option>
+              <option value="days">días</option>
+            </select>
+          </div>
+        </div>
+      )}
+      <p className="text-xs text-gray-400">
+        {paused
+          ? 'El cron no corre hasta que lo actives.'
+          : `Empieza el flujo ${formatWatchInterval(partsToMinutes(amount, unit)).toLowerCase()}.`}
+      </p>
+    </>
   )
 
   return (
@@ -175,7 +331,10 @@ export default function WatchSystemPanel({
         used={watch?.last_graph?.used}
         labels={labels}
         selected={selected}
-        onSelect={setSelected}
+        onSelect={(id) => {
+          setOpenRun(null)
+          setSelected(id)
+        }}
         toolbar={
           <>
             <button type="button" className={styles.hudBtn} onClick={() => setRecenter((n) => n + 1)}>
@@ -189,7 +348,7 @@ export default function WatchSystemPanel({
               disabled={!isAdmin || running || loading}
             >
               <Play className="h-3.5 w-3.5" />
-              {running ? 'Revisando…' : 'Ejecutar ahora'}
+              {running ? 'Ejecutando…' : 'Ejecutar ahora'}
             </button>
           </>
         }
@@ -198,7 +357,7 @@ export default function WatchSystemPanel({
           <aside className={styles.sheet} data-sheet onPointerDown={(e) => e.stopPropagation()}>
             <div className={styles.sheetHead}>
               <div>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Configurar</p>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Flujo</p>
                 <h2 className="text-[15px] font-semibold text-gray-900">{TITLES[selected]}</h2>
               </div>
               <button
@@ -211,91 +370,141 @@ export default function WatchSystemPanel({
               </button>
             </div>
             <div className={styles.sheetBody}>
-              {selected === 'agent' && (
+              {selected === 'cron' && (
                 <>
-                  <div className={styles.field}>
-                    <label>Prompt de vigilancia</label>
-                    <textarea value={watchPrompt} onChange={(e) => setWatchPrompt(e.target.value)} disabled={!isAdmin} />
-                  </div>
-                  {watch?.last_report && (
-                    <div className={styles.field}>
-                      <label>
-                        Última revisión
-                        {watch.last_at
-                          ? ` · ${new Date(watch.last_at).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}`
-                          : ''}
-                      </label>
-                      <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-2xl bg-gray-50 px-3 py-2 text-[12px] text-gray-800">
-                        {watch.last_report}
-                      </pre>
-                    </div>
-                  )}
+                  <p className="text-sm text-gray-600">
+                    El cron es el disparo. En cada pasada recorre las cajas en orden y solo toma datos nuevos desde la última ejecución.
+                  </p>
+                  {scheduleFields}
                 </>
               )}
 
               {selected === 'db' && (
                 <>
                   <div className={styles.field}>
-                    <label>URL PostgreSQL externa</label>
+                    <label>URL PostgreSQL</label>
                     <input
                       type="text"
                       value={dbUrl}
                       onChange={(e) => setDbUrl(e.target.value)}
                       disabled={!isAdmin}
-                      placeholder={watch?.db_connected ? `${watch.db_host || ''} / ${watch.db_name || ''}` : 'postgresql://…'}
+                      placeholder={
+                        watch?.db_connected
+                          ? `${watch.db_host || ''} / ${watch.db_name || ''}`
+                          : 'postgresql://…'
+                      }
                     />
                     <p className="mt-1.5 text-xs text-gray-400">
-                      {watch?.db_connected
-                        ? 'Conectada. En cada cron el agente solo lee filas nuevas desde la última pasada y guarda un resumen en su memoria.'
-                        : 'Solo lectura. En cada pasada extrae lo nuevo y deja un resumen; no vuelve a volcar todo el histórico.'}
+                      La primera conexión sincroniza solo nombres de tablas y columnas. En cada cron se extraen filas nuevas desde la última pasada. Esta URL queda guardada.
                     </p>
                   </div>
-                  {watch?.db_summary && (
-                    <div className={styles.field}>
-                      <label>
-                        Memoria del agente
-                        {watch.db_last_delta_at
-                          ? ` · ${new Date(watch.db_last_delta_at).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}`
-                          : ''}
-                      </label>
-                      <pre className="mt-1.5 max-h-56 overflow-auto whitespace-pre-wrap rounded-2xl bg-gray-50 px-3 py-2 text-[12px] text-gray-800">
-                        {watch.db_summary}
-                      </pre>
+
+                  {watch?.db_connected && (
+                    <div className={styles.actions}>
+                      <button
+                        type="button"
+                        className={styles.hudBtn}
+                        disabled={!isAdmin || syncing}
+                        onClick={() => void syncSchema()}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        {syncing ? 'Sincronizando…' : 'Sincronizar esquema'}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.hudBtn}
+                        disabled={!isAdmin || saving}
+                        onClick={() => void save({ clear_db_url: true })}
+                      >
+                        Desconectar
+                      </button>
                     </div>
                   )}
+
+                  {watch?.schema?.length ? (
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                        Tablas · marca lo que quieres excluir
+                      </p>
+                      <div className={styles.schemaList}>
+                        {watch.schema.map((t) => {
+                          const tk = tableKey(t.schema, t.table)
+                          const tableOff = excludedTables.includes(tk)
+                          const open = Boolean(expanded[tk])
+                          return (
+                            <div key={tk} className={styles.schemaTable}>
+                              <div className={styles.schemaHead}>
+                                <input
+                                  className={styles.check}
+                                  type="checkbox"
+                                  checked={tableOff}
+                                  disabled={!isAdmin}
+                                  onChange={() =>
+                                    setExcludedTables((prev) =>
+                                      prev.includes(tk) ? prev.filter((x) => x !== tk) : [...prev, tk]
+                                    )
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  className="min-w-0 flex-1 truncate text-left"
+                                  onClick={() => setExpanded((p) => ({ ...p, [tk]: !p[tk] }))}
+                                >
+                                  {tk}
+                                </button>
+                                <span className="text-[11px] font-normal text-gray-400">
+                                  {t.columns.length}
+                                </span>
+                              </div>
+                              {open && (
+                                <div className={styles.schemaCols}>
+                                  {t.columns.map((c) => {
+                                    const ck = colKey(t.schema, t.table, c.column)
+                                    return (
+                                      <label key={ck} className={styles.schemaCol}>
+                                        <input
+                                          className={styles.check}
+                                          type="checkbox"
+                                          checked={excludedColumns.includes(ck)}
+                                          disabled={!isAdmin || tableOff}
+                                          onChange={() =>
+                                            setExcludedColumns((prev) =>
+                                              prev.includes(ck)
+                                                ? prev.filter((x) => x !== ck)
+                                                : [...prev, ck]
+                                            )
+                                          }
+                                        />
+                                        {c.column}
+                                        <span>{c.data_type}</span>
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      {watch?.db_connected
+                        ? 'Aún no hay esquema. Pulsa sincronizar.'
+                        : 'Conecta la URL para leer tablas y columnas.'}
+                    </p>
+                  )}
                 </>
-              )}
-
-              {selected === 'knowledge' && (
-                <div className={styles.field}>
-                  <label>Knowledge del proyecto</label>
-                  <textarea
-                    value={knowledge}
-                    onChange={(e) => setKnowledge(e.target.value)}
-                    disabled={!isAdmin}
-                    style={{ minHeight: 280 }}
-                  />
-                </div>
-              )}
-
-              {selected === 'prompt' && (
-                <div className={styles.field}>
-                  <label>Prompt de los agentes de producción</label>
-                  <textarea
-                    value={agentPrompt}
-                    onChange={(e) => setAgentPrompt(e.target.value)}
-                    disabled={!isAdmin}
-                    style={{ minHeight: 280 }}
-                  />
-                </div>
               )}
 
               {selected === 'incidents' && (
                 <div className="space-y-3">
                   <p className="text-sm text-gray-600">
-                    {openIncidents
-                      ? `Hay ${openIncidents} incidencia${openIncidents === 1 ? '' : 's'} abierta${openIncidents === 1 ? '' : 's'}. El agente las lee en cada pasada.`
-                      : 'No hay incidencias abiertas. El webhook de la pestaña Incidencias es el que alimenta esta caja.'}
+                    En cada cron se recogen las incidencias nuevas (o actualizadas) desde la última ejecución.
+                    {watch?.last_graph?.incidents_new != null
+                      ? ` Última pasada: ${watch.last_graph.incidents_new}.`
+                      : ''}
+                    {openIncidents ? ` Ahora hay ${openIncidents} abierta${openIncidents === 1 ? '' : 's'}.` : ''}
                   </p>
                   {onGoIncidents && (
                     <button type="button" className={styles.hudBtn} onClick={onGoIncidents}>
@@ -305,15 +514,106 @@ export default function WatchSystemPanel({
                 </div>
               )}
 
-              {selected !== 'incidents' && (
+              {selected === 'reports' && (
+                <>
+                  <p className="text-sm text-gray-600">
+                    Los cinco informes más recientes de este flujo, para que la IA no parta de cero.
+                  </p>
+                  {watch?.runs?.length ? (
+                    <div className={styles.reportList}>
+                      {watch.runs.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          className={styles.reportItem}
+                          onClick={() => setOpenRun(openRun?.id === r.id ? null : r)}
+                        >
+                          <strong>{r.ok ? 'Informe' : 'Error'}</strong>
+                          <span>
+                            {new Date(r.created_at).toLocaleString('es-ES', {
+                              dateStyle: 'short',
+                              timeStyle: 'short',
+                            })}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">Todavía no hay informes. Ejecuta el flujo o espera al cron.</p>
+                  )}
+                  {openRun?.report && (
+                    <>
+                      <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-2xl bg-gray-50 px-3 py-2 text-[12px] text-gray-800">
+                        {openRun.report}
+                      </pre>
+                      <ReportActions
+                        markdown={openRun.report}
+                        title={`informe-${openRun.id}`}
+                      />
+                    </>
+                  )}
+                </>
+              )}
+
+              {selected === 'clean' && (
+                <>
+                  <p className="text-sm text-gray-600">
+                    Junta base, incidencias e informes previos en un paquete estructurado. La IA solo ve esto.
+                  </p>
+                  {watch?.last_pack ? (
+                    <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-2xl bg-gray-50 px-3 py-2 text-[11px] text-gray-800">
+                      {JSON.stringify(watch.last_pack, null, 2)}
+                    </pre>
+                  ) : (
+                    <p className="text-sm text-gray-500">Aún no hay paquete. Se genera en cada ejecución.</p>
+                  )}
+                </>
+              )}
+
+              {selected === 'ai' && (
+                <>
+                  <div className={styles.field}>
+                    <label>Prompt del informe</label>
+                    <textarea
+                      value={watchPrompt}
+                      onChange={(e) => setWatchPrompt(e.target.value)}
+                      disabled={!isAdmin}
+                      style={{ minHeight: 160 }}
+                    />
+                  </div>
+                  {watch?.last_report && (
+                    <div className={styles.field}>
+                      <label>
+                        Último informe
+                        {watch.last_at
+                          ? ` · ${new Date(watch.last_at).toLocaleString('es-ES', {
+                              dateStyle: 'short',
+                              timeStyle: 'short',
+                            })}`
+                          : ''}
+                      </label>
+                      <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-2xl bg-gray-50 px-3 py-2 text-[12px] text-gray-800">
+                        {watch.last_report}
+                      </pre>
+                      <div className="mt-2">
+                        <ReportActions markdown={watch.last_report} title="informe-sistema" />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {(selected === 'cron' ||
+                selected === 'db' ||
+                selected === 'ai') && (
                 <button
                   type="button"
-                  onClick={save}
+                  onClick={() => void save()}
                   disabled={!isAdmin || saving || loading}
                   className="mt-1 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-gray-900 px-4 text-sm font-medium text-white disabled:opacity-50"
                 >
                   <Save className="h-4 w-4" />
-                  {saving ? 'Guardando…' : 'Guardar'}
+                  {saving ? 'Guardando…' : selected === 'db' && dbUrl.trim() ? 'Conectar y guardar' : 'Guardar'}
                 </button>
               )}
               {okMsg && <p className="text-sm text-emerald-700">{okMsg}</p>}
@@ -326,51 +626,13 @@ export default function WatchSystemPanel({
       <Dialog open={scheduleOpen} onOpenChange={onScheduleOpenChange}>
         <DialogContent className="max-w-md rounded-[28px] border-2 border-white sm:rounded-[28px]">
           <DialogHeader>
-            <DialogTitle>Frecuencia del agente</DialogTitle>
+            <DialogTitle>Frecuencia del flujo</DialogTitle>
             <DialogDescription>
-              Pon el intervalo que quieras. El agente revisa solo datos nuevos desde la última pasada.
+              El cron dispara las cajas en orden y solo toma datos nuevos desde la última pasada.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <label className="flex items-center gap-2 text-sm text-gray-800">
-              <input
-                type="checkbox"
-                checked={paused}
-                onChange={(e) => setPaused(e.target.checked)}
-                disabled={!isAdmin}
-              />
-              Pausado
-            </label>
-            {!paused && (
-              <div className="grid grid-cols-[1fr_140px] gap-2">
-                <div className={styles.field}>
-                  <label>Cada</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={999}
-                    value={amount}
-                    disabled={!isAdmin}
-                    onChange={(e) => setAmount(Math.max(1, Number(e.target.value) || 1))}
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label>Unidad</label>
-                  <select
-                    value={unit}
-                    disabled={!isAdmin}
-                    onChange={(e) => setUnit(e.target.value as WatchIntervalUnit)}
-                  >
-                    <option value="minutes">minutos</option>
-                    <option value="hours">horas</option>
-                    <option value="days">días</option>
-                  </select>
-                </div>
-              </div>
-            )}
-            <p className="text-xs text-gray-400">
-              {paused ? 'El cron no corre hasta que lo actives.' : formatWatchInterval(partsToMinutes(amount, unit))}
-            </p>
+            {scheduleFields}
             <button
               type="button"
               onClick={async () => {

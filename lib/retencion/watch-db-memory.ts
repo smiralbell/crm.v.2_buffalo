@@ -12,10 +12,24 @@ export type TableWatermark = {
   last_count: number | null
 }
 
+export type SchemaColumn = { column: string; data_type: string }
+
+export type SchemaTable = {
+  schema: string
+  table: string
+  columns: SchemaColumn[]
+}
+
+export type WatchExclusions = {
+  tables: string[]
+  columns: string[]
+}
+
 export type WatchDbMemory = {
   summary: string
   watermarks: TableWatermark[]
   last_delta_at: string | null
+  schema_snapshot: SchemaTable[]
 }
 
 const TIME_NAMES = [
@@ -100,7 +114,42 @@ export async function ensureWatchMemoryTable(): Promise<void> {
       updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `)
+  await query(`
+    ALTER TABLE retencion_watch_memory
+      ADD COLUMN IF NOT EXISTS schema_snapshot JSONB
+  `)
   memoryEnsured = true
+}
+
+function parseSchemaSnapshot(raw: unknown): SchemaTable[] {
+  if (!Array.isArray(raw)) return []
+  const out: SchemaTable[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const t = raw[i] as Record<string, unknown>
+    if (!t || typeof t.schema !== 'string' || typeof t.table !== 'string') continue
+    const colsRaw = Array.isArray(t.columns) ? t.columns : []
+    const columns: SchemaColumn[] = []
+    for (let c = 0; c < colsRaw.length; c++) {
+      const col = colsRaw[c] as Record<string, unknown>
+      if (typeof col?.column === 'string' && typeof col?.data_type === 'string') {
+        columns.push({ column: col.column, data_type: col.data_type })
+      }
+    }
+    out.push({ schema: t.schema, table: t.table, columns })
+  }
+  return out
+}
+
+function tableKey(schema: string, table: string): string {
+  return `${schema}.${table}`
+}
+
+function columnKey(schema: string, table: string, column: string): string {
+  return `${schema}.${table}.${column}`
+}
+
+function exclusionSet(list: string[]): Set<string> {
+  return new Set(list.map((x) => x.trim()).filter(Boolean))
 }
 
 export async function loadWatchMemory(proyectoId: string): Promise<WatchDbMemory> {
@@ -109,8 +158,9 @@ export async function loadWatchMemory(proyectoId: string): Promise<WatchDbMemory
     summary: string | null
     watermarks: unknown
     last_delta_at: Date | null
+    schema_snapshot: unknown
   }>(
-    `SELECT summary, watermarks, last_delta_at
+    `SELECT summary, watermarks, last_delta_at, schema_snapshot
        FROM retencion_watch_memory
       WHERE proyecto_id = $1::uuid
       LIMIT 1`,
@@ -122,22 +172,25 @@ export async function loadWatchMemory(proyectoId: string): Promise<WatchDbMemory
     summary: row?.summary?.trim() || '',
     watermarks,
     last_delta_at: row?.last_delta_at ? new Date(row.last_delta_at).toISOString() : null,
+    schema_snapshot: parseSchemaSnapshot(row?.schema_snapshot),
   }
 }
 
 export async function saveWatchMemory(proyectoId: string, memory: WatchDbMemory): Promise<void> {
   await ensureWatchMemoryTable()
   await query(
-    `INSERT INTO retencion_watch_memory (proyecto_id, summary, watermarks, last_delta_at, updated_at)
-     VALUES ($1::uuid, $2, $3::jsonb, $4::timestamptz, NOW())
+    `INSERT INTO retencion_watch_memory (proyecto_id, summary, schema_snapshot, watermarks, last_delta_at, updated_at)
+     VALUES ($1::uuid, $2, $3::jsonb, $4::jsonb, $5::timestamptz, NOW())
      ON CONFLICT (proyecto_id) DO UPDATE SET
        summary = EXCLUDED.summary,
+       schema_snapshot = COALESCE(EXCLUDED.schema_snapshot, retencion_watch_memory.schema_snapshot),
        watermarks = EXCLUDED.watermarks,
        last_delta_at = EXCLUDED.last_delta_at,
        updated_at = NOW()`,
     [
       proyectoId,
       memory.summary || null,
+      JSON.stringify(memory.schema_snapshot || []),
       JSON.stringify(memory.watermarks),
       memory.last_delta_at,
     ]
@@ -148,7 +201,7 @@ function clip(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max)}\n…[truncado]` : s
 }
 
-type TableDelta = {
+export type TableDelta = {
   schema: string
   table: string
   cursor: string | null
@@ -158,14 +211,34 @@ type TableDelta = {
   note?: string
 }
 
+function stripExcludedColumns(
+  rows: Record<string, unknown>[],
+  schema: string,
+  table: string,
+  excludedCols: Set<string>
+): Record<string, unknown>[] {
+  return rows.map((row) => {
+    const out: Record<string, unknown> = {}
+    const keys = Object.keys(row)
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i]
+      if (excludedCols.has(columnKey(schema, table, k))) continue
+      out[k] = row[k]
+    }
+    return out
+  })
+}
+
 async function pullTableDelta(
   dbUrl: string,
   prev: TableWatermark | undefined,
   schema: string,
   table: string,
-  columns: { column: string; data_type: string }[],
-  approxRows: number | null
+  columns: SchemaColumn[],
+  approxRows: number | null,
+  excludedCols: Set<string>
 ): Promise<{ delta: TableDelta; watermark: TableWatermark }> {
+  const visible = columns.filter((c) => !excludedCols.has(columnKey(schema, table, c.column)))
   const cursor = pickCursorColumn(columns)
   const wm: TableWatermark = {
     schema,
@@ -174,6 +247,21 @@ async function pullTableDelta(
     cursor_kind: cursor?.kind || null,
     last_value: prev?.last_value || null,
     last_count: approxRows,
+  }
+
+  if (!visible.length) {
+    return {
+      delta: {
+        schema,
+        table,
+        cursor: cursor?.column || null,
+        new_rows: 0,
+        truncated: false,
+        sample: [],
+        note: 'Todas las columnas de esta tabla están excluidas.',
+      },
+      watermark: wm,
+    }
   }
 
   if (!cursor) {
@@ -195,22 +283,33 @@ async function pullTableDelta(
     }
   }
 
+  const selectNames: string[] = []
+  const seen = new Set<string>()
+  const addCol = (name: string) => {
+    if (seen.has(name)) return
+    seen.add(name)
+    selectNames.push(name)
+  }
+  addCol(cursor.column)
+  for (let i = 0; i < visible.length; i++) addCol(visible[i].column)
+
   const fq = `${ident(schema)}.${ident(table)}`
   const col = ident(cursor.column)
+  const selectSql = selectNames.map(ident).join(', ')
   const firstRun = !prev?.last_value
   let sql: string
   if (firstRun) {
-    sql = `SELECT * FROM ${fq} ORDER BY ${col} DESC`
+    sql = `SELECT ${selectSql} FROM ${fq} ORDER BY ${col} DESC`
   } else {
     const lit = sqlLiteral(cursor.kind, prev.last_value as string)
-    sql = `SELECT * FROM ${fq} WHERE ${col} > ${lit} ORDER BY ${col} ASC`
+    sql = `SELECT ${selectSql} FROM ${fq} WHERE ${col} > ${lit} ORDER BY ${col} ASC`
   }
 
   const r = await runReadOnlySelect(dbUrl, sql, { limit: 80 })
-  const sample = r.rows
+  const sample = stripExcludedColumns(r.rows, schema, table, excludedCols)
   let lastValue = prev?.last_value || null
-  if (sample.length) {
-    const values = sample.map((row) => cell(row[cursor.column])).filter(Boolean)
+  if (r.rows.length) {
+    const values = r.rows.map((row) => cell(row[cursor.column])).filter(Boolean)
     lastValue = firstRun ? values[0] || lastValue : values[values.length - 1] || lastValue
   }
 
@@ -225,46 +324,92 @@ async function pullTableDelta(
       truncated: r.truncated,
       sample: firstRun ? sample.slice(0, 25) : sample,
       note: firstRun
-        ? 'Primera pasada: muestra reciente (no el histórico completo). La marca queda en el máximo visto.'
+        ? 'Primera pasada: solo filas recientes (no el histórico). A partir de aquí, solo lo nuevo.'
         : undefined,
     },
     watermark: wm,
   }
 }
 
+export async function syncWatchSchema(proyectoId: string, dbUrl: string): Promise<SchemaTable[]> {
+  const tables = await listPublicTables(dbUrl)
+  const snapshot: SchemaTable[] = []
+  const chunk = 8
+  for (let i = 0; i < tables.length; i += chunk) {
+    const part = tables.slice(i, i + chunk)
+    const described = await Promise.all(
+      part.map(async (t) => {
+        const cols = await describeTable(dbUrl, t.schema, t.table)
+        return {
+          schema: t.schema,
+          table: t.table,
+          columns: cols.map((c) => ({ column: c.column, data_type: c.data_type })),
+        } as SchemaTable
+      })
+    )
+    snapshot.push(...described)
+  }
+  const prev = await loadWatchMemory(proyectoId)
+  await saveWatchMemory(proyectoId, {
+    ...prev,
+    schema_snapshot: snapshot,
+  })
+  return snapshot
+}
+
 export async function collectWatchDbDelta(
   proyectoId: string,
-  dbUrl: string
-): Promise<{ briefing: string; nextMemory: WatchDbMemory }> {
+  dbUrl: string,
+  exclusions: WatchExclusions = { tables: [], columns: [] }
+): Promise<{ briefing: string; deltas: TableDelta[]; nextMemory: WatchDbMemory }> {
   const prev = await loadWatchMemory(proyectoId)
+  let schema = prev.schema_snapshot
+  if (!schema.length) {
+    schema = await syncWatchSchema(proyectoId, dbUrl)
+  }
+  const skipTables = exclusionSet(exclusions.tables)
+  const skipCols = exclusionSet(exclusions.columns)
   const tables = await listPublicTables(dbUrl)
-  const slice = tables.slice(0, 25)
+  const approxByKey = new Map(tables.map((t) => [tableKey(t.schema, t.table), t.approx_rows]))
   const deltas: TableDelta[] = []
   const watermarks: TableWatermark[] = []
-  const prevByKey = new Map(prev.watermarks.map((w) => [`${w.schema}.${w.table}`, w]))
+  const prevByKey = new Map(prev.watermarks.map((w) => [tableKey(w.schema, w.table), w]))
 
-  for (const t of slice) {
+  let included = 0
+  for (let i = 0; i < schema.length; i++) {
+    const t = schema[i]
+    const key = tableKey(t.schema, t.table)
+    const prevWm = prevByKey.get(key)
+    if (skipTables.has(key)) {
+      if (prevWm) watermarks.push(prevWm)
+      continue
+    }
+    if (included >= 100) {
+      if (prevWm) watermarks.push(prevWm)
+      continue
+    }
+    included += 1
     try {
-      const cols = await describeTable(dbUrl, t.schema, t.table)
       const { delta, watermark } = await pullTableDelta(
         dbUrl,
-        prevByKey.get(`${t.schema}.${t.table}`),
+        prevWm,
         t.schema,
         t.table,
-        cols,
-        t.approx_rows
+        t.columns,
+        approxByKey.get(key) ?? null,
+        skipCols
       )
       watermarks.push(watermark)
       if (delta.new_rows > 0 || delta.note) deltas.push(delta)
     } catch (e) {
       watermarks.push(
-        prevByKey.get(`${t.schema}.${t.table}`) || {
+        prevWm || {
           schema: t.schema,
           table: t.table,
           cursor_column: null,
           cursor_kind: null,
           last_value: null,
-          last_count: t.approx_rows,
+          last_count: approxByKey.get(key) ?? null,
         }
       )
       deltas.push({
@@ -283,16 +428,13 @@ export async function collectWatchDbDelta(
     summary: prev.summary,
     watermarks,
     last_delta_at: new Date().toISOString(),
+    schema_snapshot: schema,
   }
 
   const briefing = clip(
     [
-      prev.summary
-        ? `## Resumen acumulado del agente (NO vuelvas a extraer este histórico)\n${prev.summary}`
-        : '## Resumen acumulado\n(primera pasada: aún no hay memoria)',
       prev.last_delta_at ? `Última ingestión: ${prev.last_delta_at}` : 'No había ingestión previa.',
       '## Datos NUEVOS desde la última pasada',
-      'Trabaja solo con esto + el resumen. No hagas SELECT * de tablas enteras.',
       JSON.stringify(
         deltas.map((d) => ({
           table: `${d.schema}.${d.table}`,
@@ -309,5 +451,5 @@ export async function collectWatchDbDelta(
     22000
   )
 
-  return { briefing, nextMemory }
+  return { briefing, deltas, nextMemory }
 }

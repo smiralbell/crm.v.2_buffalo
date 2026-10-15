@@ -3,9 +3,10 @@ import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import { assertProjectAccess } from '@/lib/project-access'
 import { assertRetencionEligible } from '@/lib/retencion/eligibility'
-import { clearDbUrl, saveDbUrl } from '@/lib/retencion/agent-config-store'
+import { clearDbUrl, getDecryptedDbUrl, saveDbUrl } from '@/lib/retencion/agent-config-store'
 import { probeConnection } from '@/lib/retencion/readonly-postgres'
 import { getWatchPublic, saveWatchSettings } from '@/lib/retencion/watch-store'
+import { syncWatchSchema } from '@/lib/retencion/watch-db-memory'
 import { runWatchForProject } from '@/lib/retencion/watch-agent'
 
 const patchSchema = z.object({
@@ -15,6 +16,8 @@ const patchSchema = z.object({
   agent_prompt: z.string().max(20000).optional(),
   watch_prompt: z.string().max(20000).optional(),
   every_minutes: z.number().int().min(0).max(86400).optional(),
+  excluded_tables: z.array(z.string().max(200)).max(500).optional(),
+  excluded_columns: z.array(z.string().max(260)).max(2000).optional(),
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -38,7 +41,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'POST') {
       const action = (req.body as { action?: string } | undefined)?.action
-      if (action !== 'run') return res.status(400).json({ error: 'action debe ser run' })
+      if (action === 'sync_schema') {
+        const dbUrl = await getDecryptedDbUrl(proyectoId)
+        if (!dbUrl) return res.status(400).json({ error: 'Conecta primero la URL de PostgreSQL' })
+        await syncWatchSchema(proyectoId, dbUrl)
+        const watch = await getWatchPublic(proyectoId)
+        return res.status(200).json({ watch })
+      }
+      if (action !== 'run') return res.status(400).json({ error: 'action debe ser run o sync_schema' })
       const result = await runWatchForProject(proyectoId)
       const watch = await getWatchPublic(proyectoId)
       return res.status(200).json({ result, watch })
@@ -59,6 +69,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return res.status(400).json({ error: `No se pudo conectar (solo lectura): ${probe.error}` })
         }
         await saveDbUrl(proyectoId, url)
+        try {
+          await syncWatchSchema(proyectoId, url)
+        } catch (e) {
+          const watch = await saveWatchSettings(proyectoId, {
+            every_minutes: parsed.every_minutes,
+            watch_prompt: parsed.watch_prompt,
+            knowledge: parsed.knowledge,
+            agent_prompt: parsed.agent_prompt,
+            excluded_tables: parsed.excluded_tables,
+            excluded_columns: parsed.excluded_columns,
+          })
+          return res.status(200).json({
+            watch,
+            warning: `Conectada, pero no se pudo leer el esquema: ${e instanceof Error ? e.message : String(e)}`,
+          })
+        }
       }
 
       const watch = await saveWatchSettings(proyectoId, {
@@ -66,6 +92,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         watch_prompt: parsed.watch_prompt,
         knowledge: parsed.knowledge,
         agent_prompt: parsed.agent_prompt,
+        excluded_tables: parsed.excluded_tables,
+        excluded_columns: parsed.excluded_columns,
       })
       return res.status(200).json({ watch })
     }
