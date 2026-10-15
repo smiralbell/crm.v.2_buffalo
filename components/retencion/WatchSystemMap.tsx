@@ -76,6 +76,8 @@ type Drag =
 export default function WatchSystemMap({
   proyectoId,
   used,
+  progress,
+  activeId,
   labels,
   selected,
   onSelect,
@@ -84,6 +86,8 @@ export default function WatchSystemMap({
 }: {
   proyectoId: string
   used?: WatchNodeId[]
+  progress?: WatchNodeId[]
+  activeId?: WatchNodeId | null
   labels: Record<WatchNodeId, string>
   selected: WatchNodeId | null
   onSelect: (id: WatchNodeId | null) => void
@@ -96,6 +100,7 @@ export default function WatchSystemMap({
   const drag = useRef<Drag | null>(null)
   const [panning, setPanning] = useState(false)
   const usedSet = useMemo(() => new Set(used?.length ? used : ['cron']), [used])
+  const doneSet = useMemo(() => new Set(progress || []), [progress])
 
   useEffect(() => {
     setNodes(loadPositions(proyectoId))
@@ -203,7 +208,8 @@ export default function WatchSystemMap({
             const a = nodes.find((n) => n.id === from)
             const b = nodes.find((n) => n.id === to)
             if (!a || !b) return null
-            const lit = usedSet.has(from) && usedSet.has(to)
+            const lit =
+              (doneSet.has(from) && doneSet.has(to)) || (usedSet.has(from) && usedSet.has(to))
             return (
               <path
                 key={`${from}-${to}`}
@@ -224,7 +230,9 @@ export default function WatchSystemMap({
               key={n.id}
               type="button"
               data-node={n.id}
-              className={`${styles.node} ${selected === n.id ? styles.selected : ''} ${usedSet.has(n.id) ? styles.used : ''}`}
+              className={`${styles.node} ${selected === n.id ? styles.selected : ''} ${
+                doneSet.has(n.id) ? styles.done : usedSet.has(n.id) ? styles.used : ''
+              } ${activeId === n.id ? styles.running : ''}`}
               style={{ transform: `translate(${n.x}px, ${n.y}px)` }}
             >
               <span className={styles.icon}>

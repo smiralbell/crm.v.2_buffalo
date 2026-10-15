@@ -3,7 +3,7 @@ import { query } from '@/lib/db'
 import { getBankConnectionStatus } from '@/lib/enable-banking/connection-status'
 import { buildFinanceAlerts } from './alerts'
 import { getAnnualRevenueTarget } from './annual-target'
-import { sumBankCobros, sumOutstandingInvoices } from './bank-cobros'
+import { sumBankCobros, sumBankCobrosYtd, sumOutstandingInvoices } from './bank-cobros'
 import {
   countUnclassifiedExpenses,
   loadExpenseTransactionsForPeriod,
@@ -504,7 +504,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   })
   const ytdInvoiced = Number(invoicedYTD._sum.total ?? 0)
 
-  const collectedYTD = await sumBankCobros(new Date(y, 0, 1), now)
+  const collectedYTD = await sumBankCobrosYtd(now)
   const collectedThisMonth = await sumBankCobros(startThisMonth, endThisMonth)
   const outstanding = await sumOutstandingInvoices()
 

@@ -23,4 +23,4 @@ export const PERIOD_INSIGHT_HELP: Record<string, string> = {
 }
 
 export const ANNUAL_GOAL_HELP =
-  'Llevamos = cobros reales del banco este año. La barra más clara es lo que sumarías si cobras las facturas ya creadas (borrador o enviadas) que aún no tienen movimiento de banco.'
+  'Llevamos = la caja Cobros de Finanzas con el filtro Año (entradas de banco amount > 0). La barra más clara es lo que sumarías si cobras las facturas ya creadas (borrador o enviadas) que aún no tienen movimiento de banco.'

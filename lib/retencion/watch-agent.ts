@@ -10,6 +10,7 @@ import {
   listDueWatchProjects,
   listWatchRuns,
   saveWatchRun,
+  setWatchLiveProgress,
   type WatchGraph,
   type WatchNodeId,
   type WatchPack,
@@ -67,7 +68,12 @@ export async function runWatchForProject(proyectoId: string): Promise<{
   graph: WatchGraph
   error?: string
 }> {
-  const used: WatchNodeId[] = ['cron']
+  const used: WatchNodeId[] = []
+  const bump = (id: WatchNodeId) => {
+    used.push(id)
+    setWatchLiveProgress(proyectoId, used, true)
+  }
+  bump('cron')
   await ensureWatchColumns()
   const cfgRow = await getOrCreateAgentConfig(proyectoId)
   const watch = await getWatchPublic(proyectoId)
@@ -90,7 +96,7 @@ export async function runWatchForProject(proyectoId: string): Promise<{
       })
       pendingMemory = collected.nextMemory
       deltas = collected.deltas
-      used.push('db')
+      bump('db')
     } catch (e) {
       deltas = [
         {
@@ -104,13 +110,16 @@ export async function runWatchForProject(proyectoId: string): Promise<{
         },
       ]
     }
+    if (used.indexOf('db') === -1) bump('db')
+  } else {
+    bump('db')
   }
 
   const incidents = await listIncidentsSince(proyectoId, watch.last_at, 40)
-  used.push('incidents')
+  bump('incidents')
 
   const previousRuns = await listWatchRuns(proyectoId, 5)
-  used.push('reports')
+  bump('reports')
 
   const pack = buildCleanPack({
     connected: Boolean(dbUrl),
@@ -119,7 +128,7 @@ export async function runWatchForProject(proyectoId: string): Promise<{
     incidents,
     runs: previousRuns,
   })
-  used.push('clean')
+  bump('clean')
 
   const dbNewRows = deltas.reduce((acc, d) => acc + (d.new_rows || 0), 0)
   const graph: WatchGraph = {
@@ -151,7 +160,7 @@ export async function runWatchForProject(proyectoId: string): Promise<{
         { model, temperature: 0.2, maxTokens: 5000 }
       )
     ).trim()
-    used.push('ai')
+    bump('ai')
     graph.used = used
     if (pendingMemory) {
       await saveWatchMemory(proyectoId, {
@@ -161,6 +170,7 @@ export async function runWatchForProject(proyectoId: string): Promise<{
       })
     }
     await saveWatchRun({ proyectoId, ok: true, report, graph, pack })
+    setWatchLiveProgress(proyectoId, used, false)
     return { ok: true, report, graph }
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e)
@@ -173,6 +183,7 @@ export async function runWatchForProject(proyectoId: string): Promise<{
       error,
       pack,
     })
+    setWatchLiveProgress(proyectoId, used, false)
     return { ok: false, report: report || error, graph, error }
   }
 }

@@ -1,6 +1,7 @@
 import { format } from 'date-fns'
 import { query } from '@/lib/db'
 import { prisma } from '@/lib/prisma'
+import { getPeriodRangeForPreset } from '@/lib/finance/period-presets'
 
 /** Entradas de banco (mismo criterio que el KPI Cobros de Finanzas). */
 export async function sumBankCobros(start: Date, end: Date): Promise<number> {
@@ -20,8 +21,14 @@ export async function sumBankCobros(start: Date, end: Date): Promise<number> {
   }
 }
 
+/** Mismo rango que Finanzas → filtro «Año» (caja Cobros). */
+export function financeYearCobrosRange(now = new Date()) {
+  return getPeriodRangeForPreset('year', now)
+}
+
 export async function sumBankCobrosYtd(now = new Date()): Promise<number> {
-  return sumBankCobros(new Date(now.getFullYear(), 0, 1), now)
+  const { start, end } = financeYearCobrosRange(now)
+  return sumBankCobros(start, end)
 }
 
 /** Facturas creadas (borrador o enviadas) aún sin cobro vinculado al banco. */

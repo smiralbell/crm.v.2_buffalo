@@ -104,12 +104,16 @@ export default function WatchSystemPanel({
   onGoIncidents,
   scheduleOpen,
   onScheduleOpenChange,
+  reportsOpen,
+  onReportsOpenChange,
   onIntervalLabel,
 }: {
   proyectoId: string
   onGoIncidents?: () => void
   scheduleOpen: boolean
   onScheduleOpenChange: (open: boolean) => void
+  reportsOpen: boolean
+  onReportsOpenChange: (open: boolean) => void
   onIntervalLabel?: (label: string) => void
 }) {
   const { user } = useAuth()
@@ -134,6 +138,7 @@ export default function WatchSystemPanel({
   const [excludedColumns, setExcludedColumns] = useState<string[]>([])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [openRun, setOpenRun] = useState<WatchRunPublic | null>(null)
+  const [liveUsed, setLiveUsed] = useState<WatchNodeId[]>([])
 
   const apply = (w: WatchPublic) => {
     setWatch(w)
@@ -228,6 +233,17 @@ export default function WatchSystemPanel({
     setRunning(true)
     setError('')
     setOkMsg('')
+    setLiveUsed(['cron'])
+    const poll = window.setInterval(() => {
+      void fetch(`/api/retencion/proyectos/${proyectoId}/watch`)
+        .then((r) => r.json())
+        .then((data) => {
+          const w = data.watch as WatchPublic | undefined
+          if (w?.live_used?.length) setLiveUsed(w.live_used)
+          if (w) apply(w)
+        })
+        .catch(() => undefined)
+    }, 700)
     try {
       const res = await fetch(`/api/retencion/proyectos/${proyectoId}/watch`, {
         method: 'POST',
@@ -237,12 +253,16 @@ export default function WatchSystemPanel({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Falló el flujo')
       apply(data.watch as WatchPublic)
+      const done = (data.watch as WatchPublic | undefined)?.last_graph?.used
+      setLiveUsed(done && done.length ? done : ['cron', 'db', 'incidents', 'reports', 'clean', 'ai'])
       setOkMsg(data.result?.ok ? 'Flujo ejecutado' : data.result?.error || 'Flujo con errores')
       setSelected('ai')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falló el flujo')
     } finally {
+      window.clearInterval(poll)
       setRunning(false)
+      window.setTimeout(() => setLiveUsed([]), 1600)
     }
   }
 
@@ -340,6 +360,8 @@ export default function WatchSystemPanel({
         key={`${proyectoId}-${recenter}`}
         proyectoId={proyectoId}
         used={watch?.last_graph?.used}
+        progress={liveUsed}
+        activeId={running && liveUsed.length ? liveUsed[liveUsed.length - 1] : null}
         labels={labels}
         selected={selected}
         onSelect={(id) => {
@@ -661,6 +683,53 @@ export default function WatchSystemPanel({
           </aside>
         )}
       </WatchSystemMap>
+
+      <Dialog open={reportsOpen} onOpenChange={onReportsOpenChange}>
+        <DialogContent className="max-w-lg rounded-[28px] border-2 border-white sm:rounded-[28px]">
+          <DialogHeader>
+            <DialogTitle>Informes del flujo</DialogTitle>
+            <DialogDescription>
+              Todos los informes generados por el cron o por Ejecutar ahora.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] space-y-3 overflow-auto pr-1">
+            {watch?.runs?.length ? (
+              watch.runs.map((r) => (
+                <div key={r.id} className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => setOpenRun(openRun?.id === r.id ? null : r)}
+                  >
+                    <p className="text-sm font-semibold text-gray-900">{r.ok ? 'Informe' : 'Error'}</p>
+                    <p className="text-xs text-gray-400">
+                      {new Date(r.created_at).toLocaleString('es-ES', {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      })}
+                    </p>
+                  </button>
+                  {openRun?.id === r.id && (
+                    <div className="mt-2 space-y-2">
+                      {r.error && <p className="text-sm text-red-700">{r.error}</p>}
+                      {r.report && (
+                        <>
+                          <pre className="max-h-56 overflow-auto whitespace-pre-wrap text-[12px] text-gray-800">
+                            {r.report}
+                          </pre>
+                          <ReportActions markdown={r.report} title={`informe-${r.id}`} />
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">Todavía no hay informes. Ejecuta el flujo o espera al cron.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={scheduleOpen} onOpenChange={onScheduleOpenChange}>
         <DialogContent className="max-w-md rounded-[28px] border-2 border-white sm:rounded-[28px]">

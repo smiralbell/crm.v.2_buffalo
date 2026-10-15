@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAnnualRevenueTarget } from '@/lib/finance/annual-target'
-import { sumBankCobros, sumOutstandingInvoices } from '@/lib/finance/bank-cobros'
+import { sumBankCobros, sumBankCobrosYtd, sumOutstandingInvoices } from '@/lib/finance/bank-cobros'
 import { listOpsAlertMessages, type OpsAlertMessage } from '@/lib/ops-alerts-store'
 import DashboardAlertsPanel from '@/components/crm/DashboardAlertsPanel'
 import { estadoLabel } from '@/lib/leads/estados'
@@ -151,7 +151,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     const invoicedThisMonth = Number(invThisMonth._sum.total || 0)
     const invoicedYTD = Number(invYTD._sum.total || 0)
     const [collectedYTD, collectedThisMonth, annualTarget, outstanding] = await Promise.all([
-      sumBankCobros(startYTD, now),
+      sumBankCobrosYtd(now),
       sumBankCobros(startThisMonth, endThisMonth),
       getAnnualRevenueTarget(),
       sumOutstandingInvoices(),

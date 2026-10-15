@@ -81,6 +81,18 @@ export type WatchPublic = {
   excluded_tables: string[]
   excluded_columns: string[]
   runs: WatchRunPublic[]
+  live_used: WatchNodeId[]
+  live_running: boolean
+}
+
+const liveByProject = new Map<string, { used: WatchNodeId[]; running: boolean }>()
+
+export function setWatchLiveProgress(proyectoId: string, used: WatchNodeId[], running: boolean) {
+  liveByProject.set(proyectoId, { used: used.slice(), running })
+}
+
+export function getWatchLiveProgress(proyectoId: string): { used: WatchNodeId[]; running: boolean } {
+  return liveByProject.get(proyectoId) || { used: [], running: false }
 }
 
 type WatchCols = {
@@ -223,7 +235,7 @@ export async function listWatchRuns(proyectoId: string, limit = 5): Promise<Watc
       WHERE proyecto_id = $1::uuid
       ORDER BY created_at DESC
       LIMIT $2`,
-    [proyectoId, Math.min(20, Math.max(1, limit))]
+    [proyectoId, Math.min(200, Math.max(1, limit))]
   )
   return rows.map((r) => ({
     id: r.id,
@@ -264,6 +276,8 @@ export function toWatchPublic(
     excluded_tables: watch.excluded_tables,
     excluded_columns: watch.excluded_columns,
     runs: extra.runs || [],
+    live_used: getWatchLiveProgress(row.proyecto_id).used,
+    live_running: getWatchLiveProgress(row.proyecto_id).running,
   }
 }
 
@@ -276,7 +290,7 @@ export async function getWatchPublic(proyectoId: string): Promise<WatchPublic> {
     watermarks: [],
     schema_snapshot: [] as SchemaTable[],
   }))
-  const runs = await listWatchRuns(proyectoId, 5).catch(() => [])
+  const runs = await listWatchRuns(proyectoId, 80).catch(() => [])
   return toWatchPublic(row, watch, {
     summary: memory.summary,
     last_delta_at: memory.last_delta_at,

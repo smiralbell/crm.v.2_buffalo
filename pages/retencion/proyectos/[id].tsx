@@ -6,7 +6,7 @@ import { useAuth } from '@/components/AuthContext'
 import DeveloperDataGuide from '@/components/engranaje5/DeveloperDataGuide'
 import IncidentsPanel from '@/components/retencion/IncidentsPanel'
 import WatchSystemPanel from '@/components/retencion/WatchSystemPanel'
-import { ArrowLeft, AlertCircle, Link2, Clock } from 'lucide-react'
+import { ArrowLeft, AlertCircle, Link2, Clock, FileText } from 'lucide-react'
 import type { ProyectoRow } from '@/lib/engranaje5/project-services'
 import type { ProjectServiceFlags } from '@/lib/engranaje5/data-column-guide'
 
@@ -34,6 +34,7 @@ export default function RetencionProyectoDetailPage() {
   const [services, setServices] = useState<ProjectServiceFlags | null>(null)
   const [webhookOpen, setWebhookOpen] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [reportsOpen, setReportsOpen] = useState(false)
   const [intervalLabel, setIntervalLabel] = useState('Frecuencia')
 
   useEffect(() => {
@@ -118,14 +119,24 @@ export default function RetencionProyectoDetailPage() {
                 </button>
               )}
               {activeTab === 'sistema' && (
-                <button
-                  type="button"
-                  onClick={() => setScheduleOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50"
-                >
-                  <Clock className="h-4 w-4" />
-                  {intervalLabel}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReportsOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Ver informes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScheduleOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                  >
+                    <Clock className="h-4 w-4" />
+                    {intervalLabel}
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -158,6 +169,8 @@ export default function RetencionProyectoDetailPage() {
               onGoIncidents={() => switchTab('incidencias')}
               scheduleOpen={scheduleOpen}
               onScheduleOpenChange={setScheduleOpen}
+              reportsOpen={reportsOpen}
+              onReportsOpenChange={setReportsOpen}
               onIntervalLabel={setIntervalLabel}
             />
           </div>
