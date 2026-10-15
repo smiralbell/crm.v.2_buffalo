@@ -5,6 +5,11 @@ import WatchSystemMap, { type WatchNodeId } from '@/components/retencion/WatchSy
 import styles from './WatchSystemMap.module.css'
 import type { WatchPublic, WatchRunPublic } from '@/lib/retencion/watch-store'
 import {
+  DEFAULT_WATCH_MODEL,
+  WATCH_MODELS,
+  watchModelLabel,
+} from '@/lib/retencion/watch-models'
+import {
   formatWatchInterval,
   minutesToParts,
   partsToMinutes,
@@ -118,6 +123,7 @@ export default function WatchSystemPanel({
   const [watch, setWatch] = useState<WatchPublic | null>(null)
   const [dbUrl, setDbUrl] = useState('')
   const [watchPrompt, setWatchPrompt] = useState('')
+  const [watchModel, setWatchModel] = useState(DEFAULT_WATCH_MODEL)
   const [paused, setPaused] = useState(true)
   const [amount, setAmount] = useState(1)
   const [unit, setUnit] = useState<WatchIntervalUnit>('hours')
@@ -132,6 +138,7 @@ export default function WatchSystemPanel({
   const apply = (w: WatchPublic) => {
     setWatch(w)
     setWatchPrompt(w.watch_prompt || '')
+    setWatchModel(w.watch_model || DEFAULT_WATCH_MODEL)
     setExcludedTables(w.excluded_tables || [])
     setExcludedColumns(w.excluded_columns || [])
     const parts = minutesToParts(w.every_minutes && w.every_minutes > 0 ? w.every_minutes : 0)
@@ -193,6 +200,7 @@ export default function WatchSystemPanel({
     try {
       const body: Record<string, unknown> = {
         watch_prompt: watchPrompt,
+        watch_model: watchModel,
         every_minutes: paused ? 0 : partsToMinutes(amount, unit),
         excluded_tables: excludedTables,
         excluded_columns: excludedColumns,
@@ -243,15 +251,18 @@ export default function WatchSystemPanel({
     setError('')
     setOkMsg('')
     try {
+      const body: Record<string, unknown> = { action: 'sync_schema' }
+      if (dbUrl.trim()) body.client_db_url = dbUrl.trim()
       const res = await fetch(`/api/retencion/proyectos/${proyectoId}/watch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sync_schema' }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'No se pudo sincronizar')
       apply(data.watch as WatchPublic)
-      setOkMsg('Esquema sincronizado')
+      setDbUrl('')
+      setOkMsg('Conectada y esquema sincronizado')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo sincronizar')
     } finally {
@@ -272,9 +283,9 @@ export default function WatchSystemPanel({
           : 'sin nuevas',
       reports: watch?.runs?.length ? `${watch.runs.length} últimos` : 'ninguno',
       clean: watch?.last_pack ? 'listo' : 'pendiente',
-      ai: watch?.last_report ? 'informe listo' : 'sin informe',
+      ai: watchModelLabel(watchModel),
     }),
-    [paused, amount, unit, watch, openIncidents]
+    [paused, amount, unit, watch, openIncidents, watchModel]
   )
 
   const scheduleFields = (
@@ -382,34 +393,40 @@ export default function WatchSystemPanel({
               {selected === 'db' && (
                 <>
                   <div className={styles.field}>
-                    <label>URL PostgreSQL</label>
+                    <label>URL PostgreSQL de este cliente</label>
                     <input
-                      type="text"
+                      type="password"
+                      autoComplete="off"
+                      spellCheck={false}
                       value={dbUrl}
                       onChange={(e) => setDbUrl(e.target.value)}
                       disabled={!isAdmin}
                       placeholder={
                         watch?.db_connected
-                          ? `${watch.db_host || ''} / ${watch.db_name || ''}`
-                          : 'postgresql://…'
+                          ? `Conectada · ${watch.db_host || ''} / ${watch.db_name || ''} · pega otra para cambiar`
+                          : 'postgres://usuario:clave@host:5432/basedatos'
                       }
                     />
                     <p className="mt-1.5 text-xs text-gray-400">
-                      La primera conexión sincroniza solo nombres de tablas y columnas. En cada cron se extraen filas nuevas desde la última pasada. Esta URL queda guardada.
+                      Cada proyecto tiene la suya. Se cifra en servidor (CLIENT_DB_ENCRYPTION_KEY / SESSION_SECRET) y no se vuelve a mostrar. Solo lectura.
                     </p>
                   </div>
 
-                  {watch?.db_connected && (
-                    <div className={styles.actions}>
-                      <button
-                        type="button"
-                        className={styles.hudBtn}
-                        disabled={!isAdmin || syncing}
-                        onClick={() => void syncSchema()}
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        {syncing ? 'Sincronizando…' : 'Sincronizar esquema'}
-                      </button>
+                  <div className={styles.actions}>
+                    <button
+                      type="button"
+                      className={styles.hudBtn}
+                      disabled={!isAdmin || syncing || (!dbUrl.trim() && !watch?.db_connected)}
+                      onClick={() => void syncSchema()}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      {syncing
+                        ? 'Sincronizando…'
+                        : dbUrl.trim()
+                          ? 'Conectar y sincronizar'
+                          : 'Sincronizar esquema'}
+                    </button>
+                    {watch?.db_connected && (
                       <button
                         type="button"
                         className={styles.hudBtn}
@@ -418,8 +435,10 @@ export default function WatchSystemPanel({
                       >
                         Desconectar
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  {okMsg && selected === 'db' && <p className="text-sm text-emerald-700">{okMsg}</p>}
+                  {error && selected === 'db' && <p className="text-sm text-red-700">{error}</p>}
 
                   {watch?.schema?.length ? (
                     <div>
@@ -572,6 +591,26 @@ export default function WatchSystemPanel({
 
               {selected === 'ai' && (
                 <>
+                  <div className={styles.field}>
+                    <label>Modelo OpenRouter</label>
+                    <select
+                      value={watchModel}
+                      disabled={!isAdmin}
+                      onChange={(e) => setWatchModel(e.target.value)}
+                    >
+                      {!WATCH_MODELS.some((m) => m.id === watchModel) && watchModel && (
+                        <option value={watchModel}>{watchModel}</option>
+                      )}
+                      {WATCH_MODELS.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label} · {m.hint}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1.5 text-xs text-gray-400">
+                      El informe se genera con OpenRouter. Recomendado: Qwen 3.7 Flash (1 millón de tokens y el más barato).
+                    </p>
+                  </div>
                   <div className={styles.field}>
                     <label>Prompt del informe</label>
                     <textarea

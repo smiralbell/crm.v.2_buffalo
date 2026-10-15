@@ -42,6 +42,7 @@ ALTER TABLE retencion_agent_configs
   ADD COLUMN IF NOT EXISTS watch_last_report TEXT,
   ADD COLUMN IF NOT EXISTS watch_last_graph JSONB,
   ADD COLUMN IF NOT EXISTS watch_prompt TEXT,
+  ADD COLUMN IF NOT EXISTS watch_model TEXT,
   ADD COLUMN IF NOT EXISTS watch_excluded_tables JSONB,
   ADD COLUMN IF NOT EXISTS watch_excluded_columns JSONB,
   ADD COLUMN IF NOT EXISTS watch_last_pack JSONB;

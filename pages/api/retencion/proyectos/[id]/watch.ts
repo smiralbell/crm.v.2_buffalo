@@ -4,7 +4,7 @@ import { requireAuthAPI } from '@/lib/auth'
 import { assertProjectAccess } from '@/lib/project-access'
 import { assertRetencionEligible } from '@/lib/retencion/eligibility'
 import { clearDbUrl, getDecryptedDbUrl, saveDbUrl } from '@/lib/retencion/agent-config-store'
-import { probeConnection } from '@/lib/retencion/readonly-postgres'
+import { probeConnection, redactDbError } from '@/lib/retencion/readonly-postgres'
 import { getWatchPublic, saveWatchSettings } from '@/lib/retencion/watch-store'
 import { syncWatchSchema } from '@/lib/retencion/watch-db-memory'
 import { runWatchForProject } from '@/lib/retencion/watch-agent'
@@ -15,6 +15,7 @@ const patchSchema = z.object({
   knowledge: z.string().max(200000).optional(),
   agent_prompt: z.string().max(20000).optional(),
   watch_prompt: z.string().max(20000).optional(),
+  watch_model: z.string().min(3).max(120).optional(),
   every_minutes: z.number().int().min(0).max(86400).optional(),
   excluded_tables: z.array(z.string().max(200)).max(500).optional(),
   excluded_columns: z.array(z.string().max(260)).max(2000).optional(),
@@ -40,10 +41,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'POST') {
-      const action = (req.body as { action?: string } | undefined)?.action
+      const action = (req.body as { action?: string; client_db_url?: string } | undefined)?.action
       if (action === 'sync_schema') {
-        const dbUrl = await getDecryptedDbUrl(proyectoId)
-        if (!dbUrl) return res.status(400).json({ error: 'Conecta primero la URL de PostgreSQL' })
+        const pasted = String(
+          (req.body as { client_db_url?: string } | undefined)?.client_db_url || ''
+        ).trim()
+        let dbUrl = pasted
+        if (dbUrl) {
+          if (!/^postgres(ql)?:\/\//i.test(dbUrl)) {
+            return res.status(400).json({ error: 'La URL debe ser postgres:// o postgresql://' })
+          }
+          const probe = await probeConnection(dbUrl)
+          if (!probe.ok) {
+            return res.status(400).json({
+              error: `No se pudo conectar (solo lectura): ${probe.error}`,
+            })
+          }
+          await saveDbUrl(proyectoId, dbUrl)
+        } else {
+          dbUrl = (await getDecryptedDbUrl(proyectoId)) || ''
+        }
+        if (!dbUrl) {
+          return res.status(400).json({ error: 'Pega la URL de PostgreSQL y pulsa Conectar y sincronizar' })
+        }
         await syncWatchSchema(proyectoId, dbUrl)
         const watch = await getWatchPublic(proyectoId)
         return res.status(200).json({ watch })
@@ -66,7 +86,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
         const probe = await probeConnection(url)
         if (!probe.ok) {
-          return res.status(400).json({ error: `No se pudo conectar (solo lectura): ${probe.error}` })
+          return res.status(400).json({
+            error: `No se pudo conectar (solo lectura): ${probe.error}`,
+          })
         }
         await saveDbUrl(proyectoId, url)
         try {
@@ -75,6 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const watch = await saveWatchSettings(proyectoId, {
             every_minutes: parsed.every_minutes,
             watch_prompt: parsed.watch_prompt,
+            watch_model: parsed.watch_model,
             knowledge: parsed.knowledge,
             agent_prompt: parsed.agent_prompt,
             excluded_tables: parsed.excluded_tables,
@@ -90,6 +113,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const watch = await saveWatchSettings(proyectoId, {
         every_minutes: parsed.every_minutes,
         watch_prompt: parsed.watch_prompt,
+        watch_model: parsed.watch_model,
         knowledge: parsed.knowledge,
         agent_prompt: parsed.agent_prompt,
         excluded_tables: parsed.excluded_tables,
@@ -104,7 +128,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: err.issues[0]?.message || 'Datos inválidos' })
     }
     if (res.headersSent) return
-    console.error('[retencion/watch]', err)
-    return res.status(500).json({ error: err instanceof Error ? err.message : 'Error interno' })
+    console.error('[retencion/watch]', redactDbError(err))
+    return res.status(500).json({ error: redactDbError(err) || 'Error interno' })
   }
 }

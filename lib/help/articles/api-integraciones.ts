@@ -315,6 +315,7 @@ Cada integración exige variables de entorno (ver artículo siguiente). Los webh
 
 - \`DATABASE_URL\` — PostgreSQL
 - \`SESSION_SECRET\` — firma de cookies
+- \`CLIENT_DB_ENCRYPTION_KEY\` — cifra las URLs de Postgres de cada cliente en Retención → Sistema (si falta, usa SESSION_SECRET)
 - \`CRM_ADMIN_EMAIL\` / \`CRM_ADMIN_PASSWORD\` — admin bootstrap
 - \`NEXT_PUBLIC_BASE_URL\` / \`APP_BASE_URL\` — URL pública
 

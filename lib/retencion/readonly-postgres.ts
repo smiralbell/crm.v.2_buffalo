@@ -3,6 +3,40 @@ import { Client } from 'pg'
 const FORBIDDEN =
   /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|copy|call|execute|do|merge|replace|vacuum|reindex|cluster|comment|security|set\s+role|set\s+session|pg_read_file|lo_import|lo_export)\b/i
 
+type SslOption = boolean | { rejectUnauthorized: false } | undefined
+
+/** Quita usuario/clave de errores de pg (a menudo incluyen la URL). */
+export function redactDbError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e)
+  return msg
+    .replace(/postgres(ql)?:\/\/[^@\s/]+@/gi, 'postgres://***@')
+    .replace(/(password|pwd)=([^&\s]+)/gi, '$1=***')
+}
+
+function isLocalPgHost(connectionString: string): boolean {
+  try {
+    const u = new URL(connectionString.replace(/^postgres(ql)?:/i, 'https:'))
+    const host = (u.hostname || '').toLowerCase()
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+  } catch {
+    return false
+  }
+}
+
+/** EasyPanel y Postgres gestionados suelen exigir TLS aunque la URL no traiga sslmode. */
+export function pgSslConfig(connectionString: string): SslOption {
+  const lower = connectionString.toLowerCase()
+  if (lower.includes('sslmode=disable')) return undefined
+  if (isLocalPgHost(connectionString) && !lower.includes('sslmode=')) return undefined
+  return { rejectUnauthorized: false }
+}
+
+function sslAttempts(connectionString: string): SslOption[] {
+  const preferred = pgSslConfig(connectionString)
+  if (preferred) return [preferred, undefined]
+  return [undefined, { rejectUnauthorized: false }]
+}
+
 /** Solo SELECT / WITH … SELECT. Bloquea escrituras y DDL. */
 export function assertReadOnlySelect(sql: string): string {
   const cleaned = sql
@@ -30,6 +64,52 @@ export type SelectResult = {
   truncated: boolean
 }
 
+async function withReadOnlyClient<T>(
+  connectionString: string,
+  timeoutMs: number,
+  fn: (client: Client) => Promise<T>
+): Promise<T> {
+  const attempts = sslAttempts(connectionString)
+  let last: unknown
+  for (let i = 0; i < attempts.length; i++) {
+    const client = new Client({
+      connectionString,
+      connectionTimeoutMillis: 12000,
+      statement_timeout: timeoutMs,
+      query_timeout: timeoutMs,
+      ssl: attempts[i],
+    })
+    try {
+      await client.connect()
+      try {
+        await client.query(`SET statement_timeout = ${timeoutMs}`)
+      } catch {
+        /* algunos hosts no permiten SET */
+      }
+      try {
+        await client.query(`SET default_transaction_read_only = on`)
+      } catch {
+        /* ignore */
+      }
+      const out = await fn(client)
+      try {
+        await client.end()
+      } catch {
+        /* ignore */
+      }
+      return out
+    } catch (e) {
+      last = e
+      try {
+        await client.end()
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  throw new Error(redactDbError(last) || 'No se pudo conectar al PostgreSQL')
+}
+
 export async function runReadOnlySelect(
   connectionString: string,
   sql: string,
@@ -38,23 +118,9 @@ export async function runReadOnlySelect(
   const safeSql = assertReadOnlySelect(sql)
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500)
   const timeoutMs = opts.timeoutMs ?? 15000
-
   const wrapped = `SELECT * FROM (${safeSql}) AS _buffalo_ro LIMIT ${limit + 1}`
 
-  const client = new Client({
-    connectionString,
-    connectionTimeoutMillis: 10000,
-    statement_timeout: timeoutMs,
-    query_timeout: timeoutMs,
-    ssl: connectionString.includes('sslmode=require')
-      ? { rejectUnauthorized: false }
-      : undefined,
-  })
-
-  try {
-    await client.connect()
-    await client.query(`SET statement_timeout = ${timeoutMs}`)
-    await client.query(`SET default_transaction_read_only = on`)
+  return withReadOnlyClient(connectionString, timeoutMs, async (client) => {
     const res = await client.query(wrapped)
     const truncated = res.rows.length > limit
     const rows = (truncated ? res.rows.slice(0, limit) : res.rows).map((r) => {
@@ -73,13 +139,7 @@ export async function runReadOnlySelect(
       rowCount: rows.length,
       truncated,
     }
-  } finally {
-    try {
-      await client.end()
-    } catch {
-      // ignore
-    }
-  }
+  })
 }
 
 export async function probeConnection(connectionString: string): Promise<{
@@ -90,11 +150,11 @@ export async function probeConnection(connectionString: string): Promise<{
   try {
     const r = await runReadOnlySelect(connectionString, 'SELECT version() AS version', {
       limit: 1,
-      timeoutMs: 10000,
+      timeoutMs: 12000,
     })
     return { ok: true, version: String(r.rows[0]?.version || '') }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Error de conexión' }
+    return { ok: false, error: redactDbError(e) || 'Error de conexión' }
   }
 }
 

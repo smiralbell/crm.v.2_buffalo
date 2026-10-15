@@ -1,12 +1,46 @@
-import { encryptSecret, decryptSecret } from '@/lib/integrations/google/crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto'
 
-/** Reutiliza la misma clave de cifrado que Google (SESSION_SECRET / GOOGLE_TOKEN_ENCRYPTION_KEY). */
+const ALGO = 'aes-256-gcm'
+
+/**
+ * Clave de cifrado de URLs de Postgres de clientes.
+ * Preferir CLIENT_DB_ENCRYPTION_KEY en EasyPanel. Si no está, se reutiliza
+ * SESSION_SECRET / GOOGLE_TOKEN_ENCRYPTION_KEY para no romper URLs ya guardadas.
+ */
+function encryptionKey(): Buffer {
+  const secret =
+    process.env.CLIENT_DB_ENCRYPTION_KEY ||
+    process.env.GOOGLE_TOKEN_ENCRYPTION_KEY ||
+    process.env.SESSION_SECRET
+  if (!secret?.trim()) {
+    throw new Error('Falta CLIENT_DB_ENCRYPTION_KEY o SESSION_SECRET para cifrar la URL de Postgres')
+  }
+  return createHash('sha256').update(secret.trim()).digest()
+}
+
 export function encryptDbUrl(plain: string): string {
-  return encryptSecret(plain.trim())
+  const iv = randomBytes(12)
+  const cipher = createCipheriv(ALGO, encryptionKey(), iv)
+  const enc = Buffer.concat([cipher.update(plain.trim(), 'utf8'), cipher.final()])
+  const tag = cipher.getAuthTag()
+  return Buffer.concat([iv, tag, enc]).toString('base64')
 }
 
 export function decryptDbUrl(enc: string): string {
-  return decryptSecret(enc)
+  try {
+    const buf = Buffer.from(enc, 'base64')
+    if (buf.length < 28) throw new Error('URL cifrada inválida')
+    const iv = buf.subarray(0, 12)
+    const tag = buf.subarray(12, 28)
+    const data = buf.subarray(28)
+    const decipher = createDecipheriv(ALGO, encryptionKey(), iv)
+    decipher.setAuthTag(tag)
+    return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
+  } catch {
+    throw new Error(
+      'No se pudo leer la URL cifrada. Comprueba CLIENT_DB_ENCRYPTION_KEY / SESSION_SECRET y vuelve a conectar.'
+    )
+  }
 }
 
 export function maskDbUrl(url: string): { host: string | null; database: string | null } {
@@ -14,7 +48,7 @@ export function maskDbUrl(url: string): { host: string | null; database: string 
     const u = new URL(url.replace(/^postgres(ql)?:/i, 'http:'))
     return {
       host: u.hostname || null,
-      database: u.pathname?.replace(/^\//, '') || null,
+      database: u.pathname?.replace(/^\//, '').split('?')[0] || null,
     }
   } catch {
     return { host: null, database: null }

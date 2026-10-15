@@ -2,6 +2,7 @@ import { openRouterChatCompletion } from '@/lib/openrouter'
 import { getDecryptedDbUrl, getOrCreateAgentConfig } from '@/lib/retencion/agent-config-store'
 import { listIncidentsSince } from '@/lib/retencion/incidents'
 import { collectWatchDbDelta, saveWatchMemory } from '@/lib/retencion/watch-db-memory'
+import { resolveWatchModel } from '@/lib/retencion/watch-models'
 import {
   DEFAULT_WATCH_PROMPT,
   ensureWatchColumns,
@@ -130,7 +131,8 @@ export async function runWatchForProject(proyectoId: string): Promise<{
 
   let report = ''
   try {
-    const packed = clip(JSON.stringify(pack, null, 2), 24000)
+    const packed = clip(JSON.stringify(pack, null, 2), 180000)
+    const model = resolveWatchModel(watch.watch_model)
     report = (
       await openRouterChatCompletion(
         [
@@ -146,7 +148,7 @@ export async function runWatchForProject(proyectoId: string): Promise<{
             ].join('\n\n'),
           },
         ],
-        { temperature: 0.2, maxTokens: 2800 }
+        { model, temperature: 0.2, maxTokens: 5000 }
       )
     ).trim()
     used.push('ai')

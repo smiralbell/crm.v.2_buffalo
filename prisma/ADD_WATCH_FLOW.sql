@@ -3,7 +3,8 @@
 ALTER TABLE retencion_agent_configs
   ADD COLUMN IF NOT EXISTS watch_excluded_tables JSONB,
   ADD COLUMN IF NOT EXISTS watch_excluded_columns JSONB,
-  ADD COLUMN IF NOT EXISTS watch_last_pack JSONB;
+  ADD COLUMN IF NOT EXISTS watch_last_pack JSONB,
+  ADD COLUMN IF NOT EXISTS watch_model TEXT;
 
 ALTER TABLE retencion_watch_memory
   ADD COLUMN IF NOT EXISTS schema_snapshot JSONB;

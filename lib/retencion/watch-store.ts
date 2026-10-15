@@ -3,6 +3,7 @@ import {
   loadWatchMemory,
   type SchemaTable,
 } from '@/lib/retencion/watch-db-memory'
+import { DEFAULT_WATCH_MODEL, resolveWatchModel } from '@/lib/retencion/watch-models'
 import {
   getOrCreateAgentConfig,
   toPublicConfig,
@@ -68,6 +69,7 @@ export type WatchPublic = {
   last_graph: WatchGraph | null
   last_pack: WatchPack | null
   watch_prompt: string
+  watch_model: string
   agent_prompt: string
   knowledge: string
   db_connected: boolean
@@ -87,6 +89,7 @@ type WatchCols = {
   watch_last_report: string | null
   watch_last_graph: WatchGraph | null
   watch_prompt: string | null
+  watch_model: string | null
   watch_last_pack: WatchPack | null
   excluded_tables: string[]
   excluded_columns: string[]
@@ -103,6 +106,7 @@ export async function ensureWatchColumns(): Promise<void> {
       ADD COLUMN IF NOT EXISTS watch_last_report TEXT,
       ADD COLUMN IF NOT EXISTS watch_last_graph JSONB,
       ADD COLUMN IF NOT EXISTS watch_prompt TEXT,
+      ADD COLUMN IF NOT EXISTS watch_model TEXT,
       ADD COLUMN IF NOT EXISTS watch_excluded_tables JSONB,
       ADD COLUMN IF NOT EXISTS watch_excluded_columns JSONB,
       ADD COLUMN IF NOT EXISTS watch_last_pack JSONB
@@ -179,12 +183,13 @@ async function selectWatchCols(proyectoId: string): Promise<WatchCols> {
     watch_last_report: string | null
     watch_last_graph: unknown
     watch_prompt: string | null
+    watch_model: string | null
     watch_last_pack: unknown
     watch_excluded_tables: unknown
     watch_excluded_columns: unknown
   }>(
     `SELECT watch_every_minutes, watch_last_at, watch_last_report, watch_last_graph, watch_prompt,
-            watch_last_pack, watch_excluded_tables, watch_excluded_columns
+            watch_model, watch_last_pack, watch_excluded_tables, watch_excluded_columns
        FROM retencion_agent_configs
       WHERE proyecto_id = $1::uuid
       LIMIT 1`,
@@ -197,6 +202,7 @@ async function selectWatchCols(proyectoId: string): Promise<WatchCols> {
     watch_last_report: row?.watch_last_report ?? null,
     watch_last_graph: parseGraph(row?.watch_last_graph),
     watch_prompt: row?.watch_prompt ?? null,
+    watch_model: row?.watch_model ?? null,
     watch_last_pack: parsePack(row?.watch_last_pack),
     excluded_tables: asStringList(row?.watch_excluded_tables),
     excluded_columns: asStringList(row?.watch_excluded_columns),
@@ -246,6 +252,7 @@ export function toWatchPublic(
     last_graph: watch.watch_last_graph,
     last_pack: watch.watch_last_pack,
     watch_prompt: watch.watch_prompt?.trim() || DEFAULT_WATCH_PROMPT,
+    watch_model: resolveWatchModel(watch.watch_model || DEFAULT_WATCH_MODEL),
     agent_prompt: row.report_prompt?.trim() || '',
     knowledge: cfg.audit_knowledge,
     db_connected: cfg.db_connected,
@@ -283,6 +290,7 @@ export async function saveWatchSettings(
   patch: {
     every_minutes?: number | null
     watch_prompt?: string
+    watch_model?: string
     knowledge?: string
     agent_prompt?: string
     excluded_tables?: string[]
@@ -311,6 +319,12 @@ export async function saveWatchSettings(
     await query(
       `UPDATE retencion_agent_configs SET watch_prompt = $2, updated_at = NOW() WHERE proyecto_id = $1::uuid`,
       [proyectoId, patch.watch_prompt]
+    )
+  }
+  if (patch.watch_model != null) {
+    await query(
+      `UPDATE retencion_agent_configs SET watch_model = $2, updated_at = NOW() WHERE proyecto_id = $1::uuid`,
+      [proyectoId, resolveWatchModel(patch.watch_model)]
     )
   }
   if (patch.excluded_tables != null) {
