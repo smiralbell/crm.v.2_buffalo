@@ -4,7 +4,7 @@ import { requireAuthAPI } from '@/lib/auth'
 import { assertProjectAccess } from '@/lib/project-access'
 import { assertRetencionEligible } from '@/lib/retencion/eligibility'
 import { clearDbUrl, getDecryptedDbUrl, saveDbUrl } from '@/lib/retencion/agent-config-store'
-import { probeConnection, redactDbError } from '@/lib/retencion/readonly-postgres'
+import { normalizePgUrl, probeConnection, redactDbError } from '@/lib/retencion/readonly-postgres'
 import { getWatchPublic, saveWatchSettings } from '@/lib/retencion/watch-store'
 import { syncWatchSchema } from '@/lib/retencion/watch-db-memory'
 import { runWatchForProject } from '@/lib/retencion/watch-agent'
@@ -43,9 +43,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'POST') {
       const action = (req.body as { action?: string; client_db_url?: string } | undefined)?.action
       if (action === 'sync_schema') {
-        const pasted = String(
-          (req.body as { client_db_url?: string } | undefined)?.client_db_url || ''
-        ).trim()
+        const pasted = normalizePgUrl(
+          String((req.body as { client_db_url?: string } | undefined)?.client_db_url || '')
+        )
         let dbUrl = pasted
         if (dbUrl) {
           if (!/^postgres(ql)?:\/\//i.test(dbUrl)) {
@@ -80,7 +80,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (parsed.clear_db_url) {
         await clearDbUrl(proyectoId)
       } else if (parsed.client_db_url) {
-        const url = parsed.client_db_url.trim()
+        const url = normalizePgUrl(parsed.client_db_url)
         if (!/^postgres(ql)?:\/\//i.test(url)) {
           return res.status(400).json({ error: 'La URL debe ser postgres:// o postgresql://' })
         }

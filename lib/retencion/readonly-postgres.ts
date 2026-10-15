@@ -1,4 +1,6 @@
+import { lookup } from 'node:dns/promises'
 import { Client } from 'pg'
+import { maskDbUrl } from '@/lib/retencion/db-url-crypto'
 
 const FORBIDDEN =
   /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|copy|call|execute|do|merge|replace|vacuum|reindex|cluster|comment|security|set\s+role|set\s+session|pg_read_file|lo_import|lo_export)\b/i
@@ -13,28 +15,115 @@ export function redactDbError(e: unknown): string {
     .replace(/(password|pwd)=([^&\s]+)/gi, '$1=***')
 }
 
-function isLocalPgHost(connectionString: string): boolean {
+export type ParsedPgUrl = {
+  host: string
+  port: number
+  user: string
+  password: string
+  database: string
+  sslmode: 'disable' | 'require' | 'prefer'
+}
+
+/** EasyPanel copia la URL con comillas, espacios o sslmode=disable. */
+export function normalizePgUrl(raw: string): string {
+  return raw.trim().replace(/^['"`]+|['"`]+$/g, '')
+}
+
+export function parsePgUrl(raw: string): ParsedPgUrl {
+  const s = normalizePgUrl(raw)
+  if (!/^postgres(ql)?:\/\//i.test(s)) {
+    throw new Error('La URL debe ser postgres:// o postgresql://')
+  }
+  let u: URL
   try {
-    const u = new URL(connectionString.replace(/^postgres(ql)?:/i, 'https:'))
-    const host = (u.hostname || '').toLowerCase()
-    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+    u = new URL(s.replace(/^postgres(ql)?:/i, 'http:'))
   } catch {
-    return false
+    throw new Error('URL de PostgreSQL inválida. En EasyPanel copia la URL externa completa (IP + puerto publicado).')
+  }
+  const sslRaw = (u.searchParams.get('sslmode') || '').toLowerCase()
+  const sslmode: ParsedPgUrl['sslmode'] =
+    sslRaw === 'require' || sslRaw.startsWith('verify') ? 'require' : sslRaw === 'prefer' ? 'prefer' : 'disable'
+  const database = decodeURIComponent((u.pathname || '/').replace(/^\//, '').split('/')[0] || '').split('?')[0]
+  return {
+    host: decodeURIComponent(u.hostname || ''),
+    port: Number(u.port || 5432),
+    user: decodeURIComponent(u.username || ''),
+    password: decodeURIComponent(u.password || ''),
+    database: database || 'postgres',
+    sslmode,
   }
 }
 
-/** EasyPanel y Postgres gestionados suelen exigir TLS aunque la URL no traiga sslmode. */
-export function pgSslConfig(connectionString: string): SslOption {
-  const lower = connectionString.toLowerCase()
-  if (lower.includes('sslmode=disable')) return undefined
-  if (isLocalPgHost(connectionString) && !lower.includes('sslmode=')) return undefined
-  return { rejectUnauthorized: false }
+function isIpv4(host: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(host)
 }
 
-function sslAttempts(connectionString: string): SslOption[] {
-  const preferred = pgSslConfig(connectionString)
-  if (preferred) return [preferred, undefined]
-  return [undefined, { rejectUnauthorized: false }]
+/** EasyPanel: URL externa = IP del servidor + puerto publicado, TLS desactivado. */
+export function pgSslConfig(connectionString: string): SslOption {
+  const parsed = parsePgUrl(connectionString)
+  if (parsed.sslmode === 'require') return { rejectUnauthorized: false }
+  return undefined
+}
+
+function sslAttempts(parsed: ParsedPgUrl): Array<false | { rejectUnauthorized: false; servername: string }> {
+  if (parsed.sslmode === 'require') {
+    return [{ rejectUnauthorized: false, servername: parsed.host }]
+  }
+  // sslmode=disable (EasyPanel) o sin param: primero sin TLS.
+  if (parsed.sslmode === 'disable') return [false]
+  return [false, { rejectUnauthorized: false, servername: parsed.host }]
+}
+
+async function resolveIpv4(host: string): Promise<string> {
+  if (isIpv4(host) || host === 'localhost' || host === '127.0.0.1') return host
+  try {
+    const rec = await lookup(host, { family: 4 })
+    return rec.address || host
+  } catch {
+    return host
+  }
+}
+
+async function openPgClient(
+  parsed: ParsedPgUrl,
+  ssl: false | { rejectUnauthorized: false; servername: string },
+  timeoutMs: number
+): Promise<Client> {
+  const host = await resolveIpv4(parsed.host)
+  const client = new Client({
+    host,
+    port: parsed.port,
+    user: parsed.user,
+    password: parsed.password,
+    database: parsed.database,
+    ssl,
+    connectionTimeoutMillis: timeoutMs,
+  })
+  await client.connect()
+  return client
+}
+
+export function explainPgConnectError(e: unknown, connectionString?: string): string {
+  const raw = redactDbError(e)
+  const msg = raw.toLowerCase()
+  const masked = connectionString ? maskDbUrl(connectionString) : { host: null, database: null }
+  const where = masked.host ? ` ${masked.host}` : ''
+  if (
+    msg.includes('timeout expired') ||
+    msg.includes('etimedout') ||
+    msg.includes('timed out') ||
+    msg.includes('connect timeout') ||
+    msg.includes('connection terminated')
+  ) {
+    return `No responde${where}. En EasyPanel usa la URL EXTERNA (Credentials): IP del VPS + puerto de la pestaña Expose, con ?sslmode=disable. No uses la URL interna ni el dominio del panel (Cloudflare corta el puerto de Postgres).`
+  }
+  if (msg.includes('enotfound') || msg.includes('getaddrinfo') || msg.includes('eai_again')) {
+    return `No se resuelve el host${where}. Revisa el nombre en la URL.`
+  }
+  if (msg.includes('password') || msg.includes('authentication failed') || msg.includes('28p01')) {
+    return 'Usuario o contraseña incorrectos.'
+  }
+  return raw
 }
 
 /** Solo SELECT / WITH … SELECT. Bloquea escrituras y DDL. */
@@ -69,18 +158,14 @@ async function withReadOnlyClient<T>(
   timeoutMs: number,
   fn: (client: Client) => Promise<T>
 ): Promise<T> {
-  const attempts = sslAttempts(connectionString)
+  const parsed = parsePgUrl(connectionString)
+  const attempts = sslAttempts(parsed)
+  const connectMs = Math.min(Math.max(timeoutMs, 4000), 15000)
   let last: unknown
   for (let i = 0; i < attempts.length; i++) {
-    const client = new Client({
-      connectionString,
-      connectionTimeoutMillis: 12000,
-      statement_timeout: timeoutMs,
-      query_timeout: timeoutMs,
-      ssl: attempts[i],
-    })
+    let client: Client | null = null
     try {
-      await client.connect()
+      client = await openPgClient(parsed, attempts[i], connectMs)
       try {
         await client.query(`SET statement_timeout = ${timeoutMs}`)
       } catch {
@@ -100,14 +185,16 @@ async function withReadOnlyClient<T>(
       return out
     } catch (e) {
       last = e
-      try {
-        await client.end()
-      } catch {
-        /* ignore */
+      if (client) {
+        try {
+          await client.end()
+        } catch {
+          /* ignore */
+        }
       }
     }
   }
-  throw new Error(redactDbError(last) || 'No se pudo conectar al PostgreSQL')
+  throw new Error(explainPgConnectError(last, connectionString) || 'No se pudo conectar al PostgreSQL')
 }
 
 export async function runReadOnlySelect(
@@ -147,15 +234,37 @@ export async function probeConnection(connectionString: string): Promise<{
   version?: string
   error?: string
 }> {
+  let parsed: ParsedPgUrl
   try {
-    const r = await runReadOnlySelect(connectionString, 'SELECT version() AS version', {
-      limit: 1,
-      timeoutMs: 12000,
-    })
-    return { ok: true, version: String(r.rows[0]?.version || '') }
+    parsed = parsePgUrl(connectionString)
   } catch (e) {
-    return { ok: false, error: redactDbError(e) || 'Error de conexión' }
+    return { ok: false, error: e instanceof Error ? e.message : 'URL inválida' }
   }
+  const attempts = sslAttempts(parsed)
+  let last: unknown
+  for (let i = 0; i < attempts.length; i++) {
+    let client: Client | null = null
+    try {
+      client = await openPgClient(parsed, attempts[i], 10000)
+      await client.query('SELECT 1 AS ok')
+      try {
+        await client.end()
+      } catch {
+        /* ignore */
+      }
+      return { ok: true }
+    } catch (e) {
+      last = e
+      if (client) {
+        try {
+          await client.end()
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+  return { ok: false, error: explainPgConnectError(last, connectionString) }
 }
 
 export async function listPublicTables(connectionString: string): Promise<

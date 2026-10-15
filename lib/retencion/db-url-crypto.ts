@@ -46,8 +46,9 @@ export function decryptDbUrl(enc: string): string {
 export function maskDbUrl(url: string): { host: string | null; database: string | null } {
   try {
     const u = new URL(url.replace(/^postgres(ql)?:/i, 'http:'))
+    const port = u.port || '5432'
     return {
-      host: u.hostname || null,
+      host: u.hostname ? `${u.hostname}:${port}` : null,
       database: u.pathname?.replace(/^\//, '').split('?')[0] || null,
     }
   } catch {

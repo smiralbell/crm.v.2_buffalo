@@ -408,7 +408,7 @@ export default function WatchSystemPanel({
                       }
                     />
                     <p className="mt-1.5 text-xs text-gray-400">
-                      Cada proyecto tiene la suya. Se cifra en servidor (CLIENT_DB_ENCRYPTION_KEY / SESSION_SECRET) y no se vuelve a mostrar. Solo lectura.
+                      EasyPanel: pestaña Credentials → URL <b>externa</b> (IP del servidor + puerto de Expose, suele llevar ?sslmode=disable). No uses la URL interna ni el dominio del panel.
                     </p>
                   </div>
 
