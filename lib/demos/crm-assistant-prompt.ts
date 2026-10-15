@@ -42,7 +42,7 @@ ESTILO WHATSAPP
 - Si enviaste documento: dilo («te mando el informe adjunto»).`
 
 export const DEFAULT_CRM_ASSISTANT_KNOWLEDGE = `NOTAS SECRETARIA BUFFALO
-- Objetivo anual ref.: 250.000 €.
+- Objetivo anual ref.: 65.000 €.
 - Checklist columnas: inbox | santi | sergi.
 - Deep links útiles: /finances /leads /gestion-proyecto /tickets /checklist /retencion /marketing
 - Documentos: se publican temporalmente vía NEXT_PUBLIC_BASE_URL/api/demos/assistant-files/…

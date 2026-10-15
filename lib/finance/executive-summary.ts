@@ -2,7 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
 import { getBankConnectionStatus } from '@/lib/enable-banking/connection-status'
 import { buildFinanceAlerts } from './alerts'
-import { ANNUAL_TARGET } from './chart-theme'
+import { getAnnualRevenueTarget } from './annual-target'
 import {
   countUnclassifiedExpenses,
   loadExpenseTransactionsForPeriod,
@@ -506,10 +506,12 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   // Facturado del mes calendario (para ritmo del objetivo anual)
   const invoicedThisMonth = await sumInvoiced(startThisMonth, endThisMonth)
 
+  const annualTarget = await getAnnualRevenueTarget()
   const annual_goal = buildAnnualGoalDetail({
     ytdInvoiced,
     invoiced_this_month: invoicedThisMonth,
     now,
+    target: annualTarget,
   })
 
   const kpi_cards = buildRichKpiCards({
@@ -534,6 +536,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
     pipeline_deals: pipelineDeals,
     profit_this_month: profitThisPeriod,
     ytdInvoiced,
+    annual_target: annualTarget,
     mrr_source: bankMrr.source,
     mrr_tagged_count: bankMrr.tagged_count,
   })
@@ -552,7 +555,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
       pipeline_value: pipelineValue,
       avg_monthly_burn: avgMonthlyBurn,
       profit_this_month: profitThisPeriod,
-      annual_target: ANNUAL_TARGET,
+      annual_target: annualTarget,
       annual_progress_pct: annual_goal.achieved_pct,
     },
     annual_goal,

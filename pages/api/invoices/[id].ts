@@ -125,6 +125,15 @@ export default async function handler(
         return res.status(404).json({ error: 'Factura no encontrada' })
       }
 
+      if (
+        data.status === 'sent' ||
+        (invoice.status === 'sent' &&
+          (data.total !== undefined || data.issue_date !== undefined || data.status !== undefined))
+      ) {
+        const { scheduleAnnualGoalCheck } = await import('@/lib/finance/annual-target-alert')
+        scheduleAnnualGoalCheck()
+      }
+
       // Marcar enviada → FACTURA EMITIDA en embudo global
       if (data.status === 'sent' && invoice.status !== 'sent') {
         try {

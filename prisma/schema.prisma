@@ -344,6 +344,8 @@ model FinancialIncome {
 model FinancialSettings {
   id                    Int      @id @default(1)
   corporate_tax_percent  Decimal  @default(25) @db.Decimal(5, 2) // % Impuesto sociedades (15%, 25%, etc.)
+  annual_revenue_target  Decimal  @default(65000) @db.Decimal(12, 2)
+  annual_goal_alert_key  String?
   updated_at             DateTime @updatedAt
 
   @@map("financial_settings")

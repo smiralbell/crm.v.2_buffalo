@@ -2,36 +2,90 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Bell, Calendar, Check, GraduationCap, Loader2, ArrowRight } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { Bell, Loader2, ArrowRight, Mail, Send } from 'lucide-react'
+import type { OpsAlertMessage } from '@/lib/ops-alerts-store'
 
-export type DashboardAlertItem = {
-  id: string
-  source: 'manual' | 'meeting' | 'form'
-  severity: 'info' | 'warn' | 'bad'
-  title: string
-  message: string
-  client_name: string | null
-  at: string
-  href: string | null
-  activity_id?: string
-  calendar_href?: string | null
-}
+export type { OpsAlertMessage as DashboardAlertItem }
 
 type Props = {
-  initialItems?: DashboardAlertItem[]
+  initialItems?: OpsAlertMessage[]
+}
+
+function stripCrmPrefix(subject: string) {
+  return subject.replace(/^\[CRM\]\s*/i, '').trim() || 'Aviso CRM'
+}
+
+function preview(text: string, n = 180) {
+  const t = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return t.length > n ? `${t.slice(0, n)}…` : t
+}
+
+function formatWhen(iso: string) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const diff = Date.now() - d.getTime()
+  const min = Math.round(diff / 60000)
+  if (min < 1) return 'Ahora'
+  if (min < 60) return `Hace ${min} min`
+  const h = Math.round(min / 60)
+  if (h < 24) return `Hace ${h} h`
+  return d.toLocaleString('es-ES', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+export function OpsAlertRow({ item }: { item: OpsAlertMessage }) {
+  const channels = item.channels.filter((c) => c !== 'none')
+  return (
+    <li className="flex items-start gap-3 rounded-xl border border-amber-200/80 bg-amber-50/40 px-3.5 py-3">
+      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-100 bg-white text-amber-700">
+        <Bell className="h-3.5 w-3.5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium text-foreground leading-snug">
+            {stripCrmPrefix(item.subject)}
+          </p>
+          <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
+            {formatWhen(item.created_at)}
+          </span>
+        </div>
+        {item.body && (
+          <p className="text-xs text-foreground/80 mt-0.5 leading-snug whitespace-pre-wrap">
+            {preview(item.body)}
+          </p>
+        )}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {channels.includes('email') && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600">
+              <Mail className="h-3 w-3" /> Mail
+            </span>
+          )}
+          {channels.includes('telegram') && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600">
+              <Send className="h-3 w-3" /> Telegram
+            </span>
+          )}
+        </div>
+      </div>
+    </li>
+  )
 }
 
 export default function DashboardAlertsPanel({ initialItems = [] }: Props) {
-  const [items, setItems] = useState<DashboardAlertItem[]>(initialItems)
+  const [items, setItems] = useState<OpsAlertMessage[]>(initialItems)
   const [loading, setLoading] = useState(initialItems.length === 0)
-  const [resolvingId, setResolvingId] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/crm/activities?dashboard=1')
+      const res = await fetch('/api/ops-alerts?page=1&pageSize=5')
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Error cargando alertas')
       setItems(data.items || [])
@@ -51,39 +105,29 @@ export default function DashboardAlertsPanel({ initialItems = [] }: Props) {
     if (initialItems.length === 0) void load()
   }, [initialItems.length, load])
 
-  const resolve = async (activityId: string) => {
-    setResolvingId(activityId)
-    try {
-      const res = await fetch('/api/crm/activities?action=resolve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: activityId }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'No se pudo resolver')
-      setItems((prev) => prev.filter((i) => i.activity_id !== activityId))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al resolver')
-    } finally {
-      setResolvingId(null)
-    }
-  }
-
   return (
     <div className="rounded-2xl border border-border bg-card p-5">
       <div className="flex items-center justify-between mb-4 gap-3">
         <div>
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <Bell className="h-4 w-4" />
-            Alertas y reuniones
+            Alertas
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Follow-ups, reuniones próximas y respuestas de formularios web
+            Últimos avisos enviados por mail y Telegram
           </p>
         </div>
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {loading ? '…' : items.length}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {loading ? '…' : items.length}
+          </span>
+          <Link
+            href="/alertas"
+            className="inline-flex items-center gap-1 text-xs font-medium text-foreground/70 hover:text-foreground"
+          >
+            Ver más <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
       </div>
 
       {error && (
@@ -97,89 +141,13 @@ export default function DashboardAlertsPanel({ initialItems = [] }: Props) {
         </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground py-6 text-center">
-          Sin alertas abiertas, reuniones próximas ni formularios recientes
+          Aún no hay avisos en el canal. Los próximos envíos de mail y Telegram aparecerán aquí.
         </p>
       ) : (
         <ul className="space-y-2">
-          {items.map((item) => {
-            const Icon =
-              item.source === 'meeting' ? Calendar : item.source === 'form' ? GraduationCap : Bell
-            return (
-              <li
-                key={item.id}
-                className={cn(
-                  'flex items-start gap-3 rounded-xl border px-3.5 py-3',
-                  item.source === 'meeting'
-                    ? 'border-sky-200/80 bg-sky-50/40'
-                    : item.source === 'form'
-                      ? 'border-teal-200/80 bg-teal-50/40'
-                      : 'border-amber-200/80 bg-amber-50/40'
-                )}
-              >
-                <span
-                  className={cn(
-                    'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border',
-                    item.source === 'meeting'
-                      ? 'border-sky-100 bg-white text-sky-700'
-                      : item.source === 'form'
-                        ? 'border-teal-100 bg-white text-teal-700'
-                        : 'border-amber-100 bg-white text-amber-700'
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium text-foreground leading-snug">{item.title}</p>
-                    <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">
-                      {item.source === 'meeting'
-                        ? 'Reunión'
-                        : item.source === 'form'
-                          ? 'Formulario'
-                          : 'Alerta'}
-                    </span>
-                  </div>
-                  {item.client_name && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.client_name}</p>
-                  )}
-                  <p className="text-xs text-foreground/80 mt-0.5 leading-snug">{item.message}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {item.href && (
-                      <Link
-                        href={item.href}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-foreground/70 hover:text-foreground"
-                      >
-                        Abrir <ArrowRight className="h-3 w-3" />
-                      </Link>
-                    )}
-                    {item.calendar_href && item.source === 'meeting' && (
-                      <Link
-                        href={item.calendar_href}
-                        className="text-xs text-sky-700 hover:underline"
-                      >
-                        Calendario
-                      </Link>
-                    )}
-                    {item.activity_id && (
-                      <button
-                        type="button"
-                        onClick={() => void resolve(item.activity_id!)}
-                        disabled={resolvingId === item.activity_id}
-                        className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
-                      >
-                        {resolvingId === item.activity_id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          <Check className="h-3 w-3" />
-                        )}
-                        Hecho
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </li>
-            )
-          })}
+          {items.map((item) => (
+            <OpsAlertRow key={item.id} item={item} />
+          ))}
         </ul>
       )}
     </div>

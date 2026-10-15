@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { getAnnualRevenueTarget } from '@/lib/finance/annual-target'
 
 async function safeQuery<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
   try {
@@ -340,7 +341,7 @@ export async function buildCrmCompanySnapshot() {
       },
       metrics_recent: marketing,
     },
-    objetivo_anual_facturacion_eur: 250_000,
+    objetivo_anual_facturacion_eur: await getAnnualRevenueTarget(),
   }
 }
 

@@ -10,7 +10,7 @@ ONTOLOGÍA CRM BUFFALO AI — FUENTE DE VERDAD PARA EL ASISTENTE
 
 0. NEGOCIO
 Buffalo vende agentes IA (voz/chat), dashboards, automatización, lead gen, GEO/SEO.
-Modelo: setup (one-shot) + mensualidad (MRR). Objetivo anual ref. 250.000 €.
+Modelo: setup (one-shot) + mensualidad (MRR). Objetivo anual ref. 65.000 €.
 Engranajes UI: ENG1 Marketing → ENG2 Onboarding → ENG3 Proyectos → ENG4 Retención.
 
 CADENA DE VERDAD (no saltar pasos):

@@ -2,7 +2,7 @@
 
 export const KPI_HELP: Record<string, string> = {
   mrr: 'Monthly Recurring Revenue: ingreso mensual recurrente. Solo cuenta cobros que marques manualmente en Ingresos con «Marcar MRR». Sin etiquetas, MRR = 0 €.',
-  arr: 'Annual Recurring Revenue: MRR × 12. Proyección anual si se mantuvieran las mismas mensualidades. El objetivo de la empresa es 250.000 €/año.',
+  arr: 'Annual Recurring Revenue: MRR × 12. Proyección anual si se mantuvieran las mismas mensualidades. El objetivo de facturación se configura en Finanzas (por defecto 65.000 €/año).',
   cash: 'Saldo disponible en cuenta según el último movimiento sincronizado del banco. Incluye variación respecto al mes anterior.',
   runway: 'Meses de caja si solo mantienes el gasto medio en plataformas/SaaS (Twilio, Cursor, PLT…). Saldo ÷ media mensual de plataformas (últimos meses con datos). No incluye nóminas ni developers.',
   invoiced: 'Total facturado en el período: facturas «enviadas» por fecha de emisión. No implica cobro.',
@@ -23,4 +23,4 @@ export const PERIOD_INSIGHT_HELP: Record<string, string> = {
 }
 
 export const ANNUAL_GOAL_HELP =
-  'Objetivo de facturación anual (250.000 €). Compara lo facturado en el año con el ritmo lineal esperado.'
+  'Objetivo de facturación anual (el mismo de Finanzas). Compara lo facturado este año (facturas enviadas) con el ritmo lineal esperado.'

@@ -26,6 +26,7 @@ export interface BuildKpiInput {
   pipeline_deals: number
   profit_this_month: number
   ytdInvoiced: number
+  annual_target?: number
   mrr_source?: 'tagged' | 'none'
   mrr_tagged_count?: number
 }
@@ -47,6 +48,7 @@ export function buildAnnualGoalDetail(input: {
   ytdInvoiced: number
   invoiced_this_month: number
   now?: Date
+  target?: number
 }): AnnualGoalDetail {
   const now = input.now ?? new Date()
   const y = now.getFullYear()
@@ -57,7 +59,7 @@ export function buildAnnualGoalDetail(input: {
   const daysInYear =
     (new Date(y, 11, 31).getTime() - new Date(y, 0, 1).getTime()) / (1000 * 60 * 60 * 24) + 1
 
-  const target = ANNUAL_TARGET
+  const target = input.target && input.target > 0 ? input.target : ANNUAL_TARGET
   const invoiced_ytd = input.ytdInvoiced
   const remaining_amount = Math.max(0, target - invoiced_ytd)
   const achieved_pct = Math.round((invoiced_ytd / target) * 1000) / 10
@@ -107,11 +109,12 @@ export function buildAnnualGoalDetail(input: {
 }
 
 export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
+  const target = input.annual_target && input.annual_target > 0 ? input.annual_target : ANNUAL_TARGET
   const mrrPerClient = input.active_clients > 0 ? input.mrr / input.active_clients : 0
-  const arrPctOfTarget = Math.round((input.arr / ANNUAL_TARGET) * 1000) / 10
+  const arrPctOfTarget = Math.round((input.arr / target) * 1000) / 10
   const mrrCoversBurn = input.avg_monthly_burn > 0 ? input.mrr >= input.avg_monthly_burn : null
   const avgDeal = input.pipeline_deals > 0 ? input.pipeline_value / input.pipeline_deals : 0
-  const pipelinePctTarget = Math.round((input.pipeline_value / ANNUAL_TARGET) * 1000) / 10
+  const pipelinePctTarget = Math.round((input.pipeline_value / target) * 1000) / 10
 
   const invMom = pctChange(input.invoiced_this_month, input.invoiced_last_month)
 
@@ -150,14 +153,14 @@ export function buildRichKpiCards(input: BuildKpiInput): RichKpiCard[] {
       help: KPI_HELP.arr,
       rows: [
         { label: 'MRR × 12', value: fmtEur(input.mrr) },
-        { label: '% del objetivo 250k', value: `${arrPctOfTarget}%` },
+        { label: `% del objetivo ${fmtEur(target)}`, value: `${arrPctOfTarget}%` },
         {
-          label: 'Gap vs 250k',
-          value: fmtEur(Math.max(0, ANNUAL_TARGET - input.arr)),
+          label: 'Gap vs objetivo',
+          value: fmtEur(Math.max(0, target - input.arr)),
         },
         {
           label: 'MRR necesario',
-          value: fmtEur(Math.max(0, (ANNUAL_TARGET - input.arr) / 12)),
+          value: fmtEur(Math.max(0, (target - input.arr) / 12)),
         },
       ],
       footer: 'Ingreso recurrente anualizado',

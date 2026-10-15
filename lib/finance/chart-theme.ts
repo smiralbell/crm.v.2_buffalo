@@ -1,5 +1,5 @@
-/** Objetivo anual de facturación Buffalo (alineado con dashboard) */
-export const ANNUAL_TARGET = 250_000
+/** Objetivo anual de facturación Buffalo (default; la fuente de verdad está en Finanzas) */
+export const ANNUAL_TARGET = 65_000
 
 /** Paleta minimalista — escala de grises del CRM */
 export const CHART_PALETTE = [

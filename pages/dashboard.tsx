@@ -11,10 +11,9 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getDashboardAlerts } from '@/lib/crm/dashboard-alerts'
-import DashboardAlertsPanel, {
-  type DashboardAlertItem,
-} from '@/components/crm/DashboardAlertsPanel'
+import { getAnnualRevenueTarget } from '@/lib/finance/annual-target'
+import { listOpsAlertMessages, type OpsAlertMessage } from '@/lib/ops-alerts-store'
+import DashboardAlertsPanel from '@/components/crm/DashboardAlertsPanel'
 import { estadoLabel } from '@/lib/leads/estados'
 
 // Recharts — client-side only
@@ -65,7 +64,7 @@ interface DashboardProps {
   recentInvoices:  InvRow[]
   hotLeads:        LeadRow[]
   monthlyRevenue:  MonthRow[]
-  dashboardAlerts: DashboardAlertItem[]
+  dashboardAlerts: OpsAlertMessage[]
 }
 
 // ── Config ─────────────────────────────────────────────────────────────
@@ -150,11 +149,17 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
     const invoicedThisMonth = Number(invThisMonth._sum.total || 0)
     const invoicedYTD = Number(invYTD._sum.total || 0)
+    const annualTarget = await getAnnualRevenueTarget()
     const annualGoal = buildAnnualGoalDetail({
       ytdInvoiced: invoicedYTD,
       invoiced_this_month: invoicedThisMonth,
       now,
+      target: annualTarget,
     })
+    if (invoicedYTD >= annualTarget) {
+      const { scheduleAnnualGoalCheck } = await import('@/lib/finance/annual-target-alert')
+      scheduleAnnualGoalCheck({ ytd: invoicedYTD, target: annualTarget, now })
+    }
 
     // ── Pipeline ──────────────────────────────────────────────────────
     const allCards = await prisma.pipelineCard.findMany({
@@ -239,7 +244,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     })
     const monthlyRevenue: MonthRow[] = Object.entries(monthRevMap).map(([month, revenue]) => ({ month, revenue }))
 
-    const dashboardAlerts = await getDashboardAlerts(2)
+    const { items: dashboardAlerts } = await listOpsAlertMessages({ take: 5 })
 
     return {
       props: {
@@ -309,7 +314,7 @@ export default function Dashboard({
     <Layout>
       <div className="space-y-6">
         {/* ── Objetivo anual (mismo componente y datos que Finanzas) ── */}
-        <AnnualGoalCard goal={annualGoal} />
+        <AnnualGoalCard goal={annualGoal} href="/finances#objetivo-anual" />
 
         {/* ── Alertas CRM + reuniones ≤2 días ── */}
         <DashboardAlertsPanel initialItems={dashboardAlerts} />

@@ -1,10 +1,28 @@
+import { useState } from 'react'
+import Link from 'next/link'
 import { fmtEur } from '@/lib/finance/chart-theme'
 import type { AnnualGoalDetail } from '@/lib/finance/types'
 import FinanceInfoTip from './FinanceInfoTip'
 import { ANNUAL_GOAL_HELP } from '@/lib/finance/kpi-help'
 import { cn } from '@/lib/utils'
+import { Pencil, Check, X, Loader2, ArrowRight } from 'lucide-react'
 
-export default function AnnualGoalCard({ goal }: { goal: AnnualGoalDetail }) {
+export default function AnnualGoalCard({
+  goal,
+  href,
+  editable,
+  onTargetSaved,
+}: {
+  goal: AnnualGoalDetail
+  href?: string
+  editable?: boolean
+  onTargetSaved?: () => Promise<void> | void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(String(Math.round(goal.target)))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
   const paceBadge =
     goal.pace_status === 'ahead'
       ? 'Adelantado'
@@ -12,8 +30,33 @@ export default function AnnualGoalCard({ goal }: { goal: AnnualGoalDetail }) {
         ? 'Retrasado'
         : 'En ritmo'
 
+  const saveTarget = async () => {
+    const n = Number(String(draft).replace(/\s/g, '').replace(',', '.'))
+    if (!Number.isFinite(n) || n < 1000) {
+      setError('Introduce un objetivo válido (mínimo 1.000 €)')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const res = await fetch('/api/finances/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ annual_revenue_target: Math.round(n) }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'No se pudo guardar')
+      setEditing(false)
+      await onTargetSaved?.()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
-    <div className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
+    <div id="objetivo-anual" className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
       <div className="px-5 pt-5 pb-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
           <div>
@@ -21,20 +64,85 @@ export default function AnnualGoalCard({ goal }: { goal: AnnualGoalDetail }) {
               <p className="text-sm font-semibold text-gray-900">Objetivo anual de facturación</p>
               <FinanceInfoTip text={ANNUAL_GOAL_HELP} />
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Meta {fmtEur(goal.target)} · {goal.months_remaining} meses restantes
+            <p className="text-xs text-gray-500 mt-0.5 flex flex-wrap items-center gap-2">
+              {editing ? (
+                <span className="inline-flex items-center gap-1.5">
+                  Meta
+                  <input
+                    type="number"
+                    min={1000}
+                    step={1000}
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    className="w-28 rounded border border-gray-300 px-2 py-0.5 text-xs tabular-nums"
+                    disabled={saving}
+                  />
+                  €
+                  <button
+                    type="button"
+                    onClick={() => void saveTarget()}
+                    disabled={saving}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-gray-700 hover:bg-gray-50"
+                    aria-label="Guardar objetivo"
+                  >
+                    {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditing(false)
+                      setDraft(String(Math.round(goal.target)))
+                      setError('')
+                    }}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-gray-500 hover:bg-gray-50"
+                    aria-label="Cancelar"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ) : (
+                <>
+                  <span>
+                    Meta {fmtEur(goal.target)} · {goal.months_remaining} meses restantes
+                  </span>
+                  {editable && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraft(String(Math.round(goal.target)))
+                        setEditing(true)
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-gray-900"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Editar
+                    </button>
+                  )}
+                </>
+              )}
             </p>
+            {error && <p className="text-[11px] text-red-600 mt-1">{error}</p>}
           </div>
-          <span
-            className={cn(
-              'inline-flex self-start text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded border',
-              goal.pace_status === 'ahead' && 'border-gray-900 text-gray-900 bg-gray-50',
-              goal.pace_status === 'behind' && 'border-gray-400 text-gray-700 bg-gray-50',
-              goal.pace_status === 'on_track' && 'border-gray-200 text-gray-600'
+          <div className="flex items-center gap-2 self-start">
+            {href && (
+              <Link
+                href={href}
+                className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-900"
+              >
+                Ver en Finanzas <ArrowRight className="h-3 w-3" />
+              </Link>
             )}
-          >
-            {paceBadge}
-          </span>
+            <span
+              className={cn(
+                'inline-flex text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded border',
+                goal.pace_status === 'ahead' && 'border-gray-900 text-gray-900 bg-gray-50',
+                goal.pace_status === 'behind' && 'border-gray-400 text-gray-700 bg-gray-50',
+                goal.pace_status === 'on_track' && 'border-gray-200 text-gray-600'
+              )}
+            >
+              {paceBadge}
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-3 mb-5 sm:grid-cols-3">
@@ -88,7 +196,7 @@ export default function AnnualGoalCard({ goal }: { goal: AnnualGoalDetail }) {
           {
             label: 'Objetivo lineal / mes',
             value: fmtEur(goal.monthly_target_even),
-            sub: '250k ÷ 12 meses',
+            sub: `${fmtEur(goal.target)} ÷ 12 meses`,
           },
           {
             label: 'Este mes facturado',

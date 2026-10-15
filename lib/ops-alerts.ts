@@ -1,4 +1,5 @@
 import { isSmtpConfigured, sendMail } from '@/lib/mail/smtp'
+import { insertOpsAlertMessage } from '@/lib/ops-alerts-store'
 
 function envList(name: string): string[] {
   return (process.env[name] || '')
@@ -61,6 +62,15 @@ export async function sendOpsAlert(input: {
   html?: string
   telegramHtml?: string
 }): Promise<void> {
+  const channels: string[] = []
+  if (isSmtpConfigured() && adminAlertEmails().length) channels.push('email')
+  if (process.env.TELEGRAM_BOT_TOKEN?.trim() && telegramChatIds().length) channels.push('telegram')
+  await insertOpsAlertMessage({
+    subject: input.subject,
+    body: input.text,
+    channels: channels.length ? channels : ['email', 'telegram'],
+  })
+
   try {
     if (isSmtpConfigured()) {
       const to = adminAlertEmails()

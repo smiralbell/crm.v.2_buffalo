@@ -7,6 +7,7 @@ import {
   insertTicket,
   resolveProjectFromPayload,
 } from '@/lib/tickets/store'
+import { alertNewTicket } from '@/lib/tickets/alerts'
 
 function parseAction(body: Record<string, unknown>): 'create' | 'delete' {
   const raw = typeof body.action === 'string' ? body.action.toLowerCase().trim() : ''
@@ -88,6 +89,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const result = await insertTicket(project.id, ticket)
+
+    if (!result.duplicate) {
+      void alertNewTicket({
+        ticketId: result.id,
+        projectName: project.name,
+        ticket,
+      })
+    }
 
     return res.status(result.duplicate ? 200 : 201).json({
       ok: true,

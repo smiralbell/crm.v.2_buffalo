@@ -195,7 +195,7 @@ export default function FinanceAiPanel({ initialAnalysis, periodStart, periodEnd
 
         {s.path_a_objetivo && (
         <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
-          <span className="font-semibold text-gray-900">Path al objetivo (250k€): </span>
+          <span className="font-semibold text-gray-900">Path al objetivo anual: </span>
             {s.path_a_objetivo}
           </p>
         )}

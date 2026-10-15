@@ -15,6 +15,11 @@ export function startOpsReminderScheduler(): void {
     void runDueOpsReminders().catch((e) => {
       console.warn('[ops-reminders]', e instanceof Error ? e.message : e)
     })
+    void import('@/lib/finance/annual-target-alert')
+      .then((m) => m.maybeNotifyAnnualGoalReached())
+      .catch((e) => {
+        console.warn('[annual-goal]', e instanceof Error ? e.message : e)
+      })
   }
 
   setTimeout(tick, 45_000)

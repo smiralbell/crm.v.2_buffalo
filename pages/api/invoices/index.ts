@@ -251,6 +251,11 @@ export default async function handler(
         }
       }
 
+      if (status === 'sent') {
+        const { scheduleAnnualGoalCheck } = await import('@/lib/finance/annual-target-alert')
+        scheduleAnnualGoalCheck()
+      }
+
       if (status === 'sent' && invoice.client_email) {
         try {
           const { advanceLeadOnGlobalByContactEmail } = await import(

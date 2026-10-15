@@ -4,8 +4,10 @@ import { openRouterChatCompletion, parseJsonFromModelOutput } from '@/lib/openro
 import { buildExecutiveSummary } from './executive-summary'
 import type { ExecutiveSummary, FinanceAiSummary } from './types'
 
-const SYSTEM = `Eres el CFO virtual de Buffalo AI, una agencia de agentes IA (voz, chat, dashboards) con modelo setup + mensualidad (MRR).
-El objetivo anual de facturación es 250.000 EUR.
+function financeAiSystem(annualTarget: number): string {
+  const formatted = new Intl.NumberFormat('es-ES').format(Math.round(annualTarget))
+  return `Eres el CFO virtual de Buffalo AI, una agencia de agentes IA (voz, chat, dashboards) con modelo setup + mensualidad (MRR).
+El objetivo anual de facturación es ${formatted} EUR.
 Recibirás un snapshot JSON con KPIs reales del CRM: caja, MRR, facturación, cobros, pipeline, alertas y economía por proyecto.
 
 Responde SOLO con JSON válido (sin markdown), en español, estructura exacta:
@@ -28,6 +30,7 @@ Reglas:
 - Si faltan datos, dilo y recomienda qué conectar (banco, facturas, proyectos).
 - Tono profesional, sin relleno motivacional vacío.
 - Prioriza cash, cobros, MRR, margen por cliente y pipeline.`
+}
 
 export async function generateFinanceAiAnalysis(period?: {
   start: Date
@@ -38,9 +41,10 @@ export async function generateFinanceAiAnalysis(period?: {
   context: ExecutiveSummary
 }> {
   const context = await buildExecutiveSummary(period)
+  const annualTarget = context.kpis.annual_target
 
   const payload = {
-    objetivo_anual_eur: 250_000,
+    objetivo_anual_eur: annualTarget,
     kpis: context.kpis,
     expense_breakdown: context.expense_breakdown,
     income_breakdown: context.income_breakdown,
@@ -53,7 +57,7 @@ export async function generateFinanceAiAnalysis(period?: {
   }
 
   const raw = await openRouterChatCompletion([
-    { role: 'system', content: SYSTEM },
+    { role: 'system', content: financeAiSystem(annualTarget) },
     {
       role: 'user',
       content: `Snapshot financiero Buffalo (${context.generated_at}):\n\n${JSON.stringify(payload, null, 2)}`,

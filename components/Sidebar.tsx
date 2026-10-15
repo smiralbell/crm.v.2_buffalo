@@ -52,7 +52,16 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin'] },
+  {
+    href: '/dashboard',
+    label: 'Dashboard',
+    icon: LayoutDashboard,
+    roles: ['admin'],
+    children: [
+      { href: '/dashboard', label: 'Resumen' },
+      { href: '/alertas', label: 'Alertas' },
+    ],
+  },
   {
     href: '/leads',
     label: 'Leads',

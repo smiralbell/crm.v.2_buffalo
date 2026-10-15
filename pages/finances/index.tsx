@@ -867,7 +867,16 @@ export default function FinancesDashboard({
             </Card>
 
             {/* Objetivo / alertas / IA */}
-            <AnnualGoalCard goal={executive.annual_goal} />
+            <AnnualGoalCard
+              goal={executive.annual_goal}
+              editable
+              onTargetSaved={async () => {
+                const { start, end } = periodToQuery(dateRange)
+                const res = await fetch(`/api/finance/executive-summary?start=${start}&end=${end}`)
+                const data = await res.json()
+                if (res.ok) setExecutive(data)
+              }}
+            />
 
             <div className="grid gap-4 lg:grid-cols-2">
               <Card className="border border-gray-200 shadow-sm">
