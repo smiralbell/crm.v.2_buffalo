@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, X, Edit2, MoreVertical, Search, Trash2, Palette, Settings, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, X, Edit2, MoreVertical, Search, Trash2, Palette, Settings, ChevronLeft, ChevronRight, ArrowRightLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -76,6 +76,9 @@ interface KanbanColumnProps {
   allowQuickCreate?: boolean
   onEntityCreated?: (entity: { id: string; name: string }) => void
   headerOnly?: boolean
+  /** Columnas del tablero, para «Mover a…» (en el móvil no hay arrastrar y soltar). */
+  allStages?: Array<{ name: string; color: string }>
+  onCardMoveTo?: (card: PipelineCard, stageName: string) => void
 }
 
 export default function KanbanColumn({
@@ -109,6 +112,8 @@ export default function KanbanColumn({
   allowQuickCreate = false,
   onEntityCreated,
   headerOnly = false,
+  allStages,
+  onCardMoveTo,
 }: KanbanColumnProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(stage.name)
@@ -366,6 +371,27 @@ export default function KanbanColumn({
                             <Settings className="h-4 w-4 mr-2" />
                             Configurar proyecto
                           </DropdownMenuItem>
+                        )}
+                        {onCardMoveTo && allStages && allStages.length > 1 && (
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              <ArrowRightLeft className="h-4 w-4 mr-2" />
+                              Mover a…
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                              {allStages
+                                .filter((s) => s.name !== card.stage)
+                                .map((s) => (
+                                  <DropdownMenuItem key={s.name} onClick={() => onCardMoveTo(card, s.name)}>
+                                    <span
+                                      className="w-1 h-4 rounded-full mr-2 inline-block"
+                                      style={{ backgroundColor: s.color }}
+                                    />
+                                    {s.name}
+                                  </DropdownMenuItem>
+                                ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
                         )}
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>

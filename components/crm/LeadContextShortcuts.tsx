@@ -21,7 +21,7 @@ export default function LeadContextShortcuts() {
     router.pathname === '/leads/[id]' && String(router.query.id) === String(leadId)
 
   return (
-    <div className="pointer-events-none fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 px-3">
+    <div className="pointer-events-none fixed bottom-[calc(var(--tabbar-h)+0.75rem)] md:bottom-5 left-1/2 z-[60] -translate-x-1/2 px-3">
       <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border bg-background/95 p-1 shadow-lg backdrop-blur-md">
         <Link
           href={leadContextHref(leadId)}

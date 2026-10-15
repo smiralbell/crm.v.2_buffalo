@@ -298,6 +298,7 @@ export default function Sidebar({
     cn(
       'flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium transition-colors',
       showLabels ? 'justify-start' : 'justify-center',
+      !isDesktop && 'py-2.5 text-[15px]',
       active
         ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-foreground))]'
         : 'text-[hsl(var(--sidebar-muted))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-foreground))]'
@@ -449,6 +450,7 @@ export default function Sidebar({
                                 onClick={() => onNavigate?.()}
                                 className={cn(
                                   'block rounded-lg px-2 py-1.5 text-xs font-medium transition-colors',
+                                  !isDesktop && 'py-2 text-[13px]',
                                   childActive
                                     ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-foreground))]'
                                     : 'text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))]'
@@ -545,6 +547,7 @@ export default function Sidebar({
                               onClick={() => onNavigate?.()}
                               className={cn(
                                 'block rounded-lg px-2 py-1.5 text-xs font-medium transition-colors',
+                                !isDesktop && 'py-2 text-[13px]',
                                 childActive
                                   ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-foreground))]'
                                   : 'text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))]'

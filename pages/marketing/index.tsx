@@ -357,8 +357,8 @@ export default function MarketingPage() {
 
         {/* Toolbar: tabs centered + period controls */}
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-1 justify-center border-b border-gray-200 lg:border-b-0 lg:pb-0 overflow-x-auto">
-            <div className="flex gap-0 flex-nowrap sm:flex-wrap justify-start sm:justify-center min-w-0">
+          <div className="hide-scrollbar flex flex-1 justify-start sm:justify-center border-b border-gray-200 lg:border-b-0 lg:pb-0 overflow-x-auto">
+            <div className="flex gap-0 flex-nowrap sm:flex-wrap justify-start sm:justify-center min-w-max sm:min-w-0">
               {TABS.map(t => {
                 const isActive = tab === t.id
 
