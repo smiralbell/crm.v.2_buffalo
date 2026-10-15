@@ -1,37 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { BellRing, BellOff, Send, Smartphone } from 'lucide-react'
+import { disablePush, enablePush, getPushState, type PushClientState } from '@/lib/push-client'
 
-type State =
-  | 'loading'
-  | 'unsupported'
-  | 'ios-install'
-  | 'not-configured'
-  | 'denied'
-  | 'off'
-  | 'on'
-
-function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
-  const padding = '='.repeat((4 - (base64.length % 4)) % 4)
-  const raw = atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'))
-  const out = new Uint8Array(new ArrayBuffer(raw.length))
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i)
-  return out
-}
-
-function isIos(): boolean {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent)
-}
-
-function isStandalone(): boolean {
-  return (
-    window.matchMedia?.('(display-mode: standalone)').matches ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true
-  )
-}
-
-async function getRegistration(): Promise<ServiceWorkerRegistration> {
-  return (await navigator.serviceWorker.getRegistration('/')) || navigator.serviceWorker.register('/sw.js')
-}
+type State = 'loading' | PushClientState
 
 /** Activa / desactiva los avisos push del CRM en este dispositivo. */
 export default function PushNotificationsCard() {
@@ -41,30 +12,9 @@ export default function PushNotificationsCard() {
   const [publicKey, setPublicKey] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
-    if (!supported) {
-      setState(isIos() && !isStandalone() ? 'ios-install' : 'unsupported')
-      return
-    }
-    try {
-      const res = await fetch('/api/push/subscription')
-      const data = await res.json()
-      if (!data.configured || !data.publicKey) {
-        setState('not-configured')
-        return
-      }
-      setPublicKey(data.publicKey)
-    } catch {
-      setState('not-configured')
-      return
-    }
-    if (Notification.permission === 'denied') {
-      setState('denied')
-      return
-    }
-    const reg = await getRegistration()
-    const sub = await reg.pushManager.getSubscription()
-    setState(sub ? 'on' : 'off')
+    const res = await getPushState()
+    setPublicKey(res.publicKey)
+    setState(res.state)
   }, [])
 
   useEffect(() => {
@@ -76,28 +26,9 @@ export default function PushNotificationsCard() {
     setBusy(true)
     setMessage(null)
     try {
-      // En iPhone el permiso solo se puede pedir tras un toque, y con la app ya instalada.
-      const permission = await Notification.requestPermission()
-      if (permission !== 'granted') {
-        setState(permission === 'denied' ? 'denied' : 'off')
-        return
-      }
-      const reg = await getRegistration()
-      await navigator.serviceWorker.ready
-      const sub =
-        (await reg.pushManager.getSubscription()) ||
-        (await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
-        }))
-      const res = await fetch('/api/push/subscription', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscription: sub.toJSON() }),
-      })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Error al guardar')
-      setState('on')
-      setMessage('Listo. Te llegarán los avisos del CRM a este dispositivo.')
+      const next = await enablePush(publicKey)
+      setState(next)
+      if (next === 'on') setMessage('Listo. Te llegarán los avisos del CRM a este dispositivo.')
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'No se pudieron activar')
     } finally {
@@ -109,16 +40,7 @@ export default function PushNotificationsCard() {
     setBusy(true)
     setMessage(null)
     try {
-      const reg = await getRegistration()
-      const sub = await reg.pushManager.getSubscription()
-      if (sub) {
-        await fetch('/api/push/subscription', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ endpoint: sub.endpoint }),
-        })
-        await sub.unsubscribe()
-      }
+      await disablePush()
       setState('off')
     } finally {
       setBusy(false)

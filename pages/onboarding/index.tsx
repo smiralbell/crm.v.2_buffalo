@@ -439,9 +439,9 @@ export default function OnboardingPage() {
           <div className="flex flex-1 flex-col gap-6 min-h-0">
 
             {/* Steps strip */}
-            <div className="flex flex-wrap items-center justify-center gap-2 shrink-0">
+            <div className="hide-scrollbar -mx-3 flex shrink-0 items-center gap-2 overflow-x-auto px-3 sm:mx-0 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0">
               {STEPS.map((s, i) => (
-                <div key={s.n} className="flex items-center">
+                <div key={s.n} className="flex shrink-0 items-center">
                   <div className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-full bg-gray-50 border border-gray-100">
                     <span className="w-5 h-5 rounded-full bg-gray-900 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                       {s.n}
@@ -465,7 +465,7 @@ export default function OnboardingPage() {
 
             {/* Selected lead → configure CTA */}
             {selected && view === 'hub' && (
-              <div className="flex items-center gap-4 rounded-2xl border-2 border-gray-900 bg-white px-5 py-4 shadow-sm shrink-0">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4 sm:flex-nowrap rounded-2xl border-2 border-gray-900 bg-white px-4 sm:px-5 py-4 shadow-sm shrink-0">
                 <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center text-white font-bold text-base">
                   {(selected.nombre || '?').charAt(0).toUpperCase()}
                 </div>
@@ -478,7 +478,7 @@ export default function OnboardingPage() {
                 <button onClick={() => setSelected(null)} className="text-gray-300 hover:text-gray-500 transition-colors flex-shrink-0 p-1">
                   <X className="h-4 w-4" />
                 </button>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center flex-shrink-0">
                   <button
                     onClick={() => void handleConfigure(selected, undefined, undefined, undefined, 'audit')}
                     className="px-4 h-10 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition-colors"
@@ -497,11 +497,11 @@ export default function OnboardingPage() {
 
             {/* Action cards (hub) — centradas vertical y horizontalmente */}
             {view === 'hub' && !selected && (
-              <div className="flex-1 flex flex-wrap items-center justify-center gap-5 content-center">
+              <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-1 sm:flex-wrap sm:items-center sm:justify-center sm:gap-5 sm:content-center">
                 <button
                   type="button"
                   onClick={() => { setView('new_lead'); setCreated(null) }}
-                  className="group w-44 h-44 sm:w-48 sm:h-48 rounded-2xl border border-gray-200 bg-white flex flex-col items-center justify-center text-center px-4 hover:border-gray-300 hover:shadow-sm transition-all"
+                  className="group w-full h-40 sm:w-48 sm:h-48 rounded-2xl border border-gray-200 bg-white flex flex-col items-center justify-center text-center px-4 hover:border-gray-300 hover:shadow-sm transition-all"
                 >
                   <UserPlus className="h-6 w-6 text-gray-700 mb-3" />
                   <div className="text-sm font-semibold text-gray-900">Nuevo lead</div>
@@ -513,7 +513,7 @@ export default function OnboardingPage() {
                 <button
                   type="button"
                   onClick={() => { setView('select'); setCreated(null) }}
-                  className="group w-44 h-44 sm:w-48 sm:h-48 rounded-2xl border border-gray-200 bg-white flex flex-col items-center justify-center text-center px-4 hover:border-gray-300 hover:shadow-sm transition-all"
+                  className="group w-full h-40 sm:w-48 sm:h-48 rounded-2xl border border-gray-200 bg-white flex flex-col items-center justify-center text-center px-4 hover:border-gray-300 hover:shadow-sm transition-all"
                 >
                   <Search className="h-6 w-6 text-gray-700 mb-3" />
                   <div className="text-sm font-semibold text-gray-900">Lead existente</div>
@@ -651,7 +651,7 @@ export default function OnboardingPage() {
                 <div className="flex flex-wrap items-center gap-2 min-w-0">
                   {/* Filtro */}
                   {!loadingProjects && projects.length > 0 && (
-                    <div className="inline-flex flex-wrap items-center gap-0.5 p-1 rounded-xl bg-gray-100/90 border border-gray-200/80">
+                    <div className="hide-scrollbar flex max-w-full items-center gap-0.5 overflow-x-auto p-1 rounded-xl bg-gray-100/90 border border-gray-200/80 sm:inline-flex sm:flex-wrap sm:overflow-visible">
                       {PROJECT_FILTERS.map((f) => {
                         const active = projectsFilter === f.id
                         const count = filterCounts[f.id]
@@ -671,7 +671,7 @@ export default function OnboardingPage() {
                             type="button"
                             onClick={() => setProjectsFilter(f.id)}
                             title={`${f.label} (${count})`}
-                            className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-[11px] font-semibold transition-all ${
+                            className={`inline-flex shrink-0 items-center gap-1.5 h-8 px-2.5 rounded-lg text-[11px] font-semibold transition-all ${
                               active
                                 ? 'bg-white text-gray-900 shadow-sm border border-gray-200/80'
                                 : 'text-gray-500 hover:text-gray-800 border border-transparent'
@@ -879,7 +879,7 @@ export default function OnboardingPage() {
                       tabIndex={0}
                       onClick={() => router.push(`/onboarding/proyectos/${lead.id}`)}
                       onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/onboarding/proyectos/${lead.id}`) }}
-                      className="group flex items-center gap-5 rounded-xl bg-white border border-gray-200/80 hover:border-gray-300 hover:shadow-sm transition-all overflow-hidden px-5 py-4 min-h-[72px] cursor-pointer"
+                      className="group flex flex-wrap items-center gap-3 sm:flex-nowrap sm:gap-5 rounded-xl bg-white border border-gray-200/80 hover:border-gray-300 hover:shadow-sm transition-all overflow-hidden px-4 py-3.5 sm:px-5 sm:py-4 min-h-[72px] cursor-pointer"
                     >
                       <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-semibold text-sm text-gray-700">
                         {name.charAt(0).toUpperCase()}
@@ -906,11 +906,11 @@ export default function OnboardingPage() {
                           <span className="text-[11px] text-gray-400">{dateStr}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 pr-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:pr-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
                           onClick={() => router.push(auditResumeUrl(lead))}
-                          className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
+                          className="inline-flex basis-[calc(50%-0.25rem)] grow sm:basis-auto sm:grow-0 justify-center whitespace-nowrap items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-sky-50 text-sky-900 border border-sky-200 hover:bg-sky-100 transition-colors"
                           title="Abrir el cuaderno de reuniones"
                         >
                           <PlayCircle className="h-3.5 w-3.5" />
@@ -921,7 +921,7 @@ export default function OnboardingPage() {
                             type="button"
                             onClick={() => togglePonerEnMarcha(lead.id, true)}
                             disabled={launchingId === lead.id}
-                            className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                            className="inline-flex basis-[calc(50%-0.25rem)] grow sm:basis-auto sm:grow-0 justify-center whitespace-nowrap items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition-colors disabled:opacity-50"
                             title="Quitar de Proyectos abiertos"
                           >
                             <CheckCircle2 className="h-3.5 w-3.5" />
@@ -932,7 +932,7 @@ export default function OnboardingPage() {
                             type="button"
                             onClick={() => togglePonerEnMarcha(lead.id, false)}
                             disabled={launchingId === lead.id || !lead.configuracion}
-                            className="inline-flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
+                            className="inline-flex basis-[calc(50%-0.25rem)] grow sm:basis-auto sm:grow-0 justify-center whitespace-nowrap items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold bg-gray-900 text-white hover:bg-gray-800 transition-colors disabled:opacity-50"
                             title="Pasar a Proyectos abiertos"
                           >
                             <Rocket className="h-3.5 w-3.5" />
@@ -950,7 +950,7 @@ export default function OnboardingPage() {
                           <Pencil className="h-3.5 w-3.5" />
                           Editar
                         </button>
-                        <Link href={`/onboarding/proyectos/${lead.id}`} className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-300 hover:text-gray-900 transition-colors" title="Ver proyecto">
+                        <Link href={`/onboarding/proyectos/${lead.id}`} className="hidden sm:flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-300 hover:text-gray-900 transition-colors" title="Ver proyecto">
                           <Eye className="h-3.5 w-3.5" />
                         </Link>
                         <button

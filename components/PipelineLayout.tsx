@@ -2,7 +2,7 @@
 
 import { ReactNode, useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { ChevronDown, Trash2, ArrowLeft } from 'lucide-react'
+import { ChevronDown, Trash2, ArrowLeft, Menu } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import LeadContextShortcuts from '@/components/crm/LeadContextShortcuts'
-import MobileTabBar from '@/components/MobileTabBar'
+import MobileTabBar, { openMobileMenu } from '@/components/MobileTabBar'
 
 interface PipelineLayoutProps {
   children: ReactNode
@@ -171,6 +171,15 @@ export default function PipelineLayout({
                   <span className="hidden sm:inline">Eliminar</span>
                 </Button>
               )}
+
+              <button
+                type="button"
+                onClick={openMobileMenu}
+                aria-label="Abrir menú"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-900 active:bg-gray-100 md:hidden"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
             </div>
 
             <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700 pl-11 sm:pl-0">

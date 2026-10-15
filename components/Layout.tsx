@@ -2,10 +2,11 @@ import { ReactNode, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import Sidebar from './Sidebar'
-import MobileTabBar from './MobileTabBar'
+import MobileTabBar, { openMobileMenu } from './MobileTabBar'
+import MobilePushPrompt from './MobilePushPrompt'
 import LeadContextShortcuts from '@/components/crm/LeadContextShortcuts'
 import { useAuth } from '@/components/AuthContext'
-import { ArrowLeft, Bell } from 'lucide-react'
+import { ArrowLeft, Bell, Menu } from 'lucide-react'
 import { mobileHasBack, mobileTitle } from '@/lib/mobile-titles'
 import { cn } from '@/lib/utils'
 
@@ -75,11 +76,22 @@ export default function Layout({ children }: LayoutProps) {
                 <Bell className="h-[18px] w-[18px]" />
               </Link>
             )}
+            <button
+              type="button"
+              onClick={openMobileMenu}
+              aria-label="Abrir menú"
+              className="-mr-1.5 inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground active:bg-muted"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
           </div>
         </header>
 
         <main className="mobile-main flex-1 overflow-y-auto overflow-x-hidden shell-surface">
-          <div className="mx-auto w-full max-w-[1600px] p-3 sm:p-6 lg:px-8 lg:py-7">{children}</div>
+          <div className="mx-auto w-full max-w-[1600px] p-3 sm:p-6 lg:px-8 lg:py-7">
+            {router.pathname === '/dashboard' && <MobilePushPrompt />}
+            {children}
+          </div>
         </main>
         <LeadContextShortcuts />
       </div>
