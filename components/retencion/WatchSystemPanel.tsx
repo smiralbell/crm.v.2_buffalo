@@ -408,7 +408,7 @@ export default function WatchSystemPanel({
                       }
                     />
                     <p className="mt-1.5 text-xs text-gray-400">
-                      URL <b>externa</b>. Si ese Postgres tiene varias bases, indica cuál en la URL: …:5432/<b>preico_v2</b>?sslmode=disable. Eso es el nombre de la base, no de una tabla.
+                      Pega la <b>URL de conexión externa</b> de EasyPanel tal cual. El host externo es el del panel (panel.…) y el puerto el de Exponer (4523): no lo cambies.
                     </p>
                   </div>
 

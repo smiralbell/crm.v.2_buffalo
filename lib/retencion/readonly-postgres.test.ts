@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  connectHostCandidates,
   explainPgConnectError,
   parsePgUrl,
   pgSslConfig,
@@ -42,14 +43,24 @@ describe('pgSslConfig', () => {
   })
 })
 
+describe('connectHostCandidates', () => {
+  it('usa la IP pública y el gateway de docker a la vez', () => {
+    const hosts = connectHostCandidates('panel.example.com', '203.0.113.10')
+    expect(hosts[0]).toBe('203.0.113.10')
+    expect(hosts).toContain('panel.example.com')
+    expect(hosts).toContain('172.17.0.1')
+  })
+})
+
 describe('explainPgConnectError', () => {
-  it('apunta a la URL externa de EasyPanel si hay timeout', () => {
+  it('no pide cambiar el host externo de EasyPanel si hay timeout', () => {
     const msg = explainPgConnectError(
       new Error('timeout expired'),
       'postgres://u:p@panel.example.com:25432/pablo'
     )
-    expect(msg.toLowerCase()).toContain('externa')
+    expect(msg.toLowerCase()).toContain('tal cual')
     expect(msg).toContain('25432')
+    expect(msg.toLowerCase()).not.toContain('sustituye')
   })
 })
 

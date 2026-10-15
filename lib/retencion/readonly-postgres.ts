@@ -38,7 +38,7 @@ export function parsePgUrl(raw: string): ParsedPgUrl {
   try {
     u = new URL(s.replace(/^postgres(ql)?:/i, 'http:'))
   } catch {
-    throw new Error('URL de PostgreSQL inválida. En EasyPanel copia la URL externa completa (IP + puerto publicado).')
+    throw new Error('URL de PostgreSQL inválida. En EasyPanel copia la URL de conexión externa tal cual.')
   }
   const sslRaw = (u.searchParams.get('sslmode') || '').toLowerCase()
   const sslmode: ParsedPgUrl['sslmode'] =
@@ -84,12 +84,30 @@ async function resolveIpv4(host: string): Promise<string> {
   }
 }
 
-async function openPgClient(
+/**
+ * EasyPanel pone panel.dominio como Host externo. Eso es válido.
+ * Desde fuera del VPS entra por la IP; desde un contenedor en el mismo VPS
+ * hay que entrar por el gateway de Docker. Se prueban a la vez.
+ */
+export function connectHostCandidates(hostname: string, resolved: string): string[] {
+  const hosts: string[] = []
+  const add = (h: string) => {
+    if (h && hosts.indexOf(h) === -1) hosts.push(h)
+  }
+  add(resolved)
+  add(hostname)
+  add('172.17.0.1')
+  add('172.18.0.1')
+  add('host.docker.internal')
+  return hosts
+}
+
+function tryOpenOnHost(
+  host: string,
   parsed: ParsedPgUrl,
   ssl: false | { rejectUnauthorized: false; servername: string },
   timeoutMs: number
 ): Promise<Client> {
-  const host = await resolveIpv4(parsed.host)
   const client = new Client({
     host,
     port: parsed.port,
@@ -99,8 +117,61 @@ async function openPgClient(
     ssl,
     connectionTimeoutMillis: timeoutMs,
   })
-  await client.connect()
-  return client
+  return client.connect().then(
+    () => client,
+    (err: unknown) => {
+      client.end().catch(() => undefined)
+      return Promise.reject(err)
+    }
+  )
+}
+
+/** Primera conexión que responda; el resto se cierra. */
+function firstOpenClient(
+  hosts: string[],
+  parsed: ParsedPgUrl,
+  ssl: false | { rejectUnauthorized: false; servername: string },
+  timeoutMs: number
+): Promise<Client> {
+  return new Promise((resolve, reject) => {
+    let remaining = hosts.length
+    let done = false
+    let last: unknown
+    if (!remaining) {
+      reject(new Error('No se pudo conectar'))
+      return
+    }
+    for (let i = 0; i < hosts.length; i++) {
+      tryOpenOnHost(hosts[i], parsed, ssl, timeoutMs).then(
+        (client) => {
+          if (done) {
+            client.end().catch(() => undefined)
+            return
+          }
+          done = true
+          resolve(client)
+        },
+        (err) => {
+          last = err
+          remaining -= 1
+          if (!done && remaining === 0) {
+            reject(last instanceof Error ? last : new Error('No se pudo conectar'))
+          }
+        }
+      )
+    }
+  })
+}
+
+async function openPgClient(
+  parsed: ParsedPgUrl,
+  ssl: false | { rejectUnauthorized: false; servername: string },
+  timeoutMs: number
+): Promise<Client> {
+  const resolved = await resolveIpv4(parsed.host)
+  const hosts = connectHostCandidates(parsed.host, resolved)
+  const perHost = Math.min(Math.max(timeoutMs, 4000), 10000)
+  return firstOpenClient(hosts, parsed, ssl, perHost)
 }
 
 export function explainPgConnectError(e: unknown, connectionString?: string): string {
@@ -115,7 +186,7 @@ export function explainPgConnectError(e: unknown, connectionString?: string): st
     msg.includes('connect timeout') ||
     msg.includes('connection terminated')
   ) {
-    return `No responde${where}. En EasyPanel usa la URL EXTERNA (Credentials): IP del VPS + puerto de la pestaña Expose, con ?sslmode=disable. No uses la URL interna ni el dominio del panel (Cloudflare corta el puerto de Postgres).`
+    return `No responde${where}. Esa es la URL externa de EasyPanel (Host externo + Puerto externo): déjala tal cual. El CRM reintenta por IP y por la red del servidor; si sigue el timeout, recarga y vuelve a conectar.`
   }
   if (msg.includes('enotfound') || msg.includes('getaddrinfo') || msg.includes('eai_again')) {
     return `No se resuelve el host${where}. Revisa el nombre en la URL.`
