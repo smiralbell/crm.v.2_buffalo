@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth'
 import Layout from '@/components/Layout'
 import { listOpsAlertMessages, type OpsAlertMessage } from '@/lib/ops-alerts-store'
 import { OpsAlertRow } from '@/components/crm/DashboardAlertsPanel'
+import PushNotificationsCard from '@/components/PushNotificationsCard'
 import { Bell, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const PAGE_SIZE = 20
@@ -59,10 +60,12 @@ export default function AlertasPage({ items, page, total, totalPages }: Props) {
             Historial de alertas
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Mensajes enviados por el canal de comunicación del CRM (mail y Telegram).
+            Mensajes enviados por el canal de comunicación del CRM (mail, Telegram y notificación en el móvil).
             {total > 0 ? ` ${total} en total.` : ''}
           </p>
         </div>
+
+        <PushNotificationsCard />
 
         {items.length === 0 ? (
           <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">

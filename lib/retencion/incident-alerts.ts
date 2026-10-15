@@ -16,5 +16,6 @@ export async function alertIncident(input: {
     text: `${body}\n\n${link}`,
     html: `<p>${safeBody}</p><p><a href="${link}">Abrir en el CRM</a></p>`,
     telegramHtml: `<b>${safeTitle}</b>\n${safeBody}\n${link}`,
+    url: `/retencion/proyectos/${input.proyectoId}?tab=incidencias`,
   })
 }

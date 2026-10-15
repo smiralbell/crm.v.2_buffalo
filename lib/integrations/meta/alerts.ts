@@ -44,7 +44,7 @@ export function formatMetaLeadAlert(input: {
 export async function alertMetaLead(input: { lead: ParsedMetaLead; leadId: number }): Promise<void> {
   const msg = formatMetaLeadAlert(input)
   try {
-    await sendOpsAlert(msg)
+    await sendOpsAlert({ ...msg, url: `/leads/${input.leadId}` })
   } catch (e) {
     console.warn('[meta-leads] aviso', e instanceof Error ? e.message : e)
   }

@@ -1,5 +1,6 @@
 import { isSmtpConfigured, sendMail } from '@/lib/mail/smtp'
 import { insertOpsAlertMessage } from '@/lib/ops-alerts-store'
+import { isPushConfigured, sendPush } from '@/lib/push'
 
 function envList(name: string): string[] {
   return (process.env[name] || '')
@@ -55,16 +56,28 @@ async function sendTelegram(text: string): Promise<void> {
   }
 }
 
-/** Gmail (SMTP) + Telegram. El mismo canal que incidencias. */
+/** Texto corto para la notificación del móvil: sin las líneas de enlaces. */
+function pushBodyFromText(text: string): string {
+  return text
+    .split('\n')
+    .filter((l) => l.trim() && !/https?:\/\//i.test(l))
+    .join(' · ')
+    .slice(0, 300)
+}
+
+/** Gmail (SMTP) + Telegram + push al móvil (PWA). El mismo canal que incidencias. */
 export async function sendOpsAlert(input: {
   subject: string
   text: string
   html?: string
   telegramHtml?: string
+  /** Ruta del CRM que abre la notificación push al tocarla. */
+  url?: string
 }): Promise<void> {
   const channels: string[] = []
   if (isSmtpConfigured() && adminAlertEmails().length) channels.push('email')
   if (process.env.TELEGRAM_BOT_TOKEN?.trim() && telegramChatIds().length) channels.push('telegram')
+  if (isPushConfigured()) channels.push('push')
   await insertOpsAlertMessage({
     subject: input.subject,
     body: input.text,
@@ -90,6 +103,15 @@ export async function sendOpsAlert(input: {
     await sendTelegram(input.telegramHtml || escHtml(input.text))
   } catch (e) {
     console.warn('[ops-alerts] telegram', e)
+  }
+  try {
+    await sendPush({
+      title: input.subject.replace(/^\[CRM\]\s*/, ''),
+      body: pushBodyFromText(input.text),
+      url: input.url,
+    })
+  } catch (e) {
+    console.warn('[ops-alerts] push', e)
   }
 }
 

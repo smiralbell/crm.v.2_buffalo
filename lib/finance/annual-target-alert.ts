@@ -64,7 +64,10 @@ export async function maybeNotifyAnnualGoalReached(opts?: {
   if (!claimed[0]) return { sent: false }
 
   try {
-    await sendOpsAlert(formatAnnualGoalReachedAlert({ year, target, invoicedYtd: ytd }))
+    await sendOpsAlert({
+      ...formatAnnualGoalReachedAlert({ year, target, invoicedYtd: ytd }),
+      url: '/finances#objetivo-anual',
+    })
     return { sent: true }
   } catch (e) {
     console.warn('[annual-goal] aviso', e instanceof Error ? e.message : e)
