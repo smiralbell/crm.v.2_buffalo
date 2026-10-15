@@ -1,4 +1,5 @@
 import type { AppProps } from 'next/app'
+import Head from 'next/head'
 import { useEffect } from 'react'
 import { AuthProvider } from '@/components/AuthContext'
 import { ThemeProvider } from '@/components/ThemeProvider'
@@ -18,6 +19,14 @@ export default function App({ Component, pageProps }: AppProps) {
 
   return (
     <ThemeProvider>
+      <Head>
+        {/* viewport-fit=cover: la app instalada usa toda la pantalla (notch y barra de gestos). */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+          key="viewport"
+        />
+      </Head>
       <AuthProvider>
         <Component {...pageProps} />
       </AuthProvider>

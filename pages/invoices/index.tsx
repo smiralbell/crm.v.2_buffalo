@@ -1012,7 +1012,85 @@ export default function InvoicesPage({
                 </Link>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* Móvil: tarjetas en lugar de tabla */}
+              <ul className="divide-y divide-gray-100 md:hidden">
+                {safeInvoices.map((invoice) => (
+                  <li key={invoice.id} className="px-4 py-3.5">
+                    <div className="flex items-start gap-3">
+                      {selectionMode && (
+                        <input
+                          type="checkbox"
+                          checked={selectedInvoices.has(invoice.id)}
+                          onChange={(e) => handleSelectInvoice(invoice.id, e.target.checked)}
+                          className="mt-1 h-4 w-4 rounded border-gray-300"
+                        />
+                      )}
+                      <Link href={`/invoices/${invoice.id}/edit`} className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-gray-900">{invoice.invoice_number}</span>
+                          <Badge
+                            variant={invoice.status === 'sent' ? 'default' : invoice.status === 'draft' ? 'secondary' : 'outline'}
+                            className="text-[10px]"
+                          >
+                            {statusLabels[invoice.status] || invoice.status}
+                          </Badge>
+                        </div>
+                        <p className="mt-0.5 truncate text-sm text-gray-700">{invoice.client_name}</p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          {format(new Date(invoice.issue_date), 'dd MMM yyyy')}
+                          {invoice.invoice_source === 'developer' &&
+                            ` · Developer${invoice.developer_name ? ` · ${invoice.developer_name}` : ''}`}
+                        </p>
+                      </Link>
+                      <div className="shrink-0 text-right">
+                        <p className="text-sm font-semibold tabular-nums text-gray-900">
+                          {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(invoice.total)}
+                        </p>
+                        <p className="text-[11px] tabular-nums text-gray-500">
+                          {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(invoice.subtotal || 0)} s/IVA
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2.5 flex items-center justify-end gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownloadPDF(invoice.id, invoice.invoice_number)}
+                        disabled={downloadingId === invoice.id}
+                        className="h-8 rounded-lg px-2.5 text-xs"
+                      >
+                        <Download className="mr-1 h-3.5 w-3.5" />
+                        PDF
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSendToDrive(invoice.id)}
+                        disabled={sendingToDrive.has(invoice.id)}
+                        className={`h-8 rounded-lg px-2.5 text-xs ${invoice.sent_to_drive ? 'text-green-700' : 'text-red-600'}`}
+                      >
+                        {invoice.sent_to_drive ? (
+                          <Cloud className="mr-1 h-3.5 w-3.5" />
+                        ) : (
+                          <CloudOff className="mr-1 h-3.5 w-3.5" />
+                        )}
+                        Drive
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteClick(invoice)}
+                        className="h-8 w-8 text-red-500"
+                        aria-label="Eliminar factura"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden overflow-x-auto md:block">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b bg-gray-50">
@@ -1156,6 +1234,7 @@ export default function InvoicesPage({
                   </tbody>
                 </table>
               </div>
+              </>
             )}
 
             {/* Pagination - Estilo minimalista */}

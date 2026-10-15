@@ -155,9 +155,9 @@ const prioridadColors: Record<string, string> = {
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   if (!value) return null
   return (
-    <div className="flex justify-between items-start py-2.5 border-b border-gray-50 last:border-0">
-      <span className="text-sm text-gray-500 shrink-0 w-32">{label}</span>
-      <span className="text-sm text-gray-900 text-right">{value}</span>
+    <div className="flex justify-between items-start gap-3 py-2.5 border-b border-gray-50 last:border-0">
+      <span className="text-sm text-gray-500 shrink-0 w-24 sm:w-32">{label}</span>
+      <span className="min-w-0 text-sm text-gray-900 text-right break-words [overflow-wrap:anywhere]">{value}</span>
     </div>
   )
 }

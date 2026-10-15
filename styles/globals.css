@@ -141,3 +141,60 @@ body {
     border-color: hsl(var(--sidebar-border));
   }
 }
+
+/* ── Móvil / app instalada (PWA) ─────────────────────────────────────── */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Altura de la barra inferior + zona del gesto de inicio del iPhone. */
+:root {
+  --tabbar-h: 0px;
+}
+@media (max-width: 767px) {
+  :root {
+    --tabbar-h: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  }
+  .mobile-tabbar {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mobile-header {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .mobile-drawer {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mobile-main {
+    padding-bottom: var(--tabbar-h);
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  /* La cabecera móvil ya tiene «volver»: ocultar las flechas sueltas de cada página. */
+  .mobile-main a:has(> svg.lucide-arrow-left:only-child),
+  .mobile-main button:has(> svg.lucide-arrow-left:only-child) {
+    display: none;
+  }
+  /* Rejillas sin columnas fijas: que un texto largo no ensanche la página. */
+  .grid > * {
+    min-width: 0;
+  }
+  /* iOS hace zoom al enfocar campos de menos de 16px: lo evitamos. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+  /* Botones e iconos clicables con tamaño de dedo, sin retraso de doble toque. */
+  a,
+  button,
+  [role='button'],
+  label {
+    touch-action: manipulation;
+  }
+}

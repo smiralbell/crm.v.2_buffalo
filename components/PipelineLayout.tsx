@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import LeadContextShortcuts from '@/components/crm/LeadContextShortcuts'
+import MobileTabBar from '@/components/MobileTabBar'
 
 interface PipelineLayoutProps {
   children: ReactNode
@@ -111,11 +112,11 @@ export default function PipelineLayout({
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-white flex flex-col">
-      <div className="flex-shrink-0 bg-white border-b border-gray-200 z-10">
-        <div className="px-3 sm:px-6 py-3 sm:py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
+    <div className="h-[100dvh] w-full overflow-hidden bg-white flex flex-col pb-[var(--tabbar-h)] md:pb-0">
+      <div className="mobile-header flex-shrink-0 bg-white border-b border-gray-200 z-10">
+        <div className="px-3 sm:px-6 py-2 sm:py-4">
+          <div className="flex flex-col gap-1.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 sm:flex-wrap sm:gap-3 min-w-0">
               <Button
                 type="button"
                 variant="ghost"
@@ -128,7 +129,7 @@ export default function PipelineLayout({
               </Button>
 
               {lockedToCurrent ? (
-                <div className="w-full sm:w-auto sm:min-w-[200px] rounded-md border border-gray-200 bg-gray-50 px-3 py-2 min-w-0">
+                <div className="flex-1 sm:flex-initial sm:w-auto sm:min-w-[200px] rounded-md border border-gray-200 bg-gray-50 px-3 py-2 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">
                     {currentPipelineName || 'Mi pipeline'}
                   </p>
@@ -137,7 +138,7 @@ export default function PipelineLayout({
               ) : (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="w-full sm:w-auto sm:min-w-[200px] justify-between min-w-0">
+                    <Button variant="outline" className="flex-1 sm:flex-initial sm:w-auto sm:min-w-[200px] justify-between min-w-0">
                       <span className="font-medium truncate">{currentPipelineName}</span>
                       <ChevronDown className="h-4 w-4 ml-2 shrink-0" />
                     </Button>
@@ -163,15 +164,16 @@ export default function PipelineLayout({
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowDeleteDialog(true)}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  aria-label="Eliminar pipeline"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Eliminar
+                  <Trash2 className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Eliminar</span>
                 </Button>
               )}
             </div>
 
-            <div className="flex items-center gap-2 text-sm text-gray-700 px-1 sm:px-0">
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700 pl-11 sm:pl-0">
               <span className="font-semibold text-gray-900">{formatCurrency(totalValue)}</span>
               <span className="text-gray-400">·</span>
               <span>
@@ -185,6 +187,7 @@ export default function PipelineLayout({
       <div className="flex-1 overflow-hidden bg-gray-50">{children}</div>
 
       <LeadContextShortcuts />
+      <MobileTabBar />
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>

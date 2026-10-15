@@ -386,11 +386,13 @@ export default function LeadsPage({
       <div className="space-y-5">
         <Card>
           <CardContent className="pt-5">
-            <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex-1 min-w-0">
+            <form onSubmit={handleSearch} className="grid grid-cols-2 gap-2 lg:flex lg:flex-row lg:items-center lg:gap-3">
+              <div className="col-span-2 min-w-0 lg:flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
+                    type="search"
+                    enterKeyHint="search"
                     placeholder="Buscar por nombre o email…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -399,7 +401,7 @@ export default function LeadsPage({
                 </div>
               </div>
               <Select value={tipo || 'all'} onValueChange={handleTipoChange}>
-                <SelectTrigger className="w-full sm:w-[160px] rounded-xl">
+                <SelectTrigger className="w-full lg:w-[160px] rounded-xl">
                   <SelectValue placeholder="Tipo" />
                 </SelectTrigger>
                 <SelectContent>
@@ -413,7 +415,7 @@ export default function LeadsPage({
                 onValueChange={handleEstadoChange}
                 disabled={tipo === 'contacto'}
               >
-                <SelectTrigger className="w-full sm:w-[160px] rounded-xl">
+                <SelectTrigger className="w-full lg:w-[160px] rounded-xl">
                   <SelectValue placeholder="Estado" />
                 </SelectTrigger>
                 <SelectContent>
@@ -428,13 +430,13 @@ export default function LeadsPage({
                   <SelectItem value="perdido">Perdido</SelectItem>
                 </SelectContent>
               </Select>
-              <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={loading} variant="outline" className="rounded-xl flex-1 sm:flex-initial">
+              <div className="col-span-2 grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
+                <Button type="submit" disabled={loading} variant="outline" className="hidden rounded-xl lg:inline-flex lg:flex-initial">
                   Buscar
                 </Button>
-                <Link href="/leads/reuniones" className="flex-1 sm:flex-initial">
+                <Link href="/leads/reuniones" className="flex-1 lg:flex-initial">
                   <Button type="button" variant="outline" className="rounded-xl w-full">
-                    <Video className="mr-2 h-4 w-4" />
+                    <Video className="mr-1.5 h-4 w-4 sm:mr-2" />
                     Reuniones
                   </Button>
                 </Link>
@@ -442,18 +444,20 @@ export default function LeadsPage({
                   type="button"
                   variant="outline"
                   onClick={() => openCreate('contact')}
-                  className="rounded-xl flex-1 sm:flex-initial shrink-0"
+                  className="rounded-xl flex-1 lg:flex-initial shrink-0"
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nuevo contacto
+                  <Plus className="mr-1.5 h-4 w-4 sm:mr-2" />
+                  <span className="sm:hidden">Contacto</span>
+                  <span className="hidden sm:inline">Nuevo contacto</span>
                 </Button>
                 <Button
                   type="button"
                   onClick={() => openCreate('lead')}
-                  className="rounded-xl flex-1 sm:flex-initial shrink-0"
+                  className="rounded-xl flex-1 lg:flex-initial shrink-0"
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nuevo Lead
+                  <Plus className="mr-1.5 h-4 w-4 sm:mr-2" />
+                  <span className="sm:hidden">Lead</span>
+                  <span className="hidden sm:inline">Nuevo Lead</span>
                 </Button>
               </div>
             </form>
@@ -541,13 +545,13 @@ export default function LeadsPage({
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead>
+                  <thead className="hidden sm:table-header-group">
                     <tr className="border-b border-border bg-muted/40">
                       <th className="text-left px-4 py-3 font-medium text-muted-foreground">Contacto</th>
                       <th className="text-left px-4 py-3 font-medium text-muted-foreground">Tipo / Estado</th>
                       <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Valor</th>
                       <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Fecha</th>
-                      <th className="text-right px-4 py-3 font-medium text-muted-foreground">Acciones</th>
+                      <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -573,7 +577,7 @@ export default function LeadsPage({
                                 {c.nombre || c.email || `Contacto #${c.id}`}
                               </span>
                               {c.email && c.nombre && (
-                                <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[220px]">
+                                <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[200px] sm:max-w-[220px]">
                                   {c.email}
                                 </p>
                               )}
@@ -587,7 +591,7 @@ export default function LeadsPage({
                             <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">
                               {new Date(c.created_at).toLocaleDateString('es-ES')}
                             </td>
-                            <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                            <td className="px-4 py-3.5 hidden sm:table-cell" onClick={(e) => e.stopPropagation()}>
                               <div className="flex justify-end gap-0.5">
                                 <Link href={`/contacts/${c.id}`}>
                                   <Button variant="ghost" size="icon" className="rounded-xl h-8 w-8">
@@ -635,13 +639,19 @@ export default function LeadsPage({
                               `Lead #${lead.id}`}
                           </span>
                           {lead.contact?.email && lead.contact?.nombre && (
-                            <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[220px]">
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[200px] sm:max-w-[220px]">
                               {lead.contact.email}
                             </p>
                           )}
+                          <p className="mt-1 text-[11px] text-muted-foreground tabular-nums sm:hidden">
+                            {lead.valor
+                              ? `€${lead.valor.toLocaleString('es-ES', { maximumFractionDigits: 0 })} · `
+                              : ''}
+                            {new Date(lead.created_at).toLocaleDateString('es-ES')}
+                          </p>
                         </td>
                         <td className="px-4 py-3.5">
-                          <div className="flex flex-wrap items-center gap-1.5">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5 sm:justify-start">
                             <Badge className="rounded-full font-medium border-0 bg-violet-500/15 text-violet-800 dark:text-violet-300">
                               Lead
                             </Badge>
@@ -666,7 +676,7 @@ export default function LeadsPage({
                         <td className="px-4 py-3.5 text-muted-foreground hidden md:table-cell">
                           {new Date(lead.created_at).toLocaleDateString('es-ES')}
                         </td>
-                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-4 py-3.5 hidden sm:table-cell" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-end gap-0.5">
                             <Link href={`/leads/${lead.id}`}>
                               <Button variant="ghost" size="icon" className="rounded-xl h-8 w-8">

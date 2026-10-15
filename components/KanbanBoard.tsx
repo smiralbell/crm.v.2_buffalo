@@ -221,37 +221,42 @@ export default function KanbanBoard({
     setDraggedOver({ stage, position })
   }
 
-  const handleDrop = async (e: React.DragEvent, targetStage: string, targetPosition: number) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!draggedCard) return
-
+  const moveCard = async (card: PipelineCard, targetStage: string, targetPosition: number) => {
     const snapshot = { ...cards }
     const updatedCards = { ...cards }
-    const sourceStage = draggedCard.stage
+    const sourceStage = card.stage
 
     if (updatedCards[sourceStage]) {
-      updatedCards[sourceStage] = updatedCards[sourceStage].filter((c) => c.id !== draggedCard.id)
+      updatedCards[sourceStage] = updatedCards[sourceStage].filter((c) => c.id !== card.id)
     }
     if (!updatedCards[targetStage]) updatedCards[targetStage] = []
 
-    const newCard = { ...draggedCard, stage: targetStage, position: targetPosition }
+    const newCard = { ...card, stage: targetStage, position: targetPosition }
     updatedCards[targetStage].splice(targetPosition, 0, newCard)
     updatedCards[targetStage].forEach((c, i) => { c.position = i })
 
     setCards(updatedCards)
 
     try {
-      await onCardMove(draggedCard.id, targetStage, targetPosition)
-      setDraggedCard(null)
-      setDraggedOver(null)
+      await onCardMove(card.id, targetStage, targetPosition)
     } catch (error) {
       console.error('Error moving card:', error)
       setCards(snapshot)
-      setDraggedCard(null)
-      setDraggedOver(null)
     }
   }
+
+  const handleDrop = async (e: React.DragEvent, targetStage: string, targetPosition: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!draggedCard) return
+    await moveCard(draggedCard, targetStage, targetPosition)
+    setDraggedCard(null)
+    setDraggedOver(null)
+  }
+
+  /** «Mover a…» desde el menú de la tarjeta: al final de la columna destino. */
+  const moveCardTo = (card: PipelineCard, targetStage: string) =>
+    moveCard(card, targetStage, (cards[targetStage] || []).length)
 
   const cancelNewColumn = () => {
     setShowNewColumnAt(null)
@@ -379,7 +384,7 @@ export default function KanbanBoard({
 
         <div
           ref={boardRef}
-          className="flex-1 overflow-x-auto overflow-y-auto bg-gray-50"
+          className="flex-1 overflow-x-auto overflow-y-auto bg-gray-50 max-md:snap-x max-md:snap-mandatory max-md:scroll-pl-10"
           style={{ scrollbarWidth: 'thin', scrollbarColor: '#CBD5E1 #F1F5F9' }}
         >
           <div className="flex min-w-max" style={{ minHeight: '100%' }}>
@@ -388,7 +393,7 @@ export default function KanbanBoard({
               return (
                 <Fragment key={stage.id}>
                   <div key={`gap-${stage.id}`} className="flex-shrink-0 w-10 border-r border-gray-100 bg-transparent" />
-                  <div key={`cards-${stage.id}`} className="flex-shrink-0 w-[300px] bg-transparent">
+                  <div key={`cards-${stage.id}`} className="flex-shrink-0 w-[300px] bg-transparent snap-start">
                     <KanbanColumn
                       stage={stage}
                       cards={stageCards}
@@ -426,6 +431,8 @@ export default function KanbanBoard({
                       allowQuickCreate={allowQuickCreate}
                       onEntityCreated={onEntityCreated}
                       headerOnly={false}
+                      allStages={boardStages}
+                      onCardMoveTo={moveCardTo}
                     />
                   </div>
                 </Fragment>

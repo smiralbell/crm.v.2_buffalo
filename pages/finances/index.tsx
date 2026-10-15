@@ -684,7 +684,7 @@ export default function FinancesDashboard({
               className="w-full sm:flex-1 min-w-0"
             />
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:flex-nowrap">
               <Link href="/invoices" className="flex-1 sm:flex-initial">
                 <Button
                   type="button"
@@ -741,15 +741,15 @@ export default function FinancesDashboard({
           ) : null}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
           {cashCards.map((card) => (
             <Link key={card.key} href={card.href}>
               <Card className="border-slate-200/80 shadow-sm bg-white hover:border-slate-300 transition-colors h-full">
-                <CardContent className="pt-5 pb-4">
+                <CardContent className="px-4 pt-4 pb-3.5 sm:px-6 sm:pt-5 sm:pb-4">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
                     {card.label}
                   </p>
-                  <p className={`text-2xl font-semibold tabular-nums ${card.valueClass}`}>
+                  <p className={`text-lg sm:text-2xl font-semibold tabular-nums ${card.valueClass}`}>
                     {card.display}
                   </p>
                   <p className="text-[11px] text-slate-400 mt-1">{card.sub}</p>

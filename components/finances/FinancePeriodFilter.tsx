@@ -160,7 +160,7 @@ export default function FinancePeriodFilter({ value, onChange, className }: Prop
     <>
       <div
         className={cn(
-          'flex flex-wrap items-center gap-1 min-w-0',
+          'hide-scrollbar flex items-center gap-1 min-w-0 overflow-x-auto sm:flex-wrap sm:overflow-visible',
           className
         )}
       >

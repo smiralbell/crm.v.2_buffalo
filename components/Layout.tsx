@@ -1,7 +1,12 @@
 import { ReactNode, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/router'
 import Sidebar from './Sidebar'
+import MobileTabBar from './MobileTabBar'
 import LeadContextShortcuts from '@/components/crm/LeadContextShortcuts'
-import { Menu } from 'lucide-react'
+import { useAuth } from '@/components/AuthContext'
+import { ArrowLeft, Bell } from 'lucide-react'
+import { mobileHasBack, mobileTitle } from '@/lib/mobile-titles'
 import { cn } from '@/lib/utils'
 
 interface LayoutProps {
@@ -9,8 +14,19 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const router = useRouter()
+  const { user } = useAuth()
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
+
+  const homeHref =
+    user?.role === 'developer' ? '/developer' : user?.role === 'comercial' ? '/comercial' : '/dashboard'
+
+  const title = mobileTitle(router.pathname)
+  const hasBack = mobileHasBack(router.pathname)
+  const goBack = () => {
+    if (window.history.length > 1) router.back()
+    else router.push(`/${router.pathname.split('/')[1] || ''}`)
+  }
 
   return (
     <div className="flex h-[100dvh] overflow-hidden shell-surface">
@@ -23,57 +39,52 @@ export default function Layout({ children }: LayoutProps) {
         />
       </div>
 
-      {/* Mobile drawer */}
-      <div
-        className={cn(
-          'fixed inset-0 z-50 md:hidden transition-opacity',
-          mobileOpen ? 'pointer-events-auto' : 'pointer-events-none'
-        )}
-      >
-        <button
-          type="button"
-          aria-label="Cerrar menú"
-          className={cn(
-            'absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity',
-            mobileOpen ? 'opacity-100' : 'opacity-0'
-          )}
-          onClick={() => setMobileOpen(false)}
-        />
-        <div
-          className={cn(
-            'absolute inset-y-0 left-0 w-[min(18rem,88vw)] shadow-2xl transition-transform duration-300 ease-out',
-            mobileOpen ? 'translate-x-0' : '-translate-x-full'
-          )}
-        >
-          <Sidebar variant="mobile" onNavigate={() => setMobileOpen(false)} />
-        </div>
-      </div>
-
       <div className="flex min-w-0 flex-1 flex-col transition-[margin] duration-200 ease-out">
-        <header className="md:hidden sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-card/90 px-3 backdrop-blur-md">
-          <button
-            type="button"
-            onClick={() => setMobileOpen(true)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-background text-foreground"
-            aria-label="Abrir menú"
-          >
-            <Menu className="h-4 w-4" />
-          </button>
-          <img
-            src="/brand/buffalo-mark.png"
-            alt="Buffalo"
-            width={28}
-            height={28}
-            className="h-7 w-7 rounded-lg object-cover"
-          />
-          <span className="text-sm font-semibold tracking-tight">Buffalo CRM</span>
+        <header className="mobile-header md:hidden sticky top-0 z-30 border-b border-border bg-card/90 backdrop-blur-md">
+          <div className="flex h-12 items-center gap-2.5 px-4">
+            {hasBack ? (
+              <button
+                type="button"
+                onClick={goBack}
+                aria-label="Volver"
+                className="-ml-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full active:bg-muted"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+            ) : (
+              <Link href={homeHref} className="shrink-0" aria-label="Inicio">
+                <img
+                  src="/brand/buffalo-mark.png"
+                  alt="Buffalo"
+                  width={26}
+                  height={26}
+                  className="h-[26px] w-[26px] rounded-lg object-cover"
+                />
+              </Link>
+            )}
+            <h1 className="min-w-0 flex-1 truncate text-[16px] font-semibold tracking-tight">{title}</h1>
+            {user?.role === 'admin' && (
+              <Link
+                href="/alertas"
+                aria-label="Alertas"
+                className={cn(
+                  'inline-flex h-9 w-9 items-center justify-center rounded-full text-foreground active:bg-muted',
+                  router.pathname === '/alertas' && 'bg-muted'
+                )}
+              >
+                <Bell className="h-[18px] w-[18px]" />
+              </Link>
+            )}
+          </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto shell-surface">
+        <main className="mobile-main flex-1 overflow-y-auto overflow-x-hidden shell-surface">
           <div className="mx-auto w-full max-w-[1600px] p-3 sm:p-6 lg:px-8 lg:py-7">{children}</div>
         </main>
         <LeadContextShortcuts />
       </div>
+
+      <MobileTabBar />
     </div>
   )
 }
