@@ -17,6 +17,7 @@ describe('aviso objetivo anual', () => {
     expect(msg.subject).toContain('2026')
     expect(msg.subject).toContain('65.000')
     expect(msg.text).toContain('66.200')
+    expect(msg.text).toContain('cobros')
     expect(msg.text).toContain('/finances')
     expect(msg.text).toContain('/dashboard')
     expect(msg.telegramHtml).toContain('<b>')

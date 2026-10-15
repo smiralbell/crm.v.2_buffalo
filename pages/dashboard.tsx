@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getAnnualRevenueTarget } from '@/lib/finance/annual-target'
+import { sumBankCobros, sumOutstandingInvoices } from '@/lib/finance/bank-cobros'
 import { listOpsAlertMessages, type OpsAlertMessage } from '@/lib/ops-alerts-store'
 import DashboardAlertsPanel from '@/components/crm/DashboardAlertsPanel'
 import { estadoLabel } from '@/lib/leads/estados'
@@ -149,16 +150,23 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
     const invoicedThisMonth = Number(invThisMonth._sum.total || 0)
     const invoicedYTD = Number(invYTD._sum.total || 0)
-    const annualTarget = await getAnnualRevenueTarget()
+    const [collectedYTD, collectedThisMonth, annualTarget, outstanding] = await Promise.all([
+      sumBankCobros(startYTD, now),
+      sumBankCobros(startThisMonth, endThisMonth),
+      getAnnualRevenueTarget(),
+      sumOutstandingInvoices(),
+    ])
     const annualGoal = buildAnnualGoalDetail({
-      ytdInvoiced: invoicedYTD,
-      invoiced_this_month: invoicedThisMonth,
+      ytdInvoiced: collectedYTD,
+      invoiced_this_month: collectedThisMonth,
       now,
       target: annualTarget,
+      pending_invoices_total: outstanding.total,
+      pending_invoices_count: outstanding.count,
     })
-    if (invoicedYTD >= annualTarget) {
+    if (collectedYTD >= annualTarget) {
       const { scheduleAnnualGoalCheck } = await import('@/lib/finance/annual-target-alert')
-      scheduleAnnualGoalCheck({ ytd: invoicedYTD, target: annualTarget, now })
+      scheduleAnnualGoalCheck({ ytd: collectedYTD, target: annualTarget, now })
     }
 
     // ── Pipeline ──────────────────────────────────────────────────────

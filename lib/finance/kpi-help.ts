@@ -23,4 +23,4 @@ export const PERIOD_INSIGHT_HELP: Record<string, string> = {
 }
 
 export const ANNUAL_GOAL_HELP =
-  'Objetivo de facturación anual (el mismo de Finanzas). Compara lo facturado este año (facturas enviadas) con el ritmo lineal esperado.'
+  'Llevamos = cobros reales del banco este año. La barra más clara es lo que sumarías si cobras las facturas ya creadas (borrador o enviadas) que aún no tienen movimiento de banco.'

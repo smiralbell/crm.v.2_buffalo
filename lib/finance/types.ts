@@ -100,6 +100,10 @@ export interface AnnualGoalDetail {
   pace_status: 'ahead' | 'behind' | 'on_track'
   pace_label: string
   projected_year_end: number
+  pending_invoices_total: number
+  pending_invoices_count: number
+  if_collected_total: number
+  if_collected_pct: number
 }
 
 export interface KpiRow {

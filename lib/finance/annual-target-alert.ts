@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { opsLink, sendOpsAlert } from '@/lib/ops-alerts'
 import { fmtEur } from './chart-theme'
 import { ensureAnnualTargetColumn, getAnnualRevenueTarget } from './annual-target'
+import { sumBankCobrosYtd } from './bank-cobros'
 
 export function annualGoalAlertKey(year: number, target: number): string {
   return `${year}:${Math.round(target)}`
@@ -21,7 +22,7 @@ export function formatAnnualGoalReachedAlert(input: {
   const dashboard = opsLink('/dashboard')
   const subject = `Objetivo anual ${input.year} alcanzado (${targetLabel})`
   const body = [
-    `Este año ya estáis en ${ytdLabel} de facturación (facturas enviadas).`,
+    `Este año ya estáis en ${ytdLabel} de cobros (entradas de banco).`,
     `Meta: ${targetLabel}.`,
     overLine,
   ].join('\n')
@@ -35,16 +36,7 @@ export function formatAnnualGoalReachedAlert(input: {
 }
 
 export async function sumInvoicedYtd(now = new Date()): Promise<number> {
-  const startYTD = new Date(now.getFullYear(), 0, 1)
-  const agg = await prisma.invoice.aggregate({
-    where: {
-      deleted_at: null,
-      status: 'sent',
-      issue_date: { gte: startYTD },
-    },
-    _sum: { total: true },
-  })
-  return Number(agg._sum.total || 0)
+  return sumBankCobrosYtd(now)
 }
 
 /** Aviso único por año + meta. No bloquea facturas si falla el canal. */

@@ -550,6 +550,9 @@ export async function syncEnableBankingTransactions(options?: {
   const syncedAt = new Date()
   await updateBankLastSyncedAt(session.id, syncedAt)
 
+  const { scheduleAnnualGoalCheck } = await import('@/lib/finance/annual-target-alert')
+  scheduleAnnualGoalCheck()
+
   return {
     inserted,
     updated: 0,

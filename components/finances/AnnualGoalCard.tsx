@@ -145,20 +145,32 @@ export default function AnnualGoalCard({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 mb-5 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 mb-5 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg bg-gray-50 px-3 py-2.5">
             <p className="text-[10px] text-gray-500 uppercase tracking-wide">Llevamos</p>
             <p className="text-lg font-bold text-gray-900 tabular-nums mt-0.5">
               {fmtEur(goal.invoiced_ytd)}
             </p>
-            <p className="text-[11px] text-gray-600 mt-0.5">{goal.achieved_pct}% del objetivo</p>
+            <p className="text-[11px] text-gray-600 mt-0.5">
+              {goal.achieved_pct}% · cobrado en banco
+            </p>
+          </div>
+          <div className="rounded-lg bg-gray-50/70 px-3 py-2.5 ring-1 ring-inset ring-gray-200/80">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Si cobramos lo pendiente</p>
+            <p className="text-lg font-bold text-gray-900/80 tabular-nums mt-0.5">
+              {fmtEur(goal.if_collected_total)}
+            </p>
+            <p className="text-[11px] text-gray-600 mt-0.5">
+              {goal.if_collected_pct}% · +{fmtEur(goal.pending_invoices_total)} en{' '}
+              {goal.pending_invoices_count} factura{goal.pending_invoices_count === 1 ? '' : 's'} sin cobrar
+            </p>
           </div>
           <div className="rounded-lg bg-gray-50 px-3 py-2.5">
             <p className="text-[10px] text-gray-500 uppercase tracking-wide">Quedan</p>
             <p className="text-lg font-bold text-gray-900 tabular-nums mt-0.5">
               {fmtEur(goal.remaining_amount)}
             </p>
-            <p className="text-[11px] text-gray-600 mt-0.5">{goal.remaining_pct}% por alcanzar</p>
+            <p className="text-[11px] text-gray-600 mt-0.5">{goal.remaining_pct}% por alcanzar (cobrado)</p>
           </div>
           <div className="rounded-lg bg-gray-50 px-3 py-2.5">
             <p className="text-[10px] text-gray-500 uppercase tracking-wide">Proyección fin de año</p>
@@ -174,14 +186,28 @@ export default function AnnualGoalCard({
         <div className="mb-2">
           <div className="flex justify-between text-[11px] text-gray-500 mb-1.5">
             <span>0 €</span>
-            <span className="font-medium text-gray-900">{goal.achieved_pct}%</span>
+            <span className="font-medium text-gray-900">{goal.achieved_pct}% cobrado</span>
             <span>{fmtEur(goal.target)}</span>
           </div>
-          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden relative">
             <div
-              className="h-full bg-gray-900 rounded-full transition-all duration-500"
+              className="absolute inset-y-0 left-0 bg-gray-900/25 rounded-full"
+              style={{ width: `${Math.min(100, goal.if_collected_pct)}%` }}
+            />
+            <div
+              className="absolute inset-y-0 left-0 bg-gray-900 rounded-full"
               style={{ width: `${Math.min(100, goal.achieved_pct)}%` }}
             />
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-gray-500">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-3 rounded-full bg-gray-900" />
+              Cobrado {fmtEur(goal.invoiced_ytd)}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-3 rounded-full bg-gray-900/25" />
+              Facturas sin cobrar {fmtEur(goal.pending_invoices_total)}
+            </span>
           </div>
         </div>
       </div>
@@ -199,9 +225,9 @@ export default function AnnualGoalCard({
             sub: `${fmtEur(goal.target)} ÷ 12 meses`,
           },
           {
-            label: 'Este mes facturado',
+            label: 'Este mes cobrado',
             value: fmtEur(goal.invoiced_this_month),
-            sub: `${goal.this_month_vs_monthly_target_pct}% del objetivo mensual`,
+            sub: `${goal.this_month_vs_monthly_target_pct}% del objetivo mensual · banco`,
           },
           {
             label: 'Ritmo acumulado esperado',

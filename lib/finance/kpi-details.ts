@@ -49,6 +49,8 @@ export function buildAnnualGoalDetail(input: {
   invoiced_this_month: number
   now?: Date
   target?: number
+  pending_invoices_total?: number
+  pending_invoices_count?: number
 }): AnnualGoalDetail {
   const now = input.now ?? new Date()
   const y = now.getFullYear()
@@ -89,6 +91,12 @@ export function buildAnnualGoalDetail(input: {
     pace_label = 'Ritmo alineado con el objetivo anual'
   }
 
+  const pending_invoices_total = Math.max(0, input.pending_invoices_total ?? 0)
+  const pending_invoices_count = Math.max(0, input.pending_invoices_count ?? 0)
+  const if_collected_total = invoiced_ytd + pending_invoices_total
+  const if_collected_pct =
+    target > 0 ? Math.round((if_collected_total / target) * 1000) / 10 : 0
+
   return {
     target,
     invoiced_ytd,
@@ -105,6 +113,10 @@ export function buildAnnualGoalDetail(input: {
     pace_status: status,
     pace_label,
     projected_year_end,
+    pending_invoices_total,
+    pending_invoices_count,
+    if_collected_total,
+    if_collected_pct,
   }
 }
 

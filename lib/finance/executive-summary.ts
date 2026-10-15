@@ -3,6 +3,7 @@ import { query } from '@/lib/db'
 import { getBankConnectionStatus } from '@/lib/enable-banking/connection-status'
 import { buildFinanceAlerts } from './alerts'
 import { getAnnualRevenueTarget } from './annual-target'
+import { sumBankCobros, sumOutstandingInvoices } from './bank-cobros'
 import {
   countUnclassifiedExpenses,
   loadExpenseTransactionsForPeriod,
@@ -503,15 +504,18 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   })
   const ytdInvoiced = Number(invoicedYTD._sum.total ?? 0)
 
-  // Facturado del mes calendario (para ritmo del objetivo anual)
-  const invoicedThisMonth = await sumInvoiced(startThisMonth, endThisMonth)
+  const collectedYTD = await sumBankCobros(new Date(y, 0, 1), now)
+  const collectedThisMonth = await sumBankCobros(startThisMonth, endThisMonth)
+  const outstanding = await sumOutstandingInvoices()
 
   const annualTarget = await getAnnualRevenueTarget()
   const annual_goal = buildAnnualGoalDetail({
-    ytdInvoiced,
-    invoiced_this_month: invoicedThisMonth,
+    ytdInvoiced: collectedYTD,
+    invoiced_this_month: collectedThisMonth,
     now,
     target: annualTarget,
+    pending_invoices_total: outstanding.total,
+    pending_invoices_count: outstanding.count,
   })
 
   const kpi_cards = buildRichKpiCards({
