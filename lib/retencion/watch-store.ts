@@ -31,12 +31,19 @@ export type WatchGraph = {
   incidents_new?: number
 }
 
+export type WatchRunTrigger = 'manual' | 'cron'
+
 export type WatchRunPublic = {
   id: string
   ok: boolean
   created_at: string
+  started_at: string
+  finished_at: string | null
+  trigger: WatchRunTrigger
   report: string | null
   error: string | null
+  graph: WatchGraph | null
+  running: boolean
 }
 
 export type WatchPack = {
@@ -83,6 +90,7 @@ export type WatchPublic = {
   runs: WatchRunPublic[]
   live_used: WatchNodeId[]
   live_running: boolean
+  next_run_at: string | null
 }
 
 const liveByProject = new Map<string, { used: WatchNodeId[]; running: boolean }>()
@@ -133,6 +141,12 @@ export async function ensureWatchColumns(): Promise<void> {
       error        TEXT,
       created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `)
+  await query(`
+    ALTER TABLE retencion_watch_runs
+      ADD COLUMN IF NOT EXISTS run_trigger TEXT,
+      ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS finished_at TIMESTAMPTZ
   `)
   await query(`
     CREATE INDEX IF NOT EXISTS retencion_watch_runs_proyecto
@@ -221,6 +235,17 @@ async function selectWatchCols(proyectoId: string): Promise<WatchCols> {
   }
 }
 
+function asTrigger(raw: unknown): WatchRunTrigger {
+  return raw === 'cron' ? 'cron' : 'manual'
+}
+
+export function nextWatchRunAt(everyMinutes: number | null, lastAt: Date | string | null): string | null {
+  if (!everyMinutes || everyMinutes <= 0) return null
+  const lastMs = lastAt ? new Date(lastAt).getTime() : 0
+  const due = lastMs ? lastMs + everyMinutes * 60_000 : Date.now()
+  return new Date(Math.max(due, Date.now())).toISOString()
+}
+
 export async function listWatchRuns(proyectoId: string, limit = 5): Promise<WatchRunPublic[]> {
   await ensureWatchColumns()
   const { rows } = await query<{
@@ -228,22 +253,53 @@ export async function listWatchRuns(proyectoId: string, limit = 5): Promise<Watc
     ok: boolean
     report: string | null
     error: string | null
+    graph: unknown
     created_at: Date
+    run_trigger: string | null
+    started_at: Date | null
+    finished_at: Date | null
   }>(
-    `SELECT id::text, ok, report, error, created_at
+    `SELECT id::text, ok, report, error, graph, created_at,
+            run_trigger, started_at, finished_at
        FROM retencion_watch_runs
       WHERE proyecto_id = $1::uuid
       ORDER BY created_at DESC
       LIMIT $2`,
     [proyectoId, Math.min(200, Math.max(1, limit))]
   )
-  return rows.map((r) => ({
-    id: r.id,
-    ok: r.ok,
-    report: r.report,
-    error: r.error,
-    created_at: new Date(r.created_at).toISOString(),
-  }))
+  return rows.map((r) => {
+    const started = new Date(r.started_at || r.created_at).toISOString()
+    const finished = r.finished_at ? new Date(r.finished_at).toISOString() : null
+    return {
+      id: r.id,
+      ok: r.ok,
+      report: r.report,
+      error: r.error,
+      graph: parseGraph(r.graph),
+      created_at: new Date(r.created_at).toISOString(),
+      started_at: started,
+      finished_at: finished,
+      trigger: asTrigger(r.run_trigger),
+      running: !finished && r.ok && !r.report && !r.error,
+    }
+  })
+}
+
+export async function startWatchRun(proyectoId: string, trigger: WatchRunTrigger): Promise<string> {
+  await ensureWatchColumns()
+  await query(
+    `UPDATE retencion_watch_runs
+        SET ok = false, error = COALESCE(error, 'Interrumpida'), finished_at = NOW()
+      WHERE proyecto_id = $1::uuid AND finished_at IS NULL`,
+    [proyectoId]
+  )
+  const { rows } = await query<{ id: string }>(
+    `INSERT INTO retencion_watch_runs (proyecto_id, ok, run_trigger, started_at)
+     VALUES ($1::uuid, true, $2, NOW())
+     RETURNING id::text`,
+    [proyectoId, trigger]
+  )
+  return rows[0]?.id || ''
 }
 
 export function toWatchPublic(
@@ -278,6 +334,7 @@ export function toWatchPublic(
     runs: extra.runs || [],
     live_used: getWatchLiveProgress(row.proyecto_id).used,
     live_running: getWatchLiveProgress(row.proyecto_id).running,
+    next_run_at: nextWatchRunAt(watch.watch_every_minutes, watch.watch_last_at),
   }
 }
 
@@ -358,6 +415,7 @@ export async function saveWatchSettings(
 
 export async function saveWatchRun(input: {
   proyectoId: string
+  runId?: string
   ok: boolean
   report?: string | null
   graph?: WatchGraph | null
@@ -365,17 +423,32 @@ export async function saveWatchRun(input: {
   pack?: WatchPack | null
 }): Promise<void> {
   await ensureWatchColumns()
-  await query(
-    `INSERT INTO retencion_watch_runs (proyecto_id, ok, report, graph, error)
-     VALUES ($1::uuid, $2, $3, $4::jsonb, $5)`,
-    [
-      input.proyectoId,
-      input.ok,
-      input.report ?? null,
-      JSON.stringify(input.graph ?? null),
-      input.error ?? null,
-    ]
-  )
+  if (input.runId) {
+    await query(
+      `UPDATE retencion_watch_runs
+          SET ok = $2, report = $3, graph = $4::jsonb, error = $5, finished_at = NOW()
+        WHERE id = $1::bigint`,
+      [
+        input.runId,
+        input.ok,
+        input.report ?? null,
+        JSON.stringify(input.graph ?? null),
+        input.error ?? null,
+      ]
+    )
+  } else {
+    await query(
+      `INSERT INTO retencion_watch_runs (proyecto_id, ok, report, graph, error, run_trigger, started_at, finished_at)
+       VALUES ($1::uuid, $2, $3, $4::jsonb, $5, 'manual', NOW(), NOW())`,
+      [
+        input.proyectoId,
+        input.ok,
+        input.report ?? null,
+        JSON.stringify(input.graph ?? null),
+        input.error ?? null,
+      ]
+    )
+  }
   await query(
     `UPDATE retencion_agent_configs SET
        watch_last_at = NOW(),

@@ -34,7 +34,6 @@ export default function RetencionProyectoDetailPage() {
   const [services, setServices] = useState<ProjectServiceFlags | null>(null)
   const [webhookOpen, setWebhookOpen] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
-  const [reportsOpen, setReportsOpen] = useState(false)
   const [intervalLabel, setIntervalLabel] = useState('Frecuencia')
 
   useEffect(() => {
@@ -120,14 +119,13 @@ export default function RetencionProyectoDetailPage() {
               )}
               {activeTab === 'sistema' && (
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setReportsOpen(true)}
+                  <Link
+                    href={`/retencion/proyectos/${proyecto.id}/informes`}
                     className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50"
                   >
                     <FileText className="h-4 w-4" />
                     Ver informes
-                  </button>
+                  </Link>
                   <button
                     type="button"
                     onClick={() => setScheduleOpen(true)}
@@ -169,8 +167,6 @@ export default function RetencionProyectoDetailPage() {
               onGoIncidents={() => switchTab('incidencias')}
               scheduleOpen={scheduleOpen}
               onScheduleOpenChange={setScheduleOpen}
-              reportsOpen={reportsOpen}
-              onReportsOpenChange={setReportsOpen}
               onIntervalLabel={setIntervalLabel}
             />
           </div>

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Copy, FileDown, FileText, Focus, Play, RefreshCw, Save, X } from 'lucide-react'
+import Link from 'next/link'
+import { Focus, History, Maximize2, Minimize2, Play, RefreshCw, Save, X } from 'lucide-react'
 import { useAuth } from '@/components/AuthContext'
 import WatchSystemMap, { type WatchNodeId } from '@/components/retencion/WatchSystemMap'
+import WatchReportActions from '@/components/retencion/WatchReportActions'
 import styles from './WatchSystemMap.module.css'
 import type { WatchPublic, WatchRunPublic } from '@/lib/retencion/watch-store'
 import {
@@ -15,11 +17,6 @@ import {
   partsToMinutes,
   type WatchIntervalUnit,
 } from '@/lib/retencion/watch-interval'
-import {
-  copyText,
-  downloadMarkdown,
-  exportWatchReportPdf,
-} from '@/lib/retencion/export-watch-report'
 import {
   Dialog,
   DialogContent,
@@ -45,58 +42,22 @@ function colKey(schema: string, table: string, column: string) {
   return `${schema}.${table}.${column}`
 }
 
-function ReportActions({
-  markdown,
-  title,
-  disabled,
-}: {
-  markdown: string
-  title: string
-  disabled?: boolean
-}) {
-  const [msg, setMsg] = useState('')
-  if (!markdown.trim()) return null
-  return (
-    <div className="space-y-1.5">
-      <div className={styles.actions}>
-        <button
-          type="button"
-          className={styles.hudBtn}
-          disabled={disabled}
-          onClick={async () => {
-            try {
-              await copyText(markdown)
-              setMsg('Copiado')
-            } catch {
-              setMsg('No se pudo copiar')
-            }
-          }}
-        >
-          <Copy className="h-3.5 w-3.5" />
-          Copiar
-        </button>
-        <button
-          type="button"
-          className={styles.hudBtn}
-          disabled={disabled}
-          onClick={() => downloadMarkdown(`${title}.md`, markdown)}
-        >
-          <FileText className="h-3.5 w-3.5" />
-          Markdown
-        </button>
-        <button
-          type="button"
-          className={styles.hudBtn}
-          disabled={disabled}
-          onClick={() => void exportWatchReportPdf(title, markdown)}
-        >
-          <FileDown className="h-3.5 w-3.5" />
-          PDF
-        </button>
-      </div>
-      {msg && <p className="text-xs text-emerald-700">{msg}</p>}
-    </div>
-  )
+function formatNextRun(iso: string | null | undefined): string {
+  if (!iso) return 'pausado'
+  const ms = new Date(iso).getTime() - Date.now()
+  if (ms <= 20_000) return 'ahora'
+  const min = Math.max(1, Math.round(ms / 60_000))
+  if (min < 60) return `en ${min} min`
+  const h = Math.round(min / 60)
+  return h === 1 ? 'en 1 h' : `en ${h} h`
+}
+
+function formatDuration(run: WatchRunPublic): string {
+  const from = new Date(run.started_at || run.created_at).getTime()
+  const to = run.finished_at ? new Date(run.finished_at).getTime() : Date.now()
+  const s = Math.max(0, Math.round((to - from) / 1000))
+  if (s < 60) return `${s}s`
+  return `${Math.floor(s / 60)}m ${s % 60}s`
 }
 
 export default function WatchSystemPanel({
@@ -104,16 +65,12 @@ export default function WatchSystemPanel({
   onGoIncidents,
   scheduleOpen,
   onScheduleOpenChange,
-  reportsOpen,
-  onReportsOpenChange,
   onIntervalLabel,
 }: {
   proyectoId: string
   onGoIncidents?: () => void
   scheduleOpen: boolean
   onScheduleOpenChange: (open: boolean) => void
-  reportsOpen: boolean
-  onReportsOpenChange: (open: boolean) => void
   onIntervalLabel?: (label: string) => void
 }) {
   const { user } = useAuth()
@@ -139,6 +96,8 @@ export default function WatchSystemPanel({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [openRun, setOpenRun] = useState<WatchRunPublic | null>(null)
   const [liveUsed, setLiveUsed] = useState<WatchNodeId[]>([])
+  const [showExec, setShowExec] = useState(false)
+  const [promptMax, setPromptMax] = useState(false)
 
   const apply = (w: WatchPublic) => {
     setWatch(w)
@@ -189,6 +148,19 @@ export default function WatchSystemPanel({
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      if (running) return
+      void fetch(`/api/retencion/proyectos/${proyectoId}/watch`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.watch) apply(data.watch as WatchPublic)
+        })
+        .catch(() => undefined)
+    }, 20_000)
+    return () => window.clearInterval(t)
+  }, [proyectoId, running])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -292,7 +264,9 @@ export default function WatchSystemPanel({
 
   const labels = useMemo<Record<WatchNodeId, string>>(
     () => ({
-      cron: formatWatchInterval(paused ? 0 : partsToMinutes(amount, unit)),
+      cron: paused
+        ? 'pausado'
+        : `${formatWatchInterval(partsToMinutes(amount, unit))} · ${formatNextRun(watch?.next_run_at)}`,
       db: watch?.db_connected
         ? `${watch.schema.length} tablas`
         : 'sin conectar',
@@ -359,13 +333,15 @@ export default function WatchSystemPanel({
       <WatchSystemMap
         key={`${proyectoId}-${recenter}`}
         proyectoId={proyectoId}
-        used={watch?.last_graph?.used}
+        used={openRun?.graph?.used || watch?.last_graph?.used}
         progress={liveUsed}
         activeId={running && liveUsed.length ? liveUsed[liveUsed.length - 1] : null}
         labels={labels}
         selected={selected}
         onSelect={(id) => {
+          setShowExec(false)
           setOpenRun(null)
+          setPromptMax(false)
           setSelected(id)
         }}
         toolbar={
@@ -373,6 +349,17 @@ export default function WatchSystemPanel({
             <button type="button" className={styles.hudBtn} onClick={() => setRecenter((n) => n + 1)}>
               <Focus className="h-3.5 w-3.5" />
               Recentrar
+            </button>
+            <button
+              type="button"
+              className={styles.hudBtn}
+              onClick={() => {
+                setSelected(null)
+                setShowExec(true)
+              }}
+            >
+              <History className="h-3.5 w-3.5" />
+              Ejecuciones
             </button>
             <button
               type="button"
@@ -386,27 +373,94 @@ export default function WatchSystemPanel({
           </>
         }
       >
-        {selected && (
-          <aside className={styles.sheet} data-sheet onPointerDown={(e) => e.stopPropagation()}>
+        {(selected || showExec) && (
+          <aside
+            className={`${styles.sheet} ${promptMax ? styles.sheetWide : ''}`}
+            data-sheet
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             <div className={styles.sheetHead}>
               <div>
-                <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Flujo</p>
-                <h2 className="text-[15px] font-semibold text-gray-900">{TITLES[selected]}</h2>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                  {showExec ? 'Historial' : 'Flujo'}
+                </p>
+                <h2 className="text-[15px] font-semibold text-gray-900">
+                  {showExec ? 'Ejecuciones' : selected ? TITLES[selected] : ''}
+                </h2>
               </div>
               <button
                 type="button"
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-gray-50 text-gray-500"
-                onClick={() => setSelected(null)}
+                onClick={() => {
+                  setSelected(null)
+                  setShowExec(false)
+                  setPromptMax(false)
+                }}
                 aria-label="Cerrar"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className={styles.sheetBody}>
+              {showExec && (
+                <>
+                  <p className="text-sm text-gray-600">
+                    Cada pasada (manual o cron) queda aquí, como en n8n. Clic para ver qué cajas corrieron.
+                  </p>
+                  {watch?.runs?.length ? (
+                    <div className={styles.reportList}>
+                      {watch.runs.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          className={`${styles.reportItem} ${openRun?.id === r.id ? styles.selected : ''}`}
+                          onClick={() => setOpenRun(openRun?.id === r.id ? null : r)}
+                        >
+                          <strong>
+                            {r.running ? 'En curso' : r.ok ? 'OK' : 'Error'} · {r.trigger === 'cron' ? 'Cron' : 'Manual'}
+                          </strong>
+                          <span>
+                            {new Date(r.started_at || r.created_at).toLocaleString('es-ES', {
+                              dateStyle: 'short',
+                              timeStyle: 'short',
+                            })}{' '}
+                            · {formatDuration(r)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">Aún no hay ejecuciones.</p>
+                  )}
+                  {openRun && (
+                    <div className="space-y-2">
+                      {openRun.error && <p className="text-sm text-red-700">{openRun.error}</p>}
+                      {openRun.report && (
+                        <Link
+                          href={`/retencion/proyectos/${proyectoId}/informes?run=${openRun.id}`}
+                          className="text-sm font-medium text-gray-900 underline"
+                        >
+                          Ver informe
+                        </Link>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
               {selected === 'cron' && (
                 <>
                   <p className="text-sm text-gray-600">
-                    El cron es el disparo. En cada pasada recorre las cajas en orden y solo toma datos nuevos desde la última ejecución.
+                    El cron dispara el flujo solo. El servidor lo revisa cada minuto; mientras tengas esta pantalla abierta se mantiene despierto.
+                  </p>
+                  <p className="text-sm text-gray-800">
+                    Próxima: <b>{formatNextRun(watch?.next_run_at)}</b>
+                    {watch?.last_at
+                      ? ` · última ${new Date(watch.last_at).toLocaleString('es-ES', {
+                          dateStyle: 'short',
+                          timeStyle: 'short',
+                        })}`
+                      : ''}
                   </p>
                   {scheduleFields}
                 </>
@@ -558,40 +612,37 @@ export default function WatchSystemPanel({
               {selected === 'reports' && (
                 <>
                   <p className="text-sm text-gray-600">
-                    Los cinco informes más recientes de este flujo, para que la IA no parta de cero.
+                    Los informes recientes alimentan la IA. La lista completa está en su página.
                   </p>
-                  {watch?.runs?.length ? (
+                  <Link
+                    href={`/retencion/proyectos/${proyectoId}/informes`}
+                    className="inline-flex h-10 items-center justify-center rounded-full bg-gray-900 px-4 text-sm font-medium text-white"
+                  >
+                    Abrir informes
+                  </Link>
+                  {watch?.runs?.filter((r) => r.ok && r.report).slice(0, 5).length ? (
                     <div className={styles.reportList}>
-                      {watch.runs.map((r) => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          className={styles.reportItem}
-                          onClick={() => setOpenRun(openRun?.id === r.id ? null : r)}
-                        >
-                          <strong>{r.ok ? 'Informe' : 'Error'}</strong>
-                          <span>
-                            {new Date(r.created_at).toLocaleString('es-ES', {
-                              dateStyle: 'short',
-                              timeStyle: 'short',
-                            })}
-                          </span>
-                        </button>
-                      ))}
+                      {watch.runs
+                        .filter((r) => r.ok && r.report)
+                        .slice(0, 5)
+                        .map((r) => (
+                          <Link
+                            key={r.id}
+                            href={`/retencion/proyectos/${proyectoId}/informes?run=${r.id}`}
+                            className={styles.reportItem}
+                          >
+                            <strong>{r.trigger === 'cron' ? 'Cron' : 'Manual'}</strong>
+                            <span>
+                              {new Date(r.finished_at || r.created_at).toLocaleString('es-ES', {
+                                dateStyle: 'short',
+                                timeStyle: 'short',
+                              })}
+                            </span>
+                          </Link>
+                        ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">Todavía no hay informes. Ejecuta el flujo o espera al cron.</p>
-                  )}
-                  {openRun?.report && (
-                    <>
-                      <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-2xl bg-gray-50 px-3 py-2 text-[12px] text-gray-800">
-                        {openRun.report}
-                      </pre>
-                      <ReportActions
-                        markdown={openRun.report}
-                        title={`informe-${openRun.id}`}
-                      />
-                    </>
+                    <p className="text-sm text-gray-500">Todavía no hay informes.</p>
                   )}
                 </>
               )}
@@ -634,12 +685,23 @@ export default function WatchSystemPanel({
                     </p>
                   </div>
                   <div className={styles.field}>
-                    <label>Prompt del informe</label>
+                    <div className="flex items-center justify-between gap-2">
+                      <label>Prompt del informe</label>
+                      <button
+                        type="button"
+                        className={styles.hudBtn}
+                        onClick={() => setPromptMax((v) => !v)}
+                      >
+                        {promptMax ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                        {promptMax ? 'Reducir' : 'Ampliar'}
+                      </button>
+                    </div>
                     <textarea
                       value={watchPrompt}
                       onChange={(e) => setWatchPrompt(e.target.value)}
                       disabled={!isAdmin}
-                      style={{ minHeight: 160 }}
+                      className={promptMax ? styles.promptBig : undefined}
+                      style={promptMax ? undefined : { minHeight: 160 }}
                     />
                   </div>
                   {watch?.last_report && (
@@ -657,7 +719,7 @@ export default function WatchSystemPanel({
                         {watch.last_report}
                       </pre>
                       <div className="mt-2">
-                        <ReportActions markdown={watch.last_report} title="informe-sistema" />
+                        <WatchReportActions markdown={watch.last_report} title="informe-sistema" />
                       </div>
                     </div>
                   )}
@@ -683,53 +745,6 @@ export default function WatchSystemPanel({
           </aside>
         )}
       </WatchSystemMap>
-
-      <Dialog open={reportsOpen} onOpenChange={onReportsOpenChange}>
-        <DialogContent className="max-w-lg rounded-[28px] border-2 border-white sm:rounded-[28px]">
-          <DialogHeader>
-            <DialogTitle>Informes del flujo</DialogTitle>
-            <DialogDescription>
-              Todos los informes generados por el cron o por Ejecutar ahora.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[60vh] space-y-3 overflow-auto pr-1">
-            {watch?.runs?.length ? (
-              watch.runs.map((r) => (
-                <div key={r.id} className="rounded-2xl border border-gray-100 bg-gray-50 px-3 py-3">
-                  <button
-                    type="button"
-                    className="w-full text-left"
-                    onClick={() => setOpenRun(openRun?.id === r.id ? null : r)}
-                  >
-                    <p className="text-sm font-semibold text-gray-900">{r.ok ? 'Informe' : 'Error'}</p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(r.created_at).toLocaleString('es-ES', {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                      })}
-                    </p>
-                  </button>
-                  {openRun?.id === r.id && (
-                    <div className="mt-2 space-y-2">
-                      {r.error && <p className="text-sm text-red-700">{r.error}</p>}
-                      {r.report && (
-                        <>
-                          <pre className="max-h-56 overflow-auto whitespace-pre-wrap text-[12px] text-gray-800">
-                            {r.report}
-                          </pre>
-                          <ReportActions markdown={r.report} title={`informe-${r.id}`} />
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-gray-500">Todavía no hay informes. Ejecuta el flujo o espera al cron.</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={scheduleOpen} onOpenChange={onScheduleOpenChange}>
         <DialogContent className="max-w-md rounded-[28px] border-2 border-white sm:rounded-[28px]">

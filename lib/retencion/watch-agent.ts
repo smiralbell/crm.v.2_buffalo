@@ -11,9 +11,11 @@ import {
   listWatchRuns,
   saveWatchRun,
   setWatchLiveProgress,
+  startWatchRun,
   type WatchGraph,
   type WatchNodeId,
   type WatchPack,
+  type WatchRunTrigger,
 } from '@/lib/retencion/watch-store'
 import { query } from '@/lib/db'
 
@@ -62,12 +64,17 @@ function buildCleanPack(input: {
   }
 }
 
-export async function runWatchForProject(proyectoId: string): Promise<{
+export async function runWatchForProject(
+  proyectoId: string,
+  opts?: { trigger?: WatchRunTrigger }
+): Promise<{
   ok: boolean
   report: string
   graph: WatchGraph
   error?: string
 }> {
+  const trigger: WatchRunTrigger = opts?.trigger === 'cron' ? 'cron' : 'manual'
+  const runId = await startWatchRun(proyectoId, trigger)
   const used: WatchNodeId[] = []
   const bump = (id: WatchNodeId) => {
     used.push(id)
@@ -169,13 +176,14 @@ export async function runWatchForProject(proyectoId: string): Promise<{
         last_delta_at: pendingMemory.last_delta_at || new Date().toISOString(),
       })
     }
-    await saveWatchRun({ proyectoId, ok: true, report, graph, pack })
+    await saveWatchRun({ runId, proyectoId, ok: true, report, graph, pack })
     setWatchLiveProgress(proyectoId, used, false)
     return { ok: true, report, graph }
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e)
     graph.used = used
     await saveWatchRun({
+      runId,
       proyectoId,
       ok: false,
       report: report || null,
@@ -193,7 +201,7 @@ export async function runDueWatches(): Promise<{ ran: number; ok: number; failed
   let ok = 0
   let failed = 0
   for (let i = 0; i < ids.length; i++) {
-    const r = await runWatchForProject(ids[i])
+    const r = await runWatchForProject(ids[i], { trigger: 'cron' })
     if (r.ok) ok += 1
     else failed += 1
   }

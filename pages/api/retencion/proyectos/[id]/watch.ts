@@ -14,7 +14,7 @@ const patchSchema = z.object({
   clear_db_url: z.boolean().optional(),
   knowledge: z.string().max(200000).optional(),
   agent_prompt: z.string().max(20000).optional(),
-  watch_prompt: z.string().max(20000).optional(),
+  watch_prompt: z.string().max(200000).optional(),
   watch_model: z.string().min(3).max(120).optional(),
   every_minutes: z.number().int().min(0).max(86400).optional(),
   excluded_tables: z.array(z.string().max(200)).max(500).optional(),
@@ -32,6 +32,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!eligible.ok) return res.status(eligible.status).json({ error: eligible.error })
 
     if (req.method === 'GET') {
+      void import('@/lib/retencion/watch-scheduler')
+        .then((m) => m.startRetencionWatchScheduler())
+        .catch(() => undefined)
       const watch = await getWatchPublic(proyectoId)
       return res.status(200).json({ watch })
     }
@@ -69,7 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({ watch })
       }
       if (action !== 'run') return res.status(400).json({ error: 'action debe ser run o sync_schema' })
-      const result = await runWatchForProject(proyectoId)
+      const result = await runWatchForProject(proyectoId, { trigger: 'manual' })
       const watch = await getWatchPublic(proyectoId)
       return res.status(200).json({ result, watch })
     }

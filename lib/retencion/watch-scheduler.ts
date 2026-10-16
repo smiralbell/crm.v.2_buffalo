@@ -16,6 +16,6 @@ export function startRetencionWatchScheduler(): void {
     })
   }
 
-  setTimeout(tick, 60_000)
+  setTimeout(tick, 8_000)
   setInterval(tick, 60_000)
 }

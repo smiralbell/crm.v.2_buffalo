@@ -246,6 +246,9 @@
   border-radius: 16px;
   padding: 10px 12px;
   cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+  display: block;
 }
 
 .reportItem strong {
@@ -276,6 +279,14 @@
   background: #fff;
   box-shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
   overflow: hidden;
+}
+
+.sheetWide {
+  width: min(860px, calc(100% - 32px));
+}
+
+.promptBig {
+  min-height: min(70vh, 640px) !important;
 }
 
 .sheetHead {
