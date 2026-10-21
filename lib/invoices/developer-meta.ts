@@ -6,6 +6,26 @@ export type InvoiceDeveloperMeta = {
   has_pdf: boolean
 }
 
+/**
+ * Las facturas que cuelgan los developers (invoice_source = developer)
+ * se ven y se descargan, pero no entran en KPIs ni totales de Buffalo.
+ */
+export const CLIENT_INVOICE_WHERE = {
+  invoice_source: { not: 'developer' as const },
+}
+
+/** Fragmento SQL: solo facturas de cliente (sin alias de tabla). */
+export const SQL_EXCLUDE_DEVELOPER_INVOICES =
+  `COALESCE(invoice_source, 'client') <> 'developer'`
+
+/** Igual con alias `i` (FROM invoices i). */
+export const SQL_EXCLUDE_DEVELOPER_INVOICES_I =
+  `COALESCE(i.invoice_source, 'client') <> 'developer'`
+
+export function withClientInvoicesOnly<W extends Record<string, unknown>>(where: W) {
+  return { ...where, ...CLIENT_INVOICE_WHERE }
+}
+
 export async function getInvoiceDeveloperMetaMap(
   invoiceIds: number[]
 ): Promise<Map<number, InvoiceDeveloperMeta>> {

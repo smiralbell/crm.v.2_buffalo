@@ -3,6 +3,10 @@ import { query } from '@/lib/db'
 import { loadExpenseTransactionsForPeriod } from '@/lib/finance/expense-sources'
 import { detectRecurringExpenses, recurringOpsMonthly } from '@/lib/finance/recurring-expenses'
 import { periodBounds, listRecentPeriods } from '@/lib/leads/analytics'
+import {
+  CLIENT_INVOICE_WHERE,
+  SQL_EXCLUDE_DEVELOPER_INVOICES_I,
+} from '@/lib/invoices/developer-meta'
 import type {
   FinanceDashboardAnalytics,
   FinanceMonthPoint,
@@ -46,6 +50,7 @@ async function sumInvoiced(start: Date, end: Date): Promise<number> {
         deleted_at: null,
         status: 'sent',
         issue_date: { gte: start, lte: end },
+        ...CLIENT_INVOICE_WHERE,
       },
       _sum: { total: true },
     })
@@ -99,6 +104,7 @@ async function sumCollected(start: Date, end: Date): Promise<number> {
        INNER JOIN bank_transactions bt ON bt.id = i.bank_transaction_id
        WHERE i.deleted_at IS NULL
          AND COALESCE(i.status, '') <> 'cancelled'
+         AND ${SQL_EXCLUDE_DEVELOPER_INVOICES_I}
          AND bt.date >= $1 AND bt.date <= $2
          AND bt.amount > 0`,
       [startStr, endStr]
@@ -252,6 +258,7 @@ async function buildTimeline(count = 12): Promise<FinanceMonthPoint[]> {
         FROM invoices
         WHERE deleted_at IS NULL
           AND status = 'sent'
+          AND COALESCE(invoice_source, 'client') <> 'developer'
           AND issue_date >= ${oldest}
           AND issue_date <= ${endOfMonth}
         GROUP BY 1
@@ -264,6 +271,7 @@ async function buildTimeline(count = 12): Promise<FinanceMonthPoint[]> {
          WHERE i.deleted_at IS NULL
            AND i.status = 'sent'
            AND i.bank_transaction_id IS NOT NULL
+           AND ${SQL_EXCLUDE_DEVELOPER_INVOICES_I}
            AND bt.date >= $1 AND bt.date <= $2
            AND bt.amount > 0
          GROUP BY 1`,

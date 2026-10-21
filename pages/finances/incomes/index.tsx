@@ -238,7 +238,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       }>(
         `SELECT id, invoice_number, client_name, total, subtotal, iva, issue_date, bank_transaction_id
          FROM invoices
-         WHERE deleted_at IS NULL AND bank_transaction_id IS NOT NULL`
+         WHERE deleted_at IS NULL AND bank_transaction_id IS NOT NULL
+           AND COALESCE(invoice_source, 'client') <> 'developer'`
       )
       linkedResult.rows.forEach((inv) => {
         if (inv.bank_transaction_id) {
@@ -270,6 +271,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           deleted_at: null,
           status: 'sent',
           issue_date: { gte: twoYearsAgo },
+          invoice_source: { not: 'developer' },
         },
         orderBy: { issue_date: 'desc' },
         select: {
@@ -391,6 +393,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         deleted_at: null,
         status: 'sent',
         issue_date: { gte: startDate, lte: endDate },
+        invoice_source: { not: 'developer' },
       },
       select: {
         client_name: true,

@@ -2,6 +2,7 @@ import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subYears } from 
 import { es } from 'date-fns/locale'
 import { query } from '@/lib/db'
 import { prisma } from '@/lib/prisma'
+import { SQL_EXCLUDE_DEVELOPER_INVOICES } from '@/lib/invoices/developer-meta'
 import { isModelo303Settlement } from './payment-concepts'
 import { quarterKeySettledBy303Payment, type IvaQuarterPoint } from './iva-quarters'
 
@@ -160,7 +161,8 @@ async function loadLinkedInvoices(): Promise<Map<string, LinkedInvoice>> {
     }>(
       `SELECT bank_transaction_id, subtotal, iva, invoice_number, client_name
        FROM invoices
-       WHERE deleted_at IS NULL AND bank_transaction_id IS NOT NULL`
+       WHERE deleted_at IS NULL AND bank_transaction_id IS NOT NULL
+         AND ${SQL_EXCLUDE_DEVELOPER_INVOICES}`
     )
     result.rows.forEach((inv) => {
       if (inv.bank_transaction_id) {

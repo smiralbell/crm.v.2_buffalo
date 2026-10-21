@@ -1,6 +1,11 @@
 import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
 import { getBankConnectionStatus } from '@/lib/enable-banking/connection-status'
+import {
+  CLIENT_INVOICE_WHERE,
+  SQL_EXCLUDE_DEVELOPER_INVOICES,
+  SQL_EXCLUDE_DEVELOPER_INVOICES_I,
+} from '@/lib/invoices/developer-meta'
 import { buildFinanceAlerts } from './alerts'
 import { getAnnualRevenueTarget } from './annual-target'
 import { sumBankCobros, sumBankCobrosYtd, sumOutstandingInvoices } from './bank-cobros'
@@ -68,6 +73,7 @@ async function sumInvoiced(start: Date, end: Date): Promise<number> {
       deleted_at: null,
       status: 'sent',
       issue_date: { gte: start, lte: end },
+      ...CLIENT_INVOICE_WHERE,
     },
     _sum: { total: true },
   })
@@ -82,6 +88,7 @@ async function sumCollectedByBankDate(startStr: string, endStr: string): Promise
      WHERE i.deleted_at IS NULL
        AND i.status = 'sent'
        AND i.bank_transaction_id IS NOT NULL
+       AND ${SQL_EXCLUDE_DEVELOPER_INVOICES_I}
        AND bt.date >= $1 AND bt.date <= $2`,
     [startStr, endStr]
   ).catch(() => ({ rows: [{ total: '0' }] }))
@@ -171,6 +178,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
         deleted_at: null,
         status: 'sent',
         issue_date: { gte: periodStart, lte: periodEnd },
+        ...CLIENT_INVOICE_WHERE,
       },
     }),
     query<{ balance: number }>(
@@ -191,6 +199,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
         deleted_at: null,
         status: 'sent',
         bank_transaction_id: null,
+        ...CLIENT_INVOICE_WHERE,
       },
       orderBy: { issue_date: 'asc' },
       take: 15,
@@ -258,6 +267,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
         deleted_at: null,
         status: 'sent',
         issue_date: { gte: periodStart, lte: periodEnd },
+        ...CLIENT_INVOICE_WHERE,
       },
       select: { issue_date: true, total: true },
     }),
@@ -267,6 +277,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
            FROM invoices i
            INNER JOIN bank_transactions bt ON bt.id = i.bank_transaction_id
            WHERE i.deleted_at IS NULL AND i.status = 'sent'
+             AND ${SQL_EXCLUDE_DEVELOPER_INVOICES_I}
              AND bt.date >= $1 AND bt.date <= $2
            GROUP BY bt.date
            ORDER BY bt.date`
@@ -276,6 +287,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
            FROM invoices i
            INNER JOIN bank_transactions bt ON bt.id = i.bank_transaction_id
            WHERE i.deleted_at IS NULL AND i.status = 'sent'
+             AND ${SQL_EXCLUDE_DEVELOPER_INVOICES_I}
              AND bt.date >= $1 AND bt.date <= $2
            GROUP BY 1, 2
            ORDER BY 1, 2`,
@@ -348,7 +360,7 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   )
 
   const draftCount = await prisma.invoice.count({
-    where: { deleted_at: null, status: 'draft' },
+    where: { deleted_at: null, status: 'draft', ...CLIENT_INVOICE_WHERE },
   })
 
   const pendingInvoices: PendingInvoiceRow[] = pendingInvoicesRaw.map((inv) => {
@@ -422,7 +434,8 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
       }>(
         `SELECT bank_transaction_id, client_name, subtotal, iva
          FROM invoices
-         WHERE deleted_at IS NULL AND bank_transaction_id IS NOT NULL`
+         WHERE deleted_at IS NULL AND bank_transaction_id IS NOT NULL
+           AND ${SQL_EXCLUDE_DEVELOPER_INVOICES}`
       ).catch(() => ({
         rows: [] as {
           bank_transaction_id: string
@@ -499,7 +512,12 @@ export async function buildExecutiveSummary(periodInput?: PeriodRange): Promise<
   })
 
   const invoicedYTD = await prisma.invoice.aggregate({
-    where: { deleted_at: null, status: 'sent', issue_date: { gte: new Date(y, 0, 1) } },
+    where: {
+      deleted_at: null,
+      status: 'sent',
+      issue_date: { gte: new Date(y, 0, 1) },
+      ...CLIENT_INVOICE_WHERE,
+    },
     _sum: { total: true },
   })
   const ytdInvoiced = Number(invoicedYTD._sum.total ?? 0)

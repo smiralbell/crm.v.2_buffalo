@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils'
 import { getAnnualRevenueTarget } from '@/lib/finance/annual-target'
 import { sumBankCobros, sumBankCobrosYtd, sumOutstandingInvoices } from '@/lib/finance/bank-cobros'
+import { CLIENT_INVOICE_WHERE } from '@/lib/invoices/developer-meta'
 import { listOpsAlertMessages, type OpsAlertMessage } from '@/lib/ops-alerts-store'
 import DashboardAlertsPanel from '@/components/crm/DashboardAlertsPanel'
 import { estadoLabel } from '@/lib/leads/estados'
@@ -116,6 +117,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           deleted_at: null,
           status: 'sent',
           issue_date: { gte: startThisMonth, lte: endThisMonth },
+          ...CLIENT_INVOICE_WHERE,
         },
         _sum: { total: true },
       }),
@@ -124,6 +126,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           deleted_at: null,
           status: 'sent',
           issue_date: { gte: startLastMonth, lte: endLastMonth },
+          ...CLIENT_INVOICE_WHERE,
         },
         _sum: { total: true },
       }),
@@ -132,16 +135,17 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           deleted_at: null,
           status: 'sent',
           issue_date: { gte: startYTD },
+          ...CLIENT_INVOICE_WHERE,
         },
         _sum: { total: true },
       }),
-      // "Sin cobrar" = solo borradores (status: draft)
+      // "Sin cobrar" = solo borradores (status: draft) de cliente
       prisma.invoice.findMany({
-        where: { deleted_at: null, status: 'draft' },
+        where: { deleted_at: null, status: 'draft', ...CLIENT_INVOICE_WHERE },
         select: { id: true, total: true },
       }),
       prisma.invoice.findMany({
-        where: { deleted_at: null },
+        where: { deleted_at: null, ...CLIENT_INVOICE_WHERE },
         orderBy: { issue_date: 'desc' },
         take: 8,
         select: { id: true, invoice_number: true, client_name: true, total: true, status: true, issue_date: true },
@@ -236,7 +240,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
     // ── Monthly revenue (last 6 months) ───────────────────────────────
     const invoicesForChart = await prisma.invoice.findMany({
-      where: { deleted_at: null, issue_date: { gte: sixMonthsAgo } },
+      where: { deleted_at: null, issue_date: { gte: sixMonthsAgo }, ...CLIENT_INVOICE_WHERE },
       select: { issue_date: true, total: true },
     })
 

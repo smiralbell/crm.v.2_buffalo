@@ -73,7 +73,8 @@ export async function buildIncomeAiPayload(startDate: Date, endDate: Date) {
   }>(
     `SELECT id, invoice_number, client_name, total, subtotal, iva, bank_transaction_id
      FROM invoices
-     WHERE deleted_at IS NULL AND bank_transaction_id IS NOT NULL`
+     WHERE deleted_at IS NULL AND bank_transaction_id IS NOT NULL
+       AND COALESCE(invoice_source, 'client') <> 'developer'`
   ).catch(() => ({ rows: [] as never[] }))
 
   const linkedByBtId = new Map<string, (typeof linkedResult.rows)[0]>()
@@ -118,6 +119,7 @@ export async function buildIncomeAiPayload(startDate: Date, endDate: Date) {
       deleted_at: null,
       status: 'sent',
       issue_date: { gte: startDate, lte: endDate },
+      invoice_source: { not: 'developer' },
     },
     select: {
       client_name: true,

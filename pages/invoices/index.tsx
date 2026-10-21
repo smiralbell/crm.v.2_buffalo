@@ -33,7 +33,11 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { format } from 'date-fns'
 import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
-import { getDeveloperInvoiceIds, getInvoiceDeveloperMetaMap } from '@/lib/invoices/developer-meta'
+import {
+  CLIENT_INVOICE_WHERE,
+  getDeveloperInvoiceIds,
+  getInvoiceDeveloperMetaMap,
+} from '@/lib/invoices/developer-meta'
 
 type SortKey = 'number' | 'date' | 'subtotal' | 'total'
 type SortDir = 'asc' | 'desc'
@@ -171,7 +175,30 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     }
 
     try {
-      const [invoices, total, allInvoices] = await Promise.all([
+      // KPIs de arriba: siempre solo facturas de cliente (developers no suman)
+      const statsWhere: any = {
+        deleted_at: null,
+        ...CLIENT_INVOICE_WHERE,
+      }
+      if (status && status !== 'all') statsWhere.status = status
+      if (search) {
+        statsWhere.OR = [
+          { invoice_number: { contains: search, mode: 'insensitive' } },
+          { client_name: { contains: search, mode: 'insensitive' } },
+          { client_email: { contains: search, mode: 'insensitive' } },
+        ]
+      }
+      if (dateFrom || dateTo) {
+        statsWhere.issue_date = {}
+        if (dateFrom) statsWhere.issue_date.gte = new Date(dateFrom)
+        if (dateTo) {
+          const endDate = new Date(dateTo)
+          endDate.setHours(23, 59, 59, 999)
+          statsWhere.issue_date.lte = endDate
+        }
+      }
+
+      const [invoices, total, kpiInvoices] = await Promise.all([
         prisma.invoice.findMany({
           where,
           skip,
@@ -192,7 +219,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         }),
         prisma.invoice.count({ where }),
         prisma.invoice.findMany({
-          where,
+          where: statsWhere,
           select: {
             status: true,
             subtotal: true,
@@ -206,28 +233,27 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
       const metaMap = await getInvoiceDeveloperMetaMap(invoices.map((i) => i.id))
 
-      // Calcular estadísticas
-      const totalSinIva = allInvoices.reduce((sum, inv) => {
+      const totalSinIva = kpiInvoices.reduce((sum, inv) => {
         const subtotal = inv.subtotal ? Number(inv.subtotal) : 0
         return sum + (isNaN(subtotal) ? 0 : subtotal)
       }, 0)
-      const totalConIva = allInvoices.reduce((sum, inv) => {
-        const total = inv.total ? Number(inv.total) : 0
-        return sum + (isNaN(total) ? 0 : total)
+      const totalConIva = kpiInvoices.reduce((sum, inv) => {
+        const totalAmt = inv.total ? Number(inv.total) : 0
+        return sum + (isNaN(totalAmt) ? 0 : totalAmt)
       }, 0)
-      const totalIva = allInvoices.reduce((sum, inv) => {
+      const totalIva = kpiInvoices.reduce((sum, inv) => {
         const iva = inv.iva ? Number(inv.iva) : 0
         return sum + (isNaN(iva) ? 0 : iva)
       }, 0)
-      
+
       const stats = {
-        total: allInvoices.length || 0,
-        draft: allInvoices.filter((i) => i.status === 'draft').length || 0,
-        sent: allInvoices.filter((i) => i.status === 'sent').length || 0,
-        totalAmount: (isNaN(totalConIva) ? 0 : totalConIva),
-        totalSinIva: (isNaN(totalSinIva) ? 0 : totalSinIva),
-        totalConIva: (isNaN(totalConIva) ? 0 : totalConIva),
-        totalIva: (isNaN(totalIva) ? 0 : totalIva),
+        total: kpiInvoices.length || 0,
+        draft: kpiInvoices.filter((i) => i.status === 'draft').length || 0,
+        sent: kpiInvoices.filter((i) => i.status === 'sent').length || 0,
+        totalAmount: isNaN(totalConIva) ? 0 : totalConIva,
+        totalSinIva: isNaN(totalSinIva) ? 0 : totalSinIva,
+        totalConIva: isNaN(totalConIva) ? 0 : totalConIva,
+        totalIva: isNaN(totalIva) ? 0 : totalIva,
       }
 
       return {
@@ -520,11 +546,22 @@ export default function InvoicesPage({
     }
   }
 
-  // Función para descargar PDF
-  const handleDownloadPDF = async (invoiceId: number, invoiceNumber: string) => {
+  // PDF cliente = generado en edit; PDF developer = el que subió el developer
+  const handleDownloadPDF = (
+    invoiceId: number,
+    invoiceNumber: string,
+    opts?: { source?: string; hasPdf?: boolean }
+  ) => {
+    if (opts?.source === 'developer') {
+      if (!opts.hasPdf) {
+        alert('Esta factura de developer aún no tiene PDF adjunto.')
+        return
+      }
+      window.open(`/api/developer/invoices/${invoiceId}/pdf`, '_blank')
+      return
+    }
     setDownloadingId(invoiceId)
     try {
-      // Abrir en nueva pestaña para usar el método de la página de edición
       window.open(`/invoices/${invoiceId}/edit?download=true`, '_blank')
     } catch (error) {
       console.error('Error al descargar PDF:', error)
@@ -797,7 +834,7 @@ export default function InvoicesPage({
             <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
               <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Total Facturas</p>
               <div className="text-xl sm:text-2xl font-semibold text-gray-900 mb-1">{stats.total}</div>
-              <p className="text-xs text-gray-400">Todas las facturas</p>
+              <p className="text-xs text-gray-400">Solo clientes (sin developers)</p>
             </CardContent>
           </Card>
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
@@ -1056,9 +1093,24 @@ export default function InvoicesPage({
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleDownloadPDF(invoice.id, invoice.invoice_number)}
-                        disabled={downloadingId === invoice.id}
+                        onClick={() =>
+                          handleDownloadPDF(invoice.id, invoice.invoice_number, {
+                            source: invoice.invoice_source,
+                            hasPdf: invoice.developer_has_pdf,
+                          })
+                        }
+                        disabled={
+                          downloadingId === invoice.id ||
+                          (invoice.invoice_source === 'developer' && !invoice.developer_has_pdf)
+                        }
                         className="h-8 rounded-lg px-2.5 text-xs"
+                        title={
+                          invoice.invoice_source === 'developer'
+                            ? invoice.developer_has_pdf
+                              ? 'Ver PDF del developer'
+                              : 'Sin PDF adjunto'
+                            : 'Descargar PDF'
+                        }
                       >
                         <Download className="mr-1 h-3.5 w-3.5" />
                         PDF
@@ -1137,17 +1189,6 @@ export default function InvoicesPage({
                                 Developer{invoice.developer_name ? ` · ${invoice.developer_name}` : ''}
                               </Badge>
                             )}
-                            {invoice.invoice_source === 'developer' && invoice.developer_has_pdf && (
-                              <a
-                                href={`/api/developer/invoices/${invoice.id}/pdf`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[10px] font-medium text-indigo-600 hover:underline"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                PDF
-                              </a>
-                            )}
                           </div>
                         </td>
                         <td className="p-3 text-sm text-gray-900">{invoice.client_name}</td>
@@ -1191,10 +1232,24 @@ export default function InvoicesPage({
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleDownloadPDF(invoice.id, invoice.invoice_number)}
-                              disabled={downloadingId === invoice.id}
+                              onClick={() =>
+                                handleDownloadPDF(invoice.id, invoice.invoice_number, {
+                                  source: invoice.invoice_source,
+                                  hasPdf: invoice.developer_has_pdf,
+                                })
+                              }
+                              disabled={
+                                downloadingId === invoice.id ||
+                                (invoice.invoice_source === 'developer' && !invoice.developer_has_pdf)
+                              }
                               className="h-8 w-8"
-                              title="Descargar PDF"
+                              title={
+                                invoice.invoice_source === 'developer'
+                                  ? invoice.developer_has_pdf
+                                    ? 'Ver PDF del developer'
+                                    : 'Sin PDF adjunto'
+                                  : 'Descargar PDF'
+                              }
                             >
                               {downloadingId === invoice.id ? (
                                 <div className="h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />

@@ -368,6 +368,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           gte: startDate,
           lte: endDate,
         },
+        invoice_source: { not: 'developer' },
       },
       orderBy: { issue_date: 'desc' },
       select: {
