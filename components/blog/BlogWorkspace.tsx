@@ -21,12 +21,17 @@ const VIEWS = [
   ['ajustes', 'Ajustes', 'Publicación en la web, calendario, cómo escribe la IA, normas SEO e imágenes.'],
 ] as const
 
-const VALID = new Set(VIEWS.map(([id]) => id))
+type BlogView = (typeof VIEWS)[number][0]
+const VALID = new Set<string>(VIEWS.map(([id]) => id))
+
+function parseBlogView(raw: string | string[] | undefined): BlogView {
+  const value = Array.isArray(raw) ? raw[0] : raw
+  return value && VALID.has(value) ? (value as BlogView) : 'resumen'
+}
 
 export default function BlogWorkspace() {
   const router = useRouter()
-  const raw = Array.isArray(router.query.view) ? router.query.view[0] : router.query.view
-  const view = raw && VALID.has(raw) ? raw : 'resumen'
+  const view = parseBlogView(router.query.view)
   const [state, setState] = useState<BlogState | null>(null)
   const [setup, setSetup] = useState('')
   const [error, setError] = useState('')
