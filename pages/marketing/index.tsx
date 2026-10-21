@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  RefreshCw, ChevronDown, ArrowUpRight, ArrowDownRight,
+  RefreshCw, ChevronDown, ArrowUpRight, ArrowDownRight, FileText,
 } from 'lucide-react'
 import EmailOutreachTab from '@/components/EmailOutreachTab'
 import WebMarketingTab from '@/components/WebMarketingTab'
@@ -27,6 +27,11 @@ import { cn } from '@/lib/utils'
 const LeadsAnalyticsPanel = dynamic(() => import('@/components/leads/LeadsAnalyticsPanel'), {
   ssr: false,
   loading: () => <div className="h-40 animate-pulse rounded-2xl bg-gray-100" />,
+})
+
+const BlogWorkspace = dynamic(() => import('@/components/blog/BlogWorkspace'), {
+  ssr: false,
+  loading: () => <div className="flex justify-center py-24"><div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700" /></div>,
 })
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -206,7 +211,7 @@ const COLD_CALLING_SECTIONS = [
   { id: 'campanas', label: 'Campañas' },
 ] as const
 
-const VALID_TABS = ['global', 'web', 'email', 'coldcalling', 'meta', 'google'] as const
+const VALID_TABS = ['blog', 'global', 'web', 'email', 'coldcalling', 'meta', 'google'] as const
 type TabId = typeof VALID_TABS[number]
 type ColdCallingSection = typeof COLD_CALLING_SECTIONS[number]['id']
 
@@ -355,7 +360,10 @@ export default function MarketingPage() {
     <Layout>
       <div className="space-y-6">
 
-        {/* Toolbar: tabs centered + period controls */}
+        {tab === 'blog' && <BlogWorkspace />}
+
+        {/* Toolbar: tabs centered + period controls. El blog se abre aparte, sin estas pestañas. */}
+        {tab !== 'blog' && (
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="hide-scrollbar flex flex-1 justify-start sm:justify-center border-b border-gray-200 lg:border-b-0 lg:pb-0 overflow-x-auto">
             <div className="flex gap-0 flex-nowrap sm:flex-wrap justify-start sm:justify-center min-w-max sm:min-w-0">
@@ -486,8 +494,17 @@ export default function MarketingPage() {
                 </Button>
               </>
             )}
+            <button
+              type="button"
+              onClick={() => goToTab('blog')}
+              className="inline-flex items-center gap-1.5 appearance-none border border-gray-200 rounded-xl px-3 py-2 text-sm font-medium bg-white text-gray-700 hover:bg-gray-50"
+            >
+              <FileText className="h-4 w-4" />
+              Blog
+            </button>
           </div>
         </div>
+        )}
 
         {/* Loading skeleton — email (global tiene su propio skeleton) */}
         {loading && tab === 'email' && (
@@ -499,7 +516,7 @@ export default function MarketingPage() {
         )}
 
         {/* No data yet — no tapa Métricas Globales (ahí vive la analítica de leads) */}
-        {!loading && !data && tab !== 'global' && tab !== 'web' && tab !== 'coldcalling' && tab !== 'meta' && (
+        {!loading && !data && tab !== 'blog' && tab !== 'global' && tab !== 'web' && tab !== 'coldcalling' && tab !== 'meta' && (
           <div className="rounded-xl border border-dashed border-gray-200 p-16 text-center">
             <p className="text-gray-400 text-sm">No hay datos de marketing todavía.</p>
             <p className="text-gray-400 text-xs mt-1">Conecta Instantly para que los datos empiecen a llegar automáticamente.</p>

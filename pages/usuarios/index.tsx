@@ -134,6 +134,7 @@ export default function UsuariosPage() {
               <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="border-b bg-gray-50 text-gray-600">
+                    <th className="px-4 py-3 text-left font-medium">ID</th>
                     <th className="px-4 py-3 text-left font-medium">Nombre</th>
                     <th className="px-4 py-3 text-left font-medium">Email</th>
                     <th className="px-4 py-3 text-left font-medium">Rol</th>
@@ -159,6 +160,7 @@ export default function UsuariosPage() {
                       }}
                       className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
                     >
+                      <td className="px-4 py-3 font-mono text-xs text-gray-500">#{u.id}</td>
                       <td className="px-4 py-3 font-medium text-gray-900">{u.name}</td>
                       <td className="px-4 py-3 text-gray-500">{u.email}</td>
                       <td className="px-4 py-3">

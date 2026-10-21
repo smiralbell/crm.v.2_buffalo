@@ -94,7 +94,7 @@ Sé breve en las notas del esquema (máximo 25 palabras cada una): el redactor y
  "internalLinks": [{"url": "/ruta/", "anchorType": "h2|frase|palabra", "reason": "breve"}],
  "externalLinks": [{"url": "https://...", "title": "", "reason": "qué dato respalda"}],
  "faq": ["3-5 preguntas reales"],
- "ownMaterial": "qué material propio concreto va y dónde; si no hay, indica [SERGI: ...]",
+ "ownMaterial": "qué material propio concreto va y dónde; si no encaja ninguno, describe una situación cotidiana genérica, nunca un hueco",
  "cta": "el único CTA final, coherente con ${destination}, en una frase",
  "imagePrompts": {"featured": "prompt de la imagen destacada", "infographic": "prompt de una infografía o diagrama que explique una idea del artículo"},
  "outline": [{"h2": "", "h3": [""], "notes": "breve"}]
@@ -191,7 +191,7 @@ Devuelve SOLO estos campos que faltan, con el mismo formato del brief: ${missing
     faq: (raw.faq || research.questions || []).slice(0, 5),
     internalLinks: links,
     externalLinks: raw.externalLinks || [],
-    ownMaterial: raw.ownMaterial || '[SERGI: añadir un caso o dato propio]',
+    ownMaterial: raw.ownMaterial || 'Una situación cotidiana de un despacho o inmobiliaria que pierde llamadas o WhatsApp, sin nombres de cliente ni cifras',
     cta: raw.cta || 'En la auditoría revisamos tu caso contigo: media hora, sin coste.',
     imagePrompts: raw.imagePrompts?.featured ? raw.imagePrompts : { featured: `Fotografía editorial de una oficina de servicios en España relacionada con: ${research.keyword}`, infographic: `Infografía sencilla que explique: ${post.title}` },
     usd,
@@ -249,7 +249,53 @@ FORMATO
 - Devuelves SOLO el cuerpo del artículo en HTML limpio, sin \`\`\` ni explicaciones: <h2>, <h3>, <p>, <ul>/<ol>/<li>, <strong>, <a href="URL">texto</a>, <table> si compara cosas.
 - Sin <h1> (lo pone la plantilla), sin estilos, sin clases, sin imágenes, sin preguntas frecuentes al final (van aparte) y sin llamada a la acción final (la pone la plantilla).
 - Los indicadores de imagen van solos en su párrafo: <p>(imagen1)</p> y <p>(imagen2)</p>, en puntos con sentido visual.
-- Párrafos de 2 a 4 frases. Nada de relleno.`
+- Párrafos de 2 a 4 frases. Nada de relleno.
+- Nunca dejes [SERGI: …], huecos, TODOs, comentarios entre corchetes ni notas para el equipo. El artículo tiene que poder publicarse tal cual.`
+}
+
+const SERGI_RE = /\s*\[SERGI:[^\]]*\]/gi
+
+export function hasSergiPlaceholders(html: string) {
+  return /\[SERGI:/i.test(html || '')
+}
+
+/** Quita notas [SERGI: …] del HTML para que el artículo se pueda publicar sin editar. */
+export function stripSergiPlaceholders(html: string) {
+  return (html || '')
+    .replace(SERGI_RE, '')
+    .replace(/ {2,}/g, ' ')
+    .replace(/ +([.,;:!?])/g, '$1')
+}
+
+/** Si el modelo dejó huecos, los reescribe a texto publicable. Si falla, los borra. */
+export async function ensureNoPlaceholders(post: Post, s: BlogSettings, rules: BlogRules): Promise<Post> {
+  if (!hasSergiPlaceholders(post.body)) return post
+  try {
+    const { data: text, usd } = await askAi<string>({
+      model: s.models.writing,
+      maxTokens: 32000,
+      reasoning: 'low',
+      system: writerSystem(rules),
+      prompt: `Este artículo tiene notas entre corchetes [SERGI: …] pensadas para que un humano las rellene. Eso no está permitido.
+
+Sustitúyelas por texto completo y publicable, usando el material propio disponible o una situación cotidiana genérica (sin nombres de cliente ni cifras inventadas). No dejes corchetes, TODOs ni notas al equipo.
+
+MATERIAL PROPIO
+${rules.ownMaterial}
+
+ARTÍCULO
+${post.body}
+
+Devuelve el cuerpo completo en HTML, sin [SERGI:].`,
+    })
+    addCost(post, usd)
+    const fixed = extractHtml(text)
+    post.body = hasSergiPlaceholders(fixed) ? stripSergiPlaceholders(fixed) : fixed
+  } catch {
+    post.body = stripSergiPlaceholders(post.body)
+  }
+  log(post, 'Huecos retirados', 'El texto ya se puede publicar sin editar')
+  return post
 }
 
 /** Saca el HTML de una respuesta aunque venga con ``` o texto alrededor. */
@@ -291,6 +337,8 @@ Secundarias (cada una al menos ${s.seo.secondaryMinCount} veces): ${post.seconda
 Preguntas que se hace la gente (respóndelas dentro del texto): ${b.research.questions.join(' | ')}
 Material propio: ${b.ownMaterial}
 
+El texto tiene que estar completo y publicable. No dejes corchetes ni notas para rellenar. Si un caso propio no encaja, usa una situación cotidiana genérica sin nombres de cliente ni cifras inventadas.
+
 ESTRUCTURA
 ${b.outline.map((o) => `- H2: ${o.h2}${o.h3?.length ? ' (H3: ' + o.h3.join(' / ') + ')' : ''}${o.notes ? ' — ' + o.notes : ''}`).join('\n')}
 
@@ -305,6 +353,7 @@ Empieza directamente con el primer <p>.`,
   post.body = extractHtml(text)
   post.status = 'borrador'
   log(post, 'Borrador escrito', `${words(post.body)} palabras`)
+  await ensureNoPlaceholders(post, s, rules)
   await makeMeta(post, s, rules)
   return post
 }
@@ -404,6 +453,7 @@ ${post.body}`,
     }
     log(post, `Corrección ${round + 1}`, fails.map((f) => f.label).join(' · '))
   }
+  await ensureNoPlaceholders(post, s, rules)
   return post
 }
 

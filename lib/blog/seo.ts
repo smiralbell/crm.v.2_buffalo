@@ -135,8 +135,6 @@ export function runChecks(post: Post, s: BlogSettings, rules: BlogRules): { chec
   const dashes = (bodyText.match(/—/g) || []).length
   add('dashes', 'Pocos guiones largos (máximo 3)', dashes <= 3, `${dashes} guiones largos`, 'aviso')
   add('faq', 'Entre 3 y 5 preguntas frecuentes', post.faq.length >= 3 && post.faq.length <= 5, `${post.faq.length} preguntas`)
-  const gaps = (post.body.match(/\[SERGI:[^\]]*\]/g) || []).length
-  add('gaps', 'Huecos [SERGI: …] rellenados', gaps === 0, gaps ? `${gaps} huecos por rellenar antes de publicar` : 'Ninguno', 'aviso')
 
   const errors = c.filter((x) => x.severity === 'error')
   const score = Math.round((errors.filter((x) => x.ok).length / Math.max(1, errors.length)) * 100)

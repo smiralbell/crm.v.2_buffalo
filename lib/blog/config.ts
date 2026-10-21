@@ -32,9 +32,51 @@ export async function saveSettings(value: BlogSettings, by?: string): Promise<Bl
   return value
 }
 
+function madridToday() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' })
+}
+
+/** El plan no puede seguir anclado a noviembre ni a 10/7 días de antelación. */
+export async function migrateSettingsIfNeeded() {
+  const s = await getSettings()
+  const today = madridToday()
+  let changed = false
+  if (!s.schedule.startDate || s.schedule.startDate > today) {
+    s.schedule.startDate = today
+    changed = true
+  }
+  if (s.leadTimes.briefDaysBefore > 3 || s.leadTimes.draftDaysBefore > 3) {
+    s.leadTimes = { briefDaysBefore: 2, draftDaysBefore: 2 }
+    changed = true
+  }
+  if (changed) await saveSettings(s, 'sistema')
+}
+
+const NO_GAPS_LINE =
+  '- Nunca dejes huecos, corchetes ni notas para el equipo. El artículo tiene que poder publicarse tal cual. Si no hay un caso propio que encaje, usa una situación cotidiana genérica (un despacho que pierde llamadas, una inmobiliaria con WhatsApp sin filtrar) sin inventar nombres de cliente ni cifras.'
+
+/** Las reglas guardadas antiguas pedían [SERGI: …]; eso ya no se usa. */
+export function sanitizeRules(r: BlogRules): BlogRules {
+  let voice = (r.voice || '')
+    .replace(/- Donde falte material propio[^\n]*/gi, NO_GAPS_LINE)
+    .replace(/\s*\[SERGI:[^\]]*\]/gi, '')
+  if (/\[SERGI:/i.test(r.voice) && !/Nunca dejes huecos/i.test(voice)) {
+    voice = `${voice.trim()}\n${NO_GAPS_LINE}`
+  }
+  return { ...r, voice }
+}
+
 export async function getRules(): Promise<BlogRules> {
   const doc = await store.get<Doc<BlogRules>>('rules', 'main')
-  return { ...DEFAULT_RULES, ...(doc?.value || {}) }
+  return sanitizeRules({ ...DEFAULT_RULES, ...(doc?.value || {}) })
+}
+
+/** Si las reglas guardadas aún pedían [SERGI: …], las actualiza una sola vez. */
+export async function migrateRulesIfNeeded() {
+  const doc = await store.get<Doc<BlogRules>>('rules', 'main')
+  const raw = doc?.value?.voice || ''
+  if (!/\[SERGI:/i.test(raw) && !/Donde falte material propio/i.test(raw)) return
+  await saveRules(sanitizeRules({ ...DEFAULT_RULES, ...(doc?.value || {}) }), 'sistema')
 }
 
 /** Las reglas guardan historial: si un cambio empeora los artículos, se vuelve atrás. */

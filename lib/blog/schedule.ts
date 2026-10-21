@@ -109,6 +109,46 @@ function assignNews(slots: Slot[], every: number) {
   }
 }
 
+/** Día civil en una zona horaria (AAAA-MM-DD). */
+export function zonedDay(iso: string, tz = 'Europe/Madrid'): string {
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: tz })
+}
+
+/** Instante UTC de una fecha y hora civiles en Madrid. */
+export function madridDateTime(date: string, time = '10:00'): Date {
+  const [y, m, d] = date.split('-').map(Number)
+  const [hh, mm] = time.split(':').map(Number)
+  return zonedToUtc(y, m, d, hh || 10, mm || 0, 'Europe/Madrid')
+}
+
+/** Próximo día laborable a las 10:00 en Madrid (como mínimo mañana). */
+export function nextPublishAt(from = new Date()): Date {
+  for (let i = 1; i <= 14; i++) {
+    const d = new Date(from.getTime() + i * DAY)
+    const wd = d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'Europe/Madrid' })
+    if (wd === 'Sat' || wd === 'Sun') continue
+    return madridDateTime(zonedDay(d.toISOString()), '10:00')
+  }
+  return new Date(from.getTime() + 2 * DAY)
+}
+
+/** Crea (o reutiliza) un hueco en un día concreto. Si ya hay uno libre ese día, lo usa. */
+export async function slotOnDay(date: string, time = '10:00'): Promise<Slot> {
+  const at = madridDateTime(date, time)
+  const existing = await store.list<Slot>('slots')
+  const free = existing.find((s) => !s.postId && zonedDay(s.at) === date)
+  if (free) return free
+  const slot: Slot = {
+    id: store.newId('slot-'),
+    at: at.toISOString(),
+    week: isoWeek(at),
+    kind: 'normal',
+    locked: true,
+  }
+  await store.put('slots', slot)
+  return slot
+}
+
 /** Asegura que hay huecos planificados para las próximas semanas. */
 export async function ensurePlanned(s: BlogSettings, now = new Date()): Promise<Slot[]> {
   const existing = (await store.list<Slot>('slots')).sort((a, b) => a.at.localeCompare(b.at))

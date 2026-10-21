@@ -3,16 +3,14 @@ import { useState } from 'react'
 import { ChevronDown, ExternalLink, Loader2, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import NewArticle from './NewArticle'
 import { api, fmt, Info, Notice, Panel, Pill, Stat, StatusPill, THEME_COLOR, time } from './shared'
 import type { TabProps } from './types'
 
-export default function Resumen({ state, reload, go }: TabProps & { go: (t: string) => void }) {
+export default function Resumen({ state, reload, go, onNewArticle }: TabProps & { go: (t: string) => void }) {
   const [busy, setBusy] = useState(false)
-  const [creating, setCreating] = useState(false)
   const [showLog, setShowLog] = useState(false)
   const [msg, setMsg] = useState<{ tone: 'info' | 'error'; text: string } | null>(null)
-  const { settings, posts, slots, runs, status, topics } = state
+  const { settings, posts, slots, runs, status } = state
 
   const byId = new Map(posts.map((p) => [p.id, p]))
   const upcoming = slots.filter((s) => s.at >= new Date().toISOString()).slice(0, 6)
@@ -39,7 +37,7 @@ export default function Resumen({ state, reload, go }: TabProps & { go: (t: stri
     <div className="space-y-6">
       {/* Acciones principales, centradas */}
       <div className="flex flex-col items-center gap-3">
-        <Button onClick={() => setCreating(true)} className="h-11 gap-2 rounded-xl px-6 text-sm">
+        <Button onClick={() => onNewArticle?.()} className="h-11 gap-2 rounded-xl px-6 text-sm">
           <Plus className="h-4 w-4" /> Nuevo artículo
         </Button>
         <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -55,7 +53,7 @@ export default function Resumen({ state, reload, go }: TabProps & { go: (t: stri
           <span className="font-medium text-gray-900">Piloto automático {settings.enabled ? 'activado' : 'en pausa'}</span>
           {busy && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
           <Info>
-            Activado, el sistema trabaja solo: cada semana reserva 2-3 fechas al azar, {settings.leadTimes.briefDaysBefore} días antes investiga el tema que toca, {settings.leadTimes.draftDaysBefore} días antes lo escribe y os lo deja en «Para revisar». Cuando lo aprobáis, se publica y se sube a la web en su fecha. En pausa no hace nada por su cuenta; podéis seguir creando artículos a mano.
+            Activado, el sistema trabaja solo: cada semana reserva 2-3 fechas, investiga el tema, lo escribe y os lo deja en «Para revisar». En pausa no escribe nada solo, pero el calendario sigue teniendo temas asignados y podéis crear un artículo cualquier día.
           </Info>
         </div>
       </div>
@@ -83,7 +81,7 @@ export default function Resumen({ state, reload, go }: TabProps & { go: (t: stri
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Panel title={`Para revisar (${toReview.length})`} info="Lo que tenéis que mirar. Abre cada uno, léelo en la vista previa, corrige lo que quieras y pulsa «Aprobar».">
+        <Panel title={`Para revisar (${toReview.length})`} info="Lo que tenéis que mirar. Abre cada uno, léelo y pulsa «Aprobar» si te vale. Editar es opcional: el texto ya sale completo.">
           {toReview.length === 0 ? (
             <p className="py-8 text-center text-sm text-gray-400">Nada pendiente de revisar.</p>
           ) : (
@@ -94,7 +92,7 @@ export default function Resumen({ state, reload, go }: TabProps & { go: (t: stri
                     <span className={cn('h-9 w-1 shrink-0 rounded-full', THEME_COLOR[p.theme])} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-gray-900">{p.h1 || p.title}</p>
-                      <p className="text-xs text-gray-500">SEO {p.score ?? '—'}/100{p.scheduledAt ? ` · sale el ${fmt(p.scheduledAt, false)}` : ''}{p.gaps ? ` · ${p.gaps} huecos por rellenar` : ''}</p>
+                      <p className="text-xs text-gray-500">SEO {p.score ?? '—'}/100{p.scheduledAt ? ` · sale el ${fmt(p.scheduledAt, false)}` : ''}</p>
                     </div>
                     <span className="text-xs font-medium text-gray-500">Revisar →</span>
                   </Link>
@@ -106,11 +104,13 @@ export default function Resumen({ state, reload, go }: TabProps & { go: (t: stri
 
         <Panel
           title="Próximas publicaciones"
-          info={`Las fechas que ha reservado el sistema: ${settings.schedule.minPerWeek}-${settings.schedule.maxPerWeek} por semana, en días y horas al azar para que no haya un patrón fijo. Un hueco «sin tema» recibe el siguiente tema de la cola ${settings.leadTimes.briefDaysBefore} días antes.`}
+          info={`Las fechas reservadas: ${settings.schedule.minPerWeek}-${settings.schedule.maxPerWeek} por semana. Cada hueco vacío se rellena con el siguiente tema de la cola en cuanto abres el blog. También puedes crear un artículo para cualquier día.`}
           action={<button className="text-xs font-medium text-gray-500 hover:text-gray-900" onClick={() => go('calendario')}>Ver calendario →</button>}
         >
           {upcoming.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-400">{settings.enabled ? 'Planificando…' : 'Activa el piloto automático para reservar fechas.'}</p>
+            <p className="py-8 text-center text-sm text-gray-400">
+              Aún no hay fechas. Pulsa «Nuevo artículo» para crear uno hoy, o ve al calendario y pulsa + en el día que quieras.
+            </p>
           ) : (
             <ul className="space-y-1.5">
               {upcoming.map((sl) => {
@@ -123,7 +123,7 @@ export default function Resumen({ state, reload, go }: TabProps & { go: (t: stri
                       <p className="text-[10px] text-gray-400">{time(sl.at)}</p>
                     </div>
                     <div className="min-w-0 flex-1">
-                      {p ? <Link href={`/blog/${p.id}`} className="line-clamp-1 text-sm text-gray-800 hover:text-gray-950">{p.h1 || p.title}</Link> : <p className="text-sm italic text-gray-400">Sin tema todavía</p>}
+                      {p ? <Link href={`/blog/${p.id}`} className="line-clamp-1 text-sm text-gray-800 hover:text-gray-950">{p.h1 || p.title}</Link> : <p className="text-sm italic text-gray-400">Sin artículo — créalo o asigna un tema</p>}
                       {sl.kind === 'actualidad' && <Pill className="mt-0.5 bg-orange-50 text-orange-600">Actualidad</Pill>}
                     </div>
                     {p && <StatusPill status={p.status} />}
@@ -157,7 +157,6 @@ export default function Resumen({ state, reload, go }: TabProps & { go: (t: stri
         )}
       </div>
 
-      <NewArticle open={creating} onClose={() => setCreating(false)} topics={topics} reload={reload} />
     </div>
   )
 }

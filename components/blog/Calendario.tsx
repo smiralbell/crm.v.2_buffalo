@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import { CalendarPlus, ChevronLeft, ChevronRight, Loader2, Lock, Newspaper, Shuffle, Trash2, Unlock, X } from 'lucide-react'
+import { CalendarPlus, ChevronLeft, ChevronRight, ListOrdered, Loader2, Lock, Newspaper, Plus, Shuffle, Trash2, Unlock, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { Slot } from '@/lib/blog/types'
 import { cn } from '@/lib/utils'
@@ -20,7 +20,7 @@ interface Entry {
   post?: PostLite
 }
 
-export default function Calendario({ state, reload }: TabProps) {
+export default function Calendario({ state, reload, onNewArticle }: TabProps) {
   const { slots, posts, settings } = state
   const [month, setMonth] = useState(() => {
     const first = slots.find((s) => s.at >= new Date().toISOString())
@@ -88,7 +88,7 @@ export default function Calendario({ state, reload }: TabProps) {
           <Button variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight className="h-4 w-4" /></Button>
           <Button variant="ghost" size="sm" className="rounded-xl" onClick={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>Hoy</Button>
         </div>
-        <div className="flex justify-center lg:w-56 lg:justify-end">
+        <div className="flex justify-center gap-2 lg:w-56 lg:justify-end">
           <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => call('plan', 'schedule/plan')} disabled={!!busy}>
             {busy === 'plan' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />} Reservar fechas
           </Button>
@@ -96,9 +96,15 @@ export default function Calendario({ state, reload }: TabProps) {
       </div>
 
       <p className="mx-auto max-w-3xl text-center text-xs text-gray-500">
-        {settings.schedule.minPerWeek}-{settings.schedule.maxPerWeek} artículos por semana en días y horas aleatorios ({settings.schedule.windows.map((w) => `${w.from}-${w.to}`).join(' y ')}), con al menos {settings.schedule.minGapHours} h entre uno y otro. 1 de cada {settings.schedule.newsEvery} es de actualidad.
+        {settings.schedule.minPerWeek}-{settings.schedule.maxPerWeek} artículos por semana en días y horas aleatorios. Pulsa <b>+</b> en cualquier día para crear un artículo ahí, aunque el piloto esté en pausa. Los huecos vacíos se rellenan solos con el siguiente tema de la cola.
       </p>
       {err && <Notice tone="error">{err}</Notice>}
+      {monthCount === 0 && (
+        <Notice>
+          Este mes no tiene fechas reservadas{settings.schedule.startDate ? ` (el plan automático empieza el ${new Date(settings.schedule.startDate + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })})` : ''}.
+          Pulsa <b>+</b> en el día que quieras para crear un artículo ahora.
+        </Notice>
+      )}
 
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50/80">
@@ -124,16 +130,32 @@ export default function Calendario({ state, reload }: TabProps) {
                   >
                     <div className="mb-1 flex items-center justify-between px-1">
                       <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs', k === today ? 'bg-gray-900 font-semibold text-white' : out ? 'text-gray-300' : 'text-gray-600')}>{d.getDate()}</span>
-                      {di === 0 && week && (
-                        <button
-                          title="Volver a sortear esta semana"
-                          onClick={() => call('w' + week, 'schedule/reshuffle', { week })}
-                          className="rounded-lg p-1 text-gray-300 opacity-0 transition hover:bg-gray-100 hover:text-gray-700 group-hover/row:opacity-100"
-                        >
-                          {busy === 'w' + week ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Shuffle className="h-3.5 w-3.5" />}
-                        </button>
-                      )}
-                      {paused(d) && di !== 0 && <span className="text-[10px] text-gray-400">Pausa</span>}
+                      <span className="flex items-center gap-0.5">
+                        {k >= today && !paused(d) && (
+                          <button
+                            type="button"
+                            title="Crear un artículo este día"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const empty = list.find((x) => x.slot && !x.post)
+                              onNewArticle?.(empty?.slot ? { slotId: empty.slot.id, date: k } : { date: k })
+                            }}
+                            className="rounded-lg p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-900"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {di === 0 && week && (
+                          <button
+                            title="Volver a sortear esta semana"
+                            onClick={() => call('w' + week, 'schedule/reshuffle', { week })}
+                            className="rounded-lg p-1 text-gray-300 opacity-0 transition hover:bg-gray-100 hover:text-gray-700 group-hover/row:opacity-100"
+                          >
+                            {busy === 'w' + week ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Shuffle className="h-3.5 w-3.5" />}
+                          </button>
+                        )}
+                        {paused(d) && di !== 0 && <span className="text-[10px] text-gray-400">Pausa</span>}
+                      </span>
                     </div>
                     <div className="space-y-1">
                       {list.map((e) => {
@@ -159,7 +181,7 @@ export default function Calendario({ state, reload }: TabProps) {
                                   {p && <span className={cn('ml-auto h-1.5 w-1.5 rounded-full', STATUS[p.status].dot)} title={STATUS[p.status].label} />}
                                 </div>
                                 <p className={cn('mt-0.5 line-clamp-2 text-[11px] leading-snug', p ? 'text-gray-800' : 'italic text-gray-400')}>
-                                  {p ? p.h1 || p.title : 'Tema por asignar'}
+                                  {p ? p.h1 || p.title : 'Sin artículo'}
                                 </p>
                               </div>
                             </div>
@@ -192,14 +214,14 @@ export default function Calendario({ state, reload }: TabProps) {
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-2">
               <p className="text-sm font-medium capitalize text-gray-500">{fmt(sel.at)}</p>
-              <p className="text-base font-semibold text-gray-900">{sel.post ? sel.post.h1 || sel.post.title : 'Hueco sin tema todavía'}</p>
+              <p className="text-base font-semibold text-gray-900">{sel.post ? sel.post.h1 || sel.post.title : 'Hueco sin artículo'}</p>
               <div className="flex flex-wrap gap-1.5">
                 {sel.post && <StatusPill status={sel.post.status} />}
                 {sel.post && <ThemePill theme={sel.post.theme} />}
                 {sel.slot?.kind === 'actualidad' && <Pill className="bg-orange-50 text-orange-600">Actualidad</Pill>}
                 {sel.slot?.locked && <Pill className="bg-gray-900 text-white">Fijado</Pill>}
               </div>
-              {!sel.post && <p className="text-xs text-gray-500">El motor le asignará el siguiente tema de la cola {settings.leadTimes.briefDaysBefore} días antes. También puedes elegir uno ahora.</p>}
+              {!sel.post && <p className="text-xs text-gray-500">Crea un artículo para esta fecha, o asigna el siguiente tema de la cola. No hace falta el piloto automático.</p>}
             </div>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl" onClick={() => setSelected(null)}><X className="h-4 w-4" /></Button>
           </div>
@@ -208,10 +230,20 @@ export default function Calendario({ state, reload }: TabProps) {
             {sel.slot && (
               <>
                 {!sel.post && (
-                  <select className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700" value="" onChange={(e) => e.target.value && call('assign', `slot/${sel.slot!.id}/assign`, { postId: e.target.value })}>
-                    <option value="">Asignar un artículo…</option>
-                    {assignable.map((x) => <option key={x.id} value={x.id}>{x.h1 || x.title}</option>)}
-                  </select>
+                  <>
+                    <Button size="sm" className="gap-1.5 rounded-xl" onClick={() => onNewArticle?.({ slotId: sel.slot!.id, date: madridDay(sel.at) })}>
+                      <Plus className="h-3.5 w-3.5" /> Crear artículo aquí
+                    </Button>
+                    <Button size="sm" variant="outline" className="gap-1.5 rounded-xl" onClick={() => call('fill', `slot/${sel.slot!.id}/fill`)} disabled={!!busy}>
+                      {busy === 'fill' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ListOrdered className="h-3.5 w-3.5" />} Tema de la cola
+                    </Button>
+                    {assignable.length > 0 && (
+                      <select className="h-9 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700" value="" onChange={(e) => e.target.value && call('assign', `slot/${sel.slot!.id}/assign`, { postId: e.target.value })}>
+                        <option value="">Asignar un artículo ya creado…</option>
+                        {assignable.map((x) => <option key={x.id} value={x.id}>{x.h1 || x.title}</option>)}
+                      </select>
+                    )}
+                  </>
                 )}
                 <Button size="sm" variant="outline" className="gap-1.5 rounded-xl" onClick={() => call('kind', `slot/${sel.slot!.id}/kind`)}><Newspaper className="h-3.5 w-3.5" /> {sel.slot.kind === 'actualidad' ? 'Pasar a normal' : 'Pasar a actualidad'}</Button>
                 <Button size="sm" variant="outline" className="gap-1.5 rounded-xl" onClick={() => call('lock', `slot/${sel.slot!.id}/lock`)}>

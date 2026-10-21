@@ -18,7 +18,10 @@ export interface BlogState {
   status: { store: 'file' | 'postgres'; spend: number; keys: { openrouter: boolean; openai: boolean; cron: boolean; ftp: boolean } }
 }
 
+export type NewArticleOpts = { slotId?: string; date?: string }
+
 export interface TabProps {
   state: BlogState
   reload: () => Promise<void>
+  onNewArticle?: (opts?: NewArticleOpts) => void
 }

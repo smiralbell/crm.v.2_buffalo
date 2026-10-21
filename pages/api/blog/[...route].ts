@@ -6,17 +6,17 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdminAPI } from '@/lib/auth'
 import { getRules, getSettings, rulesHistory, saveRules, saveSettings } from '@/lib/blog/config'
-import { bootstrap, cancelJob, emptyPost, ensureRunner, isRunning, monthSpend, publishPost, record, startAutoPost, startStep, syncWeb, tick, type Step } from '@/lib/blog/engine'
+import { assignSlots, bootstrap, cancelJob, emptyPost, ensureRunner, isRunning, monthSpend, placePost, planAndAssign, publishPost, record, startAutoPost, startStep, syncWeb, tick, type Step } from '@/lib/blog/engine'
 import { allThemes } from '@/lib/blog/defaults'
 import { buildPackage, testConnection } from '@/lib/blog/publish'
 import { ftpConfigured } from '@/lib/blog/ftp'
 import { articleHtml, indexHtml, type ImageResolver } from '@/lib/blog/render'
 import { findNews, proposeTopics } from '@/lib/blog/research'
-import { reshuffleWeek, ensurePlanned } from '@/lib/blog/schedule'
+import { reshuffleWeek } from '@/lib/blog/schedule'
 import { runChecks, slugify } from '@/lib/blog/seo'
 import * as store from '@/lib/blog/store'
 import type { BlogRules, BlogSettings, Post, RunLog, Slot, Topic } from '@/lib/blog/types'
-import { log } from '@/lib/blog/writer'
+import { hasSergiPlaceholders, log, stripSergiPlaceholders } from '@/lib/blog/writer'
 
 export const config = { api: { bodyParser: { sizeLimit: '8mb' }, responseLimit: false } }
 
@@ -38,7 +38,7 @@ const light = (p: Post) => {
   return {
     ...rest,
     words: body ? body.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length : 0,
-    gaps: (body.match(/\[SERGI:/g) || []).length,
+    gaps: 0,
     lastEvent: history?.[0],
     demand: brief?.research?.demand,
   }
@@ -72,6 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     /* ---------- Estado general ---------- */
     if (a === 'state' && req.method === 'GET') {
+      await planAndAssign()
       const [settings, rules, posts, topics, slots, runs, spend, history] = await Promise.all([
         getSettings(), getRules(), store.list<Post>('posts'), store.list<Topic>('topics'), store.list<Slot>('slots'), store.list<RunLog>('runs'), monthSpend(), rulesHistory(),
       ])
@@ -95,19 +96,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     /* ---------- Motor ---------- */
     if (a === 'tick' && req.method === 'POST') {
-      const s = await getSettings()
-      if (!s.enabled) {
-        // Ejecución puntual aunque el motor esté en pausa: sólo planifica
-        await ensurePlanned(s)
-        return res.status(200).json({ ok: true, message: 'Calendario planificado. El motor está en pausa: actívalo en Configuración para que avance solo.' })
-      }
       return res.status(200).json(await tick('manual'))
     }
 
     /* ---------- Calendario ---------- */
     if (a === 'schedule') {
       const s = await getSettings()
-      if (b === 'plan' && req.method === 'POST') return res.status(200).json({ slots: await ensurePlanned(s) })
+      if (b === 'plan' && req.method === 'POST') return res.status(200).json({ slots: await planAndAssign() })
+      if (b === 'fill' && req.method === 'POST') {
+        const slots = await store.list<Slot>('slots')
+        await assignSlots(s, slots)
+        return res.status(200).json({ slots: await store.list<Slot>('slots') })
+      }
       if (b === 'reshuffle' && req.method === 'POST') return res.status(200).json({ slots: await reshuffleWeek(String(req.body.week), s) })
     }
     if (a === 'slot' && b && req.method === 'POST') {
@@ -117,13 +117,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (c === 'kind') slot.kind = slot.kind === 'actualidad' ? 'normal' : 'actualidad'
       if (c === 'assign') {
         const postId = String(req.body.postId || '')
-        // Un artículo sólo puede estar en un hueco
-        for (const other of await store.list<Slot>('slots')) if (other.postId === postId && other.id !== slot.id) { delete other.postId; await store.put('slots', other) }
-        slot.postId = postId || undefined
-        if (postId) {
+        if (!postId) {
+          if (slot.postId) {
+            const p = await store.get<Post>('posts', slot.postId)
+            if (p) {
+              delete p.scheduledAt
+              log(p, 'Quitado del calendario', slot.at, by)
+              await store.put('posts', p)
+            }
+          }
+          delete slot.postId
+        } else {
           const p = await store.get<Post>('posts', postId)
-          if (p) { p.scheduledAt = slot.at; log(p, 'Asignado a un hueco', slot.at, by); await store.put('posts', p) }
+          if (!p) return res.status(404).json({ error: 'Artículo no encontrado' })
+          log(p, 'Asignado a un hueco', slot.at, by)
+          await placePost(p, { slotId: slot.id })
+          return res.status(200).json({ slot: await store.get<Slot>('slots', slot.id) })
         }
+      }
+      if (c === 'fill') {
+        if (slot.postId) return res.status(400).json({ error: 'Este hueco ya tiene artículo' })
+        await assignSlots(await getSettings(), [slot], { ignoreHorizon: true })
+        const filled = await store.get<Slot>('slots', slot.id)
+        if (!filled?.postId) return res.status(400).json({ error: 'No hay temas pendientes en la cola' })
+        return res.status(200).json({ slot: filled })
       }
       if (c === 'delete') { await store.remove('slots', slot.id); return res.status(200).json({ ok: true }) }
       await store.put('slots', slot)
@@ -179,12 +196,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (c === 'order') t.order = Number(req.body.order)
         if (c === 'update') Object.assign(t, { title: req.body.title ?? t.title, keyword: req.body.keyword ?? t.keyword, theme: req.body.theme ?? t.theme, destination: req.body.destination ?? t.destination, notes: req.body.notes ?? t.notes })
         if (c === 'write') {
-          // Crear el artículo de este tema ya, sin esperar a su hueco
           const post = emptyPost(t, s)
           if (t.source === 'noticia') post.kind = 'actualidad'
           t.status = 'usado'
           await store.put('topics', t)
           await store.put('posts', post)
+          await placePost(post, { slotId: req.body.slotId, date: req.body.date, time: req.body.time, schedule: req.body.schedule !== false })
           startStep(post.id, 'todo', by)
           return res.status(200).json({ post, working: true })
         }
@@ -198,11 +215,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const s = await getSettings()
       const rules = await getRules()
 
+      const placeOpts = () => ({
+        slotId: req.body.slotId ? String(req.body.slotId) : undefined,
+        date: req.body.date ? String(req.body.date) : undefined,
+        time: req.body.time ? String(req.body.time) : undefined,
+        at: req.body.scheduledAt ? String(req.body.scheduledAt) : undefined,
+        schedule: req.body.schedule !== false,
+      })
+
       // Nuevo artículo en el que la IA elige el tema según lo más buscado ahora
       if (b === 'new' && req.method === 'POST' && req.body.auto) {
         const post = emptyPost({ title: 'Eligiendo el tema con más potencial…', theme: req.body.theme || 'A' }, s)
         log(post, 'La IA está eligiendo el tema', req.body.focus ? `Enfoque: ${req.body.focus}` : undefined, by)
         await store.put('posts', post)
+        await placePost(post, placeOpts())
         startAutoPost(post.id, { focus: req.body.focus || undefined, theme: req.body.theme || undefined }, by)
         return res.status(200).json({ post, working: true })
       }
@@ -218,7 +244,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           topic.status = 'usado'
           await store.put('topics', topic)
         } else if (!req.body.manual && req.body.notes) {
-          // Tema escrito al momento: se guarda como tema para que el brief tenga las notas
           topic = {
             id: store.newId('man-'), source: 'manual', order: 0, title: post.title, keyword: post.keyword, theme: post.theme, kind: post.kind,
             destination: req.body.destination || '/auditoria/', ownMaterial: 'Banco de ideas', notes: String(req.body.notes), status: 'usado', createdAt: new Date().toISOString(),
@@ -235,7 +260,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           log(post, 'Escrito a mano', undefined, by)
         }
         await store.put('posts', post)
-        // Con IA: se investiga, se escribe, se revisa y se ilustra en segundo plano
+        await placePost(post, placeOpts())
         if (!req.body.manual) startStep(post.id, 'todo', by)
         return res.status(200).json({ post, working: !req.body.manual })
       }
@@ -244,6 +269,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!post) return res.status(404).json({ error: 'Artículo no encontrado' })
 
       if (!c && req.method === 'GET') {
+        const hadGaps = hasSergiPlaceholders(post.body) || (post.checks || []).some((c) => c.id === 'gaps')
+        if (hadGaps) {
+          post.body = stripSergiPlaceholders(post.body)
+          const r = runChecks(post, s, rules)
+          post.checks = r.checks
+          post.score = r.score
+          if (hasSergiPlaceholders(post.body) === false) log(post, 'Huecos retirados', 'El texto ya se puede publicar sin editar')
+          await store.put('posts', post)
+        }
         return res.status(200).json({ post, working: isRunning(post.id), themes: s.customThemes })
       }
       if (!c && req.method === 'PUT') {
@@ -269,22 +303,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(202).json({ post, working: true })
       }
       if (c === 'approve' && req.method === 'POST') {
-        if (/\[SERGI:/.test(post.body)) return res.status(400).json({ error: 'Quedan huecos [SERGI: …] por rellenar' })
         if (!post.body) return res.status(400).json({ error: 'El artículo todavía no tiene texto' })
+        post.body = stripSergiPlaceholders(post.body)
         post.status = 'aprobado'
-        // Si no tenía fecha, ocupa el siguiente hueco libre del calendario
-        const slots = await store.list<Slot>('slots')
-        if (!slots.some((sl) => sl.postId === post.id)) {
-          const free = slots.filter((sl) => !sl.postId && sl.at > new Date().toISOString() && sl.kind === 'normal').sort((x, y) => x.at.localeCompare(y.at))[0]
-          if (free) {
-            free.postId = post.id
-            post.scheduledAt = free.at
-            await store.put('slots', free)
-          }
-        }
+        if (!post.scheduledAt) await placePost(post)
         log(post, 'Aprobado', post.scheduledAt ? `Se publicará el ${new Date(post.scheduledAt).toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })}` : undefined, by)
         await store.put('posts', post)
-        return res.status(200).json({ post, message: post.scheduledAt ? 'Aprobado. Se publicará y subirá a la web solo en su fecha.' : 'Aprobado. No hay huecos libres en el calendario: usa «Publicar ahora» o planifica más semanas.' })
+        return res.status(200).json({ post, message: post.scheduledAt ? 'Aprobado. Se publicará y subirá a la web solo en su fecha.' : 'Aprobado. Usa «Publicar ahora» si quieres que salga hoy.' })
       }
       if (c === 'reject' && req.method === 'POST') {
         post.status = 'rechazado'
@@ -302,8 +327,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({ post })
       }
       if (c === 'publish' && req.method === 'POST') {
-        if (/\[SERGI:/.test(post.body)) return res.status(400).json({ error: 'Quedan huecos [SERGI: …] por rellenar' })
         if (!post.body) return res.status(400).json({ error: 'El artículo todavía no tiene texto' })
+        post.body = stripSergiPlaceholders(post.body)
+        await store.put('posts', post)
         const r = await publishPost(post, by)
         return res.status(200).json({ post: await store.get<Post>('posts', post.id), message: r.message })
       }

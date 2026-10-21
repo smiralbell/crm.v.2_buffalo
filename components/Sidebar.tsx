@@ -84,7 +84,6 @@ const NAV: NavItem[] = [
     ],
   },
   { href: '/pipelines', label: 'Pipelines', icon: Workflow, roles: ['admin'] },
-  { href: '/blog', label: 'Blog', icon: FileText, roles: ['admin'] },
   {
     href: '/marketing',
     label: 'Marketing',
@@ -92,6 +91,7 @@ const NAV: NavItem[] = [
     icon: Megaphone,
     roles: ['admin'],
     children: [
+      { href: '/marketing', label: 'Blog', tab: 'blog' },
       { href: '/marketing', label: 'Métricas globales', tab: 'global' },
       { href: '/marketing', label: 'Web', tab: 'web' },
       { href: '/marketing', label: 'Email Outreach', tab: 'email' },
@@ -270,6 +270,7 @@ export default function Sidebar({
   }
 
   const isParentActive = (item: NavItem) => {
+    if (item.href === '/marketing' && router.pathname.startsWith('/blog')) return true
     if (router.pathname === item.href || router.pathname.startsWith(`${item.href}/`)) return true
     return Boolean(
       item.children?.some(
@@ -526,7 +527,10 @@ export default function Sidebar({
                             : child.href
                           const tabParam = router.query.tab as string | undefined
                           const ccParam = router.query.cc as string | undefined
-                          const childActive = child.tab
+                          const childActive = child.tab === 'blog'
+                            ? (router.pathname === '/marketing' && tabParam === 'blog') ||
+                              router.pathname.startsWith('/blog')
+                            : child.tab
                             ? router.pathname === child.href &&
                               tabParam === child.tab &&
                               (child.cc

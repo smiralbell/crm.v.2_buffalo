@@ -197,7 +197,7 @@ export default function Ajustes({ state, reload }: TabProps) {
             <Button size="sm" variant="outline" className="gap-1 rounded-xl" onClick={() => set('schedule', { pauses: [...sc.pauses, { label: 'Pausa', from: sc.startDate, to: sc.startDate }] })}><Plus className="h-3.5 w-3.5" /> Pausa</Button>
           </Panel>
 
-          <Panel title="Plazos de trabajo" info="Cuántos días antes de cada fecha empieza el sistema a trabajar. Con 10 y 7, Sergi tiene una semana para revisar.">
+          <Panel title="Plazos de trabajo" info="Cuántos días antes de cada fecha empieza el sistema a escribir. Con 2, el aviso de revisión llega con margen para leerlo y aprobarlo.">
             <div className="grid grid-cols-2 gap-3">
               <Field label="Investigar: días antes"><input className={inputCls} type="number" value={s.leadTimes.briefDaysBefore} onChange={(e) => set('leadTimes', { briefDaysBefore: num(e.target.value) })} /></Field>
               <Field label="Escribir: días antes"><input className={inputCls} type="number" value={s.leadTimes.draftDaysBefore} onChange={(e) => set('leadTimes', { draftDaysBefore: num(e.target.value) })} /></Field>
@@ -221,7 +221,7 @@ export default function Ajustes({ state, reload }: TabProps) {
           {([
             ['voice', 'Voz y prompt', 'Quién escribe, a quién, con qué tono y qué tesis defiende. Es lo primero que lee la IA.'],
             ['structure', 'Estructura del artículo', 'La plantilla que siguen todos los artículos: qué va primero, qué secciones lleva, cuándo se salta algo.'],
-            ['ownMaterial', 'Material propio y límites', 'Casos reales, frases de clientes y lo que nunca se puede decir. La IA solo usa esto como experiencia propia; si le falta, deja un hueco [SERGI: …] para rellenar.'],
+            ['ownMaterial', 'Material propio y límites', 'Casos reales, frases de clientes y lo que nunca se puede decir. La IA usa esto como experiencia propia; si no encaja, escribe una situación cotidiana genérica. Nunca deja huecos en el texto.'],
           ] as const).map(([k, label, info]) => (
             <Panel key={k} title={label} info={info}>
               <textarea className={inputCls + ' min-h-[200px] font-mono text-xs leading-relaxed'} value={r[k]} onChange={(e) => setR({ ...r, [k]: e.target.value })} />

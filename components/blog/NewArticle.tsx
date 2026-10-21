@@ -1,11 +1,12 @@
 import { useRouter } from 'next/router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ListOrdered, Loader2, PenLine, Sparkles, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { Topic } from '@/lib/blog/types'
+import type { Slot, Topic } from '@/lib/blog/types'
 import { cn } from '@/lib/utils'
 import { CategorySelect } from './Categories'
-import { api, Field, inputCls, Modal, Notice, THEME_COLOR, THEME_NAMES } from './shared'
+import { api, Field, fmt, inputCls, Modal, Notice, THEME_COLOR, THEME_NAMES } from './shared'
+import type { NewArticleOpts } from './types'
 
 type Mode = 'auto' | 'cola' | 'idea' | 'manual'
 
@@ -16,32 +17,94 @@ const MODES: { id: Mode; icon: typeof Sparkles; title: string; text: string }[] 
   { id: 'manual', icon: PenLine, title: 'Lo escribo yo', text: 'Redactas tú en un editor sencillo. El sistema revisa el SEO y hace las imágenes.' },
 ]
 
-export default function NewArticle({ open, onClose, topics, reload }: { open: boolean; onClose: () => void; topics: Topic[]; reload?: () => Promise<void> }) {
+function nextFreeSlot(slots: Slot[]) {
+  const now = new Date().toISOString()
+  return [...slots].filter((s) => !s.postId && s.at > now).sort((a, b) => a.at.localeCompare(b.at))[0]
+}
+
+export default function NewArticle({
+  open,
+  onClose,
+  topics,
+  slots = [],
+  preset,
+  reload,
+}: {
+  open: boolean
+  onClose: () => void
+  topics: Topic[]
+  slots?: Slot[]
+  preset?: NewArticleOpts
+  reload?: () => Promise<void>
+}) {
   const router = useRouter()
   const queue = topics.filter((t) => t.status === 'pendiente').sort((a, b) => (a.source === 'calendario' ? 1 : 0) - (b.source === 'calendario' ? 1 : 0) || a.order - b.order)
+  const presetSlot = preset?.slotId ? slots.find((s) => s.id === preset.slotId) : undefined
+  const next = nextFreeSlot(slots)
+
   const [mode, setMode] = useState<Mode>('auto')
   const [topicId, setTopicId] = useState('')
   const [title, setTitle] = useState('')
   const [notes, setNotes] = useState('')
   const [keyword, setKeyword] = useState('')
   const [theme, setTheme] = useState('')
+  const [schedule, setSchedule] = useState(true)
+  const [date, setDate] = useState('')
+  const [time, setTime] = useState('10:00')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
+  useEffect(() => {
+    if (!open) return
+    setErr('')
+    setBusy(false)
+    const slot = preset?.slotId ? slots.find((s) => s.id === preset.slotId) : undefined
+    if (slot) {
+      setSchedule(true)
+      setDate(new Date(slot.at).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' }))
+      setTime(new Date(slot.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid', hour12: false }))
+    } else if (preset?.date) {
+      setSchedule(true)
+      setDate(preset.date)
+      setTime('10:00')
+      } else {
+        const free = nextFreeSlot(slots)
+        setSchedule(true)
+        if (free) {
+          setDate(new Date(free.at).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' }))
+          setTime(new Date(free.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid', hour12: false }))
+        } else {
+          const d = new Date()
+          d.setDate(d.getDate() + (d.getDay() === 5 ? 3 : d.getDay() === 6 ? 2 : 1))
+          setDate(d.toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' }))
+          setTime('10:00')
+        }
+      }
+  }, [open, preset?.slotId, preset?.date, slots])
+
   const chosen = queue.find((t) => t.id === (topicId || queue[0]?.id))
+  const lockedSlot = Boolean(presetSlot)
 
   const create = async () => {
     setBusy(true)
     setErr('')
     try {
+      const when = schedule
+        ? {
+            slotId: preset?.slotId,
+            date: preset?.slotId ? undefined : date || undefined,
+            time: preset?.slotId ? undefined : time || undefined,
+            schedule: true,
+          }
+        : { schedule: false }
       const body =
         mode === 'auto'
-          ? { auto: true, focus: notes, theme }
+          ? { auto: true, focus: notes, theme, ...when }
           : mode === 'cola'
-            ? { topicId: chosen?.id }
+            ? { topicId: chosen?.id, ...when }
             : mode === 'idea'
-              ? { title, notes, keyword, theme: theme || 'A' }
-              : { title, theme: theme || 'A', keyword, manual: true }
+              ? { title, notes, keyword, theme: theme || 'A', ...when }
+              : { title, theme: theme || 'A', keyword, manual: true, ...when }
       const { post } = await api('post/new', { body })
       router.push(`/blog/${post.id}`)
     } catch (e) {
@@ -52,9 +115,15 @@ export default function NewArticle({ open, onClose, topics, reload }: { open: bo
 
   const ready = mode === 'auto' ? true : mode === 'cola' ? !!chosen : !!title.trim()
   const button = { auto: 'Buscar tema y escribirlo', cola: 'Escribir este tema', idea: 'Que la IA lo escriba', manual: 'Abrir el editor' }[mode]
+  const whenLabel = schedule && date ? `${new Date(date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })} a las ${time || '10:00'}` : null
 
   return (
     <Modal open={open} onClose={onClose} title="Nuevo artículo" wide>
+      <p className="mb-4 text-sm text-gray-500">
+        {presetSlot || preset?.date
+          ? 'Este artículo queda en la fecha que has elegido. Puedes escribirlo tú o dejar que lo haga la IA.'
+          : 'Crea un artículo ahora, sin esperar al piloto automático. Elige cómo se escribe y cuándo sale.'}
+      </p>
       <div className="grid gap-2.5 sm:grid-cols-2">
         {MODES.map((m) => (
           <button
@@ -79,23 +148,20 @@ export default function NewArticle({ open, onClose, topics, reload }: { open: bo
         {mode === 'auto' && (
           <>
             <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
-              <Field label="Enfoque (opcional)" info="Si lo dejas vacío, la IA mira todo lo que hacéis (asistentes virtuales, WhatsApp y llamadas, automatizaciones…) y busca dónde hay más demanda ahora. Si quieres acotar, escribe algo como «clínicas» o «WhatsApp».">
+              <Field label="Enfoque (opcional)" info="Si lo dejas vacío, la IA mira todo lo que hacéis y busca dónde hay más demanda ahora. Si quieres acotar, escribe algo como «clínicas» o «WhatsApp».">
                 <input className={inputCls} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ej.: despachos de abogados" />
               </Field>
               <Field label="Categoría (opcional)">
                 <CategorySelect value={theme} onChange={setTheme} allowAll="Cualquiera" withNews={false} onCreated={reload} />
               </Field>
             </div>
-            <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-relaxed text-gray-600">
-              Mira las búsquedas reales de Google, Bing y DuckDuckGo y lo que está cambiando en el mercado, elige el tema con más interés que no hayáis tratado y lo escribe. Las otras ideas que encuentre se guardan en Temas → Buscar ideas.
-            </p>
           </>
         )}
 
         {mode === 'cola' &&
           (queue.length ? (
             <>
-              <Field label="Tema" info="Los temas de la cola salen del calendario anual de Sergi y de las ideas que hayáis aceptado en Temas.">
+              <Field label="Tema" info="Los temas de la cola salen del calendario anual y de las ideas que hayáis aceptado en Temas.">
                 <select className={inputCls} value={chosen?.id || ''} onChange={(e) => setTopicId(e.target.value)}>
                   {queue.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
                 </select>
@@ -108,7 +174,7 @@ export default function NewArticle({ open, onClose, topics, reload }: { open: bo
               )}
             </>
           ) : (
-            <Notice>No hay temas en la cola. Usa «Que la IA elija» o «Un tema mío».</Notice>
+            <Notice>No hay temas pendientes en la cola. Elige «Que la IA elija» o «Un tema mío»: el artículo se crea igual.</Notice>
           ))}
 
         {(mode === 'idea' || mode === 'manual') && (
@@ -134,6 +200,33 @@ export default function NewArticle({ open, onClose, topics, reload }: { open: bo
             </div>
           </>
         )}
+
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+          <label className="flex items-start gap-3">
+            <input type="checkbox" className="mt-1 h-4 w-4 accent-gray-900" checked={schedule} onChange={(e) => setSchedule(e.target.checked)} />
+            <span>
+              <span className="block text-sm font-medium text-gray-900">Ponerlo en el calendario</span>
+              <span className="block text-xs text-gray-500">
+                {lockedSlot
+                  ? `Sale el ${fmt(presetSlot!.at)}.`
+                  : next && !date
+                    ? `Si no eliges día, ocupa el siguiente hueco libre (${fmt(next.at)}).`
+                    : 'Elige cualquier día. Si ese día no tenía hueco, se crea uno.'}
+              </span>
+            </span>
+          </label>
+          {schedule && !lockedSlot && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label="Día">
+                <input className={inputCls} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              </Field>
+              <Field label="Hora">
+                <input className={inputCls} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+              </Field>
+            </div>
+          )}
+          {schedule && whenLabel && <p className="mt-2 text-xs text-gray-500">Se publicará el {whenLabel}.</p>}
+        </div>
 
         {mode !== 'manual' && <p className="text-center text-xs text-gray-400">Tarda entre 3 y 7 minutos. Verás el avance en la ficha del artículo y puedes salir mientras trabaja.</p>}
         {err && <Notice tone="error">{err}</Notice>}

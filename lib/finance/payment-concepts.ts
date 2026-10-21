@@ -229,7 +229,7 @@ export const MANUAL_TRANSFER_RULES = [
     format: 'DEV {ID} {NOMBRE} {PROYECTO-ID}',
     example: 'DEV 3 LAURA BUF-2026-0042',
     detail:
-      'ID = número del developer en Usuarios (crm_users). PROYECTO-ID = código del proyecto (p. ej. BUF-2026-0042).',
+      'ID = número del developer (Menú → Usuarios, o el buscador de arriba). PROYECTO-ID = código BUF-… del proyecto (Menú → Proyectos), no el UUID. Usa «Montar el concepto DEV» para no equivocarte.',
   },
   {
     category: 'Liquidación IVA (Hacienda)',

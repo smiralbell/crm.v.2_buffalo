@@ -78,9 +78,9 @@ export const DEFAULT_SETTINGS: BlogSettings = {
     planAheadWeeks: 3,
     newsEvery: 6,
     pauses: [{ from: '2026-12-21', to: '2027-01-03', label: 'Navidad' }],
-    startDate: '2026-11-02',
+    startDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' }),
   },
-  leadTimes: { briefDaysBefore: 10, draftDaysBefore: 7 },
+  leadTimes: { briefDaysBefore: 2, draftDaysBefore: 2 },
   topics: { source: 'calendario', proposalsPerSearch: 6 },
   models: { ...MODEL_PRESETS.economico.models, preset: 'economico' },
   images: {
@@ -128,7 +128,7 @@ export const DEFAULT_RULES: BlogRules = {
 - Nuestra tesis: si automatizas un proceso roto, solo consigues que funcione mal más rápido. Primero se audita y se decide; la tecnología viene después. Y no todo debe automatizarse.
 - Comparamos con lo que el lector haría si no nos llama: seguir a mano, contratar a otra persona o usar herramientas sueltas. No con otras agencias.
 - Varía la longitud de las frases. Alguna muy corta. Ninguna frase de relleno que repita el título.
-- Donde falte material propio, deja [SERGI: qué falta] en lugar de inventarlo.`,
+- Nunca dejes huecos, corchetes ni notas para el equipo. El artículo tiene que poder publicarse tal cual. Si no hay un caso propio que encaje, usa una situación cotidiana genérica (un despacho que pierde llamadas, una inmobiliaria con WhatsApp sin filtrar) sin inventar nombres de cliente ni cifras.`,
 
   structure: `1. H1 con la palabra clave principal, escrito como lo buscaría un gerente.
 2. Respuesta directa en los dos primeros párrafos: el dolor real y la respuesta corta.

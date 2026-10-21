@@ -3,24 +3,25 @@
  *
  * Cada pocos minutos (tick):
  *  1. Planifica los huecos aleatorios de las próximas semanas.
- *  2. Asigna un tema a cada hueco que se acerca (calendario de Sergi,
+ *  2. Asigna un tema a cada hueco futuro vacío (calendario de Sergi,
  *     propuestas aceptadas, temas manuales o, en los huecos de
- *     actualidad, una noticia).
+ *     actualidad, una noticia). La asignación no espera al piloto automático.
  *  3. Hace avanzar cada artículo: brief (N días antes) → borrador,
  *     control SEO e imágenes (M días antes) → revisión → publicación
  *     en su hora.
  * Todo se puede lanzar también a mano desde el panel.
  */
-import { getRules, getSettings } from './config'
+import { getRules, getSettings, migrateRulesIfNeeded, migrateSettingsIfNeeded } from './config'
 import { calendarTopics } from './calendar-seed'
 import { findNews, proposeTopics } from './research'
-import { ensurePlanned } from './schedule'
+import { ensurePlanned, isoWeek, nextPublishAt, slotOnDay, zonedDay } from './schedule'
 import { uploadSite } from './publish'
 import { CancelledError, jobContext } from './ai'
 import { blockingFailures, runChecks } from './seo'
 import * as store from './store'
 import type { BlogRules, BlogSettings, Post, RunLog, Slot, Topic } from './types'
-import { checkAndFix, log, makeBrief, makeDraft, makeImages } from './writer'
+import { checkAndFix, hasSergiPlaceholders, log, makeBrief, makeDraft, makeImages, stripSergiPlaceholders } from './writer'
+import { alertBlogReadyForReview, alertBlogReviewDigest } from './alerts'
 
 const DAY = 24 * 3600 * 1000
 const nowIso = () => new Date().toISOString()
@@ -42,6 +43,8 @@ export async function monthSpend(): Promise<number> {
 export async function bootstrap() {
   const topics = await store.list<Topic>('topics')
   if (!topics.some((t) => t.source === 'calendario')) await store.putMany('topics', calendarTopics())
+  await migrateRulesIfNeeded()
+  await migrateSettingsIfNeeded()
 }
 
 export function emptyPost(t: Partial<Topic> & { title: string; theme: Topic['theme'] }, s: BlogSettings): Post {
@@ -83,14 +86,64 @@ function nextTopic(topics: Topic[], s: BlogSettings, kind: Slot['kind']): Topic 
   return chosen[0] || cal[0] || null // mixto: primero lo que elegís, luego el calendario
 }
 
-async function assignSlots(s: BlogSettings, slots: Slot[]) {
-  const horizon = Date.now() + (s.leadTimes.briefDaysBefore + 4) * DAY
+/**
+ * Pone un artículo en el calendario.
+ * - slotId: ese hueco concreto.
+ * - at / date: ese día (reutiliza un hueco libre o crea uno fijado).
+ * - si no se indica nada: el siguiente hueco libre, o uno nuevo en el próximo laborable.
+ * Devuelve null solo si se pide explícitamente no programar.
+ */
+export async function placePost(
+  post: Post,
+  opts: { slotId?: string; at?: string; date?: string; time?: string; schedule?: boolean } = {}
+): Promise<Slot | null> {
+  if (opts.schedule === false) {
+    delete post.scheduledAt
+    await store.put('posts', post)
+    return null
+  }
+
+  const slots = (await store.list<Slot>('slots')).sort((a, b) => a.at.localeCompare(b.at))
+  for (const other of slots) {
+    if (other.postId === post.id && other.id !== opts.slotId) {
+      delete other.postId
+      await store.put('slots', other)
+    }
+  }
+
+  let slot: Slot | undefined
+  if (opts.slotId) {
+    slot = slots.find((s) => s.id === opts.slotId)
+    if (!slot) throw new Error('Hueco no encontrado')
+  } else if (opts.date || opts.at) {
+    const day = opts.date || zonedDay(opts.at!)
+    const time = opts.time || (opts.at ? new Date(opts.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid', hour12: false }) : '10:00')
+    slot = await slotOnDay(day, time)
+  } else {
+    slot = slots.find((s) => !s.postId && s.at > nowIso())
+    if (!slot) {
+      const at = nextPublishAt()
+      slot = { id: store.newId('slot-'), at: at.toISOString(), week: isoWeek(at), kind: 'normal', locked: true }
+    }
+  }
+
+  slot.postId = post.id
+  post.scheduledAt = slot.at
+  await store.put('slots', slot)
+  await store.put('posts', post)
+  return slot
+}
+
+/** Rellena cada hueco futuro vacío con el siguiente tema de la cola. No escribe: solo asigna. */
+export async function assignSlots(s: BlogSettings, slots: Slot[], opts: { fetchNews?: boolean; ignoreHorizon?: boolean } = {}) {
+  const newsHorizon = Date.now() + (s.leadTimes.briefDaysBefore + 4) * DAY
   const topics = await store.list<Topic>('topics')
-  for (const slot of slots) {
-    if (slot.postId || new Date(slot.at).getTime() > horizon || new Date(slot.at).getTime() < Date.now()) continue
+  for (const slot of [...slots].sort((a, b) => a.at.localeCompare(b.at))) {
+    if (slot.postId || new Date(slot.at).getTime() < Date.now()) continue
+    // La actualidad espera a acercarse la fecha para coger una noticia reciente
+    if (slot.kind === 'actualidad' && !opts.ignoreHorizon && new Date(slot.at).getTime() > newsHorizon) continue
     let topic = nextTopic(topics, s, slot.kind)
-    if (!topic && slot.kind === 'actualidad') {
-      // No hay noticia elegida: se busca la más relevante de las dos últimas semanas
+    if (!topic && slot.kind === 'actualidad' && opts.fetchNews) {
       try {
         const posts = await store.list<Post>('posts')
         const { topics: news, usd } = await findNews(s, 3, posts)
@@ -102,7 +155,6 @@ async function assignSlots(s: BlogSettings, slots: Slot[]) {
       } catch (e) {
         await record('noticias', false, e instanceof Error ? e.message : String(e))
       }
-      // Si no hay ninguna noticia que valga la pena, el hueco pasa a ser normal
       if (!topic) {
         slot.kind = 'normal'
         topic = nextTopic(topics, s, 'normal')
@@ -118,6 +170,16 @@ async function assignSlots(s: BlogSettings, slots: Slot[]) {
     await store.put('topics', topic)
     await store.put('slots', slot)
   }
+}
+
+/** Reserva fechas de las próximas semanas y pone un tema en cada hueco vacío. */
+export async function planAndAssign(): Promise<Slot[]> {
+  const s = await getSettings()
+  const slots = await ensurePlanned(s)
+  await assignSlots(s, slots)
+  await stripPlaceholdersFromPosts()
+  await notifyPendingReviews()
+  return store.list<Slot>('slots')
 }
 
 /* ---------------- Pasos de un artículo ---------------- */
@@ -250,6 +312,7 @@ export async function runStep(postId: string, step: Step, by?: string): Promise<
       await saveImagesApart(post)
     }
     if (step !== 'brief' && post.body) afterChecks(post, s, rules)
+    await notifyIfNewReview(post)
     if (by) log(post, `Paso «${step}» lanzado a mano`, undefined, by)
     delete post.lastError
     await save()
@@ -265,14 +328,63 @@ function afterChecks(post: Post, s: BlogSettings, rules: BlogRules) {
   post.score = score
   if (!['borrador', 'brief'].includes(post.status)) return
   const ok = blockingFailures(checks).length === 0
-  const gaps = /\[SERGI:/.test(post.body)
-  if (s.publishing.mode === 'automatico' && ok && !gaps) {
+  if (s.publishing.mode === 'automatico' && ok) {
     post.status = 'aprobado'
     log(post, 'Aprobado automáticamente', `Nota ${score}/100`)
   } else {
     post.status = 'revision'
     log(post, 'Pendiente de revisión', ok ? `Nota ${score}/100` : 'Con fallos de control: revisar antes de aprobar')
   }
+}
+
+async function notifyIfNewReview(post: Post) {
+  if (post.status !== 'revision' || !post.body) return
+  if (post.history.some((h) => h.event === 'Aviso de revisión enviado')) return
+  await alertBlogReadyForReview(post)
+  log(post, 'Aviso de revisión enviado')
+  await record('aviso-revision', true, `Para revisar: ${post.h1 || post.title}`)
+}
+
+async function stripPlaceholdersFromPosts() {
+  const s = await getSettings()
+  const rules = await getRules()
+  const posts = await store.list<Post>('posts')
+  for (const p of posts) {
+    const hadGaps = !!(p.body && hasSergiPlaceholders(p.body)) || (p.checks || []).some((c) => c.id === 'gaps')
+    if (!hadGaps) continue
+    if (p.body) p.body = stripSergiPlaceholders(p.body)
+    const r = runChecks(p, s, rules)
+    p.checks = r.checks
+    p.score = r.score
+    log(p, 'Huecos retirados', 'El texto ya se puede publicar sin editar')
+    await store.put('posts', p)
+  }
+}
+
+/** Avisa si hay artículos en revisión (también con el piloto en pausa). */
+export async function notifyPendingReviews() {
+  const posts = await store.list<Post>('posts')
+  const waiting = posts.filter((p) => p.status === 'revision' && p.body)
+  if (!waiting.length) return
+  let sentNew = false
+  for (const p of waiting) {
+    if (p.history.some((h) => h.event === 'Aviso de revisión enviado')) continue
+    await alertBlogReadyForReview(p)
+    log(p, 'Aviso de revisión enviado')
+    await store.put('posts', p)
+    sentNew = true
+  }
+  const today = nowIso().slice(0, 10)
+  const runs = await store.list<RunLog>('runs')
+  if (runs.some((r) => r.kind === 'aviso-revision' && r.at.startsWith(today))) return
+  if (sentNew) {
+    await record('aviso-revision', true, waiting.length === 1
+      ? `Para revisar: ${waiting[0].h1 || waiting[0].title}`
+      : `${waiting.length} artículos para revisar`)
+    return
+  }
+  await alertBlogReviewDigest(waiting)
+  await record('aviso-revision', true, `${waiting.length} ${waiting.length === 1 ? 'artículo sigue' : 'artículos siguen'} pendientes de revisar`)
 }
 
 export async function publishPost(post: Post, by?: string): Promise<{ uploaded: boolean; message: string }> {
@@ -330,11 +442,13 @@ export async function tick(reason = 'programado'): Promise<{ ok: boolean; messag
   ticking = true
   try {
     const s = await getSettings()
-    if (!s.enabled) return { ok: true, message: 'El motor está en pausa (Configuración → Activar)' }
     await bootstrap()
     const slots = await ensurePlanned(s)
+    await assignSlots(s, slots, { fetchNews: s.enabled })
+    await stripPlaceholdersFromPosts()
+    await notifyPendingReviews()
+    if (!s.enabled) return { ok: true, message: 'Calendario actualizado. El piloto automático está en pausa: no se escribe nada solo, pero cada fecha ya tiene tema. Puedes crear un artículo cuando quieras.' }
     const overBudget = (await monthSpend()) >= s.budget.monthlyUsd
-    if (!overBudget) await assignSlots(s, slots)
 
     const posts = await store.list<Post>('posts')
     const now = Date.now()
@@ -347,7 +461,7 @@ export async function tick(reason = 'programado'): Promise<{ ok: boolean; messag
         else if (post.status === 'revision' && s.publishing.mode === 'revision_con_plazo') {
           const since = post.history.find((h) => h.event === 'Pendiente de revisión')?.at
           const fails = blockingFailures(post.checks || []).length
-          if (since && !fails && !/\[SERGI:/.test(post.body) && now - new Date(since).getTime() >= s.publishing.autoPublishAfterHours * 3600 * 1000) {
+          if (since && !fails && now - new Date(since).getTime() >= s.publishing.autoPublishAfterHours * 3600 * 1000) {
             post.status = 'aprobado'
             log(post, 'Aprobado por plazo', `Nadie lo rechazó en ${s.publishing.autoPublishAfterHours} h`)
             await store.put('posts', post)

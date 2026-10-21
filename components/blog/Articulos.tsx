@@ -5,7 +5,6 @@ import { AlertCircle, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { PostStatus, Topic } from '@/lib/blog/types'
 import { cn } from '@/lib/utils'
-import NewArticle from './NewArticle'
 import { CategorySelect } from './Categories'
 import { fmt, Info, inputCls, KIND_NAMES, Pill, Segmented, STATUS, StatusPill, THEME_COLOR, THEME_NAMES, ThemePill } from './shared'
 import type { PostLite, TabProps } from './types'
@@ -43,13 +42,12 @@ function Card({ p, origin }: { p: PostLite; origin?: Topic['source'] }) {
   )
 }
 
-export default function Articulos({ state, reload }: TabProps) {
+export default function Articulos({ state, reload, onNewArticle }: TabProps) {
   const router = useRouter()
   const [view, setView] = useState<View>('tablero')
   const [q, setQ] = useState('')
   const [theme, setTheme] = useState('')
   const [showRejected, setShowRejected] = useState(false)
-  const [creating, setCreating] = useState(false)
 
   const topicSource = useMemo(() => new Map(state.topics.map((t) => [t.id, t.source])), [state.topics])
   const posts = state.posts.filter((p) => {
@@ -80,7 +78,7 @@ export default function Articulos({ state, reload }: TabProps) {
         <label className="flex items-center justify-center gap-2 text-xs text-gray-500">
           <input type="checkbox" className="h-3.5 w-3.5 accent-gray-900" checked={showRejected} onChange={(e) => setShowRejected(e.target.checked)} /> Descartados
         </label>
-        <Button className="gap-1.5 rounded-xl" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nuevo artículo</Button>
+        <Button className="gap-1.5 rounded-xl" onClick={() => onNewArticle?.()}><Plus className="h-4 w-4" /> Nuevo artículo</Button>
       </div>
 
       {posts.length === 0 && (
@@ -165,7 +163,6 @@ export default function Articulos({ state, reload }: TabProps) {
         </div>
       )}
 
-      <NewArticle open={creating} onClose={() => setCreating(false)} topics={state.topics} reload={reload} />
     </div>
   )
 }

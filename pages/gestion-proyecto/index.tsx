@@ -28,6 +28,25 @@ const serviceLabel: Record<string, string> = {
   geo_seo: 'GEO / SEO',
 }
 
+function sameText(a: string, b: string) {
+  return a.trim().toLowerCase() === b.trim().toLowerCase()
+}
+
+/** Título de caja: cliente asociado grande, empresa debajo. Sin repetir el nombre del proyecto. */
+function cardIdentity(row: ProjectListRow): { title: string; subtitle: string | null } {
+  if (row.kind === 'assignment') {
+    return { title: row.name, subtitle: 'Asignación interna' }
+  }
+  const nombre = (row.contact?.nombre || '').trim()
+  const empresa = (row.contact?.empresa || '').trim()
+  if (nombre && empresa && !sameText(nombre, empresa)) {
+    return { title: nombre, subtitle: empresa }
+  }
+  if (nombre) return { title: nombre, subtitle: null }
+  if (empresa) return { title: empresa, subtitle: null }
+  return { title: row.contact?.email || row.name || 'Sin cliente', subtitle: null }
+}
+
 export default function GestionProyectoPage() {
   const { user } = useAuth()
   const isDeveloper = user?.role === 'developer'
@@ -145,12 +164,7 @@ export default function GestionProyectoPage() {
               const href = isAssignment
                 ? `/gestion-proyecto/asignaciones/${row.id}`
                 : `/gestion-proyecto/proyectos/${row.id}`
-              const clientName = isAssignment
-                ? 'Asignación interna'
-                : row.contact?.empresa ||
-                  row.contact?.nombre ||
-                  row.contact?.email ||
-                  'Sin cliente'
+              const { title, subtitle } = cardIdentity(row)
               const openTasks =
                 row.task_counts.pending +
                 row.task_counts.in_progress +
@@ -190,15 +204,17 @@ export default function GestionProyectoPage() {
                           inProduction ? 'text-emerald-950' : 'text-gray-900'
                         }`}
                       >
-                        {row.name}
+                        {title}
                       </h2>
-                      <p
-                        className={`text-sm mt-1 truncate ${
-                          inProduction ? 'text-emerald-800/70' : 'text-gray-600'
-                        }`}
-                      >
-                        {clientName}
-                      </p>
+                      {subtitle && (
+                        <p
+                          className={`text-sm mt-1 truncate ${
+                            inProduction ? 'text-emerald-800/70' : 'text-gray-600'
+                          }`}
+                        >
+                          {subtitle}
+                        </p>
+                      )}
                     </div>
                     <div className="shrink-0 flex flex-col items-end gap-1">
                       {!isAssignment && (

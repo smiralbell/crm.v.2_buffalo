@@ -74,7 +74,7 @@ export default function BlogPostPage() {
     setRedoOpen(false)
     try {
       const r = await api<{ post?: Post; working?: boolean; message?: string }>(`post/${id}${path}`, { body, method })
-      if (key === 'delete') return push('/blog?tab=articulos')
+      if (key === 'delete') return push('/marketing?tab=blog&view=articulos')
       if (r.post) setPost(r.post)
       if (key === 'save') setDirty(false)
       if (r.message) setMsg(r.message)
@@ -97,7 +97,6 @@ export default function BlogPostPage() {
   const save = () => act('save', '', { h1: post.h1, slug: post.slug, metaDescription: post.metaDescription, keyword: post.keyword, secondary: post.secondary, excerpt: post.excerpt, body: post.body, theme: post.theme }, 'PUT')
   const r = post.brief?.research
   const fails = (post.checks || []).filter((c) => !c.ok && c.severity === 'error').length
-  const gaps = (post.body.match(/\[SERGI:/g) || []).length
   const doneSince = (event: string) => post.history.some((h) => h.event.startsWith(event) && h.at >= startedAt)
   const live = post.status === 'publicado'
   const auto = post.history.some((h) => h.event === 'La IA está eligiendo el tema')
@@ -124,7 +123,7 @@ export default function BlogPostPage() {
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
-                <Link href="/blog?tab=articulos" className="mr-1 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900"><ArrowLeft className="h-3.5 w-3.5" /> Artículos</Link>
+                <Link href="/marketing?tab=blog&view=articulos" className="mr-1 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900"><ArrowLeft className="h-3.5 w-3.5" /> Artículos</Link>
                 <StatusPill status={post.status} />
                 <ThemePill theme={post.theme} />
                 <Pill className="bg-gray-100 text-gray-600">{KIND_NAMES[post.kind]}</Pill>
@@ -203,7 +202,6 @@ export default function BlogPostPage() {
         {post.lastError && !working && <Notice tone="error"><b>No se pudo completar ({post.lastError.step}).</b> {post.lastError.message} — usa «{post.manual ? 'Ayuda de la IA' : 'Rehacer'}» para intentarlo otra vez.</Notice>}
         {msg && <Notice tone="ok">{msg}</Notice>}
         {err && <Notice tone="error">{err}</Notice>}
-        {!working && gaps > 0 && <Notice tone="warn">Hay {gaps} {gaps === 1 ? 'hueco' : 'huecos'} <b>[SERGI: …]</b> donde hace falta un caso o dato vuestro. Complétalos en «Escribir» antes de aprobar.</Notice>}
         {!working && post.body && fails > 0 && !live && <Notice tone="warn">{fails} {fails === 1 ? 'norma SEO no se cumple' : 'normas SEO no se cumplen'}. Mira «Revisión SEO» a la izquierda.</Notice>}
 
         <div className="grid gap-4 xl:grid-cols-[400px_1fr]">
