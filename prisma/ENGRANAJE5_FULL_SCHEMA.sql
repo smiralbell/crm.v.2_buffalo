@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS proyectos (
                               'automation','lead_gen','geo_seo'
                             )),
   status                    TEXT NOT NULL DEFAULT 'development' CHECK (status IN (
-                              'development','active','paused','churned'
+                              'development','active','paused','churned','done'
                             )),
   launched_at               DATE,
 

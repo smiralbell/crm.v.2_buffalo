@@ -2,10 +2,12 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '@/lib/prisma'
 import { requireProjectAccessAPI } from '@/lib/gestion-proyecto/require-project-access'
 import { isAdmin } from '@/lib/auth-rbac'
+import { ensureProjectStatusDoneAllowed } from '@/lib/gestion-proyecto/project-status'
 
 /**
  * POST /api/gestion-proyecto/proyectos/[id]/finalizar
- * Pasa el proyecto a producción (status = active) y marca fecha_fin_real.
+ * Marca el proyecto como Finalizado (status = done).
+ * NO lo pone en producción: eso es POST …/produccion (status = active).
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -33,17 +35,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'El proyecto no está en marcha' })
     }
 
-    const updated = await prisma.$queryRaw<
-      { id: string; status: string; fecha_fin_real: Date | null }[]
-    >`
-      UPDATE proyectos
-      SET
-        status = 'active',
-        fecha_fin_real = COALESCE(fecha_fin_real, CURRENT_DATE),
-        updated_at = NOW()
-      WHERE id = ${id}::uuid
-      RETURNING id, status, fecha_fin_real
-    `
+    const runUpdate = () =>
+      prisma.$queryRaw<{ id: string; status: string; fecha_fin_real: Date | null }[]>`
+        UPDATE proyectos
+        SET
+          status = 'done',
+          fecha_fin_real = COALESCE(fecha_fin_real, CURRENT_DATE),
+          updated_at = NOW()
+        WHERE id = ${id}::uuid
+        RETURNING id, status, fecha_fin_real
+      `
+
+    let updated: { id: string; status: string; fecha_fin_real: Date | null }[]
+    try {
+      updated = await runUpdate()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ''
+      if (msg.includes('proyectos_status') || msg.includes('check constraint') || msg.includes('done')) {
+        await ensureProjectStatusDoneAllowed((sql) => prisma.$executeRawUnsafe(sql))
+        updated = await runUpdate()
+      } else {
+        throw e
+      }
+    }
 
     return res.status(200).json({
       success: true,
@@ -54,7 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ? String(updated[0].fecha_fin_real).slice(0, 10)
           : null,
       },
-      label: 'En producción',
+      label: 'Finalizado',
     })
   } catch (error) {
     if (

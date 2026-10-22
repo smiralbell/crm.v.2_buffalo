@@ -50,6 +50,7 @@ const statusLabel: Record<string, string> = {
   development: 'En desarrollo',
   active: 'En producción',
   paused: 'Pausado',
+  done: 'Finalizado',
 }
 
 function KpiCard({
@@ -152,6 +153,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
   const [targetEnd, setTargetEnd] = useState('')
   const [savingEnd, setSavingEnd] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
+  const [promoting, setPromoting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -194,7 +196,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
   const finalizarProyecto = async () => {
     if (
       !window.confirm(
-        '¿Marcar este proyecto como Finalizado (producción)? En el listado de clientes la tarjeta quedará en verde.'
+        '¿Marcar como Finalizado? No lo pone en producción: la tarjeta quedará en azul. Si luego entra en live, usa «En producción».'
       )
     ) {
       return
@@ -214,7 +216,31 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
     }
   }
 
+  const pasarAProduccion = async () => {
+    if (
+      !window.confirm(
+        '¿Pasar este proyecto a producción (live)? La tarjeta del listado quedará en verde.'
+      )
+    ) {
+      return
+    }
+    setPromoting(true)
+    try {
+      const res = await fetch(`/api/gestion-proyecto/proyectos/${projectId}/produccion`, {
+        method: 'POST',
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'No se pudo pasar a producción')
+      await load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al pasar a producción')
+    } finally {
+      setPromoting(false)
+    }
+  }
+
   const enProduccion = data?.proyecto.status === 'active'
+  const finalizado = data?.proyecto.status === 'done'
 
   if (loading) {
     return (
@@ -255,7 +281,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
 
   return (
     <div className="space-y-4">
-      {/* CTA finalizar → producción */}
+      {/* Estados: desarrollo → Finalizado (azul) → En producción (verde) */}
       {enProduccion ? (
         <div className="relative overflow-hidden rounded-2xl border border-emerald-300 bg-gradient-to-r from-emerald-50 via-white to-emerald-50 px-5 py-4 shadow-sm">
           <div className="absolute inset-y-0 left-0 w-1.5 bg-emerald-500" />
@@ -267,44 +293,94 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
               <div>
                 <p className="text-sm font-semibold text-emerald-900">En producción</p>
                 <p className="text-xs text-emerald-700/80">
-                  Proyecto finalizado y entregado al cliente.
+                  Live con el cliente. Si se marcó por error, puedes dejarlo solo como Finalizado.
                 </p>
               </div>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
-              <Sparkles className="h-3.5 w-3.5" />
-              Live
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                <Sparkles className="h-3.5 w-3.5" />
+                Live
+              </span>
+              <button
+                type="button"
+                onClick={() => void finalizarProyecto()}
+                disabled={finalizing}
+                className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800 hover:bg-sky-50 disabled:opacity-60"
+              >
+                {finalizing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Solo finalizado (sin producción)
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : finalizado ? (
+        <div className="relative overflow-hidden rounded-2xl border border-sky-300 bg-gradient-to-r from-sky-50 via-white to-sky-50 px-5 py-4 shadow-sm">
+          <div className="absolute inset-y-0 left-0 w-1.5 bg-sky-500" />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pl-2">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-sky-500 text-white shadow-md shadow-sky-500/30">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-sky-900">Finalizado</p>
+                <p className="text-xs text-sky-700/80">
+                  Desarrollo cerrado. Aún no está en producción (tarjeta azul en el listado).
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void pasarAProduccion()}
+              disabled={promoting}
+              className="group relative inline-flex items-center justify-center gap-2.5 shrink-0 h-11 px-5 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-600/25 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-60"
+            >
+              {promoting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Rocket className="h-4 w-4" />
+              )}
+              {promoting ? 'Pasando…' : 'En producción'}
+            </button>
           </div>
         </div>
       ) : (
         <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-emerald-100/60 blur-2xl" />
-          <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-sky-100/60 blur-2xl" />
+          <div className="relative flex flex-col gap-4">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                Listo para entregar
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+                Cierre del proyecto
               </p>
               <h3 className="text-base font-semibold text-gray-900 mt-0.5">
-                ¿El proyecto ya está en producción?
+                Finalizado y producción son cosas distintas
               </h3>
-              <p className="text-sm text-gray-500 mt-1 max-w-xl">
-                Pulsa Finalizado. En el listado de clientes (Proyectos abiertos) la tarjeta pasará a verde.
+              <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+                <strong className="font-medium text-gray-700">Finalizado</strong> = desarrollo
+                cerrado (tarjeta azul). <strong className="font-medium text-gray-700">En producción</strong>{' '}
+                = live con el cliente (tarjeta verde). Ane y similares: solo Finalizado.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => void finalizarProyecto()}
-              disabled={finalizing}
-              className="group relative inline-flex items-center justify-center gap-2.5 shrink-0 h-12 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-600/25 hover:from-emerald-500 hover:to-emerald-400 hover:shadow-emerald-500/35 hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-60 disabled:hover:translate-y-0"
-            >
-              {finalizing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Rocket className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-              )}
-              {finalizing ? 'Finalizando…' : 'Finalizado'}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void finalizarProyecto()}
+                disabled={finalizing || promoting}
+                className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-2xl bg-sky-600 text-white text-sm font-bold shadow-md shadow-sky-600/20 hover:bg-sky-500 disabled:opacity-60"
+              >
+                {finalizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                {finalizing ? 'Finalizando…' : 'Finalizado'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void pasarAProduccion()}
+                disabled={finalizing || promoting}
+                className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-sm font-bold shadow-md shadow-emerald-600/25 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-60"
+              >
+                {promoting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                {promoting ? 'Pasando…' : 'En producción'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -315,7 +391,9 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
           'rounded-2xl border text-white p-5 shadow-lg',
           enProduccion
             ? 'border-emerald-600 bg-gradient-to-br from-emerald-900 via-emerald-800 to-gray-900'
-            : 'border-gray-800 bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900'
+            : finalizado
+              ? 'border-sky-700 bg-gradient-to-br from-sky-900 via-slate-900 to-gray-900'
+              : 'border-gray-800 bg-gradient-to-br from-gray-900 via-gray-850 to-gray-900'
         )}
       >
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">

@@ -25,9 +25,10 @@ const serviceLabel: Record<string, string> = {
 
 const statusLabel: Record<string, string> = {
   development: 'En desarrollo',
-  active: 'Activo',
+  active: 'En producción',
   paused: 'Pausado',
   churned: 'Baja',
+  done: 'Finalizado',
 }
 
 /** Plantilla inicial sin datos comerciales ni PII del cliente (vista developer). */

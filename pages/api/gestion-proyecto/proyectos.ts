@@ -41,7 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         FROM proyectos p
         INNER JOIN leads l ON l.id = p.lead_id
         WHERE p.es_buffalo = TRUE
-          AND p.status IN ('development', 'active', 'paused')
+          AND p.status IN ('development', 'active', 'paused', 'done')
           AND l.configuracion IS NOT NULL
           AND l.configuracion <> ''
         ORDER BY p.updated_at DESC
@@ -57,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         FROM proyectos p
         INNER JOIN leads l ON l.id = p.lead_id
         WHERE p.es_buffalo = TRUE
-          AND p.status IN ('development', 'active', 'paused')
+          AND p.status IN ('development', 'active', 'paused', 'done')
           AND l.configuracion IS NOT NULL
           AND l.configuracion <> ''
           AND p.id = ANY(${accessibleIds}::uuid[])

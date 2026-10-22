@@ -17,6 +17,7 @@ const statusLabel: Record<string, string> = {
   development: 'En desarrollo',
   active: 'En producción',
   paused: 'Pausado',
+  done: 'Finalizado',
 }
 
 const serviceLabel: Record<string, string> = {
@@ -176,44 +177,53 @@ export default function GestionProyectoPage() {
                 cancelled: 'Cancelada',
               }
               const inProduction = !isAssignment && row.status === 'active'
+              const isFinalized = !isAssignment && row.status === 'done'
+              const cardTone = inProduction
+                ? 'rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-50 via-emerald-50/80 to-white p-5 shadow-sm shadow-emerald-100 hover:border-emerald-400 hover:shadow-md transition-all ring-1 ring-emerald-200/60'
+                : isFinalized
+                  ? 'rounded-2xl border border-sky-300 bg-gradient-to-br from-sky-50 via-sky-50/70 to-white p-5 shadow-sm shadow-sky-100 hover:border-sky-400 hover:shadow-md transition-all ring-1 ring-sky-200/60'
+                  : 'rounded-2xl border border-gray-200 bg-white p-5 hover:border-gray-300 hover:shadow-sm transition-all'
+              const muted = inProduction
+                ? 'text-emerald-900/60'
+                : isFinalized
+                  ? 'text-sky-900/60'
+                  : 'text-gray-500'
+              const titleCls = inProduction
+                ? 'text-emerald-950'
+                : isFinalized
+                  ? 'text-sky-950'
+                  : 'text-gray-900'
+              const eyebrowCls = inProduction
+                ? 'text-emerald-700/80 font-semibold'
+                : isFinalized
+                  ? 'text-sky-700/80 font-semibold'
+                  : 'text-gray-400'
+              const subCls = inProduction
+                ? 'text-emerald-800/70'
+                : isFinalized
+                  ? 'text-sky-800/70'
+                  : 'text-gray-600'
+              const ctaCls = inProduction
+                ? 'text-emerald-800'
+                : isFinalized
+                  ? 'text-sky-800'
+                  : 'text-gray-700'
               return (
-                <Link
-                  key={row.id}
-                  href={href}
-                  className={
-                    inProduction
-                      ? 'rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-50 via-emerald-50/80 to-white p-5 shadow-sm shadow-emerald-100 hover:border-emerald-400 hover:shadow-md transition-all ring-1 ring-emerald-200/60'
-                      : 'rounded-2xl border border-gray-200 bg-white p-5 hover:border-gray-300 hover:shadow-sm transition-all'
-                  }
-                >
+                <Link key={row.id} href={href} className={cardTone}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p
-                        className={`text-xs uppercase tracking-wide ${
-                          inProduction ? 'text-emerald-700/80 font-semibold' : 'text-gray-400'
-                        }`}
-                      >
+                      <p className={`text-xs uppercase tracking-wide ${eyebrowCls}`}>
                         {isAssignment
                           ? 'Tarea puntual'
                           : inProduction
                             ? 'En producción'
-                            : 'Proyecto Buffalo'}
+                            : isFinalized
+                              ? 'Finalizado'
+                              : 'Proyecto Buffalo'}
                       </p>
-                      <h2
-                        className={`text-lg font-semibold truncate ${
-                          inProduction ? 'text-emerald-950' : 'text-gray-900'
-                        }`}
-                      >
-                        {title}
-                      </h2>
+                      <h2 className={`text-lg font-semibold truncate ${titleCls}`}>{title}</h2>
                       {subtitle && (
-                        <p
-                          className={`text-sm mt-1 truncate ${
-                            inProduction ? 'text-emerald-800/70' : 'text-gray-600'
-                          }`}
-                        >
-                          {subtitle}
-                        </p>
+                        <p className={`text-sm mt-1 truncate ${subCls}`}>{subtitle}</p>
                       )}
                     </div>
                     <div className="shrink-0 flex flex-col items-end gap-1">
@@ -222,18 +232,22 @@ export default function GestionProyectoPage() {
                           className={
                             inProduction
                               ? 'inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm'
-                              : 'inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800'
+                              : isFinalized
+                                ? 'inline-flex items-center gap-1 rounded-full bg-sky-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm'
+                                : 'inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800'
                           }
                         >
                           <CheckCircle2 className="h-3 w-3" />
-                          {inProduction ? 'Producción' : 'Buffalo'}
+                          {inProduction ? 'Producción' : isFinalized ? 'Finalizado' : 'Buffalo'}
                         </span>
                       )}
                       <span
                         className={
                           inProduction
                             ? 'rounded-full bg-emerald-600/10 border border-emerald-300 px-2.5 py-1 text-[11px] font-semibold text-emerald-800'
-                            : 'rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600'
+                            : isFinalized
+                              ? 'rounded-full bg-sky-600/10 border border-sky-300 px-2.5 py-1 text-[11px] font-semibold text-sky-800'
+                              : 'rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600'
                         }
                       >
                         {isAssignment
@@ -243,11 +257,7 @@ export default function GestionProyectoPage() {
                     </div>
                   </div>
 
-                  <div
-                    className={`mt-4 space-y-2 text-sm ${
-                      inProduction ? 'text-emerald-900/60' : 'text-gray-500'
-                    }`}
-                  >
+                  <div className={`mt-4 space-y-2 text-sm ${muted}`}>
                     {isAssignment ? (
                       <>
                         {row.assignment_summary && (
@@ -265,7 +275,11 @@ export default function GestionProyectoPage() {
                         {row.config_ref && (
                           <p
                             className={`font-mono text-[11px] ${
-                              inProduction ? 'text-emerald-700/50' : 'text-gray-400'
+                              inProduction
+                                ? 'text-emerald-700/50'
+                                : isFinalized
+                                  ? 'text-sky-700/50'
+                                  : 'text-gray-400'
                             }`}
                           >
                             {row.config_ref}
@@ -279,22 +293,18 @@ export default function GestionProyectoPage() {
                   </div>
 
                   <div className="mt-5 flex items-center justify-between text-xs">
-                    <span className={inProduction ? 'text-emerald-800/70' : 'text-gray-500'}>
+                    <span className={subCls}>
                       {isAssignment
                         ? row.status === 'done'
                           ? 'Completada'
                           : 'Asignación activa'
                         : inProduction
                           ? 'Entregado · en producción'
-                          : `${openTasks} tareas abiertas · ${row.task_counts.done} hechas`}
+                          : isFinalized
+                            ? 'Cerrado · sin producción'
+                            : `${openTasks} tareas abiertas · ${row.task_counts.done} hechas`}
                     </span>
-                    <span
-                      className={`font-medium ${
-                        inProduction ? 'text-emerald-800' : 'text-gray-700'
-                      }`}
-                    >
-                      Abrir →
-                    </span>
+                    <span className={`font-medium ${ctaCls}`}>Abrir →</span>
                   </div>
                 </Link>
               )
