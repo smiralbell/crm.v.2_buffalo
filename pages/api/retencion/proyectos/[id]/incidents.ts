@@ -4,6 +4,7 @@ import { assertProjectAccess } from '@/lib/project-access'
 import { assertRetencionEligible } from '@/lib/retencion/eligibility'
 import {
   buildIncidentsMarkdown,
+  incidentsWebhookToken,
   incidentsWebhookUrl,
   listIncidents,
 } from '@/lib/retencion/incidents'
@@ -21,9 +22,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!eligible.ok) return res.status(eligible.status).json({ error: eligible.error })
 
     const incidents = await listIncidents(proyectoId)
+    const webhookToken = incidentsWebhookToken()
     const markdown = buildIncidentsMarkdown({
       proyectoId: eligible.row.id,
       proyectoName: eligible.row.name,
+      token: webhookToken,
     })
 
     if (req.query.download === '1' || req.query.format === 'md') {
@@ -37,6 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       webhook_url: incidentsWebhookUrl(),
+      webhook_token: webhookToken,
       client_id: eligible.row.id,
       markdown,
       incidents,

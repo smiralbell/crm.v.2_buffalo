@@ -99,8 +99,13 @@ export function parseIncidentPayload(body: unknown): { error: string; clientId: 
   return { error, clientId: clientId || null }
 }
 
-export function buildIncidentsMarkdown(input: { proyectoId: string; proyectoName: string }): string {
+export function buildIncidentsMarkdown(input: {
+  proyectoId: string
+  proyectoName: string
+  token?: string | null
+}): string {
   const url = incidentsWebhookUrl()
+  const token = (input.token || incidentsWebhookToken() || '<RETENCION_INCIDENTS_TOKEN>').trim()
   return `# Incidencias Buffalo · ${input.proyectoName}
 
 Enviad los errores de producción a este webhook. Cada envío se cuelga **solo de este proyecto**.
@@ -112,7 +117,7 @@ Enviad los errores de producción a este webhook. Cada envío se cuelga **solo d
 Cabecera:
 
 \`\`\`
-Authorization: Bearer <token que os da Buffalo>
+Authorization: Bearer ${token}
 Content-Type: application/json
 \`\`\`
 

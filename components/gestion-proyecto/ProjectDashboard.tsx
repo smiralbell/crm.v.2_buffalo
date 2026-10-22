@@ -194,7 +194,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
   const finalizarProyecto = async () => {
     if (
       !window.confirm(
-        '¿Finalizar este proyecto y pasarlo a producción? La tarjeta quedará marcada en verde.'
+        '¿Marcar este proyecto como Finalizado (producción)? En el listado de clientes la tarjeta quedará en verde.'
       )
     ) {
       return
@@ -289,7 +289,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
                 ¿El proyecto ya está en producción?
               </h3>
               <p className="text-sm text-gray-500 mt-1 max-w-xl">
-                Márcalo como finalizado. La tarjeta en Proyectos abiertos pasará a verde.
+                Pulsa Finalizado. En el listado de clientes (Proyectos abiertos) la tarjeta pasará a verde.
               </p>
             </div>
             <button
@@ -303,7 +303,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
               ) : (
                 <Rocket className="h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
               )}
-              {finalizing ? 'Finalizando…' : 'Finalizar proyecto'}
+              {finalizing ? 'Finalizando…' : 'Finalizado'}
             </button>
           </div>
         </div>

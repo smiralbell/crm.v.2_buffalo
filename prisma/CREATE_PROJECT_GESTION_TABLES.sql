@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS project_dev_onboarding (
   deliverables TEXT,
   contacts TEXT,
   internal_notes TEXT,
+  repo_url TEXT,
+  passwords_json JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

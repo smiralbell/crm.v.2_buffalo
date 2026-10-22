@@ -6,7 +6,8 @@ import ProjectTaskBoard, {
   type TasksView,
 } from '@/components/gestion-proyecto/ProjectTaskBoard'
 import ProjectDashboard from '@/components/gestion-proyecto/ProjectDashboard'
-import { ArrowLeft, AlertCircle, CalendarDays, GanttChart, Kanban } from 'lucide-react'
+import ProjectValorInfoDialog from '@/components/gestion-proyecto/ProjectValorInfoDialog'
+import { ArrowLeft, AlertCircle, CalendarDays, GanttChart, Kanban, KeyRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ProjectTask } from '@/lib/gestion-proyecto/types'
 
@@ -14,7 +15,7 @@ type Tab = 'dashboard' | 'tareas'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },
-  { id: 'tareas', label: 'Tareas' },
+  { id: 'tareas', label: 'Zona de trabajo' },
 ]
 
 const TASK_VIEWS: { id: TasksView; label: string; icon: typeof Kanban }[] = [
@@ -39,6 +40,7 @@ export default function GestionProyectoDetailPage() {
     lead_id: number | null
   } | null>(null)
   const [tasks, setTasks] = useState<ProjectTask[]>([])
+  const [valorOpen, setValorOpen] = useState(false)
 
   useEffect(() => {
     if (!router.isReady) return
@@ -146,6 +148,15 @@ export default function GestionProyectoDetailPage() {
 
             {activeTab === 'tareas' && (
               <div className="absolute right-0 flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setValorOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs sm:text-sm font-medium border-b-2 border-transparent text-indigo-600 hover:text-indigo-800 hover:border-indigo-300 transition-colors whitespace-nowrap"
+                  title="Información de valor"
+                >
+                  <KeyRound className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Información de valor</span>
+                </button>
                 {TASK_VIEWS.map((tab) => {
                   const Icon = tab.icon
                   const active = tasksView === tab.id
@@ -195,6 +206,14 @@ export default function GestionProyectoDetailPage() {
             />
           ) : null
         ) : null}
+
+        {typeof id === 'string' && (
+          <ProjectValorInfoDialog
+            projectId={id}
+            open={valorOpen}
+            onOpenChange={setValorOpen}
+          />
+        )}
       </div>
     </Layout>
   )

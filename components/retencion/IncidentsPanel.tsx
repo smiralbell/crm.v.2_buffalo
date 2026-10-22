@@ -38,10 +38,11 @@ export default function IncidentsPanel({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [webhookUrl, setWebhookUrl] = useState('')
+  const [webhookToken, setWebhookToken] = useState('')
   const [clientId, setClientId] = useState(proyectoId)
   const [markdown, setMarkdown] = useState('')
   const [incidents, setIncidents] = useState<Incident[]>([])
-  const [copied, setCopied] = useState<'id' | 'url' | null>(null)
+  const [copied, setCopied] = useState<'id' | 'url' | 'token' | null>(null)
   const [solving, setSolving] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -52,6 +53,7 @@ export default function IncidentsPanel({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al cargar incidencias')
       setWebhookUrl(data.webhook_url || '')
+      setWebhookToken(data.webhook_token || '')
       setClientId(data.client_id || proyectoId)
       setMarkdown(data.markdown || '')
       setIncidents(data.incidents || [])
@@ -66,7 +68,7 @@ export default function IncidentsPanel({
     void load()
   }, [load])
 
-  const copy = async (text: string, which: 'id' | 'url') => {
+  const copy = async (text: string, which: 'id' | 'url' | 'token') => {
     try {
       await navigator.clipboard.writeText(text)
       setCopied(which)
@@ -131,7 +133,7 @@ export default function IncidentsPanel({
               </button>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block">
+              <label className="block sm:col-span-2">
                 <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Endpoint</span>
                 <div className="mt-1 flex items-center gap-2">
                   <code className="flex-1 truncate rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-800">
@@ -147,7 +149,31 @@ export default function IncidentsPanel({
                   </button>
                 </div>
               </label>
-              <label className="block">
+              <label className="block sm:col-span-2">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                  Token (Authorization Bearer)
+                </span>
+                <div className="mt-1 flex items-center gap-2">
+                  <code className="flex-1 truncate rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-800">
+                    {webhookToken || '…'}
+                  </code>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-gray-200 p-2 text-gray-500 hover:bg-gray-50"
+                    onClick={() => copy(webhookToken, 'token')}
+                    aria-label="Copiar token"
+                    disabled={!webhookToken}
+                  >
+                    {copied === 'token' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px] text-gray-400">
+                  Es el mismo token para todos los proyectos. Viene de{' '}
+                  <code className="text-[10px]">RETENCION_INCIDENTS_TOKEN</code> (o{' '}
+                  <code className="text-[10px]">INGEST_TOKEN</code>) en EasyPanel.
+                </p>
+              </label>
+              <label className="block sm:col-span-2">
                 <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
                   client_id (este proyecto)
                 </span>
@@ -167,8 +193,9 @@ export default function IncidentsPanel({
               </label>
             </div>
             <p className="text-xs text-gray-400">
-              El mismo error no vuelve a avisarnos por correo/Telegram mientras esté abierto. Al marcarlo como
-              solucionado se reabre la barrera. Errores distintos sí avisan.
+              Dale al developer: URL + token + este <code className="text-[10px]">client_id</code>. El mismo error no
+              vuelve a avisarnos por correo/Telegram mientras esté abierto. Al marcarlo como solucionado se reabre la
+              barrera. Errores distintos sí avisan.
             </p>
           </div>
         </DialogContent>
