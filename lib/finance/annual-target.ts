@@ -14,8 +14,12 @@ export async function ensureAnnualTargetColumn(): Promise<void> {
     ADD COLUMN IF NOT EXISTS annual_goal_alert_key TEXT
   `)
   await prisma.$executeRawUnsafe(`
-    INSERT INTO financial_settings (id, corporate_tax_percent, annual_revenue_target)
-    VALUES (1, 25, 65000)
+    ALTER TABLE financial_settings
+    ALTER COLUMN updated_at SET DEFAULT NOW()
+  `)
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO financial_settings (id, corporate_tax_percent, annual_revenue_target, updated_at)
+    VALUES (1, 25, 65000, NOW())
     ON CONFLICT (id) DO NOTHING
   `)
   schemaEnsured = true
@@ -41,8 +45,8 @@ export async function setAnnualRevenueTarget(value: number): Promise<number> {
     throw new Error('El objetivo anual debe estar entre 1.000 € y 10.000.000 €')
   }
   await prisma.$executeRawUnsafe(
-    `INSERT INTO financial_settings (id, corporate_tax_percent, annual_revenue_target)
-     VALUES (1, 25, $1)
+    `INSERT INTO financial_settings (id, corporate_tax_percent, annual_revenue_target, updated_at)
+     VALUES (1, 25, $1, NOW())
      ON CONFLICT (id) DO UPDATE
      SET annual_revenue_target = EXCLUDED.annual_revenue_target,
          updated_at = NOW()`,
