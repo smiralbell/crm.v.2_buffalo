@@ -128,7 +128,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     const page = parseInt(context.query.page as string) || 1
     const search = (context.query.search as string) || ''
     const status = (context.query.status as string) || ''
-    const source = (context.query.source as string) || 'all'
     const dateFrom = context.query.dateFrom as string | undefined
     const dateTo = context.query.dateTo as string | undefined
     const sortBy = parseSortKey(context.query.sortBy)
@@ -152,14 +151,11 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       ]
     }
 
-    if (source === 'developer') {
-      const devIds = await getDeveloperInvoiceIds()
-      where.id = { in: devIds.length ? devIds : [-1] }
-    } else if (source === 'client') {
-      const devIds = await getDeveloperInvoiceIds()
-      if (devIds.length > 0) {
-        where.id = { notIn: devIds }
-      }
+    // Esta pantalla es solo lo que Buffalo emite. Las facturas de developers
+    // son gastos y no se mezclan aquí. No se borran: siguen en su sitio.
+    const devIds = await getDeveloperInvoiceIds()
+    if (devIds.length > 0) {
+      where.id = { notIn: devIds }
     }
 
     // Filtro por fechas
@@ -280,7 +276,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           totalPages,
           search,
           status: status || 'all',
-          source: source || 'all',
+          source: 'client',
           sortBy,
           sortDir,
           ...(dateFrom && { dateFrom }),
@@ -372,7 +368,6 @@ export default function InvoicesPage({
   totalPages,
   search: initialSearch,
   status: initialStatus,
-  source: initialSource = 'all',
   dateFrom: initialDateFrom,
   dateTo: initialDateTo,
   sortBy = 'date',
@@ -384,7 +379,6 @@ export default function InvoicesPage({
   const router = useRouter()
   const [search, setSearch] = useState(initialSearch)
   const [status, setStatus] = useState(initialStatus)
-  const [source, setSource] = useState(initialSource)
   const [dateRange, setDateRange] = useState<DateRangePickerResult>({
     start: initialDateFrom ? new Date(initialDateFrom) : null,
     end: initialDateTo ? new Date(initialDateTo) : null,
@@ -408,7 +402,6 @@ export default function InvoicesPage({
     const query: Record<string, string | number> = {
       search,
       status: status === 'all' ? '' : status,
-      source,
       page: 1,
       sortBy,
       sortDir,
@@ -506,14 +499,6 @@ export default function InvoicesPage({
     router.push({
       pathname: '/invoices',
       query: buildListQuery({ status: statusValue, page: 1 }),
-    })
-  }
-
-  const handleSourceChange = (value: string) => {
-    setSource(value)
-    router.push({
-      pathname: '/invoices',
-      query: buildListQuery({ source: value, page: 1 }),
     })
   }
 
@@ -912,16 +897,6 @@ export default function InvoicesPage({
                   <SelectItem value="draft">Borrador</SelectItem>
                   <SelectItem value="sent">Enviada</SelectItem>
                   <SelectItem value="cancelled">Cancelada</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={source || 'all'} onValueChange={handleSourceChange}>
-                <SelectTrigger className="w-full sm:w-[180px] rounded-xl">
-                  <SelectValue placeholder="Origen" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las facturas</SelectItem>
-                  <SelectItem value="client">Facturas cliente</SelectItem>
-                  <SelectItem value="developer">Facturas developers</SelectItem>
                 </SelectContent>
               </Select>
               <DateRangePicker
