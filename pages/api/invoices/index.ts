@@ -4,17 +4,21 @@ import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import {
   ensureInvoiceNumberAvailable,
-  formatBufInvoiceNumber,
-  getNextBufInvoiceNumber,
-  parseBufInvoiceSeq,
+  getNextDocumentNumber,
 } from '@/lib/invoices/numbers'
+import {
+  countsInFiscalTotals,
+  normalizeInvoiceDocument,
+  numberMatchesDocumentType,
+} from '@/lib/invoices/document'
+import { rectificationTargetError } from '@/lib/invoices/rectification'
 
 const serviceSchema = z.object({
   description: z.string().min(1, 'La descripción es requerida'),
-  quantity: z.number(),                      // puede ser negativo (descuentos)
-  price: z.number(),                         // puede ser negativo (descuentos)
+  quantity: z.number(),
+  price: z.number(),
   tax: z.number().min(0).max(100).default(21),
-  total: z.number(),                         // puede ser negativo (descuentos)
+  total: z.number().optional(),
 })
 
 const invoiceSchema = z.object({
@@ -29,12 +33,23 @@ const invoiceSchema = z.object({
   issue_date: z.string().optional(),
   due_date: z.string().optional(),
   services: z.array(serviceSchema).min(1, 'Debe haber al menos un servicio'),
-  subtotal: z.number().min(0),
-  iva: z.number().min(0),
-  total: z.number().positive(),
+  subtotal: z.number().optional(),
+  iva: z.number().optional(),
+  total: z.number().optional(),
   status: z.enum(['draft', 'sent', 'cancelled']).optional(),
   /** Si viene de onboarding, se trackea la factura al lead */
   lead_id: z.number().int().positive().optional().nullable(),
+  document_type: z.enum(['invoice', 'credit_note', 'proforma', 'quote']).optional(),
+  document_title: z.string().max(80).optional().nullable(),
+  observations: z.string().max(4000).optional().nullable(),
+  rectifies_invoice_id: z.number().int().positive().optional().nullable(),
+  rectification_reason: z.string().max(2000).optional().nullable(),
+  show_payment_info: z.boolean().optional(),
+  payment_method: z.string().max(200).optional().nullable(),
+  bank_name: z.string().max(200).optional().nullable(),
+  bank_account_holder: z.string().max(200).optional().nullable(),
+  iban: z.string().max(64).optional().nullable(),
+  payment_instructions: z.string().max(2000).optional().nullable(),
 })
 
 export default async function handler(
@@ -151,31 +166,49 @@ export default async function handler(
 
     if (req.method === 'POST') {
       const data = invoiceSchema.parse(req.body)
+      const normalized = normalizeInvoiceDocument({
+        document_type: data.document_type,
+        document_title: data.document_title,
+        observations: data.observations,
+        rectifies_invoice_id: data.rectifies_invoice_id,
+        rectification_reason: data.rectification_reason,
+        show_payment_info: data.show_payment_info,
+        payment_method: data.payment_method,
+        bank_name: data.bank_name,
+        bank_account_holder: data.bank_account_holder,
+        iban: data.iban,
+        payment_instructions: data.payment_instructions,
+        services: data.services,
+        status: data.status,
+      })
+      if (!normalized.ok) {
+        return res.status(400).json({ error: normalized.error })
+      }
 
-      // Usar el número de factura proporcionado o generar uno automáticamente
-      let invoiceNumber = data.invoice_number
-      
-      if (!invoiceNumber) {
-        const year = new Date().getFullYear()
-        invoiceNumber = await getNextBufInvoiceNumber(year)
-        let attempts = 0
-        while (attempts < 100) {
-          const availability = await ensureInvoiceNumberAvailable(invoiceNumber)
-          if (availability.ok) break
-          const parsed = parseBufInvoiceSeq(invoiceNumber)
-          const nextSeq = (parsed?.seq ?? 0) + 1
-          invoiceNumber = formatBufInvoiceNumber(year, nextSeq)
-          attempts++
+      if (normalized.value.rectifies_invoice_id != null) {
+        const targetError = await rectificationTargetError(normalized.value.rectifies_invoice_id)
+        if (targetError) {
+          return res.status(400).json({ error: targetError })
         }
+      }
+
+      const documentType = normalized.value.document_type
+      let invoiceNumber = data.invoice_number
+
+      if (!invoiceNumber) {
+        invoiceNumber = await getNextDocumentNumber(documentType)
+      } else if (!numberMatchesDocumentType(invoiceNumber, documentType)) {
+        return res.status(400).json({
+          error: 'El número no corresponde a la serie de este documento. La numeración ya emitida no se reutiliza.',
+        })
       } else {
-        // Verificar que el número no esté en uso por una factura activa
         const availability = await ensureInvoiceNumberAvailable(invoiceNumber)
         if (!availability.ok) {
           return res.status(400).json({ error: 'El número de factura ya existe' })
         }
       }
 
-      const status = data.status || 'draft'
+      const status = normalized.value.status
 
       let leadId: number | null = data.lead_id ?? null
       if (leadId != null) {
@@ -205,11 +238,22 @@ export default async function handler(
             company_address: data.company_address || null,
             issue_date: data.issue_date ? new Date(data.issue_date) : new Date(),
             due_date: data.due_date ? new Date(data.due_date) : null,
-            services: data.services as any,
-            subtotal: data.subtotal,
-            iva: data.iva,
-            total: data.total,
+            services: normalized.value.services as any,
+            subtotal: normalized.value.subtotal,
+            iva: normalized.value.iva,
+            total: normalized.value.total,
             status,
+            document_type: normalized.value.document_type,
+            document_title: normalized.value.document_title,
+            observations: normalized.value.observations,
+            rectifies_invoice_id: normalized.value.rectifies_invoice_id,
+            rectification_reason: normalized.value.rectification_reason,
+            show_payment_info: normalized.value.show_payment_info,
+            payment_method: normalized.value.payment_method,
+            bank_name: normalized.value.bank_name,
+            bank_account_holder: normalized.value.bank_account_holder,
+            iban: normalized.value.iban,
+            payment_instructions: normalized.value.payment_instructions,
           },
         })
       } catch (createErr: unknown) {
@@ -219,7 +263,7 @@ export default async function handler(
             : ''
         if (code !== 'P2002') throw createErr
         // Unique constraint: tomar el siguiente libre
-        invoiceNumber = await getNextBufInvoiceNumber()
+        invoiceNumber = await getNextDocumentNumber(documentType)
         invoice = await prisma.invoice.create({
           data: {
             invoice_number: invoiceNumber,
@@ -232,11 +276,22 @@ export default async function handler(
             company_address: data.company_address || null,
             issue_date: data.issue_date ? new Date(data.issue_date) : new Date(),
             due_date: data.due_date ? new Date(data.due_date) : null,
-            services: data.services as any,
-            subtotal: data.subtotal,
-            iva: data.iva,
-            total: data.total,
+            services: normalized.value.services as any,
+            subtotal: normalized.value.subtotal,
+            iva: normalized.value.iva,
+            total: normalized.value.total,
             status,
+            document_type: normalized.value.document_type,
+            document_title: normalized.value.document_title,
+            observations: normalized.value.observations,
+            rectifies_invoice_id: normalized.value.rectifies_invoice_id,
+            rectification_reason: normalized.value.rectification_reason,
+            show_payment_info: normalized.value.show_payment_info,
+            payment_method: normalized.value.payment_method,
+            bank_name: normalized.value.bank_name,
+            bank_account_holder: normalized.value.bank_account_holder,
+            iban: normalized.value.iban,
+            payment_instructions: normalized.value.payment_instructions,
           },
         })
       }
@@ -251,12 +306,12 @@ export default async function handler(
         }
       }
 
-      if (status === 'sent') {
+      if (status === 'sent' && countsInFiscalTotals(documentType)) {
         const { scheduleAnnualGoalCheck } = await import('@/lib/finance/annual-target-alert')
         scheduleAnnualGoalCheck()
       }
 
-      if (status === 'sent' && invoice.client_email) {
+      if (status === 'sent' && documentType === 'invoice' && invoice.client_email) {
         try {
           const { advanceLeadOnGlobalByContactEmail } = await import(
             '@/lib/pipelines/onboarding-global'

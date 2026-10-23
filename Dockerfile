@@ -24,5 +24,5 @@ RUN npm run build
 EXPOSE 3000
 
 # Comando de inicio
-CMD ["npm", "start"]
+CMD ["sh", "-c", "node scripts/ensure-invoice-document-columns.mjs && npm start"]
 

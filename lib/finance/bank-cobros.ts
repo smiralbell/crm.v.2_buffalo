@@ -2,7 +2,7 @@ import { format } from 'date-fns'
 import { query } from '@/lib/db'
 import { prisma } from '@/lib/prisma'
 import { getPeriodRangeForPreset } from '@/lib/finance/period-presets'
-import { CLIENT_INVOICE_WHERE } from '@/lib/invoices/developer-meta'
+import { CLIENT_INVOICE_WHERE, FISCAL_INVOICE_WHERE } from '@/lib/invoices/developer-meta'
 
 /** Entradas de banco (mismo criterio que el KPI Cobros de Finanzas). */
 export async function sumBankCobros(start: Date, end: Date): Promise<number> {
@@ -39,6 +39,7 @@ export async function sumOutstandingInvoices(): Promise<{ total: number; count: 
     status: { in: ['draft', 'sent'] },
     bank_transaction_id: null,
     ...CLIENT_INVOICE_WHERE,
+    ...FISCAL_INVOICE_WHERE,
   }
   try {
     const [sum, count] = await Promise.all([

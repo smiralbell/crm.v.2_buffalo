@@ -35,6 +35,7 @@ import { format } from 'date-fns'
 import DateRangePicker, { DateRangePickerResult } from '@/components/DateRangePicker'
 import {
   CLIENT_INVOICE_WHERE,
+  FISCAL_INVOICE_WHERE,
   getDeveloperInvoiceIds,
   getInvoiceDeveloperMetaMap,
 } from '@/lib/invoices/developer-meta'
@@ -74,6 +75,7 @@ interface Invoice {
   invoice_source?: string
   developer_name?: string | null
   developer_has_pdf?: boolean
+  document_type?: string
 }
 
 interface InvoicesPageProps {
@@ -179,6 +181,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       const statsWhere: any = {
         deleted_at: null,
         ...CLIENT_INVOICE_WHERE,
+        ...FISCAL_INVOICE_WHERE,
       }
       if (status && status !== 'all') statsWhere.status = status
       if (search) {
@@ -215,6 +218,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
             issue_date: true,
             created_at: true,
             sent_to_drive: true,
+            document_type: true,
           },
         }),
         prisma.invoice.count({ where }),
@@ -571,6 +575,12 @@ export default function InvoicesPage({
     }
   }
 
+  const documentLabels: Record<string, string> = {
+    credit_note: 'Rectificativa',
+    proforma: 'Proforma',
+    quote: 'Presupuesto',
+  }
+
   const statusLabels: { [key: string]: string } = {
     draft: 'Borrador',
     sent: 'Enviada',
@@ -834,7 +844,7 @@ export default function InvoicesPage({
             <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
               <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Total Facturas</p>
               <div className="text-xl sm:text-2xl font-semibold text-gray-900 mb-1">{stats.total}</div>
-              <p className="text-xs text-gray-400">Solo clientes (sin developers)</p>
+              <p className="text-xs text-gray-400">Facturas y rectificativas. Proformas y presupuestos no suman.</p>
             </CardContent>
           </Card>
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
@@ -1072,6 +1082,11 @@ export default function InvoicesPage({
                           >
                             {statusLabels[invoice.status] || invoice.status}
                           </Badge>
+                          {documentLabels[invoice.document_type || ''] && (
+                            <Badge variant="outline" className="text-[10px]">
+                              {documentLabels[invoice.document_type || '']}
+                            </Badge>
+                          )}
                         </div>
                         <p className="mt-0.5 truncate text-sm text-gray-700">{invoice.client_name}</p>
                         <p className="mt-0.5 text-xs text-gray-500">
@@ -1129,15 +1144,17 @@ export default function InvoicesPage({
                         )}
                         Drive
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteClick(invoice)}
-                        className="h-8 w-8 text-red-500"
-                        aria-label="Eliminar factura"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {invoice.status === 'draft' && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteClick(invoice)}
+                          className="h-8 w-8 text-red-500"
+                          aria-label="Eliminar borrador"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </li>
                 ))}
@@ -1202,6 +1219,11 @@ export default function InvoicesPage({
                           >
                             {statusLabels[invoice.status] || invoice.status}
                           </Badge>
+                          {documentLabels[invoice.document_type || ''] && (
+                            <div className="mt-1 text-[10px] text-zinc-500">
+                              {documentLabels[invoice.document_type || '']}
+                            </div>
+                          )}
                         </td>
                         <td className="p-3 text-right text-sm text-gray-600">
                           {new Intl.NumberFormat('es-ES', {
@@ -1273,15 +1295,17 @@ export default function InvoicesPage({
                                 <CloudOff className="h-4 w-4" />
                               )}
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteClick(invoice)}
-                              className="h-8 w-8 text-red-500 hover:text-red-700"
-                              title="Eliminar factura"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {invoice.status === 'draft' && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteClick(invoice)}
+                                className="h-8 w-8 text-red-500 hover:text-red-700"
+                                title="Eliminar borrador"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>

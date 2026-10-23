@@ -1,9 +1,11 @@
 import { prisma } from '@/lib/prisma'
+import { seriesForDocumentType, type DocumentType } from '@/lib/invoices/document'
 
 /** Dígitos del correlativo: BUF-2026-00120 */
 export const INVOICE_NUMBER_PAD = 5
 
 const BUF_NUMBER_RE = /^BUF-(\d{4})-(\d+)$/
+const SERIES_NUMBER_RE = /^(PRE|PF|BUF|R)-(\d{4})-(\d+)$/
 
 export function formatBufInvoiceNumber(year: number, seq: number): string {
   return `BUF-${year}-${String(seq).padStart(INVOICE_NUMBER_PAD, '0')}`
@@ -50,30 +52,40 @@ export async function releaseSoftDeletedInvoiceNumber(invoiceNumber: string): Pr
  * Mira facturas activas Y soft-deleted con patrón limpio (no __deleted_),
  * para no proponer un número que falle por unique constraint.
  */
-export async function getNextBufInvoiceNumber(
+export function formatSeriesInvoiceNumber(
+  prefix: string,
+  year: number,
+  seq: number,
+  pad: number
+): string {
+  return `${prefix}-${year}-${String(seq).padStart(pad, '0')}`
+}
+
+export async function getNextSeriesNumber(
+  prefix: string,
+  pad: number,
   year: number = new Date().getFullYear()
 ): Promise<string> {
-  const prefix = `BUF-${year}-`
+  const seriesPrefix = `${prefix}-${year}-`
   const rows = await prisma.invoice.findMany({
     where: {
-      invoice_number: { startsWith: prefix },
+      invoice_number: { startsWith: seriesPrefix },
     },
     select: { invoice_number: true },
   })
 
   let maxSeq = 0
   for (const row of rows) {
-    const parsed = parseBufInvoiceSeq(row.invoice_number)
-    if (parsed && parsed.year === year && parsed.seq > maxSeq) {
-      maxSeq = parsed.seq
-    }
+    const match = SERIES_NUMBER_RE.exec(row.invoice_number.trim())
+    if (!match || match[1] !== prefix) continue
+    const parsedYear = Number(match[2])
+    const seq = Number(match[3])
+    if (parsedYear === year && seq > maxSeq) maxSeq = seq
   }
 
-  // Avanza hasta encontrar un número libre a nivel unique (tras liberar soft-deleted)
   let seq = maxSeq + 1
   for (let i = 0; i < 200; i++) {
-    const candidate = formatBufInvoiceNumber(year, seq)
-    await releaseSoftDeletedInvoiceNumber(candidate)
+    const candidate = formatSeriesInvoiceNumber(prefix, year, seq, pad)
     const taken = await prisma.invoice.findFirst({
       where: { invoice_number: candidate },
       select: { id: true },
@@ -82,19 +94,31 @@ export async function getNextBufInvoiceNumber(
     seq++
   }
 
-  return formatBufInvoiceNumber(year, seq)
+  return formatSeriesInvoiceNumber(prefix, year, seq, pad)
+}
+
+export async function getNextDocumentNumber(
+  type: DocumentType,
+  year: number = new Date().getFullYear()
+): Promise<string> {
+  const series = seriesForDocumentType(type)
+  return getNextSeriesNumber(series.prefix, series.pad, year)
+}
+
+export async function getNextBufInvoiceNumber(
+  year: number = new Date().getFullYear()
+): Promise<string> {
+  return getNextSeriesNumber('BUF', INVOICE_NUMBER_PAD, year)
 }
 
 /**
- * True si el número está libre para una factura activa.
- * Si solo lo bloquean soft-deleted, los renombra y deja el número libre.
+ * True si nadie usa ya ese número.
+ * No renombra ni reescribe facturas existentes.
  */
 export async function ensureInvoiceNumberAvailable(
   invoiceNumber: string,
   exceptInvoiceId?: number
 ): Promise<{ ok: true } | { ok: false; reason: 'taken' }> {
-  await releaseSoftDeletedInvoiceNumber(invoiceNumber)
-
   const existing = await prisma.invoice.findFirst({
     where: {
       invoice_number: invoiceNumber,
@@ -104,18 +128,6 @@ export async function ensureInvoiceNumberAvailable(
   })
 
   if (!existing) return { ok: true }
-  if (existing.deleted_at) {
-    // Por si quedó alguno: reintentar liberar
-    await releaseSoftDeletedInvoiceNumber(invoiceNumber)
-    const again = await prisma.invoice.findFirst({
-      where: {
-        invoice_number: invoiceNumber,
-        ...(exceptInvoiceId != null ? { id: { not: exceptInvoiceId } } : {}),
-      },
-      select: { id: true },
-    })
-    if (!again) return { ok: true }
-  }
   return { ok: false, reason: 'taken' }
 }
 

@@ -156,6 +156,7 @@ export async function buildCrmCompanySnapshot() {
         FROM invoices
         WHERE issue_date >= ${monthStartStr}::date
           AND COALESCE(invoice_source, 'client') = 'client'
+          AND COALESCE(document_type, 'invoice') IN ('invoice', 'credit_note')
       `,
     [{ n: 0, total_eur: 0, draft_eur: 0, sent_eur: 0 }]
   )
@@ -170,6 +171,7 @@ export async function buildCrmCompanySnapshot() {
         WHERE deleted_at IS NULL
           AND status IN ('draft', 'sent')
           AND COALESCE(invoice_source, 'client') = 'client'
+          AND COALESCE(document_type, 'invoice') IN ('invoice', 'credit_note')
           AND (bank_transaction_id IS NULL)
       `,
     [{ n: 0, total_eur: 0 }]

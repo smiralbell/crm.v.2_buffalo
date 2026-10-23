@@ -5,7 +5,9 @@ import { detectRecurringExpenses, recurringOpsMonthly } from '@/lib/finance/recu
 import { periodBounds, listRecentPeriods } from '@/lib/leads/analytics'
 import {
   CLIENT_INVOICE_WHERE,
+  FISCAL_INVOICE_WHERE,
   SQL_EXCLUDE_DEVELOPER_INVOICES_I,
+  SQL_FISCAL_INVOICES_I,
 } from '@/lib/invoices/developer-meta'
 import type {
   FinanceDashboardAnalytics,
@@ -51,6 +53,7 @@ async function sumInvoiced(start: Date, end: Date): Promise<number> {
         status: 'sent',
         issue_date: { gte: start, lte: end },
         ...CLIENT_INVOICE_WHERE,
+        ...FISCAL_INVOICE_WHERE,
       },
       _sum: { total: true },
     })
@@ -259,6 +262,7 @@ async function buildTimeline(count = 12): Promise<FinanceMonthPoint[]> {
         WHERE deleted_at IS NULL
           AND status = 'sent'
           AND COALESCE(invoice_source, 'client') <> 'developer'
+          AND COALESCE(document_type, 'invoice') IN ('invoice', 'credit_note')
           AND issue_date >= ${oldest}
           AND issue_date <= ${endOfMonth}
         GROUP BY 1
@@ -272,6 +276,7 @@ async function buildTimeline(count = 12): Promise<FinanceMonthPoint[]> {
            AND i.status = 'sent'
            AND i.bank_transaction_id IS NOT NULL
            AND ${SQL_EXCLUDE_DEVELOPER_INVOICES_I}
+           AND ${SQL_FISCAL_INVOICES_I}
            AND bt.date >= $1 AND bt.date <= $2
            AND bt.amount > 0
          GROUP BY 1`,

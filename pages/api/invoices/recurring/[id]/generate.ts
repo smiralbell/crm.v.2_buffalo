@@ -75,6 +75,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const dueDay =
       recurring.due_day == null ? null : Math.min(recurring.due_day, daysInMonth(year, monthIndex))
 
+    if (sourceInvoice.document_type && sourceInvoice.document_type !== 'invoice') {
+      return res.status(400).json({
+        error: 'Solo se puede repetir una factura normal. La factura original no se modifica.',
+      })
+    }
+
     const issueDate = new Date(Date.UTC(year, monthIndex, issueDay))
     const dueDate = dueDay == null ? null : new Date(Date.UTC(year, monthIndex, dueDay))
     const invoiceNumber = await getNextInvoiceNumber()

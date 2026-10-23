@@ -8,6 +8,8 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { createPlaceholderNotePdfBuffer } from '@/lib/pdf/placeholder-note-pdf'
 import { uploadInvoiceToDrive } from '@/lib/integrations/google/drive-invoices'
+import { format } from 'date-fns'
+import { pdfDocumentFields } from '@/lib/invoices/document'
 
 export default async function handler(
   req: NextApiRequest,
@@ -70,7 +72,33 @@ export default async function handler(
       // Continuar sin logo si no se encuentra
     }
 
-    // Generar el PDF
+    let rectifiesNumber: string | null = null
+    let rectifiesDateLabel: string | null = null
+    if (invoice.rectifies_invoice_id) {
+      const original = await prisma.invoice.findUnique({
+        where: { id: invoice.rectifies_invoice_id },
+        select: { invoice_number: true, issue_date: true },
+      })
+      if (original) {
+        rectifiesNumber = original.invoice_number
+        rectifiesDateLabel = format(original.issue_date, 'dd/MM/yyyy')
+      }
+    }
+    const documentFields = pdfDocumentFields({
+      document_type: invoice.document_type,
+      document_title: invoice.document_title,
+      observations: invoice.observations,
+      rectification_reason: invoice.rectification_reason,
+      show_payment_info: invoice.show_payment_info,
+      payment_method: invoice.payment_method,
+      bank_name: invoice.bank_name,
+      bank_account_holder: invoice.bank_account_holder,
+      iban: invoice.iban,
+      payment_instructions: invoice.payment_instructions,
+      rectifiesNumber,
+      rectifiesDateLabel,
+    })
+
     const pdfDoc = React.createElement(InvoicePDF, {
       invoiceNumber: invoice.invoice_number,
       clientName: invoice.client_name,
@@ -87,6 +115,7 @@ export default async function handler(
       iva: Number(invoice.iva),
       total: Number(invoice.total),
       logoUrl: logoBase64 || undefined,
+      ...documentFields,
     })
 
     // Generar el buffer del PDF

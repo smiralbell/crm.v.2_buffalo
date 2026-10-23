@@ -1,4 +1,5 @@
 import { Pool } from 'pg'
+import { ensureInvoiceDocumentColumns } from '@/lib/invoices/ensure-columns'
 
 let pool: Pool | null = null
 
@@ -47,6 +48,7 @@ export async function query<T = any>(
   text: string,
   params?: any[]
 ): Promise<{ rows: T[]; rowCount: number }> {
+  await ensureInvoiceDocumentColumns()
   const pool = getPool()
   const result = await pool.query(text, params)
   return {

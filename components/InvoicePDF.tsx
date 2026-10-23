@@ -26,6 +26,12 @@ interface InvoicePDFProps {
   iva: number
   total: number
   logoUrl?: string
+  documentTitle?: string
+  observations?: string
+  rectifiesLabel?: string
+  rectificationReason?: string
+  showPaymentInfo?: boolean
+  paymentLines?: string[]
 }
 
 // Estilos para el PDF
@@ -217,6 +223,30 @@ const styles = StyleSheet.create({
     fontFamily: 'Helvetica',
     fontWeight: 'normal',
   },
+  reference: {
+    marginTop: 4,
+    fontSize: 9,
+    color: '#374151',
+    textAlign: 'right',
+    maxWidth: 220,
+  },
+  notes: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTop: '1px solid #E5E7EB',
+  },
+  notesTitle: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  notesBody: {
+    fontSize: 10,
+    color: '#111827',
+    lineHeight: 1.5,
+  },
   footer: {
     marginTop: 'auto',
     paddingTop: 16,
@@ -243,7 +273,23 @@ export const InvoicePDF = ({
   iva,
   total,
   logoUrl = '/buffalo-logo.png',
+  documentTitle = 'FACTURA',
+  observations,
+  rectifiesLabel,
+  rectificationReason,
+  showPaymentInfo = true,
+  paymentLines,
 }: InvoicePDFProps) => {
+  const payment = paymentLines && paymentLines.length > 0
+    ? paymentLines
+    : [
+        'Transferencia bancaria Banco CaixaBank',
+        'Nombre: BUFFALO IA Global Digital Solutions',
+        'Número de cuenta: ES16 2100 0795 1802 0064 1987',
+      ]
+  const money = (value: number) =>
+    `${value.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -253,9 +299,12 @@ export const InvoicePDF = ({
             <Image src={logoUrl} style={styles.logo} />
           </View>
           <View style={styles.invoiceInfo}>
-            <Text style={styles.invoiceTitle}>FACTURA</Text>
+            <Text style={[styles.invoiceTitle, { fontSize: documentTitle.length > 16 ? 14 : 20 }]}>
+              {documentTitle}
+            </Text>
             <Text style={styles.invoiceNumber}>Nº {invoiceNumber}</Text>
             <Text style={styles.invoiceDate}>{format(new Date(issueDate), 'dd MMM yyyy')}</Text>
+            {rectifiesLabel ? <Text style={styles.reference}>{rectifiesLabel}</Text> : null}
           </View>
         </View>
 
@@ -302,17 +351,11 @@ export const InvoicePDF = ({
                 <Text style={[styles.tableCell, styles.colDesc]}>{service.description || 'Sin descripción'}</Text>
                 <Text style={[styles.tableCell, styles.colQty]}>{service.quantity || 0}</Text>
                 <Text style={[styles.tableCell, styles.colPrice]}>
-                  {(service.price || 0).toLocaleString('es-ES', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })} €
+                  {money(service.price || 0)}
                 </Text>
                 <Text style={[styles.tableCell, styles.colTax]}>{service.tax || 0}%</Text>
                 <Text style={[styles.tableCell, styles.colTotal]}>
-                  {(service.total || 0).toLocaleString('es-ES', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })} €
+                  {money(service.total || 0)}
                 </Text>
               </View>
             ))
@@ -330,41 +373,49 @@ export const InvoicePDF = ({
           <View style={styles.totalsContainer}>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Subtotal:</Text>
-              <Text style={styles.totalValue}>
-                {subtotal.toLocaleString('es-ES', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })} €
-              </Text>
+              <Text style={styles.totalValue}>{money(subtotal)}</Text>
             </View>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>IVA:</Text>
-              <Text style={styles.totalValue}>
-                {iva.toLocaleString('es-ES', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })} €
-              </Text>
+              <Text style={styles.totalValue}>{money(iva)}</Text>
             </View>
             <View style={styles.totalRowFinal}>
               <Text>Total:</Text>
-              <Text>
-                {total.toLocaleString('es-ES', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })} €
-              </Text>
+              <Text>{money(total)}</Text>
             </View>
           </View>
         </View>
 
-        {/* Información de pago */}
-        <View style={styles.paymentInfo}>
-          <Text style={styles.paymentTitle}>Información de pago</Text>
-          <Text style={styles.paymentDetail}>Transferencia bancaria Banco CaixaBank</Text>
-          <Text style={styles.paymentDetail}>Nombre: BUFFALO IA Global Digital Solutions</Text>
-          <Text style={styles.paymentDetail}>Número de cuenta: <Text style={styles.accountNumber}>ES16 2100 0795 1802 0064 1987</Text></Text>
-        </View>
+        {(rectificationReason || observations) && (
+          <View style={styles.notes}>
+            {rectificationReason ? (
+              <View style={{ marginBottom: observations ? 8 : 0 }}>
+                <Text style={styles.notesTitle}>Motivo de la rectificación</Text>
+                <Text style={styles.notesBody}>{rectificationReason}</Text>
+              </View>
+            ) : null}
+            {observations ? (
+              <View>
+                <Text style={styles.notesTitle}>Observaciones</Text>
+                <Text style={styles.notesBody}>{observations}</Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+
+        {showPaymentInfo && (
+          <View style={styles.paymentInfo}>
+            <Text style={styles.paymentTitle}>Información de pago</Text>
+            {payment.map((line) => (
+              <Text key={line} style={styles.paymentDetail}>{line}</Text>
+            ))}
+            {dueDate ? (
+              <Text style={styles.paymentDetail}>
+                Vencimiento: {format(new Date(dueDate), 'dd/MM/yyyy')}
+              </Text>
+            ) : null}
+          </View>
+        )}
 
         {/* Footer */}
         <View style={styles.footer}>

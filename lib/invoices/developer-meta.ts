@@ -14,6 +14,17 @@ export const CLIENT_INVOICE_WHERE = {
   invoice_source: { not: 'developer' as const },
 }
 
+/** Factura fiscal o rectificativa. Proforma y presupuesto no suman ingresos. */
+export const FISCAL_INVOICE_WHERE = {
+  document_type: { in: ['invoice', 'credit_note'] },
+}
+
+export const SQL_FISCAL_INVOICES =
+  `COALESCE(document_type, 'invoice') IN ('invoice', 'credit_note')`
+
+export const SQL_FISCAL_INVOICES_I =
+  `COALESCE(i.document_type, 'invoice') IN ('invoice', 'credit_note')`
+
 /** Fragmento SQL: solo facturas de cliente (sin alias de tabla). */
 export const SQL_EXCLUDE_DEVELOPER_INVOICES =
   `COALESCE(invoice_source, 'client') <> 'developer'`

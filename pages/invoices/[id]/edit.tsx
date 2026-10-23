@@ -18,16 +18,38 @@ import {
 } from '@/components/ui/select'
 import { ArrowLeft, Plus, Trash2, Download } from 'lucide-react'
 import Link from 'next/link'
+import { format } from 'date-fns'
 import InvoicePreview from '@/components/InvoicePreview'
 import { useRef } from 'react'
-import { getNextBufInvoiceNumber } from '@/lib/invoices/numbers'
+import { getNextDocumentNumber } from '@/lib/invoices/numbers'
 import InvoiceFeedbackDialog from '@/components/invoices/InvoiceFeedbackDialog'
+import InvoiceDocumentFields, {
+  type InvoiceOriginalOption,
+} from '@/components/invoices/InvoiceDocumentFields'
+import { ensureInvoiceDocumentColumns } from '@/lib/invoices/ensure-columns'
+import {
+  asAmount,
+  asDocumentType,
+  isIssuedStatus,
+  normalizeInvoiceDocument,
+  numberMatchesDocumentType,
+  pdfDocumentFields,
+  type DocumentType,
+} from '@/lib/invoices/document'
 
 interface Service {
   description: string
   quantity: number
-  price: number
+  price: number | string
   tax: number
+  total: number
+}
+
+interface RelatedInvoice {
+  id: number
+  invoice_number: string
+  issue_date: string
+  status: string
   total: number
 }
 
@@ -44,8 +66,23 @@ interface EditInvoiceProps {
     issue_date: string
     due_date: string | null
     services: Service[]
+    document_type?: string | null
+    document_title?: string | null
+    observations?: string | null
+    rectifies_invoice_id?: number | null
+    rectification_reason?: string | null
+    show_payment_info?: boolean | null
+    payment_method?: string | null
+    bank_name?: string | null
+    bank_account_holder?: string | null
+    iban?: string | null
+    payment_instructions?: string | null
+    invoice_source?: string | null
   }
-  nextInvoiceNumber: string
+  nextNumbers: Record<DocumentType, string>
+  originals: InvoiceOriginalOption[]
+  rectifications: RelatedInvoice[]
+  rectifies: { id: number; invoice_number: string; issue_date: string } | null
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -62,6 +99,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 
   try {
     const id = parseInt(context.params?.id as string)
+    await ensureInvoiceDocumentColumns()
 
     const invoice = await prisma.invoice.findUnique({
       where: { id, deleted_at: null },
@@ -73,7 +111,48 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       }
     }
 
-    const nextInvoiceNumber = await getNextBufInvoiceNumber()
+    await ensureInvoiceDocumentColumns()
+    const [nextInvoice, nextCredit, nextProforma, nextQuote, originalRows, rectificationRows, rectifiesRow] =
+      await Promise.all([
+        getNextDocumentNumber('invoice'),
+        getNextDocumentNumber('credit_note'),
+        getNextDocumentNumber('proforma'),
+        getNextDocumentNumber('quote'),
+        prisma.invoice.findMany({
+          where: {
+            deleted_at: null,
+            status: 'sent',
+            document_type: 'invoice',
+            invoice_source: { not: 'developer' },
+          },
+          select: {
+            id: true,
+            invoice_number: true,
+            client_name: true,
+            issue_date: true,
+            total: true,
+          },
+          orderBy: { issue_date: 'desc' },
+          take: 200,
+        }),
+        prisma.invoice.findMany({
+          where: { rectifies_invoice_id: id, deleted_at: null },
+          select: {
+            id: true,
+            invoice_number: true,
+            issue_date: true,
+            status: true,
+            total: true,
+          },
+          orderBy: { issue_date: 'desc' },
+        }),
+        invoice.rectifies_invoice_id
+          ? prisma.invoice.findUnique({
+              where: { id: invoice.rectifies_invoice_id },
+              select: { id: true, invoice_number: true, issue_date: true },
+            })
+          : Promise.resolve(null),
+      ])
 
     return {
       props: {
@@ -89,7 +168,33 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           updated_at: invoice.updated_at.toISOString(),
           deleted_at: invoice.deleted_at?.toISOString() || null,
         },
-        nextInvoiceNumber,
+        nextNumbers: {
+          invoice: nextInvoice,
+          credit_note: nextCredit,
+          proforma: nextProforma,
+          quote: nextQuote,
+        },
+        originals: originalRows.map((row) => ({
+          id: row.id,
+          invoice_number: row.invoice_number,
+          client_name: row.client_name,
+          issue_date: row.issue_date.toISOString(),
+          total: Number(row.total),
+        })),
+        rectifications: rectificationRows.map((row) => ({
+          id: row.id,
+          invoice_number: row.invoice_number,
+          issue_date: row.issue_date.toISOString(),
+          status: row.status,
+          total: Number(row.total),
+        })),
+        rectifies: rectifiesRow
+          ? {
+              id: rectifiesRow.id,
+              invoice_number: rectifiesRow.invoice_number,
+              issue_date: rectifiesRow.issue_date.toISOString(),
+            }
+          : null,
       },
     }
   } catch (error: any) {
@@ -112,7 +217,14 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   }
 }
 
-export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceProps) {
+export default function EditInvoice({
+  invoice,
+  nextNumbers,
+  originals,
+  rectifications,
+  rectifies,
+}: EditInvoiceProps) {
+  const locked = isIssuedStatus(invoice.status)
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -136,7 +248,20 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
     issue_date: invoice.issue_date,
     due_date: invoice.due_date || '',
     status: invoice.status as 'draft' | 'sent' | 'cancelled',
+    document_type: asDocumentType(invoice.document_type),
+    document_title: invoice.document_title || '',
+    observations: invoice.observations || '',
+    rectifies_invoice_id: invoice.rectifies_invoice_id ?? null,
+    rectification_reason: invoice.rectification_reason || '',
+    show_payment_info: invoice.show_payment_info !== false,
+    payment_method: invoice.payment_method || '',
+    bank_name: invoice.bank_name || '',
+    bank_account_holder: invoice.bank_account_holder || '',
+    iban: invoice.iban || '',
+    payment_instructions: invoice.payment_instructions || '',
   })
+  const suggestedNumber = nextNumbers[formData.document_type]
+  const fieldDisabled = loading || locked
 
   const [services, setServices] = useState<Service[]>(invoice.services)
   const invoicePreviewRef = useRef<HTMLDivElement>(null)
@@ -157,8 +282,8 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
 
     // Calcular total de la línea
     if (field === 'quantity' || field === 'price' || field === 'tax') {
-      const qty = field === 'quantity' ? parseFloat(value) || 0 : newServices[index].quantity
-      const price = field === 'price' ? parseFloat(value) || 0 : newServices[index].price
+      const qty = field === 'quantity' ? parseFloat(value) || 0 : asAmount(newServices[index].quantity)
+      const price = field === 'price' ? parseFloat(value) || 0 : asAmount(newServices[index].price)
       const tax = field === 'tax' ? parseFloat(value) || 21 : newServices[index].tax
       const subtotal = qty * price
       const taxAmount = subtotal * (tax / 100)
@@ -173,7 +298,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
     let iva = 0
 
     services.forEach((service) => {
-      const lineSubtotal = service.quantity * service.price
+      const lineSubtotal = asAmount(service.quantity) * asAmount(service.price)
       const lineIva = lineSubtotal * (service.tax / 100)
       subtotal += lineSubtotal
       iva += lineIva
@@ -191,24 +316,26 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
     setError('')
     setLoading(true)
 
-    if (services.some((s) => !s.description || s.quantity <= 0 || s.price <= 0)) {
-      setError('Todos los servicios deben tener descripción, cantidad y precio válidos')
+    if (locked) {
+      setError('Esta factura ya está emitida y no se modifica.')
       setLoading(false)
       return
     }
 
-    const totals = calculateTotals()
-    const servicesWithTotals = services.map((service) => {
-      const lineSubtotal = service.quantity * service.price
-      const lineIva = lineSubtotal * (service.tax / 100)
-      return {
-        description: service.description,
-        quantity: service.quantity,
-        price: service.price,
-        tax: service.tax,
-        total: lineSubtotal + lineIva,
-      }
+    const checked = normalizeInvoiceDocument({
+      ...formData,
+      services: services.map((service) => ({
+        ...service,
+        quantity: Number(service.quantity) || 0,
+        price: Number(service.price),
+        tax: Number(service.tax),
+      })),
     })
+    if (!checked.ok) {
+      setError(checked.error)
+      setLoading(false)
+      return
+    }
 
     try {
       const res = await fetch(`/api/invoices/${invoice.id}`, {
@@ -216,12 +343,18 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          invoice_number: formData.invoice_number || nextInvoiceNumber,
-          services: servicesWithTotals,
-          subtotal: totals.subtotal,
-          iva: totals.iva,
-          total: totals.total,
-          status: formData.status,
+          invoice_number: formData.invoice_number || suggestedNumber,
+          services: checked.value.services,
+          subtotal: checked.value.subtotal,
+          iva: checked.value.iva,
+          total: checked.value.total,
+          document_type: checked.value.document_type,
+          document_title: checked.value.document_title,
+          observations: checked.value.observations,
+          rectifies_invoice_id: checked.value.rectifies_invoice_id,
+          rectification_reason: checked.value.rectification_reason,
+          show_payment_info: checked.value.show_payment_info,
+          status: checked.value.status,
         }),
       })
 
@@ -236,7 +369,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
         open: true,
         variant: 'success',
         title: 'Factura guardada',
-        description: `${formData.invoice_number || nextInvoiceNumber} se ha actualizado correctamente.`,
+        description: `${formData.invoice_number || suggestedNumber} se ha actualizado correctamente.`,
         confirmLabel: 'Entendido',
       })
       setLoading(false)
@@ -247,6 +380,23 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
   }
 
   const totals = calculateTotals()
+  const linkedOriginal = originals.find((item) => item.id === formData.rectifies_invoice_id) || rectifies
+  const pdfExtras = pdfDocumentFields({
+    document_type: formData.document_type,
+    document_title: formData.document_title,
+    observations: formData.observations,
+    rectification_reason: formData.rectification_reason,
+    show_payment_info: formData.show_payment_info,
+    payment_method: formData.payment_method,
+    bank_name: formData.bank_name,
+    bank_account_holder: formData.bank_account_holder,
+    iban: formData.iban,
+    payment_instructions: formData.payment_instructions,
+    rectifiesNumber: linkedOriginal?.invoice_number,
+    rectifiesDateLabel: linkedOriginal
+      ? format(new Date(linkedOriginal.issue_date), 'dd/MM/yyyy')
+      : undefined,
+  })
 
   // Función para descargar PDF usando @react-pdf/renderer
   const handleDownloadPDF = async () => {
@@ -259,14 +409,17 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
       const servicesWithTotals = services
         .filter((s) => s.description)
         .map((service) => ({
-          ...service,
-          total: service.quantity * service.price * (1 + (service.tax || 0) / 100),
+          description: service.description,
+          quantity: asAmount(service.quantity),
+          price: asAmount(service.price),
+          tax: service.tax,
+          total: asAmount(service.quantity) * asAmount(service.price) * (1 + (service.tax || 0) / 100),
         }))
 
       // Crear el documento PDF
       const doc = (
         <InvoicePDF
-          invoiceNumber={formData.invoice_number || nextInvoiceNumber}
+          invoiceNumber={formData.invoice_number || suggestedNumber}
           clientName={formData.client_name}
           clientCompanyName={formData.client_company_name || undefined}
           clientEmail={formData.client_email || undefined}
@@ -280,6 +433,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
           subtotal={totals.subtotal}
           iva={totals.iva}
           total={totals.total}
+          {...pdfExtras}
         />
       )
 
@@ -288,7 +442,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `factura-${formData.invoice_number || nextInvoiceNumber}.pdf`
+      link.download = `factura-${formData.invoice_number || suggestedNumber}.pdf`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -320,12 +474,12 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
 
   // Preparar servicios con totales para la vista previa
   const servicesWithTotals = services.map((service) => {
-    const lineSubtotal = service.quantity * service.price
+    const lineSubtotal = asAmount(service.quantity) * asAmount(service.price)
     const lineIva = lineSubtotal * (service.tax / 100)
     return {
       description: service.description,
-      quantity: service.quantity,
-      price: service.price,
+      quantity: asAmount(service.quantity),
+      price: asAmount(service.price),
       tax: service.tax,
       total: lineSubtotal + lineIva,
     }
@@ -344,9 +498,9 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
               </Link>
               <div className="min-w-0">
                 <h1 className="truncate text-[15px] font-semibold tracking-tight text-zinc-900">
-                  Editar factura
+                  {locked ? 'Factura emitida' : 'Editar factura'}
                   <span className="ml-2 font-medium text-zinc-500">
-                    {formData.invoice_number || nextInvoiceNumber}
+                    {formData.invoice_number || suggestedNumber}
                   </span>
                 </h1>
               </div>
@@ -368,18 +522,27 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                   Cancelar
                 </Button>
               </Link>
-              <Button
-                type="button"
-                size="sm"
-                disabled={loading}
-                className="rounded-full"
-                onClick={() => {
-                  const form = document.getElementById('invoice-edit-form') as HTMLFormElement | null
-                  form?.requestSubmit()
-                }}
-              >
-                {loading ? 'Guardando…' : 'Guardar'}
-              </Button>
+              {locked && asDocumentType(invoice.document_type) === 'invoice' && invoice.invoice_source !== 'developer' && (
+                <Link href={`/invoices/new?rectifica=${invoice.id}`}>
+                  <Button type="button" size="sm" className="rounded-full">
+                    Crear rectificativa
+                  </Button>
+                </Link>
+              )}
+              {!locked && (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={loading}
+                  className="rounded-full"
+                  onClick={() => {
+                    const form = document.getElementById('invoice-edit-form') as HTMLFormElement | null
+                    form?.requestSubmit()
+                  }}
+                >
+                  {loading ? 'Guardando…' : 'Guardar'}
+                </Button>
+              )}
             </div>
           </div>
         </header>
@@ -387,6 +550,58 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 p-3 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
           <div className="hide-scrollbar min-h-0 overflow-y-auto overscroll-contain rounded-3xl border border-zinc-200/80 bg-white p-4 shadow-sm sm:p-5">
             <form id="invoice-edit-form" onSubmit={handleSubmit} className="space-y-5 pb-8">
+              {locked && (
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
+                  Esta factura ya está emitida. No se modifica ni se elimina. Si hay que corregirla, crea una factura rectificativa: el original se queda igual.
+                </div>
+              )}
+              {rectifies && (
+                <p className="text-sm text-zinc-600">
+                  Rectifica a{' '}
+                  <Link href={`/invoices/${rectifies.id}/edit`} className="font-medium underline">
+                    {rectifies.invoice_number}
+                  </Link>
+                  {' '}del {format(new Date(rectifies.issue_date), 'dd/MM/yyyy')}.
+                </p>
+              )}
+              {rectifications.length > 0 && (
+                <div className="rounded-2xl border border-zinc-200 p-3 text-sm">
+                  <p className="font-medium text-zinc-900">Rectificativas</p>
+                  <ul className="mt-2 space-y-1">
+                    {rectifications.map((item) => (
+                      <li key={item.id}>
+                        <Link href={`/invoices/${item.id}/edit`} className="underline">
+                          {item.invoice_number}
+                        </Link>
+                        {' · '}
+                        {format(new Date(item.issue_date), 'dd/MM/yyyy')}
+                        {' · '}
+                        {item.total.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <InvoiceDocumentFields
+                values={formData}
+                originals={originals}
+                disabled={fieldDisabled}
+                onChange={(patch) => {
+                  setFormData((prev) => {
+                    if (!patch.document_type || patch.document_type === prev.document_type) {
+                      return { ...prev, ...patch }
+                    }
+                    const keepNumber = numberMatchesDocumentType(prev.invoice_number, patch.document_type)
+                    return {
+                      ...prev,
+                      ...patch,
+                      invoice_number: keepNumber ? prev.invoice_number : nextNumbers[patch.document_type],
+                      show_payment_info: patch.document_type === 'credit_note' ? false : prev.show_payment_info,
+                      rectifies_invoice_id: patch.document_type === 'credit_note' ? prev.rectifies_invoice_id : null,
+                    }
+                  })
+                }}
+              />
           {/* Cliente - Estilo minimalista */}
           <Card className="rounded-2xl border border-zinc-200 shadow-none">
             <CardHeader className="pb-3">
@@ -400,7 +615,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                   value={formData.client_name}
                   onChange={(e) => setFormData({ ...formData, client_name: e.target.value })}
                   required
-                  disabled={loading}
+                  disabled={fieldDisabled}
                 />
               </div>
 
@@ -410,7 +625,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                   id="client_company_name"
                   value={formData.client_company_name}
                   onChange={(e) => setFormData({ ...formData, client_company_name: e.target.value })}
-                  disabled={loading}
+                  disabled={fieldDisabled}
                 />
               </div>
 
@@ -421,7 +636,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                   value={formData.client_address}
                   onChange={(e) => setFormData({ ...formData, client_address: e.target.value })}
                   rows={2}
-                  disabled={loading}
+                  disabled={fieldDisabled}
                 />
               </div>
 
@@ -432,7 +647,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                   type="email"
                   value={formData.client_email}
                   onChange={(e) => setFormData({ ...formData, client_email: e.target.value })}
-                  disabled={loading}
+                  disabled={fieldDisabled}
                 />
               </div>
 
@@ -442,7 +657,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                   id="client_tax_id"
                   value={formData.client_tax_id}
                   onChange={(e) => setFormData({ ...formData, client_tax_id: e.target.value })}
-                  disabled={loading}
+                  disabled={fieldDisabled}
                 />
               </div>
             </CardContent>
@@ -463,7 +678,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                       onChange={(e) => updateService(index, 'description', e.target.value)}
                       placeholder="Descripción del servicio"
                       required
-                      disabled={loading}
+                      disabled={fieldDisabled}
                       className="w-full"
                     />
                   </div>
@@ -477,19 +692,21 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                         value={service.quantity}
                         onChange={(e) => updateService(index, 'quantity', parseFloat(e.target.value) || 0)}
                         required
-                        disabled={loading}
+                        disabled={fieldDisabled}
                       />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">Precio Unit. *</Label>
                       <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        inputMode="decimal"
                         value={service.price}
-                        onChange={(e) => updateService(index, 'price', parseFloat(e.target.value) || 0)}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(',', '.')
+                          if (!/^-?\d*\.?\d*$/.test(raw)) return
+                          updateService(index, 'price', raw)
+                        }}
                         required
-                        disabled={loading}
+                        disabled={fieldDisabled}
                       />
                     </div>
                     <div className="space-y-2">
@@ -501,7 +718,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                         max="100"
                         value={service.tax}
                         onChange={(e) => updateService(index, 'tax', parseFloat(e.target.value) || 21)}
-                        disabled={loading}
+                        disabled={fieldDisabled}
                       />
                     </div>
                   </div>
@@ -512,7 +729,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                         variant="ghost"
                         size="sm"
                         onClick={() => removeService(index)}
-                        disabled={loading}
+                        disabled={fieldDisabled}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
@@ -523,7 +740,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                 </div>
               ))}
 
-              <Button type="button" variant="outline" onClick={addService} disabled={loading}>
+              <Button type="button" variant="outline" onClick={addService} disabled={fieldDisabled}>
                 <Plus className="mr-2 h-4 w-4" />
                 Agregar Servicio
               </Button>
@@ -542,10 +759,10 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                   id="invoice_number"
                   value={formData.invoice_number}
                   onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
-                  placeholder={nextInvoiceNumber}
-                  disabled={loading}
+                  placeholder={suggestedNumber}
+                  disabled={fieldDisabled}
                 />
-                <p className="text-xs text-gray-500">Por defecto: {nextInvoiceNumber}</p>
+                <p className="text-xs text-gray-500">Por defecto: {suggestedNumber}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -557,7 +774,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                     value={formData.issue_date}
                     onChange={(e) => setFormData({ ...formData, issue_date: e.target.value })}
                     required
-                    disabled={loading}
+                    disabled={fieldDisabled}
                   />
                 </div>
                 <div className="space-y-2">
@@ -567,7 +784,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                     type="date"
                     value={formData.due_date}
                     onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                    disabled={loading}
+                    disabled={fieldDisabled}
                   />
                 </div>
               </div>
@@ -579,7 +796,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                   onValueChange={(value: 'draft' | 'sent' | 'cancelled') =>
                     setFormData({ ...formData, status: value })
                   }
-                  disabled={loading}
+                  disabled={fieldDisabled}
                 >
                   <SelectTrigger id="status">
                     <SelectValue placeholder="Seleccionar estado" />
@@ -641,7 +858,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
 
               <div className="flex flex-wrap justify-end gap-2 pt-2 lg:hidden">
                 <Link href="/invoices">
-                  <Button type="button" variant="outline" disabled={loading} className="rounded-full">
+                  <Button type="button" variant="outline" disabled={fieldDisabled} className="rounded-full">
                     Cancelar
                   </Button>
                 </Link>
@@ -655,9 +872,11 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                   <Download className="mr-2 h-4 w-4" />
                   PDF
                 </Button>
-                <Button type="submit" disabled={loading} className="rounded-full">
-                  {loading ? 'Guardando...' : 'Guardar Cambios'}
-                </Button>
+                {!locked && (
+                  <Button type="submit" disabled={loading} className="rounded-full">
+                    {loading ? 'Guardando...' : 'Guardar Cambios'}
+                  </Button>
+                )}
               </div>
             </form>
           </div>
@@ -670,7 +889,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                 style={{ width: '100%', maxWidth: '210mm', minHeight: '297mm' }}
               >
                 <InvoicePreview
-                  invoiceNumber={formData.invoice_number || nextInvoiceNumber}
+                  invoiceNumber={formData.invoice_number || suggestedNumber}
                   clientName={formData.client_name}
                   clientCompanyName={formData.client_company_name || undefined}
                   clientEmail={formData.client_email || undefined}
@@ -685,6 +904,7 @@ export default function EditInvoice({ invoice, nextInvoiceNumber }: EditInvoiceP
                   iva={totals.iva}
                   total={totals.total}
                   status={formData.status}
+                  {...pdfExtras}
                 />
               </div>
             </div>

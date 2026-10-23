@@ -24,6 +24,12 @@ interface InvoicePreviewProps {
   iva: number
   total: number
   status?: string
+  documentTitle?: string
+  observations?: string
+  rectifiesLabel?: string
+  rectificationReason?: string
+  showPaymentInfo?: boolean
+  paymentLines?: string[]
 }
 
 export default function InvoicePreview({
@@ -41,9 +47,21 @@ export default function InvoicePreview({
   subtotal,
   iva,
   total,
-  status = 'draft',
+  documentTitle = 'FACTURA',
+  observations,
+  rectifiesLabel,
+  rectificationReason,
+  showPaymentInfo = true,
+  paymentLines,
 }: InvoicePreviewProps) {
   const logoUrl = '/buffalo-logo.png'
+  const payment = paymentLines && paymentLines.length > 0
+    ? paymentLines
+    : [
+        'Transferencia bancaria Banco CaixaBank',
+        'Nombre: BUFFALO IA Global Digital Solutions',
+        'ES16 2100 0795 1802 0064 1987',
+      ]
 
   return (
     <div 
@@ -51,7 +69,6 @@ export default function InvoicePreview({
       style={{ 
         width: '210mm', 
         minHeight: '297mm',
-        maxHeight: '297mm',
         margin: '0',
         padding: '0',
         backgroundColor: '#ffffff',
@@ -60,7 +77,7 @@ export default function InvoicePreview({
         lineHeight: '1.5',
         color: '#111827',
         boxSizing: 'border-box',
-        overflow: 'hidden',
+        overflow: 'visible',
         position: 'relative',
       }}
     >
@@ -68,9 +85,7 @@ export default function InvoicePreview({
       <div 
         style={{ 
           width: '100%',
-          height: '297mm',
           minHeight: '297mm',
-          maxHeight: '297mm',
           padding: '20mm 25mm 15mm 25mm',
           boxSizing: 'border-box',
           position: 'relative',
@@ -99,12 +114,17 @@ export default function InvoicePreview({
             </div>
             {/* Número y fecha */}
             <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
-              <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#111827', margin: '0 0 4px 0', lineHeight: '1.2' }}>
-                FACTURA
+              <h1 style={{ fontSize: documentTitle.length > 16 ? '20px' : '28px', fontWeight: '700', color: '#111827', margin: '0 0 4px 0', lineHeight: '1.2' }}>
+                {documentTitle}
               </h1>
               <p style={{ fontSize: '14px', color: '#4B5563', margin: '0 0 8px 0', lineHeight: '1.4' }}>
                 Nº {invoiceNumber}
               </p>
+              {rectifiesLabel && (
+                <p style={{ fontSize: '12px', color: '#374151', margin: '8px 0 0 0', lineHeight: '1.4', maxWidth: '240px' }}>
+                  {rectifiesLabel}
+                </p>
+              )}
               <p style={{ fontSize: '14px', fontWeight: '500', color: '#111827', margin: '8px 0 0 0', lineHeight: '1.4' }}>
                 {format(new Date(issueDate), 'dd MMM yyyy')}
               </p>
@@ -282,18 +302,37 @@ export default function InvoicePreview({
           </div>
         </div>
 
-        {/* Información de pago */}
-        <div style={{ marginBottom: '24px', paddingTop: '20px', borderTop: '1px solid #E5E7EB', flexShrink: 0 }}>
-          <div style={{ fontSize: '13px', color: '#4B5563', lineHeight: '1.6' }}>
-            <p style={{ fontWeight: '500', color: '#111827', margin: '0 0 6px 0', lineHeight: '1.4' }}>Información de pago</p>
-            <p style={{ margin: '0 0 4px 0', lineHeight: '1.4' }}>Transferencia bancaria</p>
-            <p style={{ margin: '0 0 4px 0', lineHeight: '1.4' }}>Banco CaixaBank</p>
-            <p style={{ margin: '0 0 4px 0', lineHeight: '1.4' }}>Nombre: BUFFALO IA Global Digital Solutions</p>
-            <p style={{ fontFamily: 'monospace', fontSize: '14px', color: '#111827', letterSpacing: '0.05em', margin: '0', lineHeight: '1.4' }}>
-              ES16 2100 0795 1802 0064 1987
-            </p>
+        {(rectificationReason || observations) && (
+          <div style={{ marginBottom: '24px', paddingTop: '16px', borderTop: '1px solid #E5E7EB' }}>
+            {rectificationReason && (
+              <div style={{ marginBottom: observations ? '12px' : 0 }}>
+                <p style={{ fontSize: '11px', fontWeight: 600, color: '#6B7280', margin: '0 0 4px 0', textTransform: 'uppercase' }}>
+                  Motivo de la rectificación
+                </p>
+                <p style={{ fontSize: '13px', color: '#111827', margin: 0, lineHeight: 1.5 }}>{rectificationReason}</p>
+              </div>
+            )}
+            {observations && (
+              <div>
+                <p style={{ fontSize: '11px', fontWeight: 600, color: '#6B7280', margin: '0 0 4px 0', textTransform: 'uppercase' }}>
+                  Observaciones
+                </p>
+                <p style={{ fontSize: '13px', color: '#111827', margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{observations}</p>
+              </div>
+            )}
           </div>
-        </div>
+        )}
+
+        {showPaymentInfo && (
+          <div style={{ marginBottom: '24px', paddingTop: '20px', borderTop: '1px solid #E5E7EB', flexShrink: 0 }}>
+            <div style={{ fontSize: '13px', color: '#4B5563', lineHeight: '1.6' }}>
+              <p style={{ fontWeight: '500', color: '#111827', margin: '0 0 6px 0', lineHeight: '1.4' }}>Información de pago</p>
+              {payment.map((line) => (
+                <p key={line} style={{ margin: '0 0 4px 0', lineHeight: '1.4' }}>{line}</p>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Footer - Posicionado al final del documento */}
         <div 
