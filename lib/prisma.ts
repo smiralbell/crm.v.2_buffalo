@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client'
-import { ensureInvoiceDocumentColumns } from '@/lib/invoices/ensure-columns'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -27,7 +26,7 @@ function createPrismaClient(): PrismaClient {
     databaseUrl = `${databaseUrl}${separator}connection_limit=10&pool_timeout=20`
   }
 
-  const client = new PrismaClient({
+  return new PrismaClient({
     // Solo logs de errores, sin queries ni warnings verbosos
     log: ['error'],
     datasources: {
@@ -36,17 +35,6 @@ function createPrismaClient(): PrismaClient {
       },
     },
   })
-
-  let columnsReady = false
-  client.$use(async (params, next) => {
-    if (!columnsReady) {
-      await ensureInvoiceDocumentColumns()
-      columnsReady = true
-    }
-    return next(params)
-  })
-
-  return client
 }
 
 // Obtener o crear el cliente Prisma
