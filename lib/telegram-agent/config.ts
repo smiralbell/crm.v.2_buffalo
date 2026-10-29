@@ -31,7 +31,7 @@ export function isAgentEnabled(): boolean {
   return Boolean(botToken()) && (flag === '1' || flag === 'true' || flag === 'on')
 }
 
-/** IDs de usuario de los socios con permiso total. */
+/** IDs de usuario con permiso total por configuración (chats privados de avisos + extra). */
 export function allowedUserIds(): Set<string> {
   const ids = alertChatIds()
     .filter((id) => /^\d+$/.test(id))
@@ -39,15 +39,35 @@ export function allowedUserIds(): Set<string> {
   return new Set(ids)
 }
 
-/** Grupos en los que el agente puede contestar (los de los avisos). */
+/** Grupos de avisos: sus miembros son los socios y el agente también contesta ahí. */
 export function allowedGroupIds(): Set<string> {
   return new Set(alertChatIds().filter((id) => /^-\d+$/.test(id)))
 }
 
-export function isAuthorized(userId: number | string, chatId: number | string, chatType: string): boolean {
-  if (!allowedUserIds().has(String(userId))) return false
-  if (chatType === 'private') return String(chatId) === String(userId)
-  return allowedGroupIds().has(String(chatId))
+/** ¿Este chat es uno donde el agente puede contestar a ese usuario? */
+function chatAllowed(userId: string, chatId: string, chatType: string): boolean {
+  if (chatType === 'private') return chatId === userId
+  return allowedGroupIds().has(chatId)
+}
+
+/**
+ * Socio = quien recibe los avisos: su chat privado está en TELEGRAM_CHAT_IDS, está en
+ * TELEGRAM_AGENT_USER_IDS, o es miembro de un grupo de avisos (se pregunta a Telegram).
+ */
+export async function isAuthorized(
+  userId: number | string,
+  chatId: number | string,
+  chatType: string,
+  isGroupMember: (groupId: string, userId: string) => Promise<boolean>
+): Promise<boolean> {
+  const uid = String(userId)
+  if (!chatAllowed(uid, String(chatId), chatType)) return false
+  if (allowedUserIds().has(uid)) return true
+  const groups = Array.from(allowedGroupIds())
+  for (const g of groups) {
+    if (await isGroupMember(g, uid)) return true
+  }
+  return false
 }
 
 /** Secreto que Telegram manda en cada webhook (X-Telegram-Bot-Api-Secret-Token). */

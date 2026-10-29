@@ -137,6 +137,29 @@ export async function downloadFile(fileId: string): Promise<{ buffer: Buffer; pa
   return { buffer: Buffer.from(await res.arrayBuffer()), path: info.file_path }
 }
 
+const memberCache = new Map<string, { ok: boolean; until: number }>()
+
+/** ¿Es miembro (no expulsado ni fuera) del grupo? Se guarda 10 minutos. */
+export async function isGroupMember(groupId: string, userId: string): Promise<boolean> {
+  const key = `${groupId}:${userId}`
+  const hit = memberCache.get(key)
+  if (hit && hit.until > Date.now()) return hit.ok
+  let ok = false
+  try {
+    const m = await call<{ status: string; is_member?: boolean; user?: TgUser & { is_bot?: boolean } }>(
+      'getChatMember',
+      { chat_id: groupId, user_id: Number(userId) }
+    )
+    ok =
+      !m.user?.is_bot &&
+      (['creator', 'administrator', 'member'].includes(m.status) || (m.status === 'restricted' && m.is_member === true))
+  } catch {
+    ok = false
+  }
+  memberCache.set(key, { ok, until: Date.now() + 10 * 60_000 })
+  return ok
+}
+
 let cachedMe: TgUser | null = null
 
 export async function getMe(): Promise<TgUser> {

@@ -15,6 +15,7 @@ import {
   answerCallback,
   downloadFile,
   getMe,
+  isGroupMember,
   sendDocument,
   sendText,
   sendTyping,
@@ -42,7 +43,7 @@ export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
   const cb = update.callback_query
   if (cb) {
     const chat = cb.message?.chat
-    if (!chat || !isAuthorized(cb.from.id, chat.id, chat.type)) {
+    if (!chat || !(await isAuthorized(cb.from.id, chat.id, chat.type, isGroupMember))) {
       await answerCallback(cb.id, 'No autorizado')
       return
     }
@@ -53,7 +54,7 @@ export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
 
   const msg = update.message
   if (!msg?.from) return
-  if (!isAuthorized(msg.from.id, msg.chat.id, msg.chat.type)) {
+  if (!(await isAuthorized(msg.from.id, msg.chat.id, msg.chat.type, isGroupMember))) {
     if (msg.chat.type === 'private') {
       await sendText(msg.chat.id, `⛔ No tienes acceso a este agente. Tu ID de Telegram es ${msg.from.id}.`)
     }
@@ -101,7 +102,10 @@ async function processMessage(msg: TgMessage): Promise<void> {
       reply = await runAgent(ctx, history, `${userName}: ${userText}`)
     } catch (e) {
       console.error('[telegram-agent]', e)
-      reply = `❌ Error del agente: ${e instanceof Error ? e.message : String(e)}`
+      const detail = e instanceof Error ? e.message : String(e)
+      reply = /OpenRouter 402/.test(detail)
+        ? '❌ No puedo pensar ahora: la cuenta de OpenRouter se ha quedado sin saldo. Recargad en openrouter.ai/settings/credits.'
+        : `❌ Error del agente: ${detail}`
     }
 
     await deliver(ctx, reply, msg.message_id)

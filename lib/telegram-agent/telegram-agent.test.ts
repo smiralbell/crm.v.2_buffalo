@@ -10,19 +10,31 @@ afterEach(() => {
 })
 
 describe('isAuthorized', () => {
-  it('solo deja pasar a los socios que reciben los avisos', () => {
+  const noMembers = async () => false
+  const groupMembers = (ids: string[]) => async (_g: string, u: string) => ids.includes(u)
+
+  it('deja pasar a los socios cuyo chat privado recibe los avisos', async () => {
     process.env.TELEGRAM_CHAT_IDS = '111,222'
-    expect(isAuthorized(111, 111, 'private')).toBe(true)
-    expect(isAuthorized(222, 222, 'private')).toBe(true)
-    expect(isAuthorized(333, 333, 'private')).toBe(false)
+    expect(await isAuthorized(111, 111, 'private', noMembers)).toBe(true)
+    expect(await isAuthorized(222, 222, 'private', noMembers)).toBe(true)
+    expect(await isAuthorized(333, 333, 'private', noMembers)).toBe(false)
   })
 
-  it('en grupos exige que el grupo esté en los avisos y que escriba un socio', () => {
-    process.env.TELEGRAM_CHAT_IDS = '-100500'
+  it('si los avisos van a un grupo, sus miembros son los socios (en privado y en el grupo)', async () => {
+    process.env.TELEGRAM_CHAT_IDS = '-4500'
+    const members = groupMembers(['111', '222'])
+    expect(await isAuthorized(111, 111, 'private', members)).toBe(true)
+    expect(await isAuthorized(222, -4500, 'group', members)).toBe(true)
+    expect(await isAuthorized(999, 999, 'private', members)).toBe(false)
+    expect(await isAuthorized(999, -4500, 'group', members)).toBe(false)
+  })
+
+  it('no contesta en grupos que no son los de avisos ni en privados ajenos', async () => {
+    process.env.TELEGRAM_CHAT_IDS = '-4500'
     process.env.TELEGRAM_AGENT_USER_IDS = '111'
-    expect(isAuthorized(111, -100500, 'supergroup')).toBe(true)
-    expect(isAuthorized(999, -100500, 'supergroup')).toBe(false)
-    expect(isAuthorized(111, -100999, 'supergroup')).toBe(false)
+    const members = groupMembers(['111'])
+    expect(await isAuthorized(111, -9999, 'supergroup', members)).toBe(false)
+    expect(await isAuthorized(111, 222, 'private', members)).toBe(false)
   })
 })
 

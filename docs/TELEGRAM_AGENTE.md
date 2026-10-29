@@ -21,10 +21,17 @@ los avisos programados que le pidáis.
 
 ## Quién tiene acceso
 
-Solo los IDs de `TELEGRAM_CHAT_IDS` (los mismos que reciben los avisos) más
-`TELEGRAM_AGENT_USER_IDS` si se definen. Cualquier otra persona recibe
-«No tienes acceso» y su ID. En grupos de avisos, el agente solo contesta si le
-mencionan, le responden o es un comando. El acceso no se puede cambiar desde el
+Solo quien recibe los avisos:
+
+- Si `TELEGRAM_CHAT_IDS` es un grupo (ahora mismo, el grupo «BUFFALO»), sus
+  miembros son los socios. El agente se lo pregunta a Telegram (con caché de
+  10 min). Si alguien sale del grupo, pierde el acceso.
+- Si son chats privados, esas personas.
+- Más `TELEGRAM_AGENT_USER_IDS` si se definen.
+
+Cualquier otra persona recibe «No tienes acceso» y su ID. Se puede hablar con el
+agente por privado (primero hay que escribirle /start) o en el grupo: ahí solo
+contesta si le mencionan, le responden o es un comando. El acceso no se puede cambiar desde el
 chat (a propósito): solo en las variables del servidor.
 
 El webhook comprueba la cabecera secreta de Telegram (`TELEGRAM_WEBHOOK_SECRET`
