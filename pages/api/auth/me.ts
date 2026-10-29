@@ -27,6 +27,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   void import('@/lib/integrations/meta/ads-scheduler')
     .then((m) => m.startMetaAdsSyncScheduler())
     .catch(() => {})
+  // Agente de Telegram: webhook + avisos programados (solo si TELEGRAM_AGENT=1).
+  void import('@/lib/telegram-agent/scheduler')
+    .then((m) => m.startTelegramAgent())
+    .catch(() => {})
 
   try {
     let user = await requireAuthAPI(req, res)
