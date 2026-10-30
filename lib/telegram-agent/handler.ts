@@ -56,7 +56,7 @@ export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
   if (!msg?.from) return
   if (!(await isAuthorized(msg.from.id, msg.chat.id, msg.chat.type, isGroupMember))) {
     if (msg.chat.type === 'private') {
-      await sendText(msg.chat.id, `⛔ No tienes acceso a este agente. Tu ID de Telegram es ${msg.from.id}.`)
+      await sendText(msg.chat.id, `No tienes acceso a este agente. Tu ID de Telegram es ${msg.from.id}.`)
     }
     console.warn(`[telegram-agent] mensaje no autorizado de ${msg.from.id} en chat ${msg.chat.id}`)
     return
@@ -108,8 +108,8 @@ async function processMessage(msg: TgMessage): Promise<void> {
       console.error('[telegram-agent]', e)
       const detail = e instanceof Error ? e.message : String(e)
       reply = /OpenRouter 402/.test(detail)
-        ? '❌ No puedo pensar ahora: la cuenta de OpenRouter se ha quedado sin saldo. Recargad en openrouter.ai/settings/credits.'
-        : `❌ Error del agente: ${detail}`
+        ? 'No puedo responder ahora: la cuenta de OpenRouter se ha quedado sin saldo. Recargad en openrouter.ai/settings/credits.'
+        : `Ha fallado algo: ${detail}`
     }
 
     await deliver(ctx, reply, msg.message_id)
@@ -208,7 +208,7 @@ async function handleCommand(raw: string, msg: TgMessage): Promise<boolean> {
     case '/nuevo':
     case '/reset':
       await saveMessage(chatId, msg.from!.id, 'reset', '')
-      await sendText(chatId, '🧹 Conversación nueva. Las instrucciones y avisos guardados se mantienen.')
+      await sendText(chatId, 'Conversación nueva. Las instrucciones y avisos guardados se mantienen.')
       return true
     case '/id':
       await sendText(chatId, `Tu ID: ${msg.from!.id}\nEste chat: ${chatId}`)
@@ -227,10 +227,10 @@ async function handleCommand(raw: string, msg: TgMessage): Promise<boolean> {
       await sendText(
         chatId,
         list.length
-          ? `⏰ Avisos programados:\n\n${list
+          ? `Avisos programados:\n\n${list
               .map(
                 (r) =>
-                  `#${r.id} · ${new Date(r.next_run_at).toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })} · ${r.repetir} · ${r.tipo === 'tarea' ? '🤖 ' : ''}${r.texto}`
+                  `#${r.id} · ${new Date(r.next_run_at).toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })} · ${r.repetir} · ${r.tipo === 'tarea' ? '(tarea) ' : ''}${r.texto}`
               )
               .join('\n')}`
           : 'No hay avisos programados. Pídemelos, p. ej. «recuérdame mañana a las 10 llamar a Juan».'
@@ -242,7 +242,7 @@ async function handleCommand(raw: string, msg: TgMessage): Promise<boolean> {
       await sendText(
         chatId,
         list.length
-          ? `📌 Instrucciones guardadas:\n\n${list.map((i) => `#${i.id}${i.modulo ? ` [${i.modulo}]` : ''} ${i.texto}`).join('\n')}`
+          ? `Instrucciones guardadas:\n\n${list.map((i) => `#${i.id}${i.modulo ? ` [${i.modulo}]` : ''} ${i.texto}`).join('\n')}`
           : 'No hay instrucciones guardadas. Dime «a partir de ahora…» y la guardo.'
       )
       return true

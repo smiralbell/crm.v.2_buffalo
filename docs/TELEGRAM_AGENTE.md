@@ -84,8 +84,8 @@ El modelo **nunca** borra. `solicitar_borrado` / `solicitar_sql_destructivo`
 solo guardan la petición con un preview (filas que coinciden y una muestra).
 Después el bot manda un mensaje con botones:
 
-1. «🗑 Sí, eliminar» → el mensaje cambia a la confirmación final.
-2. «🔴 ELIMINAR DEFINITIVAMENTE» → se ejecuta en una transacción.
+1. «Sí, eliminar» → el mensaje cambia a la confirmación final.
+2. «ELIMINAR DEFINITIVAMENTE» → se ejecuta en una transacción.
 
 - Escribir «sí» no sirve: hacen falta los dos botones.
 - Caduca a los 15 minutos.

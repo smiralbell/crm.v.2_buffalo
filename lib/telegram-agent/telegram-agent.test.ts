@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { cleanForTelegram } from './agent'
 import { isAuthorized } from './config'
 import { isDestructiveSql } from './db-tools'
 import { nextRunFor } from './scheduler'
@@ -53,6 +54,19 @@ describe('isDestructiveSql', () => {
     'ALTER TABLE leads ADD COLUMN prioridad TEXT',
     "UPDATE leads SET notas = 'deleted_at'",
   ])('permite %s', (sql) => expect(isDestructiveSql(sql)).toBe(false))
+})
+
+describe('cleanForTelegram', () => {
+  it('deja el texto limpio: sin emojis, asteriscos ni markdown, con espacios ordenados', () => {
+    const raw = `## 📋 **Tareas de hoy**\n\n\n\n* **Llamar a Juan** ✅\n• Enviar propuesta 🚀\n1. Revisar *factura* \`F-12\`\n\n---\n\nTotal: 12.450 € → pendiente`
+    expect(cleanForTelegram(raw)).toBe(
+      'Tareas de hoy\n\n- Llamar a Juan\n- Enviar propuesta\n- Revisar factura F-12\n\nTotal: 12.450 € pendiente'
+    )
+  })
+
+  it('no toca nombres con guion bajo ni el euro', () => {
+    expect(cleanForTelegram('Campo next_run_at: 300 €')).toBe('Campo next_run_at: 300 €')
+  })
 })
 
 describe('nextRunFor', () => {

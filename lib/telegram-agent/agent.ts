@@ -53,10 +53,17 @@ CÓMO TRABAJAS
 
 ${SHARED_RULES}
 
-ESTILO TELEGRAM
-- Español de España, directo, como un compañero del equipo. Sin relleno.
-- Texto plano: sin markdown, sin asteriscos ni almohadillas. Puedes usar emojis con moderación y guiones para listas.
-- Cifras con € y separador español (12.450 €). Fechas en formato español.
+CÓMO RESPONDES: COMO UNA BUENA SECRETARIA
+- Clara y directa. La primera línea es la respuesta o lo que has hecho. Nada de introducciones («¡Claro!», «Perfecto», «Aquí tienes…») ni despedidas («¿Algo más?», «Quedo a tu disposición»).
+- Corto. Solo lo que el socio necesita saber. Si no hay nada, dilo en una línea («No tienes tareas programadas.»).
+- Español de España, tono profesional y cercano, tuteando.
+- Formato limpio, en texto plano:
+  - Ni emojis, ni asteriscos, ni negritas, ni almohadillas, ni markdown, ni símbolos decorativos.
+  - Párrafos cortos separados por una línea en blanco.
+  - Listas con un guion al principio de cada línea, un elemento por línea. Si hay grupos, un título corto en su propia línea, la lista debajo y una línea en blanco entre grupos.
+  - Para cada elemento, lo importante primero y los detalles después, separados por comas (p. ej. «- Llamar a Juan Pérez, mañana a las 10:00»).
+- Cifras con € y separador español (12.450 €). Fechas como «lunes 3 de noviembre» u «hoy a las 17:00». Nunca fechas ISO ni ids técnicos salvo que los pidan o sirvan para actuar.
+- Cuando hagas algo, confírmalo en una frase con lo esencial («Hecho: he creado la tarea "Enviar propuesta" para el viernes.»).
 - Nunca respondas "voy a mirar": responde ya con el resultado.
 
 MÓDULOS (subagentes disponibles)
@@ -143,12 +150,28 @@ export async function runAgent(ctx: AgentContext, history: HistoryMessage[], use
   return cleanForTelegram(text)
 }
 
-/** Telegram va en texto plano: quita el markdown que se cuele. */
-function cleanForTelegram(text: string): string {
+// Con RegExp porque el tsconfig compila a es5 y no admite el flag u en literales.
+const EMOJI = new RegExp(
+  '[\\u{1F000}-\\u{1FAFF}\\u{2190}-\\u{21FF}\\u{2300}-\\u{23FF}\\u{2460}-\\u{24FF}\\u{25A0}-\\u{27BF}\\u{2900}-\\u{297F}\\u{2B00}-\\u{2BFF}\\u{FE0F}\\u{200D}\\u{20E3}]',
+  'gu'
+)
+
+/** Telegram va en texto plano: quita markdown y emojis que se cuelen y deja los espacios limpios. */
+export function cleanForTelegram(text: string): string {
   return text
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/__(.+?)__/g, '$1')
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/```[a-z]*\n?/g, '')
+    .replace(/```[a-z]*\n?/gi, '')
+    .replace(/`/g, '')
+    .replace(EMOJI, '')
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '$1: $2')
+    .replace(/^#{1,6}[ \t]+/gm, '')
+    .replace(/^[ \t]*[*•·][ \t]+/gm, '- ')
+    .replace(/^([ \t]*)\d+[.)][ \t]+/gm, '$1- ')
+    .replace(/\*+/g, '')
+    .replace(/(^|\s)__?([^_\n]+?)__?(?=\s|[.,:;]|$)/gm, '$1$2')
+    .replace(/^[ \t]*(-{3,}|_{3,})[ \t]*$/gm, '')
+    .replace(/(\S)[ \t]{2,}/g, '$1 ')
+    .replace(/[ \t]+$/gm, '')
+    .replace(/^[ \t]+(?=\S)/gm, (m) => (m.length > 2 ? '  ' : ''))
+    .replace(/\n{3,}/g, '\n\n')
     .trim()
 }

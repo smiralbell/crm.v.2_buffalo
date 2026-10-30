@@ -60,7 +60,7 @@ function madridWeekday(d: Date): number {
 async function runReminder(r: Reminder): Promise<void> {
   const targets = r.destino === 'socios' ? alertChatIds() : [String(r.chat_id)]
   if (r.tipo === 'texto') {
-    for (const chat of targets) await sendText(chat, `⏰ Aviso: ${r.texto}`)
+    for (const chat of targets) await sendText(chat, `Recordatorio: ${r.texto}`)
     return
   }
   // Tarea: el agente la ejecuta y manda el resultado a cada destino.
@@ -80,7 +80,7 @@ async function runReminder(r: Reminder): Promise<void> {
     } catch (e) {
       reply = `No he podido completar el aviso #${r.id}: ${e instanceof Error ? e.message : String(e)}`
     }
-    await deliver(ctx, `⏰ ${reply}`)
+    await deliver(ctx, reply)
   }
 }
 
