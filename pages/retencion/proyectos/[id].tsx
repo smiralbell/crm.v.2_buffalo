@@ -3,23 +3,22 @@ import { useRouter } from 'next/router'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
 import { useAuth } from '@/components/AuthContext'
-import DeveloperDataGuide from '@/components/engranaje5/DeveloperDataGuide'
 import IncidentsPanel from '@/components/retencion/IncidentsPanel'
+import McpPanel from '@/components/retencion/McpPanel'
 import WatchSystemPanel from '@/components/retencion/WatchSystemPanel'
 import { ArrowLeft, AlertCircle, Link2, Clock, FileText } from 'lucide-react'
 import type { ProyectoRow } from '@/lib/engranaje5/project-services'
-import type { ProjectServiceFlags } from '@/lib/engranaje5/data-column-guide'
 
-type Tab = 'incidencias' | 'sistema' | 'guia'
+type Tab = 'incidencias' | 'sistema' | 'mcp'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'incidencias', label: 'Incidencias' },
   { id: 'sistema', label: 'Sistema' },
-  { id: 'guia', label: 'Guía de desarrollo' },
+  { id: 'mcp', label: 'MCP' },
 ]
 
 function isValidTab(v: unknown): v is Tab {
-  return v === 'incidencias' || v === 'sistema' || v === 'guia'
+  return v === 'incidencias' || v === 'sistema' || v === 'mcp'
 }
 
 export default function RetencionProyectoDetailPage() {
@@ -31,7 +30,6 @@ export default function RetencionProyectoDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [proyecto, setProyecto] = useState<ProyectoRow | null>(null)
-  const [services, setServices] = useState<ProjectServiceFlags | null>(null)
   const [webhookOpen, setWebhookOpen] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [intervalLabel, setIntervalLabel] = useState('Frecuencia')
@@ -50,7 +48,6 @@ export default function RetencionProyectoDetailPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al cargar')
       setProyecto(data.proyecto)
-      setServices(data.services)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar')
     } finally {
@@ -172,9 +169,7 @@ export default function RetencionProyectoDetailPage() {
           </div>
         )}
 
-        {proyecto && services && activeTab === 'guia' && (
-          <DeveloperDataGuide projectId={proyecto.id} flags={services} />
-        )}
+        {proyecto && activeTab === 'mcp' && <McpPanel proyectoId={proyecto.id} proyectoName={proyecto.name} />}
       </div>
     </Layout>
   )

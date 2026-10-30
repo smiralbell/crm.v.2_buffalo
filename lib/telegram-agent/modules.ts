@@ -189,7 +189,8 @@ export const AGENT_MODULES: AgentModule[] = [
     herramientas: [],
     guia: `- crm_users.password_hash: NUNCA lo muestres ni lo cambies por SQL. No hay forma segura de poner contraseñas desde aquí.
 - El acceso al agente de Telegram (qué socios pueden usarlo) NO se cambia desde el chat: se configura en el servidor.
-- telegram_agent_audit es el registro de lo que ha hecho el agente: úsalo para "¿qué has cambiado hoy?".`,
+- telegram_agent_audit es el registro de lo que ha hecho el agente: úsalo para "¿qué has cambiado hoy?".
+- retencion_mcp_servers (MCP de los clientes): NO la cambies por SQL. Los MCP se conectan en el CRM (Retención → proyecto → MCP), que comprueba que sean de solo lectura; para consultarlos usa mcp_listar y mcp_usar.`,
   },
 ]
 
