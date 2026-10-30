@@ -1,7 +1,8 @@
 import { getPool } from '@/lib/db'
-import { callMcpTool } from '@/lib/retencion/mcp/client'
+import { connectionForRow } from '@/lib/retencion/mcp/api'
+import { callMcpTool, McpSignInRequired } from '@/lib/retencion/mcp/client'
 import { describeBlocked } from '@/lib/retencion/mcp/readonly'
-import { getMcpServer, listMcpServers, savedConnection, setMcpStatus } from '@/lib/retencion/mcp/store'
+import { getMcpServer, listMcpServers, patchMcpServer } from '@/lib/retencion/mcp/store'
 
 /**
  * MCP de los proyectos de retención, para consultar los sistemas de los clientes.
@@ -68,8 +69,12 @@ export async function runMcpTool(name: string, args: Record<string, unknown>): P
         proyecto,
         nombre: r.nombre,
         estado: r.estado,
-        ...(r.estado !== 'conectado' ? { aviso: r.detalle || 'No se puede usar ahora' } : {}),
-        herramientas: r.tools.map((t) => ({
+        ...(r.estado === 'pendiente'
+          ? { aviso: 'Falta iniciar sesión: un admin tiene que pulsar Conectar en el CRM (Retención, proyecto, MCP).' }
+          : r.estado !== 'conectado'
+            ? { aviso: r.detalle || 'No se puede usar ahora' }
+            : {}),
+        herramientas: r.tools.filter((t) => !(r.disabled_tools || []).includes(t.name)).map((t) => ({
           nombre: t.name,
           descripcion: (t.description || '').slice(0, 300),
           ...(compactSchema(t.inputSchema) as object),
@@ -86,18 +91,28 @@ export async function runMcpTool(name: string, args: Record<string, unknown>): P
       args.argumentos && typeof args.argumentos === 'object' && !Array.isArray(args.argumentos)
         ? (args.argumentos as Record<string, unknown>)
         : {}
+    if ((row.disabled_tools || []).includes(herramienta)) {
+      return { ok: false, error: `La herramienta ${herramienta} está desactivada para el agente en el CRM.` }
+    }
+    if (row.auth_mode === 'oauth' && !row.oauth_tokens_enc) {
+      return { ok: false, error: `${row.nombre} no tiene la sesión iniciada. Un admin tiene que pulsar Conectar en el CRM (Retención, proyecto, MCP).` }
+    }
     try {
-      const res = await callMcpTool(savedConnection(row), herramienta, argumentos)
+      const res = await callMcpTool(connectionForRow(row), herramienta, argumentos)
       if (!res.ok && res.check) {
-        await setMcpStatus(row.id, 'bloqueado', describeBlocked(res.check))
+        await patchMcpServer(row.id, { estado: 'bloqueado', detalle: describeBlocked(res.check), oauth_tokens: null, checked: true })
         return { ok: false, error: `Bloqueado: ${res.error} No se ha llamado a nada. Avisa a los socios para que lo revisen los developers.` }
       }
       if (!res.ok) return res
-      if (row.estado !== 'conectado') await setMcpStatus(row.id, 'conectado', null)
+      if (row.estado !== 'conectado') await patchMcpServer(row.id, { estado: 'conectado', detalle: null })
       return { ok: !res.esError, mcp: row.nombre, herramienta, resultado: res.resultado }
     } catch (e) {
+      if (e instanceof McpSignInRequired) {
+        await patchMcpServer(row.id, { estado: 'pendiente', detalle: null, oauth_tokens: null })
+        return { ok: false, error: `La sesión de ${row.nombre} ha caducado. Un admin tiene que volver a pulsar Conectar en el CRM.` }
+      }
       const msg = e instanceof Error ? e.message : String(e)
-      await setMcpStatus(row.id, 'error', msg)
+      await patchMcpServer(row.id, { estado: 'error', detalle: msg })
       return { ok: false, error: msg }
     }
   }
