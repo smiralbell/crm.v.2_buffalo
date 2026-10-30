@@ -66,8 +66,12 @@ export async function handleTelegramUpdate(update: TgUpdate): Promise<void> {
   await enqueue(msg.chat.id, () => processMessage(msg))
 }
 
-/** En grupos solo contesta si le mencionan, le responden o es un comando. */
+/**
+ * En el grupo de avisos solo estáis los socios y el bot: contesta a todo.
+ * TELEGRAM_AGENT_GROUP_MODE=mencion → solo si le mencionan, le responden o es un comando.
+ */
 async function addressedToBot(msg: TgMessage): Promise<boolean> {
+  if ((process.env.TELEGRAM_AGENT_GROUP_MODE || '').trim().toLowerCase() !== 'mencion') return true
   const text = msg.text || msg.caption || ''
   if (text.startsWith('/')) return true
   const me = await getMe().catch(() => null)
