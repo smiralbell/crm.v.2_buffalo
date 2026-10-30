@@ -19,7 +19,7 @@ import { answerCallback, editText, sendText, type TgCallbackQuery } from './tele
  */
 
 function describe(p: PendingAction): string {
-  const lines = [`🗑 Petición de borrado #${p.id}`, '', p.summary]
+  const lines = [`Petición de borrado #${p.id}`, '', p.summary]
   const prev = p.preview || {}
   if (p.kind === 'delete_rows') {
     lines.push('', `Tabla: ${String(prev.tabla)} · ${Number(prev.filas)} fila(s)`)
@@ -55,7 +55,7 @@ export async function sendPendingConfirmation(p: PendingAction): Promise<void> {
   const messageId = await sendText(p.chat_id, text, {
     buttons: [
       [
-        { text: '🗑 Sí, eliminar', callback_data: `del:1:${p.id}` },
+        { text: 'Sí, eliminar', callback_data: `del:1:${p.id}` },
         { text: 'Cancelar', callback_data: `del:x:${p.id}` },
       ],
     ],
@@ -89,7 +89,7 @@ export async function handleDeleteCallback(cb: TgCallbackQuery): Promise<void> {
     }
     if (pending.status === 'pending') {
       await resolvePending(pending.id, 'expired')
-      await editText(chatId, messageId, `${describe(pending)}\n\n⌛ Caducada. No se ha borrado nada.`)
+      await editText(chatId, messageId, `${describe(pending)}\n\nCaducada. No se ha borrado nada.`)
     }
     await answerCallback(cb.id, notice[pending.status] || 'Caducada')
     return
@@ -98,7 +98,7 @@ export async function handleDeleteCallback(cb: TgCallbackQuery): Promise<void> {
   if (step === 'x') {
     await resolvePending(pending.id, 'cancelled', { by: who(cb) })
     await answerCallback(cb.id, 'Cancelado')
-    await editText(chatId, messageId, `${describe(pending)}\n\n✖️ Cancelado por ${who(cb)}. No se ha borrado nada.`)
+    await editText(chatId, messageId, `${describe(pending)}\n\nCancelado por ${who(cb)}. No se ha borrado nada.`)
     await saveMessage(chatId, cb.from.id, 'assistant', `[Borrado #${pending.id} cancelado por ${who(cb)}]`)
     return
   }
@@ -113,10 +113,10 @@ export async function handleDeleteCallback(cb: TgCallbackQuery): Promise<void> {
     await editText(
       chatId,
       messageId,
-      `${describe(pending)}\n\n⚠️ Paso 2 de 2 · CONFIRMACIÓN FINAL\nEsto no se puede deshacer. ¿Seguro que quieres eliminarlo?`,
+      `${describe(pending)}\n\nPaso 2 de 2. Confirmación final\nEsto no se puede deshacer. ¿Seguro que quieres eliminarlo?`,
       [
         [
-          { text: '🔴 ELIMINAR DEFINITIVAMENTE', callback_data: `del:2:${pending.id}` },
+          { text: 'ELIMINAR DEFINITIVAMENTE', callback_data: `del:2:${pending.id}` },
           { text: 'Cancelar', callback_data: `del:x:${pending.id}` },
         ],
       ]
@@ -156,8 +156,8 @@ export async function handleDeleteCallback(cb: TgCallbackQuery): Promise<void> {
       result: outcome,
     })
     const resultLine = ok
-      ? `✅ Eliminado (${String(outcome.borradas ?? outcome.filas_afectadas ?? 0)} fila(s)). Confirmado por ${claimed.confirmed_by}.`
-      : `❌ No se ha podido borrar: ${String(outcome.error)}`
+      ? `Eliminado (${String(outcome.borradas ?? outcome.filas_afectadas ?? 0)} fila(s)). Confirmado por ${claimed.confirmed_by}.`
+      : `No se ha podido borrar: ${String(outcome.error)}`
     await editText(chatId, messageId, `${describe(pending)}\n\n${resultLine}`)
     await saveMessage(chatId, cb.from.id, 'assistant', `[Borrado #${pending.id}: ${resultLine}]`)
     return

@@ -308,7 +308,7 @@ async function runTool(name: string, args: Record<string, unknown>, ctx: AgentCo
       if (!texto) return { ok: false, error: 'texto vacío' }
       const from = ctx.scheduled ? 'Agente CRM' : ctx.userName
       const targets = alertChatIds().filter((id) => id !== String(ctx.chatId))
-      for (const id of targets) await sendText(id, `💬 ${from} (vía agente):\n\n${texto}`)
+      for (const id of targets) await sendText(id, `Mensaje de ${from}:\n\n${texto}`)
       return { ok: true, enviado_a: targets.length }
     }
     case 'instrucciones_listar':
