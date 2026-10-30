@@ -1,3 +1,4 @@
+import { UnauthorizedError, type OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
@@ -11,6 +12,8 @@ export type McpConnection = {
   url: string
   transport: McpTransport
   headers: Record<string, string>
+  /** Inicio de sesión OAuth (tokens guardados y refresco). */
+  authProvider?: OAuthClientProvider
 }
 
 const TIMEOUT_MS = 30_000
@@ -32,6 +35,13 @@ function withTimeout<T>(p: Promise<T>, what: string): Promise<T> {
   })
 }
 
+/** El servidor pide iniciar sesión (no hay tokens o ya no valen). */
+export class McpSignInRequired extends Error {
+  constructor() {
+    super('Hay que iniciar sesión en este MCP: pulsa Conectar.')
+  }
+}
+
 async function open(conn: McpConnection): Promise<{ client: Client; transport: 'http' | 'sse' }> {
   const url = new URL(conn.url)
   const requestInit = { headers: conn.headers }
@@ -42,9 +52,10 @@ async function open(conn: McpConnection): Promise<{ client: Client; transport: '
     try {
       const transport =
         kind === 'http'
-          ? new StreamableHTTPClientTransport(url, { requestInit })
+          ? new StreamableHTTPClientTransport(url, { requestInit, authProvider: conn.authProvider })
           : new SSEClientTransport(url, {
               requestInit,
+              authProvider: conn.authProvider,
               eventSourceInit: {
                 fetch: (input, init) =>
                   fetch(input, { ...init, headers: { ...(init?.headers as Record<string, string>), ...conn.headers } }),
@@ -55,6 +66,7 @@ async function open(conn: McpConnection): Promise<{ client: Client; transport: '
     } catch (e) {
       lastError = e
       await client.close().catch(() => {})
+      if (e instanceof UnauthorizedError) throw new McpSignInRequired()
     }
   }
   throw new Error(`No se pudo conectar al MCP: ${lastError instanceof Error ? lastError.message : String(lastError)}`)

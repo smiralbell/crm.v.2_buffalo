@@ -1,62 +1,87 @@
 import { z } from 'zod'
-import { describeBlocked, type McpToolInfo, type ReadOnlyCheck } from './readonly'
-import { inspectMcp, type McpTransport } from './client'
-import { connectionFor, savedConnection, setMcpStatus, toPublic, type McpServerInput, type McpServerRow } from './store'
+import { describeBlocked } from './readonly'
+import { inspectMcp, McpSignInRequired, type McpConnection } from './client'
+import { DbOAuthProvider } from './oauth'
+import { patchMcpServer, savedConnection, toPublic, type McpServerPublic, type McpServerRow } from './store'
 
-/** Lo que comparten las rutas de la API de MCP de retención. */
+/** Lo que comparten las rutas de la API de conectores MCP de retención. */
 
-export const mcpInputSchema = z
+const urlSchema = z
+  .string()
+  .trim()
+  .url('URL no válida')
+  .refine((u) => u.startsWith('https://'), 'La URL del servidor MCP debe empezar por https://')
+
+export const detectSchema = z.object({ url: urlSchema })
+
+const headerSchema = z.object({
+  name: z.string().trim().regex(/^[A-Za-z0-9-]{1,80}$/, 'Nombre de cabecera no válido'),
+  value: z.string().min(1, 'Falta el valor de la cabecera').max(4000),
+})
+
+export const createSchema = z
   .object({
-    nombre: z.string().trim().min(1).max(120),
-    url: z
-      .string()
-      .trim()
-      .url()
-      .refine((u) => u.startsWith('https://'), 'La URL del MCP debe empezar por https://'),
+    nombre: z.string().trim().min(1, 'Ponle un nombre').max(120),
+    url: urlSchema,
     transport: z.enum(['auto', 'http', 'sse']).default('auto'),
-    auth_type: z.enum(['none', 'bearer', 'header']).default('none'),
-    auth_header: z
-      .string()
-      .trim()
-      .regex(/^[A-Za-z0-9-]{1,80}$/, 'Nombre de cabecera no válido')
-      .nullish(),
-    auth_secret: z.string().max(4000).optional(),
+    /** Como en Claude: iniciar sesión ahora, cuando haga falta, o sin inicio de sesión. */
+    sign_in: z.enum(['now', 'later', 'none']),
+    oauth_client: z.enum(['published', 'auto', 'custom']).default('published'),
+    client_id: z.string().trim().max(500).nullish(),
+    client_secret: z.string().trim().max(2000).nullish(),
+    headers: z.array(headerSchema).max(20).default([]),
   })
-  .refine((v) => v.auth_type !== 'header' || Boolean(v.auth_header), {
-    message: 'Indica el nombre de la cabecera',
-    path: ['auth_header'],
+  .refine((v) => v.sign_in === 'none' || v.oauth_client !== 'custom' || Boolean(v.client_id), {
+    message: 'Falta el Client ID de tu cliente OAuth',
+    path: ['client_id'],
   })
 
-export type VerifyOutcome =
-  | { ok: true; verified: { serverName: string | null; tools: McpToolInfo[]; transport: McpTransport } }
-  | { ok: false; status: number; error: string; bloqueadas?: ReadOnlyCheck['bloqueadas'] }
-
-/** Conecta con los datos del formulario y solo da el visto bueno si todo es de solo lectura. */
-export async function verifyNew(input: McpServerInput, savedSecret: string | null): Promise<VerifyOutcome> {
-  const secret = input.auth_secret !== undefined ? input.auth_secret.trim() || null : savedSecret
-  if (input.auth_type !== 'none' && !secret) {
-    return { ok: false, status: 400, error: 'Falta el token o clave de acceso' }
-  }
-  try {
-    const res = await inspectMcp(connectionFor({ ...input, secret }))
-    if (!res.check.ok) {
-      return { ok: false, status: 400, error: describeBlocked(res.check), bloqueadas: res.check.bloqueadas }
-    }
-    return { ok: true, verified: { serverName: res.serverName, tools: res.tools, transport: res.transport } }
-  } catch (e) {
-    return { ok: false, status: 400, error: e instanceof Error ? e.message : String(e) }
-  }
+/** Conexión completa de un conector guardado: cabeceras + sesión OAuth si la tiene. */
+export function connectionForRow(row: McpServerRow): McpConnection {
+  const conn = savedConnection(row)
+  if (row.auth_mode === 'oauth') conn.authProvider = new DbOAuthProvider(row)
+  return conn
 }
 
-/** Vuelve a comprobar un MCP guardado y deja su estado al día. */
-export async function recheck(row: Parameters<typeof savedConnection>[0]) {
+/**
+ * Comprueba en vivo un conector guardado y deja su estado al día:
+ * conectado, bloqueado (no es de solo lectura: se cierra la sesión), pendiente (falta login) o error.
+ */
+export async function verifyAndStore(row: McpServerRow): Promise<McpServerPublic | null> {
+  if (row.auth_mode === 'oauth' && !row.oauth_tokens_enc) {
+    const updated = await patchMcpServer(row.id, { estado: 'pendiente', detalle: null })
+    return updated ? toPublic(updated) : null
+  }
   try {
-    const res = await inspectMcp(savedConnection(row))
-    const estado: McpServerRow['estado'] = res.check.ok ? 'conectado' : 'bloqueado'
-    const updated = await setMcpStatus(row.id, estado, res.check.ok ? null : describeBlocked(res.check), res.tools)
+    const res = await inspectMcp(connectionForRow(row))
+    if (!res.check.ok) {
+      // No es de solo lectura: no se conecta. Se borra la sesión para que nadie pueda usarlo.
+      const updated = await patchMcpServer(row.id, {
+        estado: 'bloqueado',
+        detalle: describeBlocked(res.check),
+        tools: res.tools,
+        oauth_tokens: null,
+        checked: true,
+      })
+      return updated ? toPublic(updated) : null
+    }
+    const updated = await patchMcpServer(row.id, {
+      estado: 'conectado',
+      detalle: null,
+      tools: res.tools,
+      server_name: res.serverName,
+      transport: res.transport,
+      checked: true,
+    })
     return updated ? toPublic(updated) : null
   } catch (e) {
-    const updated = await setMcpStatus(row.id, 'error', e instanceof Error ? e.message : String(e))
+    const signIn = e instanceof McpSignInRequired
+    const updated = await patchMcpServer(row.id, {
+      estado: signIn ? 'pendiente' : 'error',
+      detalle: signIn ? null : e instanceof Error ? e.message : String(e),
+      ...(signIn ? { oauth_tokens: null } : {}),
+      checked: true,
+    })
     return updated ? toPublic(updated) : null
   }
 }
