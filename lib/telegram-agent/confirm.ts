@@ -79,9 +79,19 @@ export async function handleDeleteCallback(cb: TgCallbackQuery): Promise<void> {
 
   const expired = new Date(pending.expires_at).getTime() < Date.now()
   if (pending.status !== 'pending' || expired) {
-    if (pending.status === 'pending') await resolvePending(pending.id, 'expired')
-    await answerCallback(cb.id, 'Ya no está activa')
-    await editText(chatId, messageId, `${describe(pending)}\n\n⌛ ${expired ? 'Caducada' : `Estado: ${pending.status}`}. No se ha borrado nada.`)
+    // Ya resuelta: no se toca el mensaje (ya dice el resultado), solo se avisa en la pulsación.
+    const notice: Record<string, string> = {
+      done: 'Ya se eliminó',
+      executing: 'Se está eliminando',
+      failed: 'Ya se intentó y falló',
+      cancelled: 'Estaba cancelada',
+      expired: 'Caducada',
+    }
+    if (pending.status === 'pending') {
+      await resolvePending(pending.id, 'expired')
+      await editText(chatId, messageId, `${describe(pending)}\n\n⌛ Caducada. No se ha borrado nada.`)
+    }
+    await answerCallback(cb.id, notice[pending.status] || 'Caducada')
     return
   }
 

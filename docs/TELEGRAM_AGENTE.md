@@ -30,8 +30,14 @@ Solo quien recibe los avisos:
 - Más `TELEGRAM_AGENT_USER_IDS` si se definen.
 
 Cualquier otra persona recibe «No tienes acceso» y su ID. Se puede hablar con el
-agente por privado (primero hay que escribirle /start) o en el grupo: ahí solo
-contesta si le mencionan, le responden o es un comando. El acceso no se puede cambiar desde el
+agente por privado (primero hay que escribirle /start) o en el grupo, donde
+contesta a todos los mensajes (`TELEGRAM_AGENT_GROUP_MODE=mencion` para que solo
+conteste si le mencionan, le responden o es un comando).
+
+> Para que el bot lea los mensajes normales del grupo hay que quitarle el modo
+> privacidad: BotFather → /setprivacy → el bot → Disable, y luego sacar y volver
+> a meter el bot en el grupo. Sin eso Telegram solo le entrega comandos y
+> menciones. El acceso no se puede cambiar desde el
 chat (a propósito): solo en las variables del servidor.
 
 El webhook comprueba la cabecera secreta de Telegram (`TELEGRAM_WEBHOOK_SECRET`
