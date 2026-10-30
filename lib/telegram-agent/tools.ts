@@ -1,6 +1,7 @@
 import { CRM_ASSISTANT_TOOLS, executeCrmAssistantTool } from '@/lib/demos/crm-assistant-tools'
 import { createAssistantContext } from '@/lib/demos/assistant-attachments'
 import * as db from './db-tools'
+import { MCP_TOOL_NAMES, MCP_TOOLS, runMcpTool } from './mcp-tools'
 import { AGENT_MODULES, MODULE_KEYS, type AgentModule } from './modules'
 import {
   addInstruction,
@@ -173,6 +174,7 @@ const READ_ONLY = new Set([
   'get_pipeline_brief',
   'checklist_list',
   'delegar_subagentes',
+  'mcp_listar',
 ])
 
 /** Acciones de la secretaria que en Telegram se ejecutan directas (solo los borrados piden confirmación). */
@@ -190,13 +192,13 @@ const DIRECT_ACTIONS = new Set([
 ])
 
 export function orchestratorTools(): ToolSchema[] {
-  return [DELEGATE_TOOL, ...DB_TOOLS, ...AGENT_TOOLS, ...SECRETARIA_TOOLS]
+  return [DELEGATE_TOOL, ...DB_TOOLS, ...AGENT_TOOLS, ...MCP_TOOLS, ...SECRETARIA_TOOLS]
 }
 
 export function subagentTools(mod: AgentModule): ToolSchema[] {
   const allowed = new Set(mod.herramientas)
   const extra = mod.key === 'sistema' ? AGENT_TOOLS : AGENT_TOOLS.filter((t) => t.function.name === 'enviar_documento')
-  return [...DB_TOOLS, ...extra, ...SECRETARIA_TOOLS.filter((t) => allowed.has(t.function.name))]
+  return [...DB_TOOLS, ...extra, ...MCP_TOOLS, ...SECRETARIA_TOOLS.filter((t) => allowed.has(t.function.name))]
 }
 
 // ——— Ejecución ———
@@ -363,6 +365,8 @@ async function runTool(name: string, args: Record<string, unknown>, ctx: AgentCo
         pendientes: (await listOpenPending(ctx.chatId)).map((p) => ({ id: p.id, resumen: p.summary, paso: p.step })),
       }
   }
+
+  if (MCP_TOOL_NAMES.has(name)) return runMcpTool(name, args)
 
   if (SECRETARIA_TOOLS.some((t) => t.function.name === name)) {
     const finalArgs = DIRECT_ACTIONS.has(name) ? { ...args, confirm: true } : args
