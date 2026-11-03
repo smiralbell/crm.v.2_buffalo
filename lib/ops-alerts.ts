@@ -34,26 +34,31 @@ function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-async function sendTelegram(text: string): Promise<void> {
+/** Manda un mensaje HTML a un chat concreto. true si Telegram lo aceptó. Nunca lanza. */
+export async function sendTelegramToChat(chatId: string, text: string): Promise<boolean> {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim()
-  const chats = telegramChatIds()
-  if (!token || !chats.length) return
-  for (const chatId of chats) {
-    try {
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text,
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-        }),
-      })
-    } catch (e) {
-      console.warn('[ops-alerts] telegram', e)
-    }
+  if (!token || !chatId) return false
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      }),
+    })
+    if (!res.ok) console.warn(`[ops-alerts] telegram ${chatId}: HTTP ${res.status}`)
+    return res.ok
+  } catch (e) {
+    console.warn('[ops-alerts] telegram', e)
+    return false
   }
+}
+
+async function sendTelegram(text: string): Promise<void> {
+  for (const chatId of telegramChatIds()) await sendTelegramToChat(chatId, text)
 }
 
 /** Texto corto para la notificación del móvil: sin las líneas de enlaces. */
