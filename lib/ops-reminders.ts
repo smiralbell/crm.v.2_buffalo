@@ -4,7 +4,7 @@ import { ensureChecklistSchema } from '@/lib/checklist/store'
 import { type ChecklistColumnId, isChecklistColumnId } from '@/lib/checklist/types'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
-import { opsLink, sendOpsAlert } from '@/lib/ops-alerts'
+import { opsLink, sendOpsAlert, sendTelegramToChat } from '@/lib/ops-alerts'
 import { ensureIncidentsTable } from '@/lib/retencion/incidents'
 
 const TZ = 'Europe/Madrid'
@@ -222,6 +222,44 @@ function buildDigest(incidents: DueIncident[], tasks: DueTask[]): {
   }
 }
 
+/** Chat privado de Telegram de cada persona: sus tareas de checklist le llegan solo a ella. */
+function personalChatId(column: ChecklistColumnId): string {
+  if (column === 'santi') return process.env.TELEGRAM_SANTI_CHAT_ID?.trim() || ''
+  if (column === 'sergi') return process.env.TELEGRAM_SERGI_CHAT_ID?.trim() || ''
+  return ''
+}
+
+function personalTelegramHtml(tasks: DueTask[]): string {
+  const lines = ['<b>Recordatorio · Checklist</b>', '', 'Te falta hacer:']
+  for (const t of tasks) lines.push(`• ${esc(t.title.trim())}`)
+  lines.push('', opsLink('/checklist'))
+  return lines.join('\n')
+}
+
+/**
+ * Manda por privado las tareas de quien tenga chat configurado. Devuelve las que
+ * no se han podido entregar así (sin asignar, sin chat o fallo de Telegram): esas
+ * siguen en el resumen general.
+ */
+async function sendPersonalChecklist(tasks: DueTask[]): Promise<{ rest: DueTask[]; sent: number }> {
+  const byChat = new Map<string, DueTask[]>()
+  const rest: DueTask[] = []
+  for (const t of tasks) {
+    const chatId = personalChatId(t.column_key)
+    if (!chatId) {
+      rest.push(t)
+      continue
+    }
+    byChat.set(chatId, [...(byChat.get(chatId) || []), t])
+  }
+  let sent = 0
+  for (const [chatId, own] of Array.from(byChat)) {
+    if (await sendTelegramToChat(chatId, personalTelegramHtml(own))) sent += own.length
+    else rest.push(...own)
+  }
+  return { rest, sent }
+}
+
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
@@ -239,8 +277,9 @@ export async function runDueOpsReminders(): Promise<{
     console.warn('[ops-reminders] checklist', e)
     return [] as DueTask[]
   })
-  const digest = buildDigest(incidents, tasks)
-  if (!digest) return { incidents: 0, checklist: 0, sent: false }
+  const personal = await sendPersonalChecklist(tasks)
+  const digest = buildDigest(incidents, personal.rest)
+  if (!digest) return { incidents: 0, checklist: tasks.length, sent: personal.sent > 0 }
   await sendOpsAlert({ ...digest, url: incidents.length ? '/alertas' : '/checklist' })
   return { incidents: incidents.length, checklist: tasks.length, sent: true }
 }
