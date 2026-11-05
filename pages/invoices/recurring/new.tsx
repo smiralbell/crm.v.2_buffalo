@@ -11,7 +11,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ArrowLeft } from 'lucide-react'
 import { roundMoney } from '@/lib/invoices/document'
-import { formatSpanishDate, madridToday, nextMonthOnDay } from '@/lib/invoices/recurring-dates'
+import {
+  formatSpanishDate,
+  madridToday,
+  maintenanceConcept,
+  nextMonthOnDay,
+  parseIsoDate,
+} from '@/lib/invoices/recurring-dates'
 
 interface InvoiceOption {
   id: number
@@ -111,6 +117,14 @@ export default function NewRecurringInvoice({
     Number.isFinite(base) && base > 0 && Number.isFinite(tax)
       ? roundMoney(base + roundMoney(base * (tax / 100)))
       : null
+  const conceptPreview =
+    formData.line_description.trim() && parseIsoDate(formData.next_issue_date)
+      ? maintenanceConcept(
+          formData.line_description,
+          formData.next_issue_date,
+          Number(formData.next_issue_date.slice(8, 10))
+        )
+      : ''
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -165,7 +179,9 @@ export default function NewRecurringInvoice({
 
   return (
     <FullScreenLayout>
-      <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-6 py-8">
+      <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="mx-auto flex w-full max-w-4xl flex-col px-6 py-8">
         <div className="mb-6 flex items-center gap-4">
           <Link href="/invoices/recurring">
             <Button variant="ghost" size="icon">
@@ -199,7 +215,7 @@ export default function NewRecurringInvoice({
               <CardTitle>{mode === 'new' ? 'Datos de la mensualidad' : 'Configuración'}</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-5">
                 {mode === 'existing' ? (
                   <>
                     <div className="space-y-2">
@@ -317,6 +333,9 @@ export default function NewRecurringInvoice({
                         required
                         disabled={loading}
                       />
+                      <p className="text-xs text-gray-500">
+                        Este texto no cambia. Cada factura añade el mes que termina ese día: si sale el 15 de diciembre, pondrá del 15 de noviembre al 15 de diciembre.
+                      </p>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -374,21 +393,7 @@ export default function NewRecurringInvoice({
                     {error}
                   </div>
                 )}
-
-                <div className="flex justify-end gap-3 pt-2">
-                  <Link href="/invoices/recurring">
-                    <Button type="button" variant="outline" disabled={loading}>
-                      Cancelar
-                    </Button>
-                  </Link>
-                  <Button
-                    type="submit"
-                    disabled={loading || (mode === 'existing' && !formData.source_invoice_id)}
-                  >
-                    {loading ? 'Guardando...' : 'Guardar recurrente'}
-                  </Button>
-                </div>
-              </form>
+              </div>
             </CardContent>
           </Card>
 
@@ -412,6 +417,12 @@ export default function NewRecurringInvoice({
                     Después se repetirá cada mes, el día {formData.next_issue_date?.slice(8, 10) || '—'}.
                     {previewTotal != null ? ` Importe con IVA: ${formatCurrency(previewTotal)}.` : ''}
                   </p>
+                  {conceptPreview ? (
+                    <p className="text-gray-900">
+                      El concepto de esa factura será:{' '}
+                      <span className="font-medium">{conceptPreview}</span>
+                    </p>
+                  ) : null}
                   <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
                     Ejemplo: si la guardas en octubre y eliges el 23 de noviembre, la factura aparece el 23 de
                     noviembre, no el día en que la guardas.
@@ -443,6 +454,20 @@ export default function NewRecurringInvoice({
           </Card>
         </div>
       </div>
+      </div>
+      <div className="shrink-0 border-t border-gray-200 bg-white px-6 py-3">
+        <div className="mx-auto flex w-full max-w-4xl justify-end gap-3">
+          <Link href="/invoices/recurring">
+            <Button type="button" variant="outline" disabled={loading}>
+              Cancelar
+            </Button>
+          </Link>
+          <Button type="submit" disabled={loading || (mode === 'existing' && !formData.source_invoice_id)}>
+            {loading ? 'Guardando...' : 'Guardar recurrente'}
+          </Button>
+        </div>
+      </div>
+      </form>
     </FullScreenLayout>
   )
 }

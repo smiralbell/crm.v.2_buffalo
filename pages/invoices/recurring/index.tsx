@@ -10,7 +10,7 @@ import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 
 interface RecurringInvoiceRow {
   id: string
@@ -106,6 +106,15 @@ export default function RecurringInvoicesPage({
   const router = useRouter()
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const active = recurringInvoices.filter((item) => item.is_active)
+  const paused = recurringInvoices.length - active.length
+  const mrr = active.reduce((sum, item) => sum + Number(item.total || 0), 0)
+  const thisMonthKey = madridToday().slice(0, 7)
+  const dueThisMonth = active.filter(
+    (item) => item.next_issue_date && item.next_issue_date.slice(0, 7) === thisMonthKey
+  )
+  const dueThisMonthTotal = dueThisMonth.reduce((sum, item) => sum + Number(item.total || 0), 0)
+  const average = active.length > 0 ? mrr / active.length : 0
 
   const handleGenerate = async (id: string) => {
     setLoadingId(id)
@@ -175,17 +184,67 @@ export default function RecurringInvoicesPage({
     <Layout>
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4">
-          <Link href="/invoices">
-            <Button variant="ghost" size="icon" className="shrink-0">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+          <div className="flex min-w-0 items-center gap-3">
+            <Link href="/invoices">
+              <Button variant="ghost" size="icon" className="shrink-0">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-gray-900">Facturas recurrentes</h1>
+              <p className="text-sm text-gray-500">Mantenimientos que se facturan cada mes</p>
+            </div>
+          </div>
           <Link href="/invoices/recurring/new">
             <Button className="rounded-xl">
               <Plus className="mr-2 h-4 w-4" />
               Nueva recurrente
             </Button>
           </Link>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="px-3 pt-4 sm:px-6 sm:pt-6">
+              <p className="mb-2 text-xs font-medium text-gray-500 sm:text-sm">MRR</p>
+              <div className="mb-1 break-words text-lg font-semibold text-gray-900 sm:text-2xl">
+                {formatCurrency(mrr)}
+              </div>
+              <p className="text-xs text-gray-400">Al mes, con IVA. Solo las activas.</p>
+            </CardContent>
+          </Card>
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="px-3 pt-4 sm:px-6 sm:pt-6">
+              <p className="mb-2 text-xs font-medium text-gray-500 sm:text-sm">ARR</p>
+              <div className="mb-1 break-words text-lg font-semibold text-gray-900 sm:text-2xl">
+                {formatCurrency(mrr * 12)}
+              </div>
+              <p className="text-xs text-gray-400">Lo mismo, multiplicado por 12 meses.</p>
+            </CardContent>
+          </Card>
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="px-3 pt-4 sm:px-6 sm:pt-6">
+              <p className="mb-2 text-xs font-medium text-gray-500 sm:text-sm">Este mes</p>
+              <div className="mb-1 break-words text-lg font-semibold text-gray-900 sm:text-2xl">
+                {formatCurrency(dueThisMonthTotal)}
+              </div>
+              <p className="text-xs text-gray-400">
+                {dueThisMonth.length === 1
+                  ? '1 factura se crea este mes'
+                  : `${dueThisMonth.length} facturas se crean este mes`}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border border-gray-200 shadow-sm">
+            <CardContent className="px-3 pt-4 sm:px-6 sm:pt-6">
+              <p className="mb-2 text-xs font-medium text-gray-500 sm:text-sm">Activos</p>
+              <div className="mb-1 text-xl font-semibold text-gray-900 sm:text-2xl">{active.length}</div>
+              <p className="text-xs text-gray-400">
+                Ticket medio {formatCurrency(average)}
+                {paused > 0 ? ` · ${paused} en pausa` : ''}
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {error && (
@@ -249,6 +308,12 @@ export default function RecurringInvoicesPage({
                         </td>
                         <td className="p-3">
                           <div className="flex justify-end gap-2">
+                            <Link href={`/invoices/recurring/${item.id}/edit`}>
+                              <Button size="sm" variant="outline">
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Editar
+                              </Button>
+                            </Link>
                             <Button
                               size="sm"
                               variant="outline"

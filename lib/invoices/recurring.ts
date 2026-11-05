@@ -5,7 +5,7 @@ import { getNextBufInvoiceNumber } from '@/lib/invoices/numbers'
 import {
   formatSpanishDate,
   madridToday,
-  monthLabel,
+  maintenanceConcept,
   nextMonthOnDay,
   parseIsoDate,
 } from '@/lib/invoices/recurring-dates'
@@ -153,9 +153,11 @@ export async function generateRecurringInvoice(
     const description = recurring.line_description?.trim() || ''
     const price = Number(recurring.base_amount)
     const tax = recurring.tax_percent == null ? 21 : Number(recurring.tax_percent)
+    const issueIsoForConcept =
+      issueIso || `${year}-${String(month).padStart(2, '0')}-${String(issueDay).padStart(2, '0')}`
     services = [
       {
-        description: `${description} (${monthLabel(year, month)})`,
+        description: maintenanceConcept(description, issueIsoForConcept, recurring.issue_day),
         quantity: 1,
         price,
         tax,

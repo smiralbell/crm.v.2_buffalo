@@ -2,12 +2,23 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import { query } from '@/lib/db'
+import { ensureRecurringInvoiceColumns } from '@/lib/invoices/recurring'
+import { parseIsoDate } from '@/lib/invoices/recurring-dates'
 
 const updateSchema = z.object({
   is_active: z.boolean().optional(),
   name: z.string().min(1).optional(),
   issue_day: z.number().int().min(1).max(31).optional(),
   due_day: z.number().int().min(1).max(31).nullable().optional(),
+  client_name: z.string().optional(),
+  client_company_name: z.string().optional(),
+  client_email: z.string().optional(),
+  client_address: z.string().optional(),
+  client_tax_id: z.string().optional(),
+  line_description: z.string().optional(),
+  base_amount: z.number().positive('El importe tiene que ser mayor que 0').nullable().optional(),
+  tax_percent: z.number().min(0).max(100).nullable().optional(),
+  next_issue_date: z.string().nullable().optional(),
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -20,25 +31,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'PATCH') {
+      await ensureRecurringInvoiceColumns()
       const data = updateSchema.parse(req.body)
       const sets: string[] = []
       const values: unknown[] = []
+      const set = (column: string, value: unknown) => {
+        values.push(value)
+        sets.push(`${column} = $${values.length}`)
+      }
 
-      if (data.is_active !== undefined) {
-        values.push(data.is_active)
-        sets.push(`is_active = $${values.length}`)
-      }
-      if (data.name !== undefined) {
-        values.push(data.name.trim())
-        sets.push(`name = $${values.length}`)
-      }
-      if (data.issue_day !== undefined) {
-        values.push(data.issue_day)
-        sets.push(`issue_day = $${values.length}`)
-      }
-      if (data.due_day !== undefined) {
-        values.push(data.due_day)
-        sets.push(`due_day = $${values.length}`)
+      if (data.is_active !== undefined) set('is_active', data.is_active)
+      if (data.name !== undefined) set('name', data.name.trim())
+      if (data.issue_day !== undefined) set('issue_day', data.issue_day)
+      if (data.due_day !== undefined) set('due_day', data.due_day)
+      if (data.client_name !== undefined) set('client_name', data.client_name.trim() || null)
+      if (data.client_company_name !== undefined) set('client_company_name', data.client_company_name.trim() || null)
+      if (data.client_email !== undefined) set('client_email', data.client_email.trim() || null)
+      if (data.client_address !== undefined) set('client_address', data.client_address.trim() || null)
+      if (data.client_tax_id !== undefined) set('client_tax_id', data.client_tax_id.trim() || null)
+      if (data.line_description !== undefined) set('line_description', data.line_description.trim() || null)
+      if (data.base_amount !== undefined) set('base_amount', data.base_amount)
+      if (data.tax_percent !== undefined) set('tax_percent', data.tax_percent)
+      if (data.next_issue_date !== undefined) {
+        if (data.next_issue_date == null || data.next_issue_date === '') {
+          set('next_issue_date', null)
+        } else {
+          const parsed = parseIsoDate(data.next_issue_date)
+          if (!parsed) {
+            return res.status(400).json({ error: 'Elige un día válido para la próxima factura' })
+          }
+          set('next_issue_date', data.next_issue_date)
+          set('issue_day', parsed.day)
+        }
       }
 
       if (sets.length === 0) {
