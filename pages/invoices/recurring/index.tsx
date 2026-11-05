@@ -4,6 +4,8 @@ import { useRouter } from 'next/router'
 import Link from 'next/link'
 import { requireAuth } from '@/lib/auth'
 import { query } from '@/lib/db'
+import { ensureRecurringInvoiceColumns } from '@/lib/invoices/recurring'
+import { formatSpanishDate, madridToday } from '@/lib/invoices/recurring-dates'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,17 +15,18 @@ import { ArrowLeft, Plus, RefreshCw, Trash2 } from 'lucide-react'
 interface RecurringInvoiceRow {
   id: string
   name: string
-  source_invoice_id: number
-  source_invoice_number: string
-  client_name: string
-  total: string | number
-  source_status: string
+  source_invoice_id: number | null
+  source_invoice_number: string | null
+  client_name: string | null
+  total: string | number | null
+  source_status: string | null
   issue_day: number
   due_day: number | null
   is_active: boolean
   last_generated_at: string | null
   last_generated_period: string | null
   last_generated_invoice_id: number | null
+  next_issue_date: string | null
   created_at: string
 }
 
@@ -45,6 +48,7 @@ export const getServerSideProps: GetServerSideProps<RecurringInvoicesPageProps> 
   }
 
   try {
+    await ensureRecurringInvoiceColumns()
     const result = await query<RecurringInvoiceRow>(
       `SELECT
          ri.id,
@@ -56,13 +60,17 @@ export const getServerSideProps: GetServerSideProps<RecurringInvoicesPageProps> 
          ri.last_generated_at::text,
          ri.last_generated_period,
          ri.last_generated_invoice_id,
+         ri.next_issue_date::text AS next_issue_date,
          ri.created_at::text,
          i.invoice_number AS source_invoice_number,
-         i.client_name,
-         i.total,
+         COALESCE(ri.client_name, i.client_name) AS client_name,
+         COALESCE(
+           i.total,
+           ROUND(ri.base_amount * (1 + COALESCE(ri.tax_percent, 21) / 100), 2)
+         ) AS total,
          i.status AS source_status
        FROM recurring_invoices ri
-       INNER JOIN invoices i ON i.id = ri.source_invoice_id
+       LEFT JOIN invoices i ON i.id = ri.source_invoice_id
        WHERE ri.deleted_at IS NULL
        ORDER BY ri.created_at DESC`
     )
@@ -195,7 +203,7 @@ export default function RecurringInvoicesPage({
               <div className="px-6 py-12 text-center">
                 <p className="text-base font-medium text-gray-700">Todavía no hay facturas recurrentes</p>
                 <p className="mt-1 text-sm text-gray-500">
-                  Crea una plantilla a partir de una factura existente y luego genera la del mes cuando quieras.
+                  Crea una con los datos del cliente y el día de la primera factura. Ese día se creará sola, con el siguiente número.
                 </p>
               </div>
             ) : (
@@ -204,9 +212,9 @@ export default function RecurringInvoicesPage({
                   <thead>
                     <tr className="border-b bg-gray-50">
                       <th className="p-3 text-left text-sm font-medium text-gray-700">Plantilla</th>
-                      <th className="p-3 text-left text-sm font-medium text-gray-700">Factura base</th>
+                      <th className="p-3 text-left text-sm font-medium text-gray-700">Origen</th>
                       <th className="p-3 text-left text-sm font-medium text-gray-700">Cliente</th>
-                      <th className="p-3 text-left text-sm font-medium text-gray-700">Día emisión</th>
+                      <th className="p-3 text-left text-sm font-medium text-gray-700">Próxima factura</th>
                       <th className="p-3 text-left text-sm font-medium text-gray-700">Última generación</th>
                       <th className="p-3 text-left text-sm font-medium text-gray-700">Estado</th>
                       <th className="p-3 text-right text-sm font-medium text-gray-700">Acciones</th>
@@ -217,12 +225,16 @@ export default function RecurringInvoicesPage({
                       <tr key={item.id} className="border-b hover:bg-gray-50">
                         <td className="p-3">
                           <div className="font-medium text-gray-900">{item.name}</div>
-                          <div className="text-xs text-gray-500">{formatCurrency(item.total)}</div>
+                          <div className="text-xs text-gray-500">{formatCurrency(item.total || 0)}</div>
                         </td>
-                        <td className="p-3 text-sm text-gray-700">{item.source_invoice_number}</td>
-                        <td className="p-3 text-sm text-gray-700">{item.client_name}</td>
                         <td className="p-3 text-sm text-gray-700">
-                          Día {item.issue_day}
+                          {item.source_invoice_number || 'Datos propios'}
+                        </td>
+                        <td className="p-3 text-sm text-gray-700">{item.client_name || '—'}</td>
+                        <td className="p-3 text-sm text-gray-700">
+                          {item.next_issue_date
+                            ? formatSpanishDate(item.next_issue_date.slice(0, 10))
+                            : `Día ${item.issue_day}, al pulsar Generar`}
                           {item.due_day ? ` · vence día ${item.due_day}` : ''}
                         </td>
                         <td className="p-3 text-sm text-gray-700">
@@ -241,10 +253,18 @@ export default function RecurringInvoicesPage({
                               size="sm"
                               variant="outline"
                               onClick={() => handleGenerate(item.id)}
-                              disabled={loadingId === item.id || !item.is_active}
+                              disabled={
+                                loadingId === item.id ||
+                                !item.is_active ||
+                                Boolean(item.next_issue_date && item.next_issue_date.slice(0, 10) > madridToday())
+                              }
                             >
                               <RefreshCw className="mr-2 h-4 w-4" />
-                              {loadingId === item.id ? 'Generando...' : 'Generar mes'}
+                              {loadingId === item.id
+                                ? 'Generando...'
+                                : item.next_issue_date && item.next_issue_date.slice(0, 10) > madridToday()
+                                  ? 'Espera al día'
+                                  : 'Generar mes'}
                             </Button>
                             <Button
                               size="sm"
