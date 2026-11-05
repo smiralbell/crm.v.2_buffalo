@@ -180,6 +180,7 @@ export default function Sidebar({
   const expanded = isDesktop ? Boolean(expandedProp) : true
 
   const [open, setOpen] = useState<Record<string, boolean>>({})
+  const [hoveredHref, setHoveredHref] = useState<string | null>(null)
   const [callNowHref, setCallNowHref] = useState('/comercial/campanas')
 
   const showLabels = !isDesktop || expanded
@@ -308,7 +309,10 @@ export default function Sidebar({
   return (
     <aside
       onMouseEnter={() => isDesktop && setExpanded(true)}
-      onMouseLeave={() => isDesktop && setExpanded(false)}
+      onMouseLeave={() => {
+        if (isDesktop) setExpanded(false)
+        setHoveredHref(null)
+      }}
       className={cn(
         'shell-sidebar flex h-full flex-col border-r transition-[width] duration-200 ease-out overflow-hidden',
         isDesktop ? (expanded ? 'w-60' : 'w-[68px]') : 'h-full w-full'
@@ -351,7 +355,14 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-nav-fade flex-1 min-h-0 relative">
-        <nav className="sidebar-nav-scroll hide-scrollbar h-full py-2.5 px-2 pb-8 space-y-0.5">
+        <nav
+          className="sidebar-nav-scroll hide-scrollbar h-full py-2.5 px-2 pb-8 space-y-0.5"
+          onMouseMove={(event) => {
+            const el = (event.target as HTMLElement | null)?.closest?.('[data-nav-group]')
+            const href = el?.getAttribute('data-nav-group') ?? null
+            setHoveredHref((current) => (current === href ? current : href))
+          }}
+        >
           {loading ? (
             <div className="px-1 py-2 space-y-2">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -417,9 +428,9 @@ export default function Sidebar({
                 .map((item) => {
                   const Icon = item.icon
                   const active = isParentActive(item)
-                  const isOpen = open[item.href] ?? false
+                  const isOpen = (open[item.href] ?? false) || hoveredHref === item.href
                   return (
-                    <div key={item.href}>
+                    <div key={item.href} data-nav-group={item.href}>
                       <button
                         type="button"
                         title={item.label}
@@ -454,7 +465,7 @@ export default function Sidebar({
                                   !isDesktop && 'py-2 text-[13px]',
                                   childActive
                                     ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-foreground))]'
-                                    : 'text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))]'
+                                    : 'text-[hsl(var(--sidebar-muted))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-foreground))]'
                                 )}
                               >
                                 {child.label}
@@ -471,7 +482,7 @@ export default function Sidebar({
             navItems.map((item) => {
               const Icon = item.icon
               const active = isParentActive(item)
-              const isOpen = open[item.href] ?? false
+              const isOpen = (open[item.href] ?? false) || hoveredHref === item.href
 
               if (!item.children) {
                 return (
@@ -489,7 +500,7 @@ export default function Sidebar({
               }
 
               return (
-                <div key={item.href}>
+                <div key={item.href} data-nav-group={item.href}>
                   <button
                     type="button"
                     title={item.label}
@@ -554,7 +565,7 @@ export default function Sidebar({
                                 !isDesktop && 'py-2 text-[13px]',
                                 childActive
                                   ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-foreground))]'
-                                  : 'text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))]'
+                                  : 'text-[hsl(var(--sidebar-muted))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-foreground))]'
                               )}
                             >
                               {childLabel(child)}

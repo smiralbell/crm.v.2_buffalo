@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getDeveloperInvoiceIds } from '@/lib/invoices/developer-meta'
 
 export default async function handler(
   req: NextApiRequest,
@@ -25,9 +26,15 @@ export default async function handler(
       if (invoiceIds.length > 0) {
         where.id = { in: invoiceIds }
       }
+    } else if (status === 'gastos') {
+      where.id = { in: await getDeveloperInvoiceIds() }
     } else if (status && status !== 'all') {
-      // Si hay filtro por estado
       where.status = status
+      const devIds = await getDeveloperInvoiceIds()
+      if (devIds.length > 0) where.id = { notIn: devIds }
+    } else {
+      const devIds = await getDeveloperInvoiceIds()
+      if (devIds.length > 0) where.id = { notIn: devIds }
     }
 
     // Filtro por fechas

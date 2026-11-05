@@ -139,7 +139,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       deleted_at: null,
     }
 
-    if (status && status !== 'all') {
+    const showingExpenses = status === 'gastos'
+
+    if (status && status !== 'all' && !showingExpenses) {
       where.status = status
     }
 
@@ -151,10 +153,12 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       ]
     }
 
-    // Esta pantalla es solo lo que Buffalo emite. Las facturas de developers
-    // son gastos y no se mezclan aquí. No se borran: siguen en su sitio.
+    // Por defecto solo lo que Buffalo emite. «Gastos» enseña las facturas
+    // de developers, que son gastos. No se borran ni se mezclan con el resto.
     const devIds = await getDeveloperInvoiceIds()
-    if (devIds.length > 0) {
+    if (showingExpenses) {
+      where.id = { in: devIds }
+    } else if (devIds.length > 0) {
       where.id = { notIn: devIds }
     }
 
@@ -179,7 +183,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         ...CLIENT_INVOICE_WHERE,
         ...FISCAL_INVOICE_WHERE,
       }
-      if (status && status !== 'all') statsWhere.status = status
+      if (status && status !== 'all' && status !== 'gastos') statsWhere.status = status
       if (search) {
         statsWhere.OR = [
           { invoice_number: { contains: search, mode: 'insensitive' } },
@@ -889,7 +893,7 @@ export default function InvoicesPage({
                 </div>
               </div>
               <Select value={status || 'all'} onValueChange={handleStatusChange}>
-                <SelectTrigger className="w-full sm:w-[160px] rounded-xl">
+                <SelectTrigger className="w-full sm:w-[200px] rounded-xl">
                   <SelectValue placeholder="Todos los estados" />
                 </SelectTrigger>
                 <SelectContent>
@@ -897,6 +901,7 @@ export default function InvoicesPage({
                   <SelectItem value="draft">Borrador</SelectItem>
                   <SelectItem value="sent">Enviada</SelectItem>
                   <SelectItem value="cancelled">Cancelada</SelectItem>
+                  <SelectItem value="gastos">Gastos</SelectItem>
                 </SelectContent>
               </Select>
               <DateRangePicker
@@ -1024,14 +1029,22 @@ export default function InvoicesPage({
             {safeInvoices.length === 0 ? (
               <div className="text-center py-16">
                 <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-lg font-semibold text-gray-500 mb-2">No hay facturas registradas</p>
-                <p className="text-sm text-gray-400 mb-6">Crea tu primera factura para comenzar</p>
-                <Link href="/invoices/new">
-                  <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Crear Primera Factura
-                  </Button>
-                </Link>
+                <p className="text-lg font-semibold text-gray-500 mb-2">
+                  {status === 'gastos' ? 'No hay facturas de gasto' : 'No hay facturas registradas'}
+                </p>
+                <p className="text-sm text-gray-400 mb-6">
+                  {status === 'gastos'
+                    ? 'Cuando un developer envíe una factura, aparecerá aquí'
+                    : 'Crea tu primera factura para comenzar'}
+                </p>
+                {status !== 'gastos' && (
+                  <Link href="/invoices/new">
+                    <Button>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Crear Primera Factura
+                    </Button>
+                  </Link>
+                )}
               </div>
             ) : (
               <>
