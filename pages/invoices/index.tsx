@@ -79,12 +79,18 @@ interface Invoice {
   document_type?: string
 }
 
+type InvoicesView = 'facturas' | 'equipo'
+
 interface InvoicesPageProps {
   invoices: Invoice[]
   page: number
   totalPages: number
   search: string
   status: string
+  /** «Facturas» (lo que emite Buffalo) o «Equipo» (lo que suben los usuarios) */
+  view?: InvoicesView
+  /** Cuántas facturas ha subido el equipo en total */
+  teamCount?: number
   source?: string
   dateFrom?: string
   dateTo?: string
@@ -140,24 +146,38 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       deleted_at: null,
     }
 
-    const showingExpenses = status === 'gastos'
+    // Interruptor de arriba: «Facturas» = lo que emite Buffalo; «Equipo» = las
+    // facturas que suben developers y demás usuarios (son gastos, no ingresos).
+    // ?status=gastos es el enlace antiguo a la vista del equipo.
+    const view: InvoicesView =
+      context.query.vista === 'equipo' || status === 'gastos' ? 'equipo' : 'facturas'
+    const statusFilter = status && status !== 'all' && status !== 'gastos' ? status : ''
 
-    if (status && status !== 'all' && !showingExpenses) {
-      where.status = status
+    if (statusFilter) {
+      where.status = statusFilter
     }
 
+    const searchOr: any[] = []
     if (search) {
-      where.OR = [
+      searchOr.push(
         { invoice_number: { contains: search, mode: 'insensitive' } },
         { client_name: { contains: search, mode: 'insensitive' } },
-        { client_email: { contains: search, mode: 'insensitive' } },
-      ]
+        { client_email: { contains: search, mode: 'insensitive' } }
+      )
+      // En «Equipo» todas van a nombre de Buffalo: se busca por la persona que la sube
+      if (view === 'equipo') {
+        const users = await prisma.$queryRaw<{ id: number }[]>`
+          SELECT id FROM crm_users WHERE name ILIKE ${'%' + search + '%'}
+        `.catch(() => [] as { id: number }[])
+        if (users.length > 0) {
+          searchOr.push({ crm_user_id: { in: users.map((u) => u.id) } })
+        }
+      }
+      where.OR = searchOr
     }
 
-    // Por defecto solo lo que Buffalo emite. «Gastos» enseña las facturas
-    // de developers, que son gastos. No se borran ni se mezclan con el resto.
     const devIds = await getDeveloperInvoiceIds()
-    if (showingExpenses) {
+    if (view === 'equipo') {
       where.id = { in: devIds }
     } else if (devIds.length > 0) {
       where.id = { notIn: devIds }
@@ -178,19 +198,15 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     }
 
     try {
-      // KPIs de arriba: siempre solo facturas de cliente (developers no suman)
-      const statsWhere: any = {
-        deleted_at: null,
-        ...CLIENT_INVOICE_WHERE,
-        ...FISCAL_INVOICE_WHERE,
-      }
-      if (status && status !== 'all' && status !== 'gastos') statsWhere.status = status
-      if (search) {
-        statsWhere.OR = [
-          { invoice_number: { contains: search, mode: 'insensitive' } },
-          { client_name: { contains: search, mode: 'insensitive' } },
-          { client_email: { contains: search, mode: 'insensitive' } },
-        ]
+      // KPIs de arriba: en «Facturas», solo facturas de cliente (las del equipo no
+      // suman ingresos); en «Equipo», los totales de las facturas del equipo.
+      const statsWhere: any =
+        view === 'equipo'
+          ? { deleted_at: null, id: { in: devIds } }
+          : { deleted_at: null, ...CLIENT_INVOICE_WHERE, ...FISCAL_INVOICE_WHERE }
+      if (statusFilter) statsWhere.status = statusFilter
+      if (searchOr.length > 0) {
+        statsWhere.OR = searchOr
       }
       if (dateFrom || dateTo) {
         statsWhere.issue_date = {}
@@ -281,7 +297,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           page,
           totalPages,
           search,
-          status: status || 'all',
+          status: statusFilter || 'all',
+          view,
+          teamCount: devIds.length,
           source: 'client',
           sortBy,
           sortDir,
@@ -374,6 +392,8 @@ export default function InvoicesPage({
   totalPages,
   search: initialSearch,
   status: initialStatus,
+  view = 'facturas',
+  teamCount = 0,
   dateFrom: initialDateFrom,
   dateTo: initialDateTo,
   sortBy = 'date',
@@ -414,6 +434,7 @@ export default function InvoicesPage({
       sortBy,
       sortDir,
     }
+    if (view === 'equipo') query.vista = 'equipo'
     if (dateRange.start) {
       query.dateFrom = dateRange.start.toISOString().split('T')[0]
     }
@@ -498,6 +519,19 @@ export default function InvoicesPage({
     router.push({
       pathname: '/invoices',
       query,
+    })
+  }
+
+  const isTeamView = view === 'equipo'
+
+  // Cambiar de vista vuelve a la página 1 y mantiene búsqueda, estado y fechas
+  const handleViewChange = (next: InvoicesView) => {
+    if (next === view) return
+    setSelectionMode(false)
+    setSelectedInvoices(new Set())
+    router.push({
+      pathname: '/invoices',
+      query: buildListQuery({ vista: next === 'equipo' ? 'equipo' : undefined, page: 1 }),
     })
   }
 
@@ -613,8 +647,9 @@ export default function InvoicesPage({
       const params = new URLSearchParams()
       if (invoiceIds && invoiceIds.length > 0) {
         params.append('ids', invoiceIds.join(','))
-      } else if (filterStatus && filterStatus !== 'all') {
-        params.append('status', filterStatus)
+      } else {
+        if (filterStatus && filterStatus !== 'all') params.append('status', filterStatus)
+        if (view === 'equipo') params.append('vista', 'equipo')
       }
       if (dateFrom) {
         params.append('dateFrom', dateFrom)
@@ -831,13 +866,58 @@ export default function InvoicesPage({
           </Card>
         )}
 
+        {/* Interruptor de vista: lo que emite Buffalo / lo que sube el equipo */}
+        <div
+          role="tablist"
+          aria-label="Qué facturas ver"
+          className="inline-flex w-full rounded-xl border border-gray-200 bg-gray-100 p-1 sm:w-auto"
+        >
+          {(
+            [
+              { value: 'facturas', label: 'Facturas' },
+              { value: 'equipo', label: 'Equipo' },
+            ] as { value: InvoicesView; label: string }[]
+          ).map((opt) => {
+            const active = view === opt.value
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => handleViewChange(opt.value)}
+                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors sm:flex-initial ${
+                  active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                {opt.label}
+                {opt.value === 'equipo' && teamCount > 0 && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[11px] tabular-nums leading-none ${
+                      active ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-200 text-gray-600'
+                    }`}
+                  >
+                    {teamCount}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
         {/* Stats Cards - Estilo minimalista */}
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
-              <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Total Facturas</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">
+                {isTeamView ? 'Facturas del equipo' : 'Total Facturas'}
+              </p>
               <div className="text-xl sm:text-2xl font-semibold text-gray-900 mb-1">{stats.total}</div>
-              <p className="text-xs text-gray-400">Facturas y rectificativas. Proformas y presupuestos no suman.</p>
+              <p className="text-xs text-gray-400">
+                {isTeamView
+                  ? 'Gastos: no suman a los ingresos de Buffalo.'
+                  : 'Facturas y rectificativas. Proformas y presupuestos no suman.'}
+              </p>
             </CardContent>
           </Card>
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
@@ -868,7 +948,9 @@ export default function InvoicesPage({
           </Card>
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
-              <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">IVA a Pagar</p>
+              <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">
+                {isTeamView ? 'IVA soportado' : 'IVA a Pagar'}
+              </p>
               <div className="text-lg sm:text-2xl font-semibold text-gray-900 mb-1 break-words">
                 {new Intl.NumberFormat('es-ES', {
                   style: 'currency',
@@ -876,7 +958,9 @@ export default function InvoicesPage({
                   minimumFractionDigits: 2,
                 }).format(stats.totalIva || 0)}
               </div>
-              <p className="text-xs text-gray-400">IVA repercutido</p>
+              <p className="text-xs text-gray-400">
+                {isTeamView ? 'IVA de las facturas del equipo' : 'IVA repercutido'}
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -889,7 +973,9 @@ export default function InvoicesPage({
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input
-                    placeholder="Buscar por número, cliente, email..."
+                    placeholder={
+                      isTeamView ? 'Buscar por número o persona...' : 'Buscar por número, cliente, email...'
+                    }
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="pl-10 rounded-xl"
@@ -905,7 +991,6 @@ export default function InvoicesPage({
                   <SelectItem value="draft">Borrador</SelectItem>
                   <SelectItem value="sent">Enviada</SelectItem>
                   <SelectItem value="cancelled">Cancelada</SelectItem>
-                  <SelectItem value="gastos">Gastos</SelectItem>
                 </SelectContent>
               </Select>
               <DateRangePicker
@@ -1081,14 +1166,16 @@ export default function InvoicesPage({
               <div className="text-center py-16">
                 <FileText className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                 <p className="text-lg font-semibold text-gray-500 mb-2">
-                  {status === 'gastos' ? 'No hay facturas de gasto' : 'No hay facturas registradas'}
+                  {isTeamView ? 'No hay facturas del equipo' : 'No hay facturas registradas'}
                 </p>
                 <p className="text-sm text-gray-400 mb-6">
-                  {status === 'gastos'
-                    ? 'Cuando un developer envíe una factura, aparecerá aquí'
+                  {isTeamView
+                    ? search || status !== 'all' || dateRange.start || dateRange.end
+                      ? 'Ninguna coincide con los filtros'
+                      : 'Cuando alguien del equipo suba una factura, aparecerá aquí'
                     : 'Crea tu primera factura para comenzar'}
                 </p>
-                {status !== 'gastos' && (
+                {!isTeamView && (
                   <Link href="/invoices/new">
                     <Button>
                       <Plus className="mr-2 h-4 w-4" />
@@ -1127,11 +1214,13 @@ export default function InvoicesPage({
                             </Badge>
                           )}
                         </div>
-                        <p className="mt-0.5 truncate text-sm text-gray-700">{invoice.client_name}</p>
+                        <p className="mt-0.5 truncate text-sm text-gray-700">
+                          {isTeamView ? invoice.developer_name || '—' : invoice.client_name}
+                        </p>
                         <p className="mt-0.5 text-xs text-gray-500">
                           {format(new Date(invoice.issue_date), 'dd MMM yyyy')}
                           {invoice.invoice_source === 'developer' &&
-                            ` · Developer${invoice.developer_name ? ` · ${invoice.developer_name}` : ''}`}
+                            (invoice.sent_to_drive ? ' · En Drive' : ' · Sin subir a Drive')}
                         </p>
                       </Link>
                       <div className="shrink-0 text-right">
@@ -1235,7 +1324,9 @@ export default function InvoicesPage({
                         </th>
                       )}
                       <SortHeader label="Número" column="number" />
-                      <th className="text-left p-3 font-medium text-sm text-gray-700">Cliente</th>
+                      <th className="text-left p-3 font-medium text-sm text-gray-700">
+                        {isTeamView ? 'Persona' : 'Cliente'}
+                      </th>
                       <SortHeader label="Fecha" column="date" />
                       <th className="text-center p-3 font-medium text-sm text-gray-700">Estado</th>
                       <SortHeader label="Sin IVA" column="subtotal" align="right" />
@@ -1262,14 +1353,11 @@ export default function InvoicesPage({
                         <td className="p-3 text-sm font-medium text-gray-900">
                           <div className="flex flex-wrap items-center gap-2">
                             {invoice.invoice_number}
-                            {invoice.invoice_source === 'developer' && (
-                              <Badge className="bg-indigo-50 text-indigo-800 border-indigo-100 text-[10px] font-medium">
-                                Developer{invoice.developer_name ? ` · ${invoice.developer_name}` : ''}
-                              </Badge>
-                            )}
                           </div>
                         </td>
-                        <td className="p-3 text-sm text-gray-900">{invoice.client_name}</td>
+                        <td className="p-3 text-sm text-gray-900">
+                          {isTeamView ? invoice.developer_name || '—' : invoice.client_name}
+                        </td>
                         <td className="p-3 text-sm text-gray-600">
                           {format(new Date(invoice.issue_date), 'dd MMM yyyy')}
                         </td>

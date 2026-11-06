@@ -14,11 +14,15 @@ export default async function handler(
       return res.status(405).json({ error: 'Method not allowed' })
     }
 
-    const { ids, status, dateFrom, dateTo } = req.query
+    const { ids, status, dateFrom, dateTo, vista } = req.query
 
     const where: any = {
       deleted_at: null,
     }
+
+    // vista=equipo → facturas que suben los usuarios; si no, las que emite Buffalo.
+    // status=gastos es la forma antigua de pedir la vista del equipo.
+    const teamView = vista === 'equipo' || status === 'gastos'
 
     // Si hay IDs específicos, filtrar por ellos
     if (ids && typeof ids === 'string') {
@@ -26,15 +30,14 @@ export default async function handler(
       if (invoiceIds.length > 0) {
         where.id = { in: invoiceIds }
       }
-    } else if (status === 'gastos') {
-      where.id = { in: await getDeveloperInvoiceIds() }
-    } else if (status && status !== 'all') {
-      where.status = status
-      const devIds = await getDeveloperInvoiceIds()
-      if (devIds.length > 0) where.id = { notIn: devIds }
     } else {
+      if (status && status !== 'all' && status !== 'gastos') where.status = status
       const devIds = await getDeveloperInvoiceIds()
-      if (devIds.length > 0) where.id = { notIn: devIds }
+      if (teamView) {
+        where.id = { in: devIds }
+      } else if (devIds.length > 0) {
+        where.id = { notIn: devIds }
+      }
     }
 
     // Filtro por fechas
