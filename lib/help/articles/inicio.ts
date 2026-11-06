@@ -103,7 +103,7 @@ El sidebar se filtra por rol. Al pasar el ratón (desktop) se expande y empuja e
 - **Onboarding (ENG 2)** → Proyectos activos, Configurador, Demos
 - **Proyectos (ENG 3)** → Abiertos, Tickets
 - **Retención (ENG 4)** → Buffalo con mensualidad
-- **Calendario**, **Análisis IA**, **Checklist**
+- **Calendario**, **Checklist**
 - Pie: tema, **Usuarios**, cerrar sesión, **Ayuda** (?)
 
 ## Developer
