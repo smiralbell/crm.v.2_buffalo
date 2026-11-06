@@ -45,12 +45,19 @@ export async function getInvoiceDeveloperMetaMap(
 
   try {
     const rows = await prisma.$queryRaw<
-      { id: number; invoice_source: string; developer_name: string | null; developer_pdf_path: string | null }[]
+      {
+        id: number
+        invoice_source: string
+        developer_name: string | null
+        developer_pdf_path: string | null
+        pdf_drive_file_id: string | null
+      }[]
     >`
       SELECT i.id,
              COALESCE(i.invoice_source, 'client') AS invoice_source,
              u.name AS developer_name,
-             i.developer_pdf_path
+             i.developer_pdf_path,
+             i.pdf_drive_file_id
       FROM invoices i
       LEFT JOIN crm_users u ON u.id = i.crm_user_id
       WHERE i.id = ANY(${invoiceIds}::int[])
@@ -59,7 +66,8 @@ export async function getInvoiceDeveloperMetaMap(
       map.set(row.id, {
         invoice_source: row.invoice_source,
         developer_name: row.developer_name,
-        has_pdf: Boolean(row.developer_pdf_path),
+        // El PDF puede estar en el servidor, en Drive o en los dos
+        has_pdf: Boolean(row.developer_pdf_path || row.pdf_drive_file_id),
       })
     }
   } catch {
