@@ -89,8 +89,6 @@ interface InvoicesPageProps {
   status: string
   /** «Facturas» (lo que emite Buffalo) o «Equipo» (lo que suben los usuarios) */
   view?: InvoicesView
-  /** Cuántas facturas ha subido el equipo en total */
-  teamCount?: number
   source?: string
   dateFrom?: string
   dateTo?: string
@@ -299,7 +297,6 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           search,
           status: statusFilter || 'all',
           view,
-          teamCount: devIds.length,
           source: 'client',
           sortBy,
           sortDir,
@@ -393,7 +390,6 @@ export default function InvoicesPage({
   search: initialSearch,
   status: initialStatus,
   view = 'facturas',
-  teamCount = 0,
   dateFrom: initialDateFrom,
   dateTo: initialDateTo,
   sortBy = 'date',
@@ -866,45 +862,6 @@ export default function InvoicesPage({
           </Card>
         )}
 
-        {/* Interruptor de vista: lo que emite Buffalo / lo que sube el equipo */}
-        <div
-          role="tablist"
-          aria-label="Qué facturas ver"
-          className="inline-flex w-full rounded-xl border border-gray-200 bg-gray-100 p-1 sm:w-auto"
-        >
-          {(
-            [
-              { value: 'facturas', label: 'Facturas' },
-              { value: 'equipo', label: 'Equipo' },
-            ] as { value: InvoicesView; label: string }[]
-          ).map((opt) => {
-            const active = view === opt.value
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => handleViewChange(opt.value)}
-                className={`inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors sm:flex-initial ${
-                  active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                {opt.label}
-                {opt.value === 'equipo' && teamCount > 0 && (
-                  <span
-                    className={`rounded-full px-1.5 py-0.5 text-[11px] tabular-nums leading-none ${
-                      active ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-200 text-gray-600'
-                    }`}
-                  >
-                    {teamCount}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-
         {/* Stats Cards - Estilo minimalista */}
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
@@ -969,6 +926,35 @@ export default function InvoicesPage({
         <Card className="border border-gray-200 shadow-sm">
           <CardContent className="pt-6">
             <form onSubmit={handleSearch} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              {/* Interruptor de vista: lo que emite Buffalo / lo que sube el equipo */}
+              <div
+                role="tablist"
+                aria-label="Qué facturas ver"
+                className="inline-flex h-10 w-full shrink-0 rounded-xl border border-gray-200 bg-gray-100 p-1 sm:w-auto"
+              >
+                {(
+                  [
+                    { value: 'facturas', label: 'Facturas' },
+                    { value: 'equipo', label: 'Equipo' },
+                  ] as { value: InvoicesView; label: string }[]
+                ).map((opt) => {
+                  const active = view === opt.value
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => handleViewChange(opt.value)}
+                      className={`inline-flex flex-1 items-center justify-center rounded-lg px-4 text-sm font-medium transition-colors sm:flex-initial ${
+                        active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
               <div className="w-full sm:flex-1 sm:min-w-[200px] min-w-0">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
