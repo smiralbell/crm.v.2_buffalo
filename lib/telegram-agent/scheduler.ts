@@ -3,12 +3,16 @@ import { runAgent } from './agent'
 import { alertChatIds, isAgentEnabled, webhookSecret } from './config'
 import { deliver } from './handler'
 import { claimDueReminders, type Reminder } from './store'
-import { getWebhookInfo, sendText, setCommands, setWebhook } from './telegram-api'
+import { getWebhookInfo, setCommands, setWebhook } from './telegram-api'
+import { sendChatText } from './channel'
+import { allowedWhatsAppNumbers, isWhatsAppChat, waChatId } from '@/lib/whatsapp-agent/config'
 import type { AgentContext } from './tools'
 
 declare global {
   // eslint-disable-next-line no-var
   var __buffaloTelegramAgent: boolean | undefined
+  // eslint-disable-next-line no-var
+  var __buffaloAgentReminders: boolean | undefined
 }
 
 export function webhookUrl(): string {
@@ -57,10 +61,19 @@ function madridWeekday(d: Date): number {
   return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(name)
 }
 
+/** A quién va un aviso: su chat, o todos los socios por el mismo canal en que se pidió. */
+function reminderTargets(r: Reminder): string[] {
+  if (r.destino !== 'socios') return [String(r.chat_id)]
+  if (isWhatsAppChat(r.chat_id)) {
+    return Array.from(allowedWhatsAppNumbers()).map((n) => String(waChatId(n)))
+  }
+  return alertChatIds()
+}
+
 async function runReminder(r: Reminder): Promise<void> {
-  const targets = r.destino === 'socios' ? alertChatIds() : [String(r.chat_id)]
+  const targets = reminderTargets(r)
   if (r.tipo === 'texto') {
-    for (const chat of targets) await sendText(chat, `Recordatorio: ${r.texto}`)
+    for (const chat of targets) await sendChatText(chat, `Recordatorio: ${r.texto}`)
     return
   }
   // Tarea: el agente la ejecuta y manda el resultado a cada destino.
@@ -91,6 +104,15 @@ async function tick(): Promise<void> {
   }
 }
 
+/** Revisa los avisos programados cada minuto. Una vez por proceso, lo arranque Telegram o WhatsApp. */
+export function startAgentReminders(): void {
+  if (globalThis.__buffaloAgentReminders) return
+  globalThis.__buffaloAgentReminders = true
+  const run = () => void tick().catch((e) => console.warn('[telegram-agent] avisos', e instanceof Error ? e.message : e))
+  setTimeout(run, 20_000)
+  setInterval(run, 60_000)
+}
+
 /** Arranca una vez por proceso: registra el webhook y revisa avisos cada minuto. */
 export function startTelegramAgent(): void {
   if (globalThis.__buffaloTelegramAgent || !isAgentEnabled()) return
@@ -99,7 +121,5 @@ export function startTelegramAgent(): void {
   if (process.env.TELEGRAM_AGENT_AUTO_WEBHOOK !== '0') {
     void ensureWebhook().catch((e) => console.warn('[telegram-agent] webhook', e instanceof Error ? e.message : e))
   }
-  const run = () => void tick().catch((e) => console.warn('[telegram-agent] avisos', e instanceof Error ? e.message : e))
-  setTimeout(run, 20_000)
-  setInterval(run, 60_000)
+  startAgentReminders()
 }

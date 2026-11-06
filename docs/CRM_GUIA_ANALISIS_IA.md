@@ -6,7 +6,7 @@
 **Stack:** Next.js (Pages Router) + Prisma parcial + SQL crudo (`$queryRaw`) + PostgreSQL  
 **Fecha de la guía:** 2026-07-19  
 
-**UI en el CRM:** `/analisis` (sidebar **Análisis IA**, solo admin). Genera informes con OpenRouter usando esta guía + snapshot SQL (`lib/analisis/*`, tabla `crm_company_ai_analyses`).
+**Uso en el CRM:** el asistente de CRM (Demos) usa esta guía como ontología y el snapshot SQL de `lib/analisis/snapshot.ts`. La pantalla `/analisis` («Análisis IA») se retiró; la tabla `crm_company_ai_analyses` conserva los informes antiguos.
 
 **Instrucciones al agente analista**
 1. Lee primero la sección 0 (modelo de negocio) y la 1 (roles).

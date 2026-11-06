@@ -22,7 +22,6 @@ import {
   MessageSquare,
   Copy,
   ListChecks,
-  Sparkles,
   HelpCircle,
   Video,
 } from 'lucide-react'
@@ -154,7 +153,6 @@ const NAV: NavItem[] = [
     ],
   },
   { href: '/calendario', label: 'Calendario', icon: Calendar, roles: ['admin'] },
-  { href: '/analisis', label: 'Análisis IA', icon: Sparkles, roles: ['admin'] },
   { href: '/checklist', label: 'Checklist', icon: ListChecks, roles: ['admin'] },
 ]
 

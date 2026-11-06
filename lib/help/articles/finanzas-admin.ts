@@ -109,12 +109,12 @@ Al crear un usuario eliges rol (\`admin\` | \`developer\` | \`comercial\`). Los 
   },
   {
     id: 'calendario-analisis-checklist',
-    title: 'Calendario, Análisis IA y Checklist',
-    summary: 'Google Calendar, informes de empresa con IA y checklist operativo',
+    title: 'Calendario y Checklist',
+    summary: 'Google Calendar y checklist operativo',
     category: 'admin',
     order: 2,
     audience: ['admin'],
-    tags: ['calendario', 'análisis', 'checklist', 'google', 'IA'],
+    tags: ['calendario', 'checklist', 'google'],
     body: `# Herramientas admin
 
 ## Calendario
@@ -122,13 +122,6 @@ Al crear un usuario eliges rol (\`admin\` | \`developer\` | \`comercial\`). Los 
 \`/calendario\` — reuniones vinculadas a Google Calendar.
 
 Integración: \`/api/integrations/google/*\` (connect, callback, disconnect, status, events, event-notes).
-
-## Análisis IA
-
-\`/analisis\` — informes cuantitativos de toda la empresa (OpenRouter + snapshot SQL).  
-API: \`GET|POST /api/analisis/ai-analysis\`
-
-La guía operativa larga está en \`docs/CRM_GUIA_ANALISIS_IA.md\` (también resumida en este Centro de ayuda).
 
 ## Checklist
 

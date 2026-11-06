@@ -16,7 +16,7 @@ function num(v: unknown): number {
 }
 
 /**
- * Snapshot cuantitativo del CRM para el agente de Análisis IA.
+ * Snapshot cuantitativo del CRM para el asistente de CRM (Demos).
  * Alineado con docs/CRM_GUIA_ANALISIS_IA.md
  */
 export async function buildCrmCompanySnapshot() {

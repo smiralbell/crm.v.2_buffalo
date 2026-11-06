@@ -10,6 +10,8 @@ import {
   type PendingAction,
 } from './store'
 import { answerCallback, editText, sendText, type TgCallbackQuery } from './telegram-api'
+import { isWhatsAppChat } from '@/lib/whatsapp-agent/config'
+import { sendWhatsAppPendingConfirmation } from '@/lib/whatsapp-agent/confirm'
 
 /**
  * Doble confirmación de borrados. El agente (LLM) nunca borra: solo crea una
@@ -50,7 +52,55 @@ function rowLabel(row: Record<string, unknown>): string {
   return parts.join(' · ')
 }
 
+export { describe as describePending }
+
+/**
+ * Ejecuta un borrado que ya pasó los dos pasos (claimed = estado «executing»),
+ * lo audita y lo apunta en el historial. Lo usan Telegram (botones) y WhatsApp (códigos).
+ */
+export async function executeConfirmedPending(
+  pending: PendingAction,
+  claimed: PendingAction,
+  chatId: number,
+  userId: number | null
+): Promise<string> {
+  let outcome: Record<string, unknown>
+  let ok = true
+  try {
+    outcome =
+      pending.kind === 'delete_rows'
+        ? await executeDeleteRows(pending.payload as unknown as DeleteRowsPayload)
+        : await executeDestructiveSql(
+            String(pending.payload.sql || ''),
+            Array.isArray(pending.payload.params) ? pending.payload.params : []
+          )
+  } catch (e) {
+    ok = false
+    outcome = { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+  await resolvePending(pending.id, ok ? 'done' : 'failed', outcome)
+  await audit({
+    chatId,
+    userId,
+    agent: 'doble-confirmacion',
+    tool: pending.kind,
+    args: { id: pending.id, payload: pending.payload, confirmado_por: claimed.confirmed_by },
+    ok,
+    result: outcome,
+  })
+  const resultLine = ok
+    ? `Eliminado (${String(outcome.borradas ?? outcome.filas_afectadas ?? 0)} fila(s)). Confirmado por ${claimed.confirmed_by}.`
+    : `No se ha podido borrar: ${String(outcome.error)}`
+  await saveMessage(chatId, userId, 'assistant', `[Borrado #${pending.id}: ${resultLine}]`)
+  return resultLine
+}
+
 export async function sendPendingConfirmation(p: PendingAction): Promise<void> {
+  // En WhatsApp no hay botones: se confirma escribiendo un código
+  if (isWhatsAppChat(p.chat_id)) {
+    await sendWhatsAppPendingConfirmation(p)
+    return
+  }
   const text = `${describe(p)}\n\nPaso 1 de 2 · ¿Quieres eliminarlo? Caduca en ${DELETE_CONFIRM_TTL_MIN} min.`
   const messageId = await sendText(p.chat_id, text, {
     buttons: [
@@ -131,35 +181,8 @@ export async function handleDeleteCallback(cb: TgCallbackQuery): Promise<void> {
       return
     }
     await answerCallback(cb.id, 'Eliminando…')
-    let outcome: Record<string, unknown>
-    let ok = true
-    try {
-      outcome =
-        pending.kind === 'delete_rows'
-          ? await executeDeleteRows(pending.payload as unknown as DeleteRowsPayload)
-          : await executeDestructiveSql(
-              String(pending.payload.sql || ''),
-              Array.isArray(pending.payload.params) ? pending.payload.params : []
-            )
-    } catch (e) {
-      ok = false
-      outcome = { ok: false, error: e instanceof Error ? e.message : String(e) }
-    }
-    await resolvePending(pending.id, ok ? 'done' : 'failed', outcome)
-    await audit({
-      chatId,
-      userId: cb.from.id,
-      agent: 'doble-confirmacion',
-      tool: pending.kind,
-      args: { id: pending.id, payload: pending.payload, confirmado_por: claimed.confirmed_by },
-      ok,
-      result: outcome,
-    })
-    const resultLine = ok
-      ? `Eliminado (${String(outcome.borradas ?? outcome.filas_afectadas ?? 0)} fila(s)). Confirmado por ${claimed.confirmed_by}.`
-      : `No se ha podido borrar: ${String(outcome.error)}`
+    const resultLine = await executeConfirmedPending(pending, claimed, chatId, cb.from.id)
     await editText(chatId, messageId, `${describe(pending)}\n\n${resultLine}`)
-    await saveMessage(chatId, cb.from.id, 'assistant', `[Borrado #${pending.id}: ${resultLine}]`)
     return
   }
 

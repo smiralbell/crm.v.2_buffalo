@@ -52,7 +52,7 @@ export const HELP_CATEGORIES: HelpCategory[] = [
   {
     id: 'admin',
     label: 'Admin, calendario y análisis',
-    description: 'Usuarios, checklist, calendario Google y Análisis IA',
+    description: 'Usuarios, checklist y calendario Google',
     order: 9,
   },
   {

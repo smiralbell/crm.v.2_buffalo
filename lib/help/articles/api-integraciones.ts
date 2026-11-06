@@ -218,7 +218,6 @@ Prefijo \`/api/retencion/\`:
 
 - \`GET /api/health\`
 - \`/api/checklist\` · \`/[id]\`
-- \`/api/analisis/ai-analysis\`
 `,
   },
   {
