@@ -5,7 +5,7 @@ import Layout from '@/components/Layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ArrowLeft, FileText, Loader2, Trash2, Upload } from 'lucide-react'
+import { ArrowLeft, Cloud, FileText, Loader2, Trash2, Upload } from 'lucide-react'
 
 export default function DeveloperFacturaDetailPage() {
   const router = useRouter()
@@ -20,6 +20,7 @@ export default function DeveloperFacturaDetailPage() {
     total: number
     issue_date: string
     has_pdf: boolean
+    sent_to_drive?: boolean
     services: { description: string; quantity: number; price: number; tax: number; total: number }[]
   } | null>(null)
   const [loading, setLoading] = useState(true)
@@ -138,6 +139,12 @@ export default function DeveloperFacturaDetailPage() {
                     </a>
                   ) : (
                     <p className="text-sm text-amber-700 mt-1 font-medium">Falta adjuntar el PDF</p>
+                  )}
+                  {invoice.has_pdf && invoice.sent_to_drive && (
+                    <p className="mt-1 inline-flex items-center gap-1 text-xs text-green-700">
+                      <Cloud className="h-3.5 w-3.5" />
+                      Guardada en Google Drive
+                    </p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">

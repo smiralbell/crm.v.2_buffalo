@@ -20,6 +20,8 @@ export default function NuevaFacturaDeveloperPage() {
   const [lines, setLines] = useState<ServiceLine[]>([
     { description: 'Desarrollo y mantenimiento', quantity: 1, price: 0, tax: 21 },
   ])
+  // Muchos developers no cobran IVA: con «Sin IVA» todas las líneas van al 0 %.
+  const [withIva, setWithIva] = useState(true)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -31,9 +33,10 @@ export default function NuevaFacturaDeveloperPage() {
       .catch(() => {})
   }, [])
 
-  const lineTotal = (l: ServiceLine) => l.quantity * l.price * (1 + l.tax / 100)
+  const taxOf = (l: ServiceLine) => (withIva ? l.tax : 0)
+  const lineTotal = (l: ServiceLine) => l.quantity * l.price * (1 + taxOf(l) / 100)
   const subtotal = lines.reduce((s, l) => s + l.quantity * l.price, 0)
-  const iva = lines.reduce((s, l) => s + l.quantity * l.price * (l.tax / 100), 0)
+  const iva = lines.reduce((s, l) => s + l.quantity * l.price * (taxOf(l) / 100), 0)
   const total = subtotal + iva
 
   const fmt = (n: number) =>
@@ -67,8 +70,8 @@ export default function NuevaFacturaDeveloperPage() {
         description: l.description,
         quantity: l.quantity,
         price: l.price,
-        tax: l.tax,
-        total: Math.round(l.quantity * l.price * (1 + l.tax / 100) * 100) / 100,
+        tax: taxOf(l),
+        total: Math.round(lineTotal(l) * 100) / 100,
       }))
       const res = await fetch('/api/developer/invoices', {
         method: 'POST',
@@ -119,6 +122,40 @@ export default function NuevaFacturaDeveloperPage() {
         </div>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
+          <div>
+            <Label className="text-xs">IVA</Label>
+            <div
+              role="radiogroup"
+              aria-label="IVA de la factura"
+              className="mt-1 inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1"
+            >
+              {[
+                { value: true, label: 'Con IVA' },
+                { value: false, label: 'Sin IVA' },
+              ].map((opt) => (
+                <button
+                  key={opt.label}
+                  type="button"
+                  role="radio"
+                  aria-checked={withIva === opt.value}
+                  onClick={() => setWithIva(opt.value)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    withIva === opt.value
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {!withIva && (
+              <p className="mt-1.5 text-xs text-gray-500">
+                La factura va sin IVA: el total es la base imponible.
+              </p>
+            )}
+          </div>
+
           {lines.map((line, idx) => (
             <div key={idx} className="grid gap-3 border-b border-gray-100 pb-4 last:border-0">
               <div>
@@ -129,7 +166,7 @@ export default function NuevaFacturaDeveloperPage() {
                   className="mt-1"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className={`grid gap-3 ${withIva ? 'grid-cols-3' : 'grid-cols-2'}`}>
                 <div>
                   <Label className="text-xs">Cantidad</Label>
                   <Input
@@ -152,15 +189,19 @@ export default function NuevaFacturaDeveloperPage() {
                     className="mt-1"
                   />
                 </div>
-                <div>
-                  <Label className="text-xs">IVA %</Label>
-                  <Input
-                    type="number"
-                    value={line.tax}
-                    onChange={(e) => updateLine(idx, { tax: Number(e.target.value) })}
-                    className="mt-1"
-                  />
-                </div>
+                {withIva && (
+                  <div>
+                    <Label className="text-xs">IVA %</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={line.tax}
+                      onChange={(e) => updateLine(idx, { tax: Number(e.target.value) })}
+                      className="mt-1"
+                    />
+                  </div>
+                )}
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500">Línea: {fmt(lineTotal(line))}</span>
@@ -195,7 +236,7 @@ export default function NuevaFacturaDeveloperPage() {
             </div>
             <div className="flex justify-between text-gray-600">
               <span>IVA</span>
-              <span>{fmt(iva)}</span>
+              <span>{withIva ? fmt(iva) : 'Sin IVA'}</span>
             </div>
             <div className="flex justify-between font-semibold text-gray-900 text-base pt-1">
               <span>Total</span>

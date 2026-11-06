@@ -28,7 +28,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, Eye, AlertTriangle, FileText, Download, Trash2, FileDown, ChevronDown, Cloud, CloudOff, ArrowDown, ArrowUp } from 'lucide-react'
+import { Plus, Search, Eye, AlertTriangle, FileText, Download, Trash2, FileDown, ChevronDown, Cloud, CloudOff, ArrowDown, ArrowUp, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { format } from 'date-fns'
@@ -72,6 +72,7 @@ interface Invoice {
   issue_date: string
   created_at: string
   sent_to_drive: boolean
+  pdf_drive_url?: string | null
   invoice_source?: string
   developer_name?: string | null
   developer_has_pdf?: boolean
@@ -218,6 +219,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
             issue_date: true,
             created_at: true,
             sent_to_drive: true,
+            pdf_drive_url: true,
             document_type: true,
           },
         }),
@@ -397,6 +399,8 @@ export default function InvoicesPage({
   const [exporting, setExporting] = useState(false)
   const [selectionMode, setSelectionMode] = useState(false)
   const [sendingToDrive, setSendingToDrive] = useState<Set<number>>(new Set())
+  // Vista previa del PDF que subió el developer
+  const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null)
 
   const safeInvoices = invoices || []
   const safePage = page || 1
@@ -550,7 +554,7 @@ export default function InvoicesPage({
         alert('Esta factura de developer aún no tiene PDF adjunto.')
         return
       }
-      window.open(`/api/developer/invoices/${invoiceId}/pdf`, '_blank')
+      window.location.href = `/api/developer/invoices/${invoiceId}/pdf?download=1`
       return
     }
     setDownloadingId(invoiceId)
@@ -974,6 +978,53 @@ export default function InvoicesPage({
           </CardContent>
         </Card>
 
+        {/* Vista previa del PDF de un developer */}
+        <Dialog open={previewInvoice !== null} onOpenChange={(open) => !open && setPreviewInvoice(null)}>
+          <DialogContent className="flex h-[90vh] max-w-4xl flex-col gap-3 p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle>{previewInvoice?.invoice_number}</DialogTitle>
+              <DialogDescription>
+                {previewInvoice?.developer_name || 'Developer'}
+                {previewInvoice &&
+                  ` · ${format(new Date(previewInvoice.issue_date), 'dd MMM yyyy')} · ${new Intl.NumberFormat('es-ES', {
+                    style: 'currency',
+                    currency: 'EUR',
+                  }).format(previewInvoice.total)}`}
+              </DialogDescription>
+            </DialogHeader>
+            {previewInvoice && (
+              <iframe
+                key={previewInvoice.id}
+                src={`/api/developer/invoices/${previewInvoice.id}/pdf`}
+                title={`Factura ${previewInvoice.invoice_number}`}
+                className="min-h-0 w-full flex-1 rounded-lg border bg-gray-50"
+              />
+            )}
+            <DialogFooter className="gap-2 sm:gap-2">
+              {previewInvoice?.pdf_drive_url && (
+                <a
+                  href={previewInvoice.pdf_drive_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border px-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Abrir en Drive
+                </a>
+              )}
+              {previewInvoice && (
+                <a
+                  href={`/api/developer/invoices/${previewInvoice.id}/pdf?download=1`}
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800"
+                >
+                  <Download className="h-4 w-4" />
+                  Descargar
+                </a>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Delete Confirmation Dialog */}
         <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <DialogContent>
@@ -1093,6 +1144,17 @@ export default function InvoicesPage({
                       </div>
                     </div>
                     <div className="mt-2.5 flex items-center justify-end gap-1.5">
+                      {invoice.invoice_source === 'developer' && invoice.developer_has_pdf && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPreviewInvoice(invoice)}
+                          className="h-8 rounded-lg px-2.5 text-xs"
+                        >
+                          <Eye className="mr-1 h-3.5 w-3.5" />
+                          Ver
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -1132,6 +1194,17 @@ export default function InvoicesPage({
                         )}
                         Drive
                       </Button>
+                      {invoice.sent_to_drive && invoice.pdf_drive_url && (
+                        <a
+                          href={invoice.pdf_drive_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-gray-600"
+                          aria-label="Abrir en Google Drive"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                      )}
                       {invoice.status === 'draft' && (
                         <Button
                           variant="ghost"
@@ -1229,6 +1302,18 @@ export default function InvoicesPage({
                         </td>
                         <td className="p-3">
                           <div className="flex justify-end gap-1">
+                            {invoice.invoice_source === 'developer' && invoice.developer_has_pdf && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setPreviewInvoice(invoice)}
+                                className="h-8 w-8"
+                                title="Ver factura"
+                                aria-label={`Ver factura ${invoice.invoice_number}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Link href={`/invoices/${invoice.id}/edit`}>
                               <Button 
                                 variant="ghost" 
@@ -1283,6 +1368,17 @@ export default function InvoicesPage({
                                 <CloudOff className="h-4 w-4" />
                               )}
                             </Button>
+                            {invoice.sent_to_drive && invoice.pdf_drive_url && (
+                              <a
+                                href={invoice.pdf_drive_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                                title="Abrir en Google Drive"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
+                            )}
                             {invoice.status === 'draft' && (
                               <Button
                                 variant="ghost"

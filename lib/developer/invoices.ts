@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { removeDevInvoicePdf } from '@/lib/developer/invoice-pdf'
+import { trashDriveFile } from '@/lib/developer/invoice-drive'
 
 export type DeveloperInvoiceRow = {
   id: number
@@ -13,6 +14,8 @@ export type DeveloperInvoiceRow = {
   created_at: Date
   developer_pdf_path: string | null
   has_pdf: boolean
+  /** El PDF ya está en Drive (FACTURAS/GASTOS/<mes>). */
+  sent_to_drive: boolean
 }
 
 export class DeveloperInvoicesConfigError extends Error {
@@ -46,6 +49,7 @@ function mapRow(r: {
   issue_date: Date
   created_at: Date
   developer_pdf_path?: string | null
+  sent_to_drive?: boolean | null
 }): DeveloperInvoiceRow {
   return {
     id: r.id,
@@ -59,6 +63,7 @@ function mapRow(r: {
     created_at: r.created_at,
     developer_pdf_path: r.developer_pdf_path ?? null,
     has_pdf: Boolean(r.developer_pdf_path),
+    sent_to_drive: Boolean(r.sent_to_drive),
   }
 }
 
@@ -76,10 +81,11 @@ export async function listDeveloperInvoices(userId: number): Promise<DeveloperIn
         issue_date: Date
         created_at: Date
         developer_pdf_path: string | null
+        sent_to_drive: boolean | null
       }[]
     >`
       SELECT id, invoice_number, status, client_name, subtotal, iva, total,
-             issue_date, created_at, developer_pdf_path
+             issue_date, created_at, developer_pdf_path, sent_to_drive
       FROM invoices
       WHERE deleted_at IS NULL
         AND invoice_source = 'developer'
@@ -214,14 +220,25 @@ export async function setDeveloperInvoicePdfPath(
   }
 }
 
+/** Dónde está el PDF de la factura: en el disco del servidor, en Drive o en los dos. */
 export async function getDeveloperInvoicePdfPath(
   invoiceId: number
-): Promise<{ path: string; userId: number; invoice_number: string } | null> {
+): Promise<{
+  path: string | null
+  driveFileId: string | null
+  userId: number
+  invoice_number: string
+} | null> {
   try {
     const rows = await prisma.$queryRaw<
-      { developer_pdf_path: string | null; crm_user_id: number; invoice_number: string }[]
+      {
+        developer_pdf_path: string | null
+        pdf_drive_file_id: string | null
+        crm_user_id: number
+        invoice_number: string
+      }[]
     >`
-      SELECT developer_pdf_path, crm_user_id, invoice_number
+      SELECT developer_pdf_path, pdf_drive_file_id, crm_user_id, invoice_number
       FROM invoices
       WHERE id = ${invoiceId}
         AND deleted_at IS NULL
@@ -229,9 +246,11 @@ export async function getDeveloperInvoicePdfPath(
       LIMIT 1
     `
     const r = rows[0]
-    if (!r?.developer_pdf_path || !r.crm_user_id) return null
+    if (!r?.crm_user_id) return null
+    if (!r.developer_pdf_path && !r.pdf_drive_file_id) return null
     return {
       path: r.developer_pdf_path,
+      driveFileId: r.pdf_drive_file_id,
       userId: r.crm_user_id,
       invoice_number: r.invoice_number,
     }
@@ -242,8 +261,10 @@ export async function getDeveloperInvoicePdfPath(
 
 export async function deleteDeveloperInvoice(userId: number, invoiceId: number): Promise<boolean> {
   try {
-    const current = await prisma.$queryRaw<{ invoice_number: string; developer_pdf_path: string | null }[]>`
-      SELECT invoice_number, developer_pdf_path
+    const current = await prisma.$queryRaw<
+      { invoice_number: string; developer_pdf_path: string | null; pdf_drive_file_id: string | null }[]
+    >`
+      SELECT invoice_number, developer_pdf_path, pdf_drive_file_id
       FROM invoices
       WHERE id = ${invoiceId}
         AND crm_user_id = ${userId}
@@ -263,6 +284,7 @@ export async function deleteDeveloperInvoice(userId: number, invoiceId: number):
     `
     if (!deleted) return false
     await removeDevInvoicePdf(pdfPath)
+    await trashDriveFile(current[0].pdf_drive_file_id)
     return true
   } catch (err) {
     if (isMissingColumnError(err)) {
@@ -290,10 +312,11 @@ export async function getDeveloperInvoice(
         created_at: Date
         services: unknown
         developer_pdf_path: string | null
+        sent_to_drive: boolean | null
       }[]
     >`
       SELECT id, invoice_number, status, client_name, subtotal, iva, total,
-             issue_date, created_at, services, developer_pdf_path
+             issue_date, created_at, services, developer_pdf_path, sent_to_drive
       FROM invoices
       WHERE id = ${invoiceId}
         AND deleted_at IS NULL

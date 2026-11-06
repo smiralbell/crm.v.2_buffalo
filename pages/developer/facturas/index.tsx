@@ -3,7 +3,7 @@ import Link from 'next/link'
 import Layout from '@/components/Layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Plus, RefreshCw, Eye, Trash2, FileText, Upload, Loader2 } from 'lucide-react'
+import { Plus, RefreshCw, Eye, Trash2, FileText, Upload, Loader2, Cloud } from 'lucide-react'
 
 interface InvoiceRow {
   id: number
@@ -14,6 +14,7 @@ interface InvoiceRow {
   total: number
   issue_date: string
   has_pdf: boolean
+  sent_to_drive?: boolean
 }
 
 const fmt = (n: number) =>
@@ -154,6 +155,15 @@ export default function DeveloperFacturasPage() {
                           </a>
                         ) : (
                           <span className="text-xs text-amber-600">Sin PDF</span>
+                        )}
+                        {inv.has_pdf && inv.sent_to_drive && (
+                          <span
+                            className="ml-2 inline-flex items-center gap-1 text-xs text-green-700"
+                            title="Guardada en Google Drive"
+                          >
+                            <Cloud className="h-3.5 w-3.5" />
+                            En Drive
+                          </span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">
