@@ -34,6 +34,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   void import('@/lib/telegram-agent/scheduler')
     .then((m) => m.startTelegramAgent())
     .catch(() => {})
+  // Agente por WhatsApp: webhook en Evolution + avisos (solo si WHATSAPP_AGENT=1).
+  void import('@/lib/whatsapp-agent/setup')
+    .then((m) => m.startWhatsAppAgent())
+    .catch(() => {})
 
   try {
     let user = await requireAuthAPI(req, res)

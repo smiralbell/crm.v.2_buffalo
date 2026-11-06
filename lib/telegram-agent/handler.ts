@@ -1,5 +1,6 @@
 import { openRouterDescribeImage, openRouterTranscribeAudio } from '@/lib/openrouter'
 import { runAgent } from './agent'
+import { sendChatDocument, sendChatText } from './channel'
 import { isAgentEnabled, isAuthorized } from './config'
 import { handleDeleteCallback, sendPendingConfirmation } from './confirm'
 import { AGENT_MODULES } from './modules'
@@ -16,7 +17,6 @@ import {
   downloadFile,
   getMe,
   isGroupMember,
-  sendDocument,
   sendText,
   sendTyping,
   type TgMessage,
@@ -120,10 +120,11 @@ async function processMessage(msg: TgMessage): Promise<void> {
 
 /** Envía respuesta, adjuntos y confirmaciones de borrado; guarda el historial. */
 export async function deliver(ctx: AgentContext, reply: string, replyTo?: number): Promise<void> {
-  await sendText(ctx.chatId, reply, { replyTo })
+  // Telegram o WhatsApp, según la conversación
+  await sendChatText(ctx.chatId, reply, { replyTo })
   for (const doc of ctx.documents) {
-    await sendDocument(ctx.chatId, doc).catch(async (e) => {
-      await sendText(ctx.chatId, `No he podido adjuntar ${doc.filename}: ${e instanceof Error ? e.message : e}`)
+    await sendChatDocument(ctx.chatId, doc).catch(async (e) => {
+      await sendChatText(ctx.chatId, `No he podido adjuntar ${doc.filename}: ${e instanceof Error ? e.message : e}`)
     })
   }
   for (const p of ctx.pending) await sendPendingConfirmation(p)

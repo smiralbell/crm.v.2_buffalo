@@ -77,13 +77,13 @@ export const DB_TOOLS: ToolSchema[] = [
     params: { type: 'array', items: {} },
     max_filas: { type: 'number', description: 'Se cancela si afecta a más filas (por defecto 50)' },
   }, ['sql']),
-  tool('solicitar_borrado', 'Pide borrar filas. NO borra nada: genera un preview y los socios reciben dos botones de confirmación en Telegram. Solo si pulsan los dos se borra. Usa esto para CUALQUIER eliminación.', {
+  tool('solicitar_borrado', 'Pide borrar filas. NO borra nada: genera un preview y el socio recibe una confirmación en dos pasos (botones en Telegram, códigos en WhatsApp). Solo si completa los dos se borra. Usa esto para CUALQUIER eliminación.', {
     tabla: { type: 'string' },
     ...whereProps,
     motivo: { type: 'string', description: 'Qué se va a borrar, en palabras claras para el socio' },
     max_filas: { type: 'number', description: 'Tope de filas (por defecto 50)' },
   }, ['tabla', 'motivo']),
-  tool('solicitar_sql_destructivo', 'Pide ejecutar SQL destructivo (DROP, TRUNCATE, ALTER … DROP COLUMN, DELETE complejo). NO se ejecuta: pasa por la doble confirmación con botones. Solo si solicitar_borrado no sirve.', {
+  tool('solicitar_sql_destructivo', 'Pide ejecutar SQL destructivo (DROP, TRUNCATE, ALTER … DROP COLUMN, DELETE complejo). NO se ejecuta: pasa por la doble confirmación del socio. Solo si solicitar_borrado no sirve.', {
     sql: { type: 'string' },
     params: { type: 'array', items: {} },
     motivo: { type: 'string' },
@@ -93,7 +93,7 @@ export const DB_TOOLS: ToolSchema[] = [
 // ——— Documentos, socios, configuración del agente ———
 
 export const AGENT_TOOLS: ToolSchema[] = [
-  tool('enviar_documento', 'Adjunta un archivo de texto (txt, csv, md, json, html) a la respuesta de Telegram. Úsalo para listados largos, exportaciones o informes.', {
+  tool('enviar_documento', 'Adjunta un archivo de texto (txt, csv, md, json, html) a la respuesta (Telegram o WhatsApp). Úsalo para listados largos, exportaciones o informes.', {
     nombre_archivo: { type: 'string', description: 'p. ej. leads-noviembre.csv' },
     contenido: { type: 'string' },
     descripcion: { type: 'string' },
@@ -226,7 +226,7 @@ async function requestDeletion(
     id: pending.id,
     filas: preview.count,
     mensaje:
-      'No se ha borrado nada todavía. El socio recibirá dos botones de confirmación en Telegram. Díselo así; no digas que está borrado.',
+      'No se ha borrado nada todavía. El socio recibirá la confirmación en dos pasos (botones en Telegram, códigos en WhatsApp). Díselo así; no digas que está borrado.',
   }
 }
 
@@ -288,7 +288,7 @@ async function runTool(name: string, args: Record<string, unknown>, ctx: AgentCo
         ok: true,
         estado: 'PENDIENTE_DOBLE_CONFIRMACION',
         id: pending.id,
-        mensaje: 'No se ha ejecutado. El socio recibirá dos botones de confirmación.',
+        mensaje: 'No se ha ejecutado. El socio recibirá la confirmación en dos pasos.',
       }
     }
 
