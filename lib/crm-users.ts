@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 
-export type CrmRole = 'admin' | 'developer' | 'comercial'
+export type CrmRole = 'admin' | 'developer' | 'comercial' | 'project_manager'
 
 export interface CrmUserRow {
   id: number
@@ -237,7 +237,7 @@ export async function listDeveloperUsers(): Promise<CrmUserPublic[]> {
   const rows = await prisma.$queryRaw<CrmUserRow[]>`
     SELECT id, name, email, role, active, created_at, updated_at
     FROM crm_users
-    WHERE role = 'developer' AND active = TRUE
+    WHERE role IN ('developer', 'project_manager') AND active = TRUE
     ORDER BY name ASC
   `
   return rows.map(toPublic)

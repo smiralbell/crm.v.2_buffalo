@@ -65,7 +65,7 @@ const NAV: NavItem[] = [
     href: '/leads',
     label: 'Leads',
     icon: TrendingUp,
-    roles: ['admin'],
+    roles: ['admin', 'project_manager'],
     children: [
       { href: '/leads', label: 'Listado' },
       { href: '/leads/reuniones', label: 'Reuniones' },
@@ -82,19 +82,19 @@ const NAV: NavItem[] = [
       { href: '/invoices/recurring', label: 'Recurrentes' },
     ],
   },
-  { href: '/pipelines', label: 'Pipelines', icon: Workflow, roles: ['admin'] },
+  { href: '/pipelines', label: 'Pipelines', icon: Workflow, roles: ['admin', 'project_manager'] },
   {
     href: '/marketing',
     label: 'Marketing',
     badge: 'ENG 1',
     icon: Megaphone,
-    roles: ['admin'],
+    roles: ['admin', 'project_manager'],
     children: [
       { href: '/marketing', label: 'Blog', tab: 'blog' },
       { href: '/marketing', label: 'Métricas globales', tab: 'global' },
       { href: '/marketing', label: 'Web', tab: 'web' },
       { href: '/marketing', label: 'Email Outreach', tab: 'email' },
-      { href: '/marketing', label: 'Cold Calling', tab: 'coldcalling' },
+      { href: '/marketing', label: 'Cold Calling', tab: 'coldcalling', roles: ['admin'] },
       { href: '/marketing', label: 'Meta Ads', tab: 'meta' },
       { href: '/marketing', label: 'Google Ads', tab: 'google' },
     ],
@@ -104,11 +104,11 @@ const NAV: NavItem[] = [
     label: 'Onboarding',
     badge: 'ENG 2',
     icon: PackageCheck,
-    roles: ['admin'],
+    roles: ['admin', 'project_manager'],
     children: [
       { href: '/onboarding', label: 'Proyectos activos', tab: 'projects' },
-      { href: '/onboarding/configure', label: 'Configurador' },
-      { href: '/demos', label: 'Demos' },
+      { href: '/onboarding/configure', label: 'Configurador', roles: ['admin'] },
+      { href: '/demos', label: 'Demos', roles: ['admin'] },
     ],
   },
   {
@@ -116,7 +116,7 @@ const NAV: NavItem[] = [
     label: 'Proyectos',
     badge: 'ENG 3',
     icon: FolderKanban,
-    roles: ['admin', 'developer'],
+    roles: ['admin', 'developer', 'project_manager'],
     children: [
       { href: '/gestion-proyecto', label: 'Proyectos abiertos' },
       { href: '/tickets', label: 'Tickets', roles: ['admin', 'developer'] },
@@ -127,7 +127,7 @@ const NAV: NavItem[] = [
     label: 'Retención',
     badge: 'ENG 4',
     icon: HeartHandshake,
-    roles: ['admin', 'developer'],
+    roles: ['admin', 'developer', 'project_manager'],
     children: [
       { href: '/retencion', label: 'Buffalo con mensualidad', developerLabel: 'Proyectos' },
     ],
@@ -289,7 +289,13 @@ export default function Sidebar({
   }
 
   const homeHref =
-    role === 'developer' ? '/developer' : role === 'comercial' ? '/comercial' : '/dashboard'
+    role === 'developer'
+      ? '/developer'
+      : role === 'comercial'
+        ? '/comercial'
+        : role === 'project_manager'
+          ? '/leads'
+          : '/dashboard'
 
   const childLabel = (child: SubItem) =>
     role === 'developer' && child.developerLabel ? child.developerLabel : child.label

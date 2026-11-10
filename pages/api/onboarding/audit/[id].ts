@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
-import { requireAuthAPI } from '@/lib/auth'
+import { requireAuthAPI, type AuthUser } from '@/lib/auth'
+import { userHasLeadAccess } from '@/lib/project-access'
 import { getAuditById, saveAudit } from '@/lib/onboarding/audit/store'
 import {
   addManualNote,
@@ -121,8 +122,9 @@ function enrichPayload(audit: Parameters<typeof computeBlockStatus>[0]) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  let user: AuthUser
   try {
-    await requireAuthAPI(req, res)
+    user = await requireAuthAPI(req, res)
   } catch {
     return
   }
@@ -131,6 +133,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!id) return res.status(400).json({ error: 'id requerido' })
 
   try {
+    if (user.role !== 'admin') {
+      const owner = await getAuditById(id)
+      if (owner && !(await userHasLeadAccess(user, Number(owner.lead_id)))) {
+        return res.status(403).json({ error: 'No tienes acceso a este proyecto' })
+      }
+    }
+
     if (req.method === 'GET') {
       const audit = await getAuditById(id)
       if (!audit) return res.status(404).json({ error: 'Auditoría no encontrada' })

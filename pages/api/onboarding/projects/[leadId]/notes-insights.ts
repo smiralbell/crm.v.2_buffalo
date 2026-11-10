@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
-import { requireAuthAPI } from '@/lib/auth'
+import { requireLeadAccessAPI } from '@/lib/gestion-proyecto/require-project-access'
 import { prisma } from '@/lib/prisma'
 import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import {
@@ -70,7 +70,7 @@ function fallbackDiagnosisHtml(input: {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    await requireAuthAPI(req, res)
+    await requireLeadAccessAPI(req, res, req.query.leadId)
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Method not allowed' })
     }
@@ -305,7 +305,7 @@ No inventes datos. Español profesional.`,
     }
     if (
       error instanceof Error &&
-      (error.message === 'No session' ||
+      (error.message === 'No session' || error.message === 'Forbidden' ||
         error.message === 'Invalid session' ||
         error.message === 'Expired session')
     ) {

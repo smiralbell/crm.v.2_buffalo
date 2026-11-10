@@ -28,7 +28,8 @@ export default async function handler(
     if (user.role === 'comercial' && !coldCall) {
       return res.status(403).json({ error: 'Solo puedes acceder al pipeline de Cold Calling' })
     }
-    if (user.role !== 'admin' && user.role !== 'comercial') {
+    const pmOnNormalPipeline = user.role === 'project_manager' && !coldCall
+    if (user.role !== 'admin' && user.role !== 'comercial' && !pmOnNormalPipeline) {
       return res.status(403).json({ error: 'Acceso denegado' })
     }
 

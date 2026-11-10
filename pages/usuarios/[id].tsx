@@ -19,11 +19,13 @@ import {
 import { ArrowLeft, Loader2, Plus, Trash2, FolderKanban, Copy, KeyRound, Eye, EyeOff, Pencil } from 'lucide-react'
 import type { DeveloperAssignment } from '@/lib/developer/assignments'
 import type { CrmRole } from '@/lib/auth'
+import UserProjectsEditor from '@/components/usuarios/UserProjectsEditor'
 
 const ROLE_LABEL: Record<CrmRole, string> = {
   admin: 'Admin',
   developer: 'Developer',
   comercial: 'Comercial',
+  project_manager: 'Project manager',
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -423,34 +425,16 @@ export default function UsuarioDetailPage() {
             </div>
             )}
 
-            {isDeveloperUser && (
-            <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100">
-                <h2 className="text-sm font-semibold text-gray-900">Proyectos asignados</h2>
-              </div>
-              {projects.length === 0 ? (
-                <div className="py-10 text-center text-sm text-gray-400">
-                  Sin proyectos vinculados
-                </div>
-              ) : (
-                <ul className="divide-y divide-gray-100">
-                  {projects.map((p) => (
-                    <li key={p.id} className="px-5 py-3 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FolderKanban className="h-4 w-4 text-gray-400 shrink-0" />
-                        <span className="text-sm font-medium text-gray-900 truncate">{p.name}</span>
-                      </div>
-                      <Link
-                        href={`/gestion-proyecto/proyectos/${p.id}`}
-                        className="text-xs font-medium text-gray-500 hover:text-gray-900 shrink-0"
-                      >
-                        Ver →
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            {(isDeveloperUser || user.role === 'project_manager') && (
+              <UserProjectsEditor
+                userId={user.id}
+                description={
+                  user.role === 'project_manager'
+                    ? 'Solo verá estos proyectos en Onboarding, Proyectos y Retención. Leads, Pipelines y Marketing los ve completos.'
+                    : 'Proyectos en los que trabaja (Proyectos, Retención y tickets).'
+                }
+                onSaved={load}
+              />
             )}
 
             {!isDeveloperUser && user.role === 'comercial' && (

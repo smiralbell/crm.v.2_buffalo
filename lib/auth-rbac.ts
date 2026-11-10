@@ -9,6 +9,23 @@ export const DEVELOPER_PAGE_PREFIXES = [
   '/login',
 ] as const
 
+/**
+ * Project manager: Leads, Pipelines y Marketing completos; Onboarding, Proyectos
+ * y Retención filtrados a los proyectos que admin le asigna (crm_user_projects).
+ */
+export const PROJECT_MANAGER_PAGE_PREFIXES = [
+  '/leads',
+  '/contacts',
+  '/pipelines',
+  '/marketing',
+  '/blog',
+  '/onboarding',
+  '/gestion-proyecto',
+  '/retencion',
+  '/ayuda',
+  '/login',
+] as const
+
 export const COMERCIAL_PAGE_PREFIXES = [
   '/comercial',
   '/coldcalling',
@@ -78,6 +95,11 @@ export function canAccessPage(pathname: string, role: CrmRole): boolean {
       (p) => p !== '/login' && (pathname === p || pathname.startsWith(`${p}/`))
     )
   }
+  if (role === 'project_manager') {
+    return PROJECT_MANAGER_PAGE_PREFIXES.some(
+      (p) => p !== '/login' && (pathname === p || pathname.startsWith(`${p}/`))
+    )
+  }
   return DEVELOPER_PAGE_PREFIXES.some(
     (p) => p !== '/login' && (pathname === p || pathname.startsWith(`${p}/`))
   )
@@ -94,5 +116,6 @@ export function canAccessApi(pathname: string, role: CrmRole): boolean {
 export function defaultHomeForRole(role: CrmRole): string {
   if (role === 'developer') return '/developer'
   if (role === 'comercial') return '/comercial'
+  if (role === 'project_manager') return '/leads'
   return '/dashboard'
 }

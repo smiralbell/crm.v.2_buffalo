@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { requireAuth } from '@/lib/auth'
+import { userHasLeadAccess } from '@/lib/project-access'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
 import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
@@ -45,8 +46,11 @@ interface Props {
 
 export const getServerSideProps: GetServerSideProps<Props> = async (context) => {
   try {
-    await requireAuth(context)
+    const user = await requireAuth(context)
     const id = parseInt(context.params?.id as string, 10)
+    if (!(await userHasLeadAccess(user, id))) {
+      return { redirect: { destination: '/onboarding?tab=projects', permanent: false } }
+    }
     const lead = await prisma.lead.findUnique({
       where: { id },
       include: {

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
-import { requireAuthAPI } from '@/lib/auth'
+import { requireLeadAccessAPI } from '@/lib/gestion-proyecto/require-project-access'
 import { prisma } from '@/lib/prisma'
 import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import { mergeLeadConfig } from '@/lib/onboarding/project-context-ai'
@@ -30,7 +30,7 @@ async function nextInvoiceNumber(): Promise<string> {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const user = await requireAuthAPI(req, res)
+    const user = await requireLeadAccessAPI(req, res, req.query.leadId)
 
     const leadId = parseInt(String(req.query.leadId), 10)
     if (!Number.isFinite(leadId) || leadId <= 0) {
@@ -220,7 +220,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     if (
       error instanceof Error &&
-      (error.message === 'No session' ||
+      (error.message === 'No session' || error.message === 'Forbidden' ||
         error.message === 'Invalid session' ||
         error.message === 'Expired session')
     ) {
