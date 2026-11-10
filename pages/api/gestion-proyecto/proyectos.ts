@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { prisma } from '@/lib/prisma'
 import { getAccessibleProjectIds, getDevelopersByProjectIds } from '@/lib/project-access'
 import { listAssignmentsForUser } from '@/lib/developer/assignments'
@@ -184,13 +185,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       0
     )
 
-    const isDeveloper = user.role === 'developer'
+    const hidePrices = !canSeeClientPrices(user.role)
 
     return res.status(200).json({
       proyectos: merged,
       total: merged.length,
-      // Precios de cliente: solo admin. Nunca exponer a developers.
-      money: isDeveloper
+      // Precios de cliente: nunca a developers ni project managers.
+      money: hidePrices
         ? null
         : {
             setup_total_eur: Math.round(setupTotal * 100) / 100,

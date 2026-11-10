@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { getAccessibleProjectIds } from '@/lib/project-access'
-import { stripRetencionListRowForDeveloper } from '@/lib/retencion/developer-view'
+import { isDeveloperViewer, stripRetencionListRowForDeveloper } from '@/lib/retencion/developer-view'
 import { prisma } from '@/lib/prisma'
 
 type ProyectoRow = {
@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const user = await requireAuthAPI(req, res)
     const accessibleIds = await getAccessibleProjectIds(user)
-    const isDeveloper = user.role === 'developer'
+    const isDeveloper = isDeveloperViewer(user)
 
     let proyectos: ProyectoRow[]
     if (accessibleIds === null) {

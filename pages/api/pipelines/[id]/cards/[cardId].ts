@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { prisma } from '@/lib/prisma'
 import { softDeletePipelineCard } from '@/lib/pipelines/global-funnel'
 import { z } from 'zod'
@@ -33,7 +34,9 @@ export default async function handler(
   res: NextApiResponse
 ) {
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
+    // Developers / project managers: sin importes de tarjetas
+    const showPrices = canSeeClientPrices(user.role)
 
     const cardId = req.query.cardId as string
 
@@ -53,11 +56,12 @@ export default async function handler(
         return res.status(404).json({ error: 'Tarjeta no encontrada' })
       }
 
-      return res.status(200).json(card)
+      return res.status(200).json(showPrices ? card : { ...card, amount: null })
     }
 
     if (req.method === 'PUT') {
-      const data = updateCardSchema.parse(req.body)
+      const parsed = updateCardSchema.parse(req.body)
+      const data = showPrices ? parsed : { ...parsed, amount: undefined }
 
       const card = await prisma.pipelineCard.findUnique({
         where: { id: cardId },
@@ -94,7 +98,7 @@ export default async function handler(
         }
       }
 
-      return res.status(200).json(updated)
+      return res.status(200).json(showPrices ? updated : { ...updated, amount: null })
     }
 
     if (req.method === 'DELETE') {

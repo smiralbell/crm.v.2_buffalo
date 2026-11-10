@@ -290,12 +290,14 @@ export async function getLeadDetailBundle(input: {
   contactName: string | null
   leadUpdatedAt: Date
   leadEstado: string | null
+  /** Sin alertas de facturas (importes) para quien no ve precios. */
+  hidePrices?: boolean
 }): Promise<LeadDetailBundle> {
   const contactId = input.contactId
   const [pipeline, proyecto, invoiceAlerts, stageAlert, openManualAlerts] = await Promise.all([
     contactId ? getPipelineCardContext(contactId) : Promise.resolve(null),
     loadProyectoForLead(input.leadId),
-    loadInvoiceAlerts(input.email, input.contactName),
+    input.hidePrices ? Promise.resolve([]) : loadInvoiceAlerts(input.email, input.contactName),
     contactId ? loadPipelineStageAlert(contactId) : Promise.resolve(null),
     contactId
       ? listOpenAlerts({ contactId, limit: 20 })

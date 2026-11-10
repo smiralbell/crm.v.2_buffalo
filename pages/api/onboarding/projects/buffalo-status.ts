@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -8,7 +9,8 @@ import { prisma } from '@/lib/prisma'
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
+    const showPrices = canSeeClientPrices(user.role)
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
     const raw = String(req.query.ids || '')
@@ -49,9 +51,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const key = String(row.lead_id)
       flags[key] = Boolean(row.es_buffalo)
       fees[key] = {
-        setup: row.setup_fee_eur != null ? Number(row.setup_fee_eur) : null,
-        monthly: row.monthly_fee_eur != null ? Number(row.monthly_fee_eur) : null,
-        has_mensualidad: Boolean(row.has_mensualidad),
+        setup: showPrices && row.setup_fee_eur != null ? Number(row.setup_fee_eur) : null,
+        monthly: showPrices && row.monthly_fee_eur != null ? Number(row.monthly_fee_eur) : null,
+        has_mensualidad: showPrices && Boolean(row.has_mensualidad),
       }
     }
 

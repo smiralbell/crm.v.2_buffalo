@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { syncProyectoFromLead } from '@/lib/engranaje5/sync-proyecto'
 import { z } from 'zod'
 
@@ -58,7 +59,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
+    // Escribe configuración e importes del proyecto: solo quien ve precios
+    if (!canSeeClientPrices(user.role)) {
+      return res.status(403).json({ error: 'Acceso denegado' })
+    }
     const body = bodySchema.parse(req.body)
     const result = await syncProyectoFromLead(body)
 

@@ -2,6 +2,7 @@ import { GetServerSideProps } from 'next'
 import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { prisma } from '@/lib/prisma'
 import PipelineLayout from '@/components/PipelineLayout'
 import KanbanBoard from '@/components/KanbanBoard'
@@ -144,7 +145,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       position: card.position,
       tags: card.tags,
       capture_date: card.capture_date?.toISOString?.() || (card.capture_date ? String(card.capture_date) : null),
-      amount: card.amount ? Number(card.amount) : null,
+      amount: canSeeClientPrices(user.role) && card.amount ? Number(card.amount) : null,
       notes: card.notes || null,
       created_at: card.created_at.toISOString(),
       updated_at: card.updated_at.toISOString(),

@@ -1,7 +1,9 @@
 import type { AuthUser } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 
+/** Developers y project managers: sin precios de cliente (setup, mensualidad, contrato). */
 export function isDeveloperViewer(user: AuthUser): boolean {
-  return user.role === 'developer'
+  return !canSeeClientPrices(user.role)
 }
 
 export function stripRetencionListRowForDeveloper<T extends {
