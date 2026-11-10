@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS crm_users (
   name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'developer' CHECK (role IN ('admin', 'developer', 'comercial')),
+  role TEXT NOT NULL DEFAULT 'developer' CHECK (role IN ('admin', 'developer', 'comercial', 'project_manager')),
   active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

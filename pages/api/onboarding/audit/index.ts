@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
-import { requireAuthAPI } from '@/lib/auth'
+import { requireAuthAPI, type AuthUser } from '@/lib/auth'
+import { userHasLeadAccess } from '@/lib/project-access'
 import { createAudit, getAuditByLeadId, saveAudit } from '@/lib/onboarding/audit/store'
 import {
   buildAuditSnapshot,
@@ -35,8 +36,9 @@ const postSchema = z.object({
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  let user: AuthUser
   try {
-    await requireAuthAPI(req, res)
+    user = await requireAuthAPI(req, res)
   } catch {
     return
   }
@@ -45,6 +47,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'GET') {
       const leadId = Number(req.query.lead_id)
       if (!leadId) return res.status(400).json({ error: 'lead_id requerido' })
+      if (!(await userHasLeadAccess(user, leadId))) {
+        return res.status(403).json({ error: 'No tienes acceso a este proyecto' })
+      }
       let audit = await getAuditByLeadId(leadId)
       if (!audit) audit = await createAudit({ lead_id: leadId })
 
@@ -85,6 +90,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'POST') {
       const body = postSchema.parse(req.body)
+      if (!(await userHasLeadAccess(user, body.lead_id))) {
+        return res.status(403).json({ error: 'No tienes acceso a este proyecto' })
+      }
       let audit = await getAuditByLeadId(body.lead_id)
       if (!audit) {
         audit = await createAudit({

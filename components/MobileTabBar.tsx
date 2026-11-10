@@ -89,6 +89,37 @@ const TABS: Record<CrmRole, Tab[]> = {
     },
     { href: '/comercial/reuniones', label: 'Reuniones', icon: Calendar, match: ['/comercial/reuniones'] },
   ],
+  project_manager: [
+    { href: '/leads', label: 'Leads', icon: TrendingUp, match: ['/leads', '/contacts'] },
+    { href: '/pipelines', label: 'Pipelines', icon: Workflow, match: ['/pipelines'] },
+    { href: '/marketing?tab=global', label: 'Marketing', icon: Megaphone, match: ['/marketing', '/blog'] },
+    {
+      href: '/gestion-proyecto',
+      label: 'Proyectos',
+      icon: FolderKanban,
+      match: ['/onboarding', '/gestion-proyecto', '/retencion'],
+      options: [
+        {
+          href: '/onboarding?tab=projects',
+          label: 'Onboarding',
+          description: 'Tus proyectos asignados',
+          icon: PackageCheck,
+        },
+        {
+          href: '/gestion-proyecto',
+          label: 'Proyectos',
+          description: 'Tareas y avance',
+          icon: FolderKanban,
+        },
+        {
+          href: '/retencion',
+          label: 'Retención',
+          description: 'Clientes con mensualidad',
+          icon: HeartHandshake,
+        },
+      ],
+    },
+  ],
 }
 
 function isActive(tab: Tab, pathname: string): boolean {

@@ -4,7 +4,7 @@ import { requireAuth } from '@/lib/auth'
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
     const user = await requireAuth(context)
-    if (user.role !== 'admin') return { redirect: { destination: '/dashboard', permanent: false } }
+    if (user.role !== 'admin' && user.role !== 'project_manager') return { redirect: { destination: '/dashboard', permanent: false } }
   } catch {
     return { redirect: { destination: '/login', permanent: false } }
   }

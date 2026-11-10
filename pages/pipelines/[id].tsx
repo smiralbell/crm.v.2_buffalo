@@ -94,7 +94,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       }
       return { redirect: { destination: '/comercial', permanent: false } }
     }
-    if (!coldCall && user.role !== 'admin') {
+    if (!coldCall && user.role !== 'admin' && user.role !== 'project_manager') {
       return { notFound: true }
     }
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
+import { useAuth } from '@/components/AuthContext'
 import {
   Search, UserPlus, ChevronRight, ArrowRight,
   X, Check, Building2,
@@ -106,12 +107,18 @@ type Tab = 'configure' | 'projects'
 // ══════════════════════════════════════════════════════════════════════
 export default function OnboardingPage() {
   const router = useRouter()
+  const { user: authUser } = useAuth()
+  // Project manager: solo ve y trabaja sus proyectos asignados (no crea, asigna ni borra)
+  const isAdmin = authUser?.role === 'admin'
 
   const urlPipeline = router.query.pipeline as string | undefined
   const urlCard     = router.query.card     as string | undefined
   const urlTab = typeof router.query.tab === 'string' ? router.query.tab : undefined
 
   const [activeTab, setActiveTab]     = useState<Tab>(urlTab === 'configure' ? 'configure' : 'projects')
+  useEffect(() => {
+    if (authUser && !isAdmin) setActiveTab('projects')
+  }, [authUser, isAdmin])
   const [view, setView]               = useState<'hub' | 'select' | 'new_lead'>('hub')
   const [selected, setSelected]       = useState<Contact | null>(null)
   const [search, setSearch]           = useState('')
@@ -428,6 +435,7 @@ export default function OnboardingPage() {
 
         {/* ── Tab bar ── */}
         <OnboardingSectionTabs
+          projectsOnly={!isAdmin && !!authUser}
           active={activeTab === 'configure' ? 'configure' : 'projects'}
           projectsCount={!loadingProjects ? projects.length : undefined}
         />
@@ -796,13 +804,15 @@ export default function OnboardingPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
+                  {isAdmin && (
+<button
                     onClick={() => setActiveTab('configure')}
                     className="flex items-center gap-1.5 px-3 h-8 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg hover:border-gray-300 hover:text-gray-800 transition-colors"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Nuevo
                   </button>
+)}
                   {projects.length > 0 && (
                     <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
                       <button
@@ -939,7 +949,7 @@ export default function OnboardingPage() {
                             {launchingId === lead.id ? '…' : 'Poner en marcha'}
                           </button>
                         )}
-                        {lead.configuracion && (
+                        {isAdmin && lead.configuracion && (
                           <AssignDevelopersButton leadId={lead.id} variant="icon" />
                         )}
                         <button
@@ -953,7 +963,8 @@ export default function OnboardingPage() {
                         <Link href={`/onboarding/proyectos/${lead.id}`} className="hidden sm:flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-300 hover:text-gray-900 transition-colors" title="Ver proyecto">
                           <Eye className="h-3.5 w-3.5" />
                         </Link>
-                        <button
+                        {isAdmin && (
+<button
                           type="button"
                           onClick={() => setDeleteTarget({ id: lead.id, name })}
                           className="flex items-center justify-center w-9 h-9 border border-red-100 text-red-500 rounded-lg hover:border-red-200 hover:bg-red-50 transition-colors"
@@ -961,6 +972,7 @@ export default function OnboardingPage() {
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
+)}
                       </div>
                     </div>
                   )
@@ -1051,7 +1063,7 @@ export default function OnboardingPage() {
                             </button>
                           )}
                           <div className="flex items-center gap-1.5">
-                            {lead.configuracion && (
+                            {isAdmin && lead.configuracion && (
                               <AssignDevelopersButton leadId={lead.id} variant="icon" />
                             )}
                             <button
@@ -1069,7 +1081,8 @@ export default function OnboardingPage() {
                             >
                               <Eye className="h-3.5 w-3.5" />
                             </Link>
-                            <button
+                            {isAdmin && (
+<button
                               type="button"
                               onClick={() => setDeleteTarget({ id: lead.id, name })}
                               className="flex items-center justify-center w-9 h-9 border border-red-100 text-red-500 rounded-lg hover:border-red-200 hover:bg-red-50 transition-colors"
@@ -1077,6 +1090,7 @@ export default function OnboardingPage() {
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
+)}
                           </div>
                         </div>
                       </div>

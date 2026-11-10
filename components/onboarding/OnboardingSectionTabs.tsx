@@ -12,13 +12,16 @@ const TABS: { id: OnboardingSectionTab; label: string; short?: string; href: str
 export default function OnboardingSectionTabs({
   active,
   projectsCount,
+  projectsOnly = false,
 }: {
   active: OnboardingSectionTab
   projectsCount?: number
+  /** Sin «Nuevo» ni «Demos» (project manager). */
+  projectsOnly?: boolean
 }) {
   return (
     <div className="flex items-center gap-1 border-b border-gray-200 sm:justify-center">
-      {TABS.map((tab) => {
+      {TABS.filter((tab) => !projectsOnly || tab.id === 'projects').map((tab) => {
         const isActive = active === tab.id
         return (
           <Link

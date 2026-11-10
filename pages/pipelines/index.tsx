@@ -42,7 +42,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     if (user.role === 'comercial') {
       return { redirect: { destination: '/comercial/pipeline', permanent: false } }
     }
-    if (user.role !== 'admin') {
+    if (user.role !== 'admin' && user.role !== 'project_manager') {
       return { redirect: { destination: '/dashboard', permanent: false } }
     }
   } catch {

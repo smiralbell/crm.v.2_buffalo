@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getProjectDevelopers } from '@/lib/project-access'
+import { getProjectDevelopers, userHasLeadAccess } from '@/lib/project-access'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -9,10 +9,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
     const leadId = parseInt(req.query.leadId as string, 10)
     if (!Number.isFinite(leadId)) {
       return res.status(400).json({ error: 'leadId inválido' })
+    }
+    if (!(await userHasLeadAccess(user, leadId))) {
+      return res.status(403).json({ error: 'No tienes acceso a este proyecto' })
     }
 
     const rows = await prisma.$queryRaw<

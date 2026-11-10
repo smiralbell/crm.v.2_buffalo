@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
-import { requireAuthAPI } from '@/lib/auth'
+import { requireLeadAccessAPI } from '@/lib/gestion-proyecto/require-project-access'
 import { syncNotebookContextToLead } from '@/lib/onboarding/notes/sync-context'
 
 const bodySchema = z.object({
@@ -9,7 +9,7 @@ const bodySchema = z.object({
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const user = await requireAuthAPI(req, res)
+    const user = await requireLeadAccessAPI(req, res, req.query.leadId)
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Method not allowed' })
     }
@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     if (
       error instanceof Error &&
-      (error.message === 'No session' ||
+      (error.message === 'No session' || error.message === 'Forbidden' ||
         error.message === 'Invalid session' ||
         error.message === 'Expired session')
     ) {

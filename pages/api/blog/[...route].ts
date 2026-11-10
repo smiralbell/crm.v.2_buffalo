@@ -4,7 +4,7 @@
  * que usa CRON_SECRET para que EasyPanel pueda lanzar el motor.
  */
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { requireAdminAPI } from '@/lib/auth'
+import { requireMarketingAPI } from '@/lib/auth'
 import { getRules, getSettings, rulesHistory, saveRules, saveSettings } from '@/lib/blog/config'
 import { assignSlots, bootstrap, cancelJob, emptyPost, ensureRunner, isRunning, monthSpend, placePost, planAndAssign, publishPost, record, startAutoPost, startStep, syncWeb, tick, type Step } from '@/lib/blog/engine'
 import { allThemes } from '@/lib/blog/defaults'
@@ -58,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   let user
   try {
-    user = await requireAdminAPI(req, res)
+    user = await requireMarketingAPI(req, res)
   } catch {
     return
   }

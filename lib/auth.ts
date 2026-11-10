@@ -2,7 +2,7 @@ import { GetServerSidePropsContext, NextApiRequest, NextApiResponse } from 'next
 import { randomBytes, createHmac, timingSafeEqual } from 'crypto'
 import { verifyCrmUserPassword } from '@/lib/crm-users'
 
-export type CrmRole = 'admin' | 'developer' | 'comercial'
+export type CrmRole = 'admin' | 'developer' | 'comercial' | 'project_manager'
 
 export interface AuthUser {
   id: number
@@ -200,4 +200,17 @@ export async function deleteSession(_signedToken: string, res?: NextApiResponse)
   if (res) {
     res.setHeader('Set-Cookie', 'session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0')
   }
+}
+
+/** Marketing (blog, etc.): admin y project manager. */
+export async function requireMarketingAPI(
+  req: NextApiRequest,
+  res: NextApiResponse
+): Promise<AuthUser> {
+  const user = await requireAuthAPI(req, res)
+  if (user.role !== 'admin' && user.role !== 'project_manager') {
+    res.status(403).json({ error: 'Acceso denegado' })
+    throw new Error('Forbidden')
+  }
+  return user
 }

@@ -32,6 +32,7 @@ const ROLE_LABEL: Record<CrmRole, string> = {
   admin: 'Admin',
   developer: 'Developer',
   comercial: 'Comercial',
+  project_manager: 'Project manager',
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
@@ -56,7 +57,7 @@ export default function UsuariosPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<'developer' | 'comercial'>('developer')
+  const [role, setRole] = useState<'developer' | 'comercial' | 'project_manager'>('developer')
 
   const load = () => {
     setLoading(true)
@@ -210,7 +211,7 @@ export default function UsuariosPage() {
               <Label htmlFor="u_role">Rol</Label>
               <Select
                 value={role}
-                onValueChange={(v) => setRole(v as 'developer' | 'comercial')}
+                onValueChange={(v) => setRole(v as 'developer' | 'comercial' | 'project_manager')}
               >
                 <SelectTrigger id="u_role" className="rounded-xl">
                   <SelectValue />
@@ -218,12 +219,15 @@ export default function UsuariosPage() {
                 <SelectContent>
                   <SelectItem value="developer">Developer</SelectItem>
                   <SelectItem value="comercial">Comercial</SelectItem>
+                  <SelectItem value="project_manager">Project manager</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-gray-500">
                 {role === 'comercial'
                   ? 'Acceso a dashboard de campañas, cold calling y facturas propias.'
-                  : 'Acceso al panel de proyectos, tickets y facturas propias.'}
+                  : role === 'project_manager'
+                    ? 'Acceso a Leads, Pipelines y Marketing. En Onboarding, Proyectos y Retención solo ve los proyectos que le asignes desde su ficha.'
+                    : 'Acceso al panel de proyectos, tickets y facturas propias.'}
               </p>
             </div>
             <div className="space-y-1.5">

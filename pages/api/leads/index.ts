@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
+import { getAccessibleLeadIds } from '@/lib/project-access'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
@@ -18,7 +19,7 @@ export default async function handler(
   res: NextApiResponse
 ) {
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
 
     if (req.method === 'GET') {
       const page = parseInt(req.query.page as string) || 1
@@ -42,6 +43,9 @@ export default async function handler(
           { configuracion: { not: null } },
           { NOT: { configuracion: '' } },
         ]
+        // Onboarding: los no-admin solo ven los proyectos que admin les asigna
+        const accessibleLeadIds = await getAccessibleLeadIds(user)
+        if (accessibleLeadIds !== null) where.id = { in: accessibleLeadIds }
       }
 
       if (search) {
