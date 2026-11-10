@@ -1,4 +1,5 @@
 import type { ProjectOnboarding } from './types'
+import { stripPriceLines } from '@/lib/price-visibility'
 
 /** Oculta datos comerciales y PII del cliente en la vista developer. */
 export function sanitizeOnboardingForDeveloper(
@@ -49,5 +50,18 @@ export function sanitizeOnboardingForDeveloper(
     summary: clean(onboarding.summary),
     contacts: clean(onboarding.contacts),
     internal_notes: clean(onboarding.internal_notes),
+  }
+}
+
+/** Vista project manager: mantiene contactos y contexto, solo quita precios. */
+export function sanitizeOnboardingPrices(onboarding: ProjectOnboarding): ProjectOnboarding {
+  return {
+    ...onboarding,
+    summary: stripPriceLines(onboarding.summary),
+    client_context: stripPriceLines(onboarding.client_context),
+    scope_text: stripPriceLines(onboarding.scope_text),
+    deliverables: stripPriceLines(onboarding.deliverables),
+    contacts: stripPriceLines(onboarding.contacts),
+    internal_notes: stripPriceLines(onboarding.internal_notes),
   }
 }

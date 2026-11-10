@@ -1,6 +1,7 @@
 'use client'
 
 import { ReactNode, useState, useEffect } from 'react'
+import { useCanSeePrices } from '@/components/useCanSeePrices'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, Trash2, ArrowLeft, Menu } from 'lucide-react'
 import {
@@ -50,6 +51,7 @@ export default function PipelineLayout({
   backHref = '/pipelines',
   allowDelete = true,
 }: PipelineLayoutProps) {
+  const showPrices = useCanSeePrices()
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -183,8 +185,12 @@ export default function PipelineLayout({
             </div>
 
             <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-700 pl-11 sm:pl-0">
-              <span className="font-semibold text-gray-900">{formatCurrency(totalValue)}</span>
-              <span className="text-gray-400">·</span>
+              {showPrices && (
+                <>
+                  <span className="font-semibold text-gray-900">{formatCurrency(totalValue)}</span>
+                  <span className="text-gray-400">·</span>
+                </>
+              )}
               <span>
                 <span className="font-semibold text-gray-900">{totalCards}</span> Oportunidades
               </span>

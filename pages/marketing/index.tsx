@@ -22,6 +22,7 @@ import MetaAdsConfigButton from '@/components/marketing/MetaAdsConfigButton'
 import { parseColdCallFilterParam } from '@/lib/coldcall/api-query'
 import type { ColdCallFilter } from '@/lib/coldcall/scope'
 import { useAuth } from '@/components/AuthContext'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { cn } from '@/lib/utils'
 
 const LeadsAnalyticsPanel = dynamic(() => import('@/components/leads/LeadsAnalyticsPanel'), {
@@ -240,6 +241,8 @@ function resolveColdCallingSection(
 export default function MarketingPage() {
   const router = useRouter()
   const { user } = useAuth()
+  // Project manager: ve lo invertido, no lo cobrado a clientes
+  const showClientPrices = canSeeClientPrices(user?.role)
   const tabFromUrl = resolveTab(router.query.tab)
   const ccFromUrl = resolveColdCallingSection(router.query.cc)
   const ccFilterFromUrl = resolveColdCallingFilter(router.query.ccUser, user?.id ?? 0)
@@ -558,11 +561,13 @@ export default function MarketingPage() {
                     value={fmt(data.global.closedLeads)}
                     sub="leads → cliente"
                   />
+                  {showClientPrices && (
                   <KpiCard
                     label="Cash Collected"
                     value={data.global.cashCollected > 0 ? `${fmt(data.global.cashCollected)} €` : '—'}
                     sub="valor leads cerrados"
                   />
+                  )}
                   <KpiCard
                     label="Inversión total"
                     value={data.global.totalSpend > 0 ? `${fmt(data.global.totalSpend)} €` : '—'}
@@ -643,12 +648,14 @@ export default function MarketingPage() {
             )}
 
             {/* Mismo bloque que Dashboard → Analítica de leads */}
+            {showClientPrices && (
             <LeadsAnalyticsPanel
               period={effectivePeriod || undefined}
               onPeriodChange={handlePeriod}
               hidePeriodSelect
               defaultOpen
             />
+            )}
           </div>
         )}
 

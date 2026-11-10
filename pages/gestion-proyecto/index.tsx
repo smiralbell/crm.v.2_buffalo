@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { useAuth } from '@/components/AuthContext'
 import { DeveloperTags } from '@/components/gestion-proyecto/ProjectDevelopersPanel'
 import { AlertCircle, CheckCircle2, FolderKanban, RefreshCw, Ticket, Wallet } from 'lucide-react'
@@ -51,6 +52,7 @@ function cardIdentity(row: ProjectListRow): { title: string; subtitle: string | 
 export default function GestionProyectoPage() {
   const { user } = useAuth()
   const isDeveloper = user?.role === 'developer'
+  const showMoney = canSeeClientPrices(user?.role)
   const [rows, setRows] = useState<ProjectListRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -90,7 +92,7 @@ export default function GestionProyectoPage() {
     <Layout>
       <div className="w-full space-y-4 -mt-2 lg:-mt-3">
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {!isDeveloper && (
+          {showMoney && (
             <div className="inline-flex w-full sm:w-auto items-stretch h-10 rounded-xl border border-gray-200 bg-white overflow-hidden">
               <div className="flex flex-1 sm:flex-initial items-center gap-2 px-3.5 border-r border-gray-100">
                 <Wallet className="h-3.5 w-3.5 text-gray-400 shrink-0" />

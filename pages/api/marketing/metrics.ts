@@ -1,12 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { prisma } from '@/lib/prisma'
 
 // GET /api/marketing/metrics?period=2026-06
 // Returns KPIs for the requested period (default: current month)
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  try { await requireAuthAPI(req, res) } catch { return }
+  let showPrices = false
+  try {
+    const user = await requireAuthAPI(req, res)
+    // Lo invertido sí; lo cobrado a clientes y el valor de leads, no (project manager)
+    showPrices = canSeeClientPrices(user.role)
+  } catch {
+    return
+  }
 
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -108,7 +116,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       global: {
         ...globalMetric,
         closedLeads,
-        cashCollected,
+        cashCollected: showPrices ? cashCollected : null,
         cac,
       },
       metrics,          // one row per channel
@@ -117,7 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: l.id,
         estado: l.estado,
         prioridad: l.prioridad,
-        valor: l.valor ? Number(l.valor) : null,
+        valor: showPrices && l.valor ? Number(l.valor) : null,
         created_at: l.created_at.toISOString(),
         contact: l.contact,
       })),

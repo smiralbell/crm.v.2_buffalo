@@ -1,6 +1,7 @@
 import { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -39,7 +40,8 @@ interface ContactDetailProps {
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
-    await requireAuth(context)
+    const authUser = await requireAuth(context)
+    const showPrices = canSeeClientPrices(authUser.role)
 
     const id = parseInt(context.params?.id as string)
 
@@ -80,7 +82,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         leads: contact.leads.map((lead) => ({
           id: lead.id,
           estado: lead.estado,
-          valor: lead.valor ? Number(lead.valor) : null,
+          valor: showPrices && lead.valor ? Number(lead.valor) : null,
           created_at: lead.created_at.toISOString(),
         })),
       },

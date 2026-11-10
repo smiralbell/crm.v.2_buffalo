@@ -26,6 +26,17 @@ export const PROJECT_MANAGER_PAGE_PREFIXES = [
   '/login',
 ] as const
 
+/** Dentro de sus módulos, el project manager no entra en páginas con precios. */
+export const PROJECT_MANAGER_PRICE_PAGES = [
+  '/leads/analytics',
+  '/onboarding/configure',
+  '/onboarding/custom',
+  '/onboarding/propuesta',
+  '/onboarding/contrato',
+  '/onboarding/factura',
+  '/onboarding/pre-kickoff',
+] as const
+
 export const COMERCIAL_PAGE_PREFIXES = [
   '/comercial',
   '/coldcalling',
@@ -96,6 +107,12 @@ export function canAccessPage(pathname: string, role: CrmRole): boolean {
     )
   }
   if (role === 'project_manager') {
+    // Páginas que existen para trabajar precios (configurador, documentos, ROI)
+    if (
+      PROJECT_MANAGER_PRICE_PAGES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+    ) {
+      return false
+    }
     return PROJECT_MANAGER_PAGE_PREFIXES.some(
       (p) => p !== '/login' && (pathname === p || pathname.startsWith(`${p}/`))
     )

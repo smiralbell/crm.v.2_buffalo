@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { parseColdCallFilterParam } from '@/lib/coldcall/api-query'
@@ -55,6 +56,8 @@ export default async function handler(
 ) {
   try {
     const user = await requireAuthAPI(req, res)
+    // Developers / project managers: sin importes de tarjetas (ni verlos ni cambiarlos)
+    const showPrices = canSeeClientPrices(user.role)
 
     const pipelineId = req.query.id as string
 
@@ -94,7 +97,7 @@ export default async function handler(
         const rows = await getColdCallPipelineCards(scope, pipelineId)
         cards = rows.map((card) => ({
           ...card,
-          amount: card.amount != null ? Number(card.amount) : null,
+          amount: showPrices && card.amount != null ? Number(card.amount) : null,
         }))
       } else {
         const rows = await prisma.pipelineCard.findMany({
@@ -106,7 +109,7 @@ export default async function handler(
         })
         cards = rows.map((card) => ({
           ...card,
-          amount: card.amount != null ? Number(card.amount) : null,
+          amount: showPrices && card.amount != null ? Number(card.amount) : null,
         }))
       }
 
@@ -194,7 +197,7 @@ export default async function handler(
             position: newPosition,
             tags: data.tags || [],
             capture_date: data.capture_date ? (typeof data.capture_date === 'string' ? new Date(data.capture_date) : null) : null,
-            amount: data.amount !== null && data.amount !== undefined ? data.amount : null,
+            amount: showPrices && data.amount !== null && data.amount !== undefined ? data.amount : null,
             notes: data.notes || null,
           },
         })
@@ -312,7 +315,7 @@ export default async function handler(
           stage: data.stage,
           stage_color: data.stage_color || card.stage_color,
           position: data.position,
-          ...(data.amount != null ? { amount: data.amount } : {}),
+          ...(showPrices && data.amount != null ? { amount: data.amount } : {}),
         },
       })
 
@@ -354,11 +357,12 @@ export default async function handler(
         }
       }
 
-      return res.status(200).json(updated)
+      return res.status(200).json(showPrices ? updated : { ...updated, amount: null })
     }
 
     // PATCH: update only amount (without changing stage/position)
     if (req.method === 'PATCH') {
+      if (!showPrices) return res.status(403).json({ error: 'Acceso denegado' })
       const { card_id, amount } = req.body
       if (!card_id) return res.status(400).json({ error: 'card_id es requerido' })
 

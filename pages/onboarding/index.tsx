@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import { useAuth } from '@/components/AuthContext'
+import { useCanSeePrices } from '@/components/useCanSeePrices'
 import {
   Search, UserPlus, ChevronRight, ArrowRight,
   X, Check, Building2,
@@ -110,6 +111,7 @@ export default function OnboardingPage() {
   const { user: authUser } = useAuth()
   // Project manager: solo ve y trabaja sus proyectos asignados (no crea, asigna ni borra)
   const isAdmin = authUser?.role === 'admin'
+  const showPrices = useCanSeePrices()
 
   const urlPipeline = router.query.pipeline as string | undefined
   const urlCard     = router.query.card     as string | undefined
@@ -728,7 +730,7 @@ export default function OnboardingPage() {
                   )}
 
                   {/* Métricas del filtro */}
-                  {!loadingProjects && projects.length > 0 && (
+                  {showPrices && !loadingProjects && projects.length > 0 && (
                     <div
                       className={`inline-flex items-stretch h-10 rounded-xl border overflow-hidden ${
                         projectsFilter === 'en_marcha'
@@ -879,8 +881,8 @@ export default function OnboardingPage() {
                   const name       = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
                   const company    = lead.contact?.empresa
                   const fees       = projectFees[lead.id] || resolveProjectFees(lead, null)
-                  const amount     = fees.setup
-                  const monthly    = fees.monthly
+                  const amount     = showPrices ? fees.setup : null
+                  const monthly    = showPrices ? fees.monthly : null
                   const dateStr    = new Date(lead.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })
                   return (
                     <div
@@ -926,7 +928,7 @@ export default function OnboardingPage() {
                           <PlayCircle className="h-3.5 w-3.5" />
                           Abrir cuaderno
                         </button>
-                        {buffaloFlags[lead.id] ? (
+                        {isAdmin && (buffaloFlags[lead.id] ? (
                           <button
                             type="button"
                             onClick={() => togglePonerEnMarcha(lead.id, true)}
@@ -948,11 +950,12 @@ export default function OnboardingPage() {
                             <Rocket className="h-3.5 w-3.5" />
                             {launchingId === lead.id ? '…' : 'Poner en marcha'}
                           </button>
-                        )}
+                        ))}
                         {isAdmin && lead.configuracion && (
                           <AssignDevelopersButton leadId={lead.id} variant="icon" />
                         )}
-                        <button
+                        {showPrices && (
+<button
                           onClick={async () => { const r = await fetch(`/api/contacts/${lead.contact.id}`); if (r.ok) void handleConfigure(await r.json(), undefined, undefined, lead.id) }}
                           className="flex items-center gap-1.5 px-3 h-9 border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
                           title="Editar cliente, proyecto y configuración"
@@ -960,6 +963,7 @@ export default function OnboardingPage() {
                           <Pencil className="h-3.5 w-3.5" />
                           Editar
                         </button>
+)}
                         <Link href={`/onboarding/proyectos/${lead.id}`} className="hidden sm:flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-300 hover:text-gray-900 transition-colors" title="Ver proyecto">
                           <Eye className="h-3.5 w-3.5" />
                         </Link>
@@ -988,8 +992,8 @@ export default function OnboardingPage() {
                   const name       = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
                   const company    = lead.contact?.empresa
                   const fees       = projectFees[lead.id] || resolveProjectFees(lead, null)
-                  const amount     = fees.setup
-                  const monthly    = fees.monthly
+                  const amount     = showPrices ? fees.setup : null
+                  const monthly    = showPrices ? fees.monthly : null
                   const dateStr    = new Date(lead.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
                   return (
                     <div
@@ -1018,7 +1022,7 @@ export default function OnboardingPage() {
                           {amount != null && amount > 0 ? (
                             <div className="text-base font-semibold text-gray-700 mt-1">{fmt(amount)}</div>
                           ) : (
-                            <div className="text-xs text-gray-400 mt-1">Sin valorar</div>
+                            showPrices ? <div className="text-xs text-gray-400 mt-1">Sin valorar</div> : null
                           )}
                           {monthly != null && monthly > 0 && (
                             <div className="mt-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-100">
@@ -1039,7 +1043,7 @@ export default function OnboardingPage() {
                             <PlayCircle className="h-3.5 w-3.5" />
                             Abrir cuaderno
                           </button>
-                          {buffaloFlags[lead.id] ? (
+                          {isAdmin && (buffaloFlags[lead.id] ? (
                             <button
                               type="button"
                               onClick={() => togglePonerEnMarcha(lead.id, true)}
@@ -1061,12 +1065,13 @@ export default function OnboardingPage() {
                               <Rocket className="h-3.5 w-3.5" />
                               {launchingId === lead.id ? '…' : 'Poner en marcha'}
                             </button>
-                          )}
+                          ))}
                           <div className="flex items-center gap-1.5">
                             {isAdmin && lead.configuracion && (
                               <AssignDevelopersButton leadId={lead.id} variant="icon" />
                             )}
-                            <button
+                            {showPrices && (
+<button
                               onClick={async () => { const r = await fetch(`/api/contacts/${lead.contact.id}`); if (r.ok) void handleConfigure(await r.json(), undefined, undefined, lead.id) }}
                               className="flex-1 flex items-center justify-center gap-1 h-9 border border-gray-200 text-gray-700 text-xs font-medium rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
                               title="Editar cliente, proyecto y configuración"
@@ -1074,6 +1079,7 @@ export default function OnboardingPage() {
                               <Pencil className="h-3.5 w-3.5" />
                               Editar
                             </button>
+)}
                             <Link
                               href={`/onboarding/proyectos/${lead.id}`}
                               className="flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-400 rounded-lg hover:border-gray-300 hover:text-gray-700 transition-colors"

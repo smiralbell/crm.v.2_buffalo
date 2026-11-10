@@ -2,7 +2,12 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '@/lib/prisma'
 import { buildDefaultOnboarding } from '@/lib/gestion-proyecto/prefill-onboarding'
 import { requireProjectAccessAPI } from '@/lib/gestion-proyecto/require-project-access'
-import { sanitizeOnboardingForDeveloper } from '@/lib/gestion-proyecto/sanitize-onboarding'
+import {
+  sanitizeOnboardingForDeveloper,
+  sanitizeOnboardingPrices,
+} from '@/lib/gestion-proyecto/sanitize-onboarding'
+import type { ProjectOnboarding } from '@/lib/gestion-proyecto/types'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { serializeTaskRow } from '@/lib/gestion-proyecto/task-stale'
 
 type DbProyecto = {
@@ -47,6 +52,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const user = await requireProjectAccessAPI(req, res, id)
     const isDeveloper = user.role === 'developer'
+    const hidePrices = !canSeeClientPrices(user.role)
+    const cleanOnboarding = (o: ProjectOnboarding): ProjectOnboarding =>
+      isDeveloper ? sanitizeOnboardingForDeveloper(o) : hidePrices ? sanitizeOnboardingPrices(o) : o
 
     const row = await fetchProyectoContext(id)
     if (!row) return res.status(404).json({ error: 'Proyecto no encontrado' })
@@ -141,7 +149,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 internal_notes: onboardingRows[0].internal_notes || '',
                 updated_at: onboardingRows[0].updated_at.toISOString(),
               }
-              return isDeveloper ? sanitizeOnboardingForDeveloper(raw) : raw
+              return cleanOnboarding(raw)
             })()
           : null
 
@@ -277,15 +285,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ON CONFLICT (project_id) DO NOTHING
         `
 
-        onboarding = isDeveloper
-          ? sanitizeOnboardingForDeveloper({
-              ...defaults,
-              updated_at: new Date().toISOString(),
-            })
-          : {
-              ...defaults,
-              updated_at: new Date().toISOString(),
-            }
+        onboarding = cleanOnboarding({
+          ...defaults,
+          updated_at: new Date().toISOString(),
+        })
       }
 
       const safeOnboarding = onboarding!

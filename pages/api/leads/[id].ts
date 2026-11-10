@@ -3,6 +3,8 @@ import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { applyLeadSetupFee } from '@/lib/crm/sync-lead-value'
+import { canSeeClientPrices } from '@/lib/price-visibility'
+import { hideLeadPrices } from '@/lib/onboarding/sanitize-config-prices'
 
 const leadUpdateSchema = z.object({
   contact_id: z.number().optional(),
@@ -20,7 +22,9 @@ export default async function handler(
   res: NextApiResponse
 ) {
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
+    // Developers / project managers: ni ven ni tocan valor ni configuración (precios)
+    const showPrices = canSeeClientPrices(user.role)
 
     const id = parseInt(req.query.id as string)
 
@@ -36,10 +40,9 @@ export default async function handler(
         return res.status(404).json({ error: 'Lead no encontrado' })
       }
 
-      return res.status(200).json({
-        ...lead,
-        valor: lead.valor != null ? Number(lead.valor) : null,
-      })
+      return res.status(200).json(
+        hideLeadPrices({ ...lead, valor: lead.valor != null ? Number(lead.valor) : null }, user.role)
+      )
     }
 
     if (req.method === 'PUT') {
@@ -52,10 +55,10 @@ export default async function handler(
       if (data.prioridad !== undefined) updateData.prioridad = data.prioridad
       if (data.score !== undefined) updateData.score = data.score
       if (data.notas !== undefined) updateData.notas = data.notas
-      if (data.configuracion !== undefined) updateData.configuracion = data.configuracion
+      if (data.configuracion !== undefined && showPrices) updateData.configuracion = data.configuracion
 
       // valor se sincroniza con proyectos + pipeline (mismo importe en todos lados)
-      if (data.valor !== undefined) {
+      if (data.valor !== undefined && showPrices) {
         await applyLeadSetupFee(id, data.valor)
       }
 
@@ -71,10 +74,9 @@ export default async function handler(
         return res.status(404).json({ error: 'Lead no encontrado' })
       }
 
-      return res.status(200).json({
-        ...lead,
-        valor: lead.valor != null ? Number(lead.valor) : null,
-      })
+      return res.status(200).json(
+        hideLeadPrices({ ...lead, valor: lead.valor != null ? Number(lead.valor) : null }, user.role)
+      )
     }
 
     if (req.method === 'DELETE') {

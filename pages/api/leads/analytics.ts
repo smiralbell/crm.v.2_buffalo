@@ -1,10 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { currentPeriod, getLeadsAnalytics, listRecentPeriods } from '@/lib/leads/analytics'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
+    // Incluye lo cobrado a clientes (ROI): no para quien no ve precios
+    if (!canSeeClientPrices(user.role)) {
+      return res.status(403).json({ error: 'Acceso denegado' })
+    }
   } catch {
     return
   }
