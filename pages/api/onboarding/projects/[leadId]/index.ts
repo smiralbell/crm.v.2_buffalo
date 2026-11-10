@@ -6,6 +6,13 @@ import { syncProyectoFromLead } from '@/lib/engranaje5/sync-proyecto'
 import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import { mergeLeadConfig } from '@/lib/onboarding/project-context-ai'
 import {
+  canSeeClientPrices,
+  mergeHiddenPriceLines,
+  stripPriceLines,
+} from '@/lib/price-visibility'
+import { sanitizeConfiguracionPrices } from '@/lib/onboarding/sanitize-config-prices'
+import { stripProyectoFeesForDeveloper } from '@/lib/retencion/developer-view'
+import {
   applyLeadSetupFee,
   recomputeLeadCommercialValue,
   sumSetupFeesForLead,
@@ -188,6 +195,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const cfg = parseConfiguradorConfig(lead.configuracion)
       const definition = (cfg?.description || lead.notas || '').trim() || null
       const context = (cfg?.project_context || '').trim() || null
+
+      // Project manager / developer: misma ficha, sin precios ni documentos con importes
+      if (!canSeeClientPrices(user.role)) {
+        const serialized = serializeProyecto(proyecto)
+        return res.status(200).json({
+          lead: {
+            id: lead.id,
+            estado: lead.estado,
+            valor: null,
+            notas: stripPriceLines(lead.notas) || null,
+            configuracion: sanitizeConfiguracionPrices(lead.configuracion),
+            contact: lead.contact,
+          },
+          proyecto: serialized ? stripProyectoFeesForDeveloper(serialized, user) : null,
+          project_definition: stripPriceLines(definition) || null,
+          project_context: stripPriceLines(context) || null,
+          proposal_draft: null,
+          proposal_status: 'draft',
+          proposal_sent_at: null,
+          contract_draft: null,
+          contract_status: 'draft',
+          contract_sent_at: null,
+          pre_kickoff_draft: stripPriceLines(cfg?.pre_kickoff_draft) || null,
+          linked_invoices: [],
+        })
+      }
+
       return res.status(200).json({
         lead: {
           id: lead.id,
@@ -212,12 +246,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'PATCH') {
-      const data = patchSchema.parse(req.body)
+      const parsed = patchSchema.parse(req.body)
       const lead = await prisma.lead.findUnique({
         where: { id: leadId },
-        select: { id: true, contact_id: true, configuracion: true },
+        select: { id: true, contact_id: true, configuracion: true, notas: true },
       })
       if (!lead) return res.status(404).json({ error: 'Lead no encontrado' })
+
+      // Sin permiso de precios: se ignoran importes/plan y no se pierden las líneas
+      // con precio que no pudo ver al editar definición, contexto o notas.
+      let data = parsed
+      if (!canSeeClientPrices(user.role)) {
+        const {
+          lead_valor: _lv,
+          setup_fee_eur: _sf,
+          monthly_fee_eur: _mf,
+          maint_plan: _mp,
+          has_mensualidad: _hm,
+          es_buffalo: _eb,
+          ...rest
+        } = parsed
+        const storedCfg = parseConfiguradorConfig(lead.configuracion)
+        data = {
+          ...rest,
+          ...(rest.project_definition !== undefined
+            ? {
+                project_definition: mergeHiddenPriceLines(
+                  storedCfg?.description || lead.notas,
+                  rest.project_definition
+                ),
+              }
+            : {}),
+          ...(rest.project_context !== undefined
+            ? {
+                project_context: mergeHiddenPriceLines(
+                  storedCfg?.project_context,
+                  rest.project_context
+                ),
+              }
+            : {}),
+          ...(rest.lead_notas !== undefined
+            ? { lead_notas: mergeHiddenPriceLines(lead.notas, rest.lead_notas) }
+            : {}),
+        }
+      }
 
       let activeContactId = lead.contact_id
 
@@ -394,7 +466,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const updated = await getProyectoByLead(leadId)
           return res.status(200).json({
             success: true,
-            proyecto: serializeProyecto(updated),
+            proyecto: canSeeClientPrices(user.role)
+              ? serializeProyecto(updated)
+              : (() => {
+                  const s = serializeProyecto(updated)
+                  return s ? stripProyectoFeesForDeveloper(s, user) : null
+                })(),
             warning: 'Datos de cliente/lead guardados; no hay proyecto Buffalo vinculado',
           })
         }
@@ -472,6 +549,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const updated = await getProyectoByLead(leadId)
       const fees = await sumSetupFeesForLead(leadId)
+      if (!canSeeClientPrices(user.role)) {
+        const serialized = serializeProyecto(updated)
+        return res.status(200).json({
+          success: true,
+          proyecto: serialized ? stripProyectoFeesForDeveloper(serialized, user) : null,
+          commercial: null,
+        })
+      }
       return res.status(200).json({
         success: true,
         proyecto: serializeProyecto(updated),

@@ -4,11 +4,15 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { requireAuth } from '@/lib/auth'
 import { userHasLeadAccess } from '@/lib/project-access'
+import { canSeeClientPrices } from '@/lib/price-visibility'
+import { sanitizeConfiguracionPrices } from '@/lib/onboarding/sanitize-config-prices'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
 import AssignDevelopersButton from '@/components/onboarding/AssignDevelopersButton'
 import DeleteOnboardingProjectDialog from '@/components/onboarding/DeleteOnboardingProjectDialog'
 import OnboardingSectionTabs from '@/components/onboarding/OnboardingSectionTabs'
+import { useAuth } from '@/components/AuthContext'
+import { useCanSeePrices } from '@/components/useCanSeePrices'
 import { DeveloperTags } from '@/components/gestion-proyecto/ProjectDevelopersPanel'
 import {
   ArrowLeft, Pencil, Mail, Phone, MapPin, Building2,
@@ -69,9 +73,11 @@ export const getServerSideProps: GetServerSideProps<Props> = async (context) => 
         lead: {
           id: lead.id,
           estado: lead.estado ?? 'frio',
-          valor: lead.valor ? Number(lead.valor) : null,
+          valor: canSeeClientPrices(user.role) && lead.valor ? Number(lead.valor) : null,
           notas: lead.notas ?? null,
-          configuracion: lead.configuracion ?? null,
+          configuracion: canSeeClientPrices(user.role)
+            ? lead.configuracion ?? null
+            : sanitizeConfiguracionPrices(lead.configuracion),
           prioridad: lead.prioridad ?? null,
           created_at: lead.created_at.toISOString(),
           updated_at: lead.updated_at.toISOString(),
@@ -106,6 +112,10 @@ function MetaRow({
 
 export default function ProyectoDetailPage({ lead }: Props) {
   const router = useRouter()
+  const { user: authUser } = useAuth()
+  const isAdmin = authUser?.role === 'admin'
+  // Project manager: sin precios, propuesta, contrato ni facturas
+  const showPrices = useCanSeePrices()
   const [developers, setDevelopers] = useState<{ id: number; name: string }[]>([])
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [esBuffalo, setEsBuffalo] = useState(false)
@@ -301,7 +311,7 @@ export default function ProyectoDetailPage({ lead }: Props) {
                 <PlayCircle className="h-4 w-4" />
                 Abrir cuaderno de reuniones
               </Link>
-              {!esBuffalo ? (
+              {isAdmin && (!esBuffalo ? (
                 <button
                   type="button"
                   onClick={toggleBuffalo}
@@ -325,8 +335,9 @@ export default function ProyectoDetailPage({ lead }: Props) {
                 >
                   Quitar de Buffalo
                 </button>
-              )}
-              <AssignDevelopersButton leadId={lead.id} onAssigned={loadDevelopers} />
+              ))}
+              {isAdmin && <AssignDevelopersButton leadId={lead.id} onAssigned={loadDevelopers} />}
+              {showPrices && (
               <Link
                 href={configureUrl}
                 className="inline-flex items-center gap-2 px-4 h-10 text-sm font-medium rounded-xl border border-gray-200 text-gray-800 hover:bg-gray-50 transition-colors"
@@ -334,6 +345,8 @@ export default function ProyectoDetailPage({ lead }: Props) {
                 <Pencil className="h-3.5 w-3.5" />
                 Editar
               </Link>
+              )}
+              {isAdmin && (
               <button
                 type="button"
                 onClick={() => setDeleteOpen(true)}
@@ -342,6 +355,7 @@ export default function ProyectoDetailPage({ lead }: Props) {
               >
                 <Trash2 className="h-4 w-4" />
               </button>
+              )}
             </div>
           </header>
 
@@ -400,10 +414,10 @@ export default function ProyectoDetailPage({ lead }: Props) {
             </details>
           )}
 
-          {/* Documentos: propuesta, factura, contrato, pre-kick-off */}
+          {/* Documentos: propuesta, factura, contrato, pre-kick-off (con precios: no para project manager) */}
           <div
             id="documentos"
-            className="rounded-2xl border border-gray-200 bg-white px-5 py-5 sm:px-6 sm:py-6 scroll-mt-6"
+            className={`${showPrices ? '' : 'hidden '}rounded-2xl border border-gray-200 bg-white px-5 py-5 sm:px-6 sm:py-6 scroll-mt-6`}
           >
             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
               <div>
@@ -426,10 +440,10 @@ export default function ProyectoDetailPage({ lead }: Props) {
 
           <OnboardingPublicFormsPanel leadId={lead.id} />
 
-          <OnboardingInvoicesThread leadId={lead.id} />
+          {showPrices && <OnboardingInvoicesThread leadId={lead.id} />}
 
           {/* Economics — single strip */}
-          {hasEconomics && (
+          {showPrices && hasEconomics && (
             <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
               <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-gray-100">
                 <div className="px-5 py-5 text-center">

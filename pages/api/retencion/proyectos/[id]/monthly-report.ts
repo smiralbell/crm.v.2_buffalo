@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { isDeveloperViewer } from '@/lib/retencion/developer-view'
 import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import { assertProjectAccess } from '@/lib/project-access'
@@ -123,7 +124,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-    const proyecto = await buildProyectoContext(proyectoId)
+    const proyectoRaw = await buildProyectoContext(proyectoId)
+    // Sin precios para developers / project managers (el agente no debe poder citarlos)
+    const proyecto =
+      proyectoRaw && isDeveloperViewer(user) ? { ...proyectoRaw, monthly_fee_eur: null } : proyectoRaw
     if (!proyecto) {
       return res.status(403).json({ error: 'Proyecto no elegible para retención' })
     }

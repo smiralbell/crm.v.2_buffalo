@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useCanSeePrices } from '@/components/useCanSeePrices'
 import { useRouter } from 'next/router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,6 +55,7 @@ export default function NewLeadDialog({
   onCreated,
   initialNombre = '',
 }: NewLeadDialogProps) {
+  const showPrices = useCanSeePrices()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -342,7 +344,7 @@ export default function NewLeadDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
+                <div className={showPrices ? 'space-y-1.5' : 'hidden'}>
                   <Label htmlFor="nl-valor">Valor (€)</Label>
                   <Input
                     id="nl-valor"

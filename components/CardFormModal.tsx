@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useCanSeePrices } from '@/components/useCanSeePrices'
 import { X, Calendar, DollarSign, FileText, Tag, User, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,6 +57,7 @@ export default function CardFormModal({
   allowQuickCreate = false,
   onEntityCreated,
 }: CardFormModalProps) {
+  const showPrices = useCanSeePrices()
   const [entityId, setEntityId] = useState(card?.entity_id || propEntityId || '')
   const [selectedEntityName, setSelectedEntityName] = useState(entityName || '')
   const [captureDate, setCaptureDate] = useState(
@@ -309,8 +311,8 @@ export default function CardFormModal({
             />
           </div>
 
-          {/* Cantidad */}
-          <div>
+          {/* Cantidad (oculta para quien no ve precios) */}
+          <div className={showPrices ? undefined : 'hidden'}>
             <Label className="text-sm font-semibold mb-2 flex items-center gap-2">
               <DollarSign className="h-4 w-4" />
               Cantidad (€)

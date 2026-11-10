@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { getAccessibleLeadIds } from '@/lib/project-access'
+import { canSeeClientPrices } from '@/lib/price-visibility'
+import { hideLeadPrices } from '@/lib/onboarding/sanitize-config-prices'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
@@ -80,7 +82,7 @@ export default async function handler(
       ])
 
       return res.status(200).json({
-        leads,
+        leads: leads.map((l) => hideLeadPrices(l, user.role)),
         pagination: {
           page,
           pageSize,
@@ -98,7 +100,7 @@ export default async function handler(
           data: {
             contact_id: data.contact_id,
             estado: data.estado || 'frio',
-            valor: data.valor || null,
+            valor: canSeeClientPrices(user.role) ? data.valor || null : null,
             origen_principal: data.origen_principal || null,
             prioridad: data.prioridad || 'media',
             score: data.score || null,

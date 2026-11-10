@@ -1,5 +1,6 @@
 import { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
+import { useCanSeePrices } from '@/components/useCanSeePrices'
 import { useState } from 'react'
 import { requireAuth } from '@/lib/auth'
 import Layout from '@/components/Layout'
@@ -28,6 +29,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
 }
 
 export default function NewLead() {
+  const showPrices = useCanSeePrices()
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -255,7 +257,7 @@ export default function NewLead() {
                   </Select>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className={showPrices ? 'space-y-1.5' : 'hidden'}>
                   <Label htmlFor="valor">Valor (€)</Label>
                   <Input
                     id="valor"

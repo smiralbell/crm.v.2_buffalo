@@ -2,6 +2,7 @@ import { GetServerSideProps } from 'next'
 import { useState } from 'react'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
 import { Button } from '@/components/ui/button'
@@ -70,7 +71,8 @@ interface LeadsPageProps {
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
-    await requireAuth(context)
+    const authUser = await requireAuth(context)
+    const showPrices = canSeeClientPrices(authUser.role)
 
     const page = parseInt(context.query.page as string) || 1
     const search = (context.query.search as string) || ''
@@ -210,7 +212,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         leads: leads.map((lead) => ({
           id: lead.id,
           estado: lead.estado,
-          valor: lead.valor ? Number(lead.valor) : null,
+          valor: showPrices && lead.valor ? Number(lead.valor) : null,
           contact: lead.contact,
           created_at: lead.created_at.toISOString(),
         })),

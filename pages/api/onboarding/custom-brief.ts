@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { analyzeCustomProjectBrief } from '@/lib/onboarding/custom-brief-ai'
 
 const schema = z.object({
@@ -27,7 +28,11 @@ const schema = z.object({
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    await requireAuthAPI(req, res)
+    const user = await requireAuthAPI(req, res)
+    // Brief de proyecto a medida con presupuesto: no para project manager / developer
+    if (!canSeeClientPrices(user.role)) {
+      return res.status(403).json({ error: 'Acceso denegado' })
+    }
   } catch {
     return
   }

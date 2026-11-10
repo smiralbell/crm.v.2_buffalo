@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireLeadAccessAPI } from '@/lib/gestion-proyecto/require-project-access'
+import { canSeeClientPrices } from '@/lib/price-visibility'
 import { prisma } from '@/lib/prisma'
 import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 import { mergeLeadConfig } from '@/lib/onboarding/project-context-ai'
@@ -31,6 +32,10 @@ async function nextInvoiceNumber(): Promise<string> {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const user = await requireLeadAccessAPI(req, res, req.query.leadId)
+    // Propuesta, contrato y facturas llevan importes: no para project manager / developer
+    if (!canSeeClientPrices(user.role)) {
+      return res.status(403).json({ error: 'Sin acceso a documentos con precios' })
+    }
 
     const leadId = parseInt(String(req.query.leadId), 10)
     if (!Number.isFinite(leadId) || leadId <= 0) {

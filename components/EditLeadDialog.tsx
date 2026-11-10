@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useCanSeePrices } from '@/components/useCanSeePrices'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -74,6 +75,7 @@ export default function EditLeadDialog({
   onOpenChange,
   onSaved,
 }: EditLeadDialogProps) {
+  const showPrices = useCanSeePrices()
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState('')
@@ -367,7 +369,7 @@ export default function EditLeadDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
+                <div className={showPrices ? 'space-y-1.5' : 'hidden'}>
                   <Label htmlFor="el-valor">Valor (€)</Label>
                   <Input
                     id="el-valor"

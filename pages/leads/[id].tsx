@@ -2,6 +2,8 @@ import { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { requireAuth } from '@/lib/auth'
+import { canSeeClientPrices } from '@/lib/price-visibility'
+import { sanitizeConfiguracionPrices } from '@/lib/onboarding/sanitize-config-prices'
 import { prisma } from '@/lib/prisma'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -66,7 +68,8 @@ interface LeadDetailProps {
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
-    await requireAuth(context)
+    const authUser = await requireAuth(context)
+    const showPrices = canSeeClientPrices(authUser.role)
 
     const id = parseInt(context.params?.id as string)
 
@@ -95,6 +98,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
       contactName: lead.contact?.nombre ?? null,
       leadUpdatedAt: lead.updated_at,
       leadEstado: lead.estado,
+      hidePrices: !showPrices,
     })
 
     let metaAds: MetaAdsAttributionView | null = null
@@ -128,9 +132,9 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
         lead: {
           id: lead.id,
           estado: lead.estado ?? 'frio',
-          valor: lead.valor ? Number(lead.valor) : null,
+          valor: showPrices && lead.valor ? Number(lead.valor) : null,
           notas: lead.notas ?? null,
-          configuracion: lead.configuracion ?? null,
+          configuracion: showPrices ? lead.configuracion ?? null : sanitizeConfiguracionPrices(lead.configuracion),
           prioridad: lead.prioridad ?? null,
           origen_principal: lead.origen_principal ?? null,
           created_at: lead.created_at.toISOString(),
