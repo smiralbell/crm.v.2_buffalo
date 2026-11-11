@@ -43,9 +43,19 @@ function compactSchema(schema: unknown): unknown {
   return { parametros: props, obligatorios: s.required || [] }
 }
 
-export async function runMcpTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+/**
+ * opts.projectIds la pone el servidor (agente del equipo): solo esos proyectos.
+ * Sin opts (agente de los socios): todos.
+ */
+export async function runMcpTool(
+  name: string,
+  args: Record<string, unknown>,
+  opts: { projectIds?: string[] } = {}
+): Promise<unknown> {
+  const scoped = Array.isArray(opts.projectIds)
+  const inScope = (proyectoId: string) => !scoped || opts.projectIds!.includes(proyectoId)
   if (name === 'mcp_listar') {
-    const rows = await listMcpServers()
+    const rows = (await listMcpServers()).filter((r) => inScope(r.proyecto_id))
     const ids = Array.from(new Set(rows.map((r) => r.proyecto_id)))
     const names = new Map<string, string>()
     if (ids.length) {
@@ -85,7 +95,7 @@ export async function runMcpTool(name: string, args: Record<string, unknown>): P
 
   if (name === 'mcp_usar') {
     const row = await getMcpServer(Number(args.mcp_id))
-    if (!row) return { ok: false, error: 'Ese MCP no existe. Mira mcp_listar.' }
+    if (!row || !inScope(row.proyecto_id)) return { ok: false, error: 'Ese MCP no existe. Mira mcp_listar.' }
     const herramienta = String(args.herramienta || '')
     const argumentos =
       args.argumentos && typeof args.argumentos === 'object' && !Array.isArray(args.argumentos)

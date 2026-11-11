@@ -16,10 +16,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Loader2, Plus, Trash2, FolderKanban, Copy, KeyRound, Eye, EyeOff, Pencil } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Trash2, FolderKanban, Copy, KeyRound, Eye, EyeOff, Pencil, ListTodo, ExternalLink } from 'lucide-react'
 import type { DeveloperAssignment } from '@/lib/developer/assignments'
 import type { CrmRole } from '@/lib/auth'
 import UserProjectsEditor from '@/components/usuarios/UserProjectsEditor'
+import UserWhatsAppAgentCard from '@/components/usuarios/UserWhatsAppAgentCard'
 
 const ROLE_LABEL: Record<CrmRole, string> = {
   admin: 'Admin',
@@ -441,6 +442,36 @@ export default function UsuarioDetailPage() {
               <div className="rounded-2xl border border-gray-200 bg-white px-5 py-4 text-sm text-gray-600">
                 Los comerciales acceden al dashboard de cold calling, campañas y facturas propias desde su panel lateral.
               </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white px-5 py-4">
+              <div className="min-w-0">
+                <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                  <ListTodo className="h-4 w-4 text-gray-500" />
+                  Tareas
+                </h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Su tablero de tareas: las sueltas
+                  {user.role === 'comercial' ? '' : ' y las de sus proyectos'}. Desde ahí le puedes poner tareas nuevas.
+                </p>
+              </div>
+              <a
+                href={`/usuarios/${user.id}/tareas`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gray-900 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+              >
+                Abrir tareas
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+
+            {(isDeveloperUser || user.role === 'project_manager') && (
+              <UserWhatsAppAgentCard
+                userId={user.id}
+                userName={user.name}
+                roleLabel={user.role === 'project_manager' ? 'project manager' : 'developer'}
+              />
             )}
                 </>
               )

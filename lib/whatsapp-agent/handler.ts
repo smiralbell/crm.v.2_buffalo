@@ -4,6 +4,8 @@ import { sendPendingConfirmation } from '@/lib/telegram-agent/confirm'
 import { deliver } from '@/lib/telegram-agent/handler'
 import { claimUpdate, listOpenPending, loadHistory, saveMessage } from '@/lib/telegram-agent/store'
 import type { AgentContext } from '@/lib/telegram-agent/tools'
+import { runTeamAgent } from '@/lib/team-agent/agent'
+import { findTeamMemberByPhone, type TeamMember } from '@/lib/team-agent/identity'
 import { isAllowedWhatsAppNumber, isWhatsAppAgentEnabled, waChatId } from './config'
 import { handleWhatsAppConfirmation } from './confirm'
 import { downloadWhatsAppMedia, sendWhatsAppText, sendWhatsAppTyping } from './evolution-api'
@@ -27,15 +29,27 @@ export async function handleWhatsAppWebhook(body: unknown): Promise<void> {
   const msg = parseEvolutionWebhook(body)
   if (!msg) return
 
-  // Solo los socios. Al resto no se le contesta (es un número de WhatsApp normal).
-  if (!isAllowedWhatsAppNumber(msg.phone)) {
+  // Quién escribe lo decide el móvil, nunca la IA:
+  // - socios (WHATSAPP_AGENT_NUMBERS): agente completo, como siempre;
+  // - developer / PM activo con ese móvil en su ficha: agente del equipo, solo lo suyo;
+  // - cualquier otro: no se le contesta (es un número de WhatsApp normal).
+  const isSocio = isAllowedWhatsAppNumber(msg.phone)
+  const member = isSocio ? null : await findTeamMemberByPhone(msg.phone)
+  if (!isSocio && !member) {
     console.warn(`[whatsapp-agent] mensaje ignorado de un número no autorizado (…${msg.phone.slice(-4)})`)
     return
   }
   if (!(await claimUpdate(waUpdateId(msg.id)))) return
 
   const chatId = waChatId(msg.phone)
-  await enqueue(chatId, () => processMessage(chatId, msg))
+  await enqueue(chatId, async () => {
+    if (isSocio) return processMessage(chatId, msg, null)
+    // Se vuelve a comprobar justo antes de contestar: si le han quitado el acceso
+    // mientras esperaba en la cola, ya no entra.
+    const current = await findTeamMemberByPhone(msg.phone)
+    if (!current) return
+    return processMessage(chatId, msg, current)
+  })
 }
 
 const HELP = `Soy el agente del CRM de Buffalo, el mismo que en Telegram. Escríbeme o mándame una nota de voz.
@@ -46,12 +60,24 @@ Para borrar algo siempre te pediré confirmarlo dos veces escribiendo un código
 
 Comandos: /nuevo (conversación nueva) · /pendientes (borrados por confirmar) · /ayuda`
 
-async function processMessage(chatId: number, msg: WaIncoming): Promise<void> {
+function teamHelp(member: TeamMember): string {
+  return `Soy el asistente del CRM de Buffalo para el equipo. Hola, ${member.name}.
+
+Puedo ver y gestionar tus tareas: las sueltas y las de tus proyectos, con sus subtareas. Crear, cambiar, mover de columna y borrar las tuyas.
+
+Para borrar algo siempre te pediré confirmarlo dos veces escribiendo un código.
+
+Comandos: /nuevo (conversación nueva) · /pendientes (borrados por confirmar) · /ayuda`
+}
+
+/** member = null: socio. Si no, la persona del equipo resuelta por su móvil. */
+async function processMessage(chatId: number, msg: WaIncoming, member: TeamMember | null): Promise<void> {
   const userId = Number(msg.phone)
-  const userName = msg.pushName.trim() || 'socio'
+  // El nombre del equipo sale del CRM, no del perfil de WhatsApp
+  const userName = member ? member.name : msg.pushName.trim() || 'socio'
   const raw = msg.text.trim()
 
-  if (raw.startsWith('/') && (await handleCommand(chatId, userId, raw))) return
+  if (raw.startsWith('/') && (await handleCommand(chatId, userId, raw, member))) return
   if (raw && (await handleWhatsAppConfirmation(chatId, userId, userName, raw))) return
   // Stickers, ubicaciones, contactos, reacciones…: no se pasan a la IA
   if (msg.kind === 'other' && !raw) {
@@ -71,13 +97,18 @@ async function processMessage(chatId: number, msg: WaIncoming): Promise<void> {
     const ctx: AgentContext = { chatId, userId, userName, pending: [], documents: [], actions: [] }
     let reply: string
     try {
-      reply = await runAgent(ctx, history, `${userName}: ${userText}`)
+      reply = member
+        ? await runTeamAgent(ctx, member, history, `${userName}: ${userText}`)
+        : await runAgent(ctx, history, `${userName}: ${userText}`)
     } catch (e) {
       console.error('[whatsapp-agent]', e)
       const detail = e instanceof Error ? e.message : String(e)
-      reply = /OpenRouter 402/.test(detail)
-        ? 'No puedo responder ahora: la cuenta de OpenRouter se ha quedado sin saldo. Recargad en openrouter.ai/settings/credits.'
-        : `Ha fallado algo: ${detail}`
+      reply = member
+        ? // Al equipo no se le enseñan errores internos
+          'Ha fallado algo y no he podido terminar. Prueba otra vez en un momento; si sigue, avisa a los socios.'
+        : /OpenRouter 402/.test(detail)
+          ? 'No puedo responder ahora: la cuenta de OpenRouter se ha quedado sin saldo. Recargad en openrouter.ai/settings/credits.'
+          : `Ha fallado algo: ${detail}`
     }
     await deliver(ctx, reply)
   } finally {
@@ -85,19 +116,19 @@ async function processMessage(chatId: number, msg: WaIncoming): Promise<void> {
   }
 }
 
-async function handleCommand(chatId: number, userId: number, raw: string): Promise<boolean> {
+async function handleCommand(chatId: number, userId: number, raw: string, member: TeamMember | null): Promise<boolean> {
   const phone = String(userId)
   const cmd = raw.split(/\s/)[0].toLowerCase()
   switch (cmd) {
     case '/start':
     case '/ayuda':
     case '/help':
-      await sendWhatsAppText(phone, HELP)
+      await sendWhatsAppText(phone, member ? teamHelp(member) : HELP)
       return true
     case '/nuevo':
     case '/reset':
       await saveMessage(chatId, userId, 'reset', '')
-      await sendWhatsAppText(phone, 'Conversación nueva. Las instrucciones y avisos guardados se mantienen.')
+      await sendWhatsAppText(phone, member ? 'Conversación nueva.' : 'Conversación nueva. Las instrucciones y avisos guardados se mantienen.')
       return true
     case '/pendientes': {
       const list = await listOpenPending(chatId)
