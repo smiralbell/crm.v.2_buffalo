@@ -624,6 +624,7 @@ export default function ProjectTaskBoard({
                         {expanded.has(task.id) && (task.subtasks?.length ?? 0) > 0 && (
                           <SubtaskList
                             compact
+                            parentTitle={task.title}
                             subtasks={task.subtasks}
                             onChange={(next) => updateSubtasks(task.id, next)}
                             className="mt-2 border-t border-gray-100 pt-2"
@@ -763,7 +764,12 @@ export default function ProjectTaskBoard({
               <p className="text-xs text-gray-500">
                 Los pasos para completar esta tarea. En el tablero se ven plegados dentro de la tarjeta.
               </p>
-              <SubtaskList subtasks={newSubtasks} onChange={setNewSubtasks} disabled={creating} />
+              <SubtaskList
+                subtasks={newSubtasks}
+                onChange={setNewSubtasks}
+                disabled={creating}
+                parentTitle={title.trim() || 'Nueva tarea'}
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700" htmlFor="task_files">
@@ -842,6 +848,7 @@ export default function ProjectTaskBoard({
                 <div className="mb-4 space-y-2">
                   <p className="text-sm font-medium text-gray-700">Subtareas</p>
                   <SubtaskList
+                    parentTitle={viewTask.title}
                     subtasks={viewTask.subtasks}
                     onChange={(next) => updateSubtasks(viewTask.id, next)}
                   />

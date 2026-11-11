@@ -306,6 +306,7 @@ export default function ChecklistBoard({
                             <SubtaskList
                               compact
                               autoFocus={!hasSubtasks}
+                              parentTitle={item.title}
                               subtasks={item.subtasks}
                               onChange={(next) => void onSubtasks(item.id, next)}
                               className={hasSubtasks ? 'mt-1.5' : ''}
@@ -347,6 +348,7 @@ export default function ChecklistBoard({
               </span>
               <SubtaskList
                 className="mt-1"
+                parentTitle={editing.title}
                 subtasks={items.find((i) => i.id === editing.id)?.subtasks ?? editing.subtasks}
                 onChange={(next) => void onSubtasks(editing.id, next)}
               />
