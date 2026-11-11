@@ -1,4 +1,5 @@
 import type { ProjectTask, TaskStatus } from './types'
+import { normalizeSubtasks } from '@/lib/subtasks'
 
 export const STALE_DAYS = 10
 export const STALE_EXTENSION_DAYS = 10
@@ -95,5 +96,6 @@ export function serializeTaskRow<T extends Record<string, unknown>>(row: T) {
           ? String(extensionUntil)
           : null,
     stale_notice_active: Boolean(row.stale_notice_active),
+    subtasks: normalizeSubtasks(row.subtasks),
   }
 }

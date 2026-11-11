@@ -19,7 +19,9 @@ import {
   type ChecklistRemindMode,
 } from '@/lib/checklist/types'
 import { checklistRemindMode } from '@/lib/checklist/remind'
-import { Check, GripVertical, Plus, Trash2 } from 'lucide-react'
+import { Check, GripVertical, ListChecks, Plus, Trash2 } from 'lucide-react'
+import SubtaskList, { SubtaskChip } from '@/components/subtasks/SubtaskList'
+import type { Subtask } from '@/lib/subtasks'
 
 interface ChecklistBoardProps {
   items: ChecklistItem[]
@@ -36,6 +38,7 @@ interface ChecklistBoardProps {
     }
   ) => Promise<void>
   onDelete: (id: number) => Promise<void>
+  onSubtasks: (id: number, subtasks: Subtask[]) => Promise<void>
   busyId?: number | null
 }
 
@@ -46,8 +49,17 @@ export default function ChecklistBoard({
   onMove,
   onUpdate,
   onDelete,
+  onSubtasks,
   busyId,
 }: ChecklistBoardProps) {
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
+  const toggleExpanded = (id: number) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   const [drafts, setDrafts] = useState<Record<string, string>>({
     inbox: '',
     santi: '',
@@ -201,10 +213,12 @@ export default function ChecklistBoard({
                 )}
                 {colItems.map((item, index) => {
                   const busy = busyId === item.id
+                  const open = expanded.has(item.id)
+                  const hasSubtasks = item.subtasks.length > 0
                   return (
                     <div
                       key={item.id}
-                      draggable={!busy}
+                      draggable={!busy && !open}
                       onDragStart={() => setDraggingId(item.id)}
                       onDragEnd={() => setDraggingId(null)}
                       onDragOver={(e) => e.preventDefault()}
@@ -213,12 +227,13 @@ export default function ChecklistBoard({
                         e.stopPropagation()
                         void handleDrop(col.id, index)
                       }}
-                      className={`group flex items-start gap-2 rounded-xl border bg-white px-2.5 py-2 shadow-sm transition ${
+                      className={`group rounded-xl border bg-white px-2.5 py-2 shadow-sm transition ${
                         draggingId === item.id
                           ? 'opacity-50 border-gray-300'
                           : 'border-gray-100 hover:border-gray-200'
                       } ${item.done ? 'opacity-70' : ''}`}
                     >
+                      <div className="flex items-start gap-2">
                       <span className="mt-1 text-gray-300 cursor-grab active:cursor-grabbing shrink-0">
                         <GripVertical className="h-4 w-4" />
                       </span>
@@ -255,6 +270,18 @@ export default function ChecklistBoard({
                           </p>
                         )}
                       </button>
+                      {!hasSubtasks && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(item.id)}
+                          className={`shrink-0 p-1 transition hover:text-gray-700 ${
+                            open ? 'text-gray-700' : 'opacity-0 group-hover:opacity-100 text-gray-300'
+                          }`}
+                          title="Añadir subtareas"
+                        >
+                          <ListChecks className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={busy}
@@ -264,6 +291,28 @@ export default function ChecklistBoard({
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
+                      </div>
+                      {(hasSubtasks || open) && (
+                        <div className="mt-1.5 pl-[3.25rem]">
+                          {hasSubtasks && (
+                            <SubtaskChip
+                              subtasks={item.subtasks}
+                              open={open}
+                              onToggle={() => toggleExpanded(item.id)}
+                              className="text-[10px] py-0"
+                            />
+                          )}
+                          {open && (
+                            <SubtaskList
+                              compact
+                              autoFocus={!hasSubtasks}
+                              subtasks={item.subtasks}
+                              onChange={(next) => void onSubtasks(item.id, next)}
+                              className={hasSubtasks ? 'mt-1.5' : ''}
+                            />
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -291,6 +340,18 @@ export default function ChecklistBoard({
               className="mt-1 rounded-xl"
             />
           </label>
+          {editing && (
+            <div>
+              <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                Subtareas
+              </span>
+              <SubtaskList
+                className="mt-1"
+                subtasks={items.find((i) => i.id === editing.id)?.subtasks ?? editing.subtasks}
+                onChange={(next) => void onSubtasks(editing.id, next)}
+              />
+            </div>
+          )}
           <label className="block">
             <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Recordatorio</span>
             <select

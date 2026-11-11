@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { normalizeRemindTime, normalizeWeekday } from '@/lib/checklist/remind'
+import { normalizeSubtasks, type Subtask } from '@/lib/subtasks'
 import {
   isChecklistColumnId,
   type ChecklistColumnId,
@@ -19,6 +20,7 @@ type Row = {
   created_at: Date
   updated_at: Date
   completed_at: Date | null
+  subtasks?: unknown
 }
 
 function mapTime(v: string | Date | null): string | null {
@@ -45,6 +47,7 @@ function mapRow(r: Row): ChecklistItem {
     created_at: r.created_at.toISOString(),
     updated_at: r.updated_at.toISOString(),
     completed_at: r.completed_at ? r.completed_at.toISOString() : null,
+    subtasks: normalizeSubtasks(r.subtasks),
   }
 }
 
@@ -63,6 +66,9 @@ export async function ensureChecklistSchema(): Promise<void> {
   await prisma.$executeRawUnsafe(
     `ALTER TABLE crm_checklist_items ADD COLUMN IF NOT EXISTS remind_time TEXT`
   )
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE crm_checklist_items ADD COLUMN IF NOT EXISTS subtasks JSONB NOT NULL DEFAULT '[]'::jsonb`
+  )
   schemaEnsured = true
 }
 
@@ -70,7 +76,7 @@ export async function listChecklistItems(): Promise<ChecklistItem[]> {
   await ensureChecklistSchema()
   const rows = await prisma.$queryRaw<Row[]>`
     SELECT id, title, done, column_key, position, remind_every_days, remind_weekday, remind_time,
-           last_reminded_at, created_at, updated_at, completed_at
+           last_reminded_at, created_at, updated_at, completed_at, subtasks
     FROM crm_checklist_items
     ORDER BY column_key ASC, position ASC, id ASC
   `
@@ -98,7 +104,7 @@ export async function createChecklistItem(input: {
     INSERT INTO crm_checklist_items (title, column_key, position, created_by_user_id, remind_every_days, remind_time)
     VALUES (${title}, ${column}, ${position}, ${input.createdByUserId ?? null}, 1, '09:00')
     RETURNING id, title, done, column_key, position, remind_every_days, remind_weekday, remind_time,
-              last_reminded_at, created_at, updated_at, completed_at
+              last_reminded_at, created_at, updated_at, completed_at, subtasks
   `
   return mapRow(rows[0])
 }
@@ -111,6 +117,7 @@ export type ChecklistItemPatch = {
   remind_every_days?: number
   remind_weekday?: number | null
   remind_time?: string | null
+  subtasks?: Subtask[]
 }
 
 export async function updateChecklistItem(
@@ -120,7 +127,7 @@ export async function updateChecklistItem(
   await ensureChecklistSchema()
   const existing = await prisma.$queryRaw<Row[]>`
     SELECT id, title, done, column_key, position, remind_every_days, remind_weekday, remind_time,
-           last_reminded_at, created_at, updated_at, completed_at
+           last_reminded_at, created_at, updated_at, completed_at, subtasks
     FROM crm_checklist_items WHERE id = ${id} LIMIT 1
   `
   const cur = existing[0]
@@ -142,6 +149,9 @@ export async function updateChecklistItem(
   const time =
     'remind_time' in patch ? normalizeRemindTime(patch.remind_time) : mapTime(cur.remind_time)
   const completedAt = done ? cur.completed_at ?? new Date() : null
+  const subtasks = JSON.stringify(
+    patch.subtasks !== undefined ? normalizeSubtasks(patch.subtasks) : normalizeSubtasks(cur.subtasks)
+  )
 
   const rows = await prisma.$queryRaw<Row[]>`
     UPDATE crm_checklist_items SET
@@ -153,10 +163,11 @@ export async function updateChecklistItem(
       remind_weekday = ${weekday},
       remind_time = ${time},
       completed_at = ${completedAt},
+      subtasks = ${subtasks}::jsonb,
       updated_at = NOW()
     WHERE id = ${id}
     RETURNING id, title, done, column_key, position, remind_every_days, remind_weekday, remind_time,
-              last_reminded_at, created_at, updated_at, completed_at
+              last_reminded_at, created_at, updated_at, completed_at, subtasks
   `
   return rows[0] ? mapRow(rows[0]) : null
 }

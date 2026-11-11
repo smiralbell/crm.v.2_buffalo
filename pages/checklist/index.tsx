@@ -1,9 +1,10 @@
 import { GetServerSideProps } from 'next'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Layout from '@/components/Layout'
 import { requireAuth } from '@/lib/auth'
 import ChecklistBoard from '@/components/checklist/ChecklistBoard'
 import type { ChecklistColumnId, ChecklistItem } from '@/lib/checklist/types'
+import type { Subtask } from '@/lib/subtasks'
 import { Button } from '@/components/ui/button'
 import { Loader2, RefreshCw } from 'lucide-react'
 
@@ -25,6 +26,8 @@ export default function ChecklistPage() {
   const [warning, setWarning] = useState('')
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState<number | null>(null)
+  /** Guardados de subtareas en cola por tarea, para que no lleguen desordenados. */
+  const subtaskSaves = useRef(new Map<number, Promise<void>>())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -137,6 +140,29 @@ export default function ChecklistPage() {
     }
   }
 
+  const onSubtasks = async (id: number, subtasks: Subtask[]) => {
+    setError('')
+    // Optimista: la lista se actualiza al momento y se guarda de fondo
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, subtasks } : i)))
+    const save = async () => {
+      try {
+        const res = await fetch(`/api/checklist/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subtasks }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'No se pudieron guardar las subtareas')
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Error')
+        await load()
+      }
+    }
+    const next = (subtaskSaves.current.get(id) ?? Promise.resolve()).then(save)
+    subtaskSaves.current.set(id, next)
+    await next
+  }
+
   const onDelete = async (id: number) => {
     setBusyId(id)
     setError('')
@@ -191,6 +217,7 @@ export default function ChecklistPage() {
             onMove={onMove}
             onUpdate={onUpdate}
             onDelete={onDelete}
+            onSubtasks={onSubtasks}
             busyId={busyId}
           />
         )}

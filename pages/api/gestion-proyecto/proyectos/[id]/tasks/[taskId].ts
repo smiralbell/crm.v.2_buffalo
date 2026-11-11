@@ -3,12 +3,23 @@ import { z } from 'zod'
 import { requireProjectAccessAPI } from '@/lib/gestion-proyecto/require-project-access'
 import { STALE_EXTENSION_DAYS, serializeTaskRow } from '@/lib/gestion-proyecto/task-stale'
 import { prisma } from '@/lib/prisma'
+import { saveProjectTaskSubtasks } from '@/lib/gestion-proyecto/task-subtasks'
 
 const dueDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida')
   .nullable()
   .optional()
+
+const subtasksSchema = z
+  .array(
+    z.object({
+      id: z.string().max(40).optional(),
+      title: z.string().max(300),
+      done: z.boolean().optional(),
+    })
+  )
+  .max(50, 'Máximo 50 subtareas')
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).optional(),
@@ -21,6 +32,7 @@ const updateTaskSchema = z.object({
   position: z.number().int().optional(),
   extend_stale: z.boolean().optional(),
   acknowledge_stale: z.boolean().optional(),
+  subtasks: subtasksSchema.optional(),
 })
 
 function formatTaskResponse(task: Record<string, unknown>) {
@@ -60,6 +72,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       const current = currentRows[0]
       if (!current) return res.status(404).json({ error: 'Tarea no encontrada' })
+
+      if (data.subtasks !== undefined) {
+        const saved = await saveProjectTaskSubtasks(projectId, taskId, data.subtasks)
+        if (!saved) return res.status(404).json({ error: 'Tarea no encontrada' })
+        const onlySubtasks = Object.entries(data).every(
+          ([key, value]) => key === 'subtasks' || value === undefined
+        )
+        if (onlySubtasks) return res.status(200).json(formatTaskResponse(saved))
+      }
 
       if (data.extend_stale) {
         const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
