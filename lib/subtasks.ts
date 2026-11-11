@@ -7,10 +7,13 @@ export interface Subtask {
   id: string
   title: string
   done: boolean
+  /** Explicación opcional de qué hay que hacer en este paso */
+  description?: string
 }
 
 export const MAX_SUBTASKS = 50
 export const MAX_SUBTASK_TITLE = 300
+export const MAX_SUBTASK_DESCRIPTION = 4000
 
 function randomId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
@@ -41,7 +44,9 @@ export function normalizeSubtasks(raw: unknown): Subtask[] {
     let id = typeof e.id === 'string' && e.id.trim() ? e.id.trim().slice(0, 40) : randomId()
     if (seen.has(id)) id = randomId()
     seen.add(id)
-    out.push({ id, title, done: e.done === true })
+    const description =
+      typeof e.description === 'string' ? e.description.trim().slice(0, MAX_SUBTASK_DESCRIPTION) : ''
+    out.push({ id, title, done: e.done === true, ...(description ? { description } : {}) })
     if (out.length >= MAX_SUBTASKS) break
   }
   return out

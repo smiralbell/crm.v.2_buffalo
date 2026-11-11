@@ -34,6 +34,17 @@ describe('normalizeSubtasks', () => {
     expect(out[0].id).toBe('x')
   })
 
+  it('guarda la descripción limpia y la omite si está vacía', () => {
+    const out = normalizeSubtasks([
+      { id: 'a', title: 'Con texto', description: '  Explicar el paso\ncon detalle  ' },
+      { id: 'b', title: 'Vacía', description: '   ' },
+      { id: 'c', title: 'Rara', description: 42 },
+    ])
+    expect(out[0]).toEqual({ id: 'a', title: 'Con texto', done: false, description: 'Explicar el paso\ncon detalle' })
+    expect(out[1]).toEqual({ id: 'b', title: 'Vacía', done: false })
+    expect(out[2]).toEqual({ id: 'c', title: 'Rara', done: false })
+  })
+
   it('corta en el máximo permitido', () => {
     const many = Array.from({ length: MAX_SUBTASKS + 10 }, (_, i) => ({ title: `Paso ${i}` }))
     expect(normalizeSubtasks(many)).toHaveLength(MAX_SUBTASKS)

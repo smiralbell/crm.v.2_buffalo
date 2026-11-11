@@ -17,6 +17,7 @@ const subtasksSchema = z
       id: z.string().max(40).optional(),
       title: z.string().max(300),
       done: z.boolean().optional(),
+      description: z.string().max(4000).optional(),
     })
   )
   .max(50, 'Máximo 50 subtareas')
