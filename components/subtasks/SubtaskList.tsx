@@ -1,20 +1,25 @@
 import { useState } from 'react'
-import { Check, ChevronDown, ListChecks, Plus, StickyNote, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, FileText, ListChecks, Plus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import {
-  MAX_SUBTASKS,
-  MAX_SUBTASK_DESCRIPTION,
-  MAX_SUBTASK_TITLE,
-  newSubtask,
-  subtaskProgress,
-  type Subtask,
-} from '@/lib/subtasks'
+import { MAX_SUBTASKS, newSubtask, subtaskProgress, type Subtask } from '@/lib/subtasks'
+import SubtaskViewer from '@/components/subtasks/SubtaskViewer'
 
 /** Cuántas subtareas se ven en una tarjeta antes de "Ver todas". */
 const COMPACT_VISIBLE = 5
 
 /** Para que escribir o hacer clic dentro no abra ni arrastre la tarjeta. */
 const stop = (e: React.SyntheticEvent) => e.stopPropagation()
+
+/** Quita símbolos de formato para el avance de una línea. */
+function plainPreview(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/[#>*_`~]+/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^\s*[-+]\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 interface ChipProps {
   subtasks: Subtask[] | undefined
@@ -60,16 +65,22 @@ interface ListProps {
   /** Dentro de una tarjeta: más pequeño y recortado a unas pocas filas. */
   compact?: boolean
   autoFocus?: boolean
+  /** Nombre de la tarea padre, se muestra al abrir una subtarea */
+  parentTitle?: string
   className?: string
 }
 
-/** Lista de subtareas con casilla, borrar y campo para añadir. */
+/**
+ * Lista de subtareas con casilla, borrar y campo para añadir.
+ * Al pulsar una subtarea se abre en grande para leer o escribir su explicación.
+ */
 export default function SubtaskList({
   subtasks,
   onChange,
   disabled,
   compact = false,
   autoFocus = false,
+  parentTitle,
   className,
 }: ListProps) {
   const list = subtasks || []
@@ -91,19 +102,7 @@ export default function SubtaskList({
 
   const toggle = (id: string) =>
     onChange(list.map((s) => (s.id === id ? { ...s, done: !s.done } : s)))
-  const remove = (id: string) => {
-    if (openId === id) setOpenId(null)
-    onChange(list.filter((s) => s.id !== id))
-  }
-  const edit = (id: string, patch: Partial<Pick<Subtask, 'title' | 'description'>>) =>
-    onChange(
-      list.map((s) => {
-        if (s.id !== id) return s
-        const next = { ...s, ...patch }
-        if (!next.description) delete next.description
-        return next
-      })
-    )
+  const remove = (id: string) => onChange(list.filter((s) => s.id !== id))
 
   return (
     <div
@@ -131,19 +130,28 @@ export default function SubtaskList({
       )}
 
       {visible.length > 0 && (
-        <ul className={cn('space-y-0.5', !compact && 'max-h-72 overflow-y-auto pr-1')}>
-          {visible.map((s) => {
-            const isOpen = openId === s.id
-            return (
-            <li key={s.id} className={cn('rounded-md', isOpen && 'bg-gray-50 ring-1 ring-gray-200')}>
-            <div className="group/sub flex items-start gap-2 rounded-md px-1 py-0.5 hover:bg-gray-50">
+        <ul
+          className={cn(
+            compact ? 'space-y-0.5' : 'max-h-[26rem] space-y-1.5 overflow-y-auto pr-1'
+          )}
+        >
+          {visible.map((s) => (
+            <li
+              key={s.id}
+              className={cn(
+                'group/sub flex items-start gap-2 transition',
+                compact
+                  ? 'rounded-md px-1 py-0.5 hover:bg-gray-50'
+                  : 'rounded-xl border border-gray-200 bg-white px-3 py-2.5 hover:border-gray-300 hover:shadow-sm'
+              )}
+            >
               <button
                 type="button"
                 disabled={disabled}
                 onClick={() => toggle(s.id)}
                 className={cn(
-                  'mt-0.5 flex shrink-0 items-center justify-center rounded border transition',
-                  compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
+                  'flex shrink-0 items-center justify-center rounded border transition',
+                  compact ? 'mt-0.5 h-3.5 w-3.5' : 'mt-0.5 h-[18px] w-[18px]',
                   s.done
                     ? 'border-emerald-600 bg-emerald-600 text-white'
                     : 'border-gray-300 bg-white hover:border-gray-400'
@@ -154,27 +162,38 @@ export default function SubtaskList({
               </button>
               <button
                 type="button"
-                onClick={() => setOpenId(isOpen ? null : s.id)}
+                onClick={() => setOpenId(s.id)}
                 className="min-w-0 flex-1 text-left"
-                title={isOpen ? 'Cerrar' : s.description ? 'Ver explicación' : 'Añadir explicación'}
+                title={s.description ? 'Leer la explicación' : 'Abrir para escribir una explicación'}
               >
                 <span
                   className={cn(
-                    'block leading-snug [overflow-wrap:anywhere]',
-                    compact ? 'text-xs' : 'text-sm',
-                    s.done ? 'text-gray-400 line-through' : 'text-gray-800'
+                    'flex items-start gap-1 leading-snug [overflow-wrap:anywhere]',
+                    compact ? 'text-xs' : 'text-sm font-medium',
+                    s.done ? 'text-gray-400 line-through' : 'text-gray-900'
                   )}
                 >
-                  {s.title}
-                  {s.description && !isOpen && (
-                    <StickyNote className="ml-1 inline h-3 w-3 -translate-y-px text-gray-400" />
+                  <span className="min-w-0">{s.title}</span>
+                  {s.description && compact && (
+                    <FileText className="mt-px h-3 w-3 shrink-0 text-indigo-400" />
                   )}
                 </span>
-                {s.description && !isOpen && !compact && (
-                  <span className="mt-0.5 block line-clamp-2 whitespace-pre-line text-xs leading-snug text-gray-500 [overflow-wrap:anywhere]">
-                    {s.description}
-                  </span>
-                )}
+                {!compact &&
+                  (s.description ? (
+                    <>
+                      <span className="mt-1 block line-clamp-2 text-[13px] leading-snug text-gray-500 [overflow-wrap:anywhere]">
+                        {plainPreview(s.description)}
+                      </span>
+                      <span className="mt-1 inline-flex items-center text-xs font-medium text-indigo-600 group-hover/sub:underline">
+                        Leer explicación
+                        <ChevronRight className="h-3 w-3" />
+                      </span>
+                    </>
+                  ) : (
+                    <span className="mt-0.5 block text-xs text-gray-400 sm:opacity-0 sm:group-hover/sub:opacity-100">
+                      + Añadir explicación
+                    </span>
+                  ))}
               </button>
               <button
                 type="button"
@@ -183,22 +202,10 @@ export default function SubtaskList({
                 className="shrink-0 p-0.5 text-gray-300 transition hover:text-red-600 sm:opacity-0 sm:group-hover/sub:opacity-100"
                 title="Quitar subtarea"
               >
-                <X className="h-3 w-3" />
+                <X className={compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
               </button>
-            </div>
-            {isOpen && (
-              <SubtaskDetail
-                key={s.id}
-                subtask={s}
-                compact={compact}
-                disabled={disabled}
-                onSave={(patch) => edit(s.id, patch)}
-                onClose={() => setOpenId(null)}
-              />
-            )}
             </li>
-            )
-          })}
+          ))}
         </ul>
       )}
 
@@ -246,77 +253,15 @@ export default function SubtaskList({
         </form>
       )}
       {full && <p className="px-1 text-[11px] text-gray-400">Máximo {MAX_SUBTASKS} subtareas.</p>}
-    </div>
-  )
-}
 
-interface DetailProps {
-  subtask: Subtask
-  compact: boolean
-  disabled?: boolean
-  onSave: (patch: { title?: string; description?: string }) => void
-  onClose: () => void
-}
-
-/** Título y explicación de una subtarea. Se guarda al salir de cada campo. */
-function SubtaskDetail({ subtask, compact, disabled, onSave, onClose }: DetailProps) {
-  const [title, setTitle] = useState(subtask.title)
-  const [description, setDescription] = useState(subtask.description ?? '')
-
-  const saveTitle = () => {
-    const next = title.trim()
-    if (!next) {
-      setTitle(subtask.title)
-      return
-    }
-    if (next !== subtask.title) onSave({ title: next })
-  }
-  const saveDescription = () => {
-    const next = description.trim()
-    if (next !== (subtask.description ?? '')) onSave({ description: next })
-  }
-
-  const field =
-    'w-full rounded-lg border border-gray-200 bg-white px-2 outline-none placeholder:text-gray-400 focus:border-gray-400'
-
-  return (
-    <div className="space-y-1.5 px-1 pb-1.5 pt-0.5">
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onBlur={saveTitle}
-        onKeyDown={(e) => {
-          e.stopPropagation()
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            e.currentTarget.blur()
-          }
-        }}
+      <SubtaskViewer
+        subtasks={list}
+        openId={openId}
+        onOpenIdChange={setOpenId}
+        onChange={onChange}
+        parentTitle={parentTitle}
         disabled={disabled}
-        maxLength={MAX_SUBTASK_TITLE}
-        placeholder="Título de la subtarea"
-        className={cn(field, compact ? 'h-7 text-xs' : 'h-9 text-sm font-medium')}
       />
-      <textarea
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        onBlur={saveDescription}
-        disabled={disabled}
-        maxLength={MAX_SUBTASK_DESCRIPTION}
-        autoFocus
-        rows={compact ? 3 : 4}
-        placeholder="Explica qué hay que hacer, enlaces, criterios…"
-        className={cn(field, 'resize-y py-1.5 leading-snug', compact ? 'text-xs' : 'text-sm')}
-      />
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-md px-2 py-0.5 text-[11px] font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-800"
-        >
-          Listo
-        </button>
-      </div>
     </div>
   )
 }
