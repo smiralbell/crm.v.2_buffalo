@@ -59,6 +59,11 @@ const TASK_TOOLS = [
   'tarea_mover',
   'tarea_subtareas',
   'tarea_borrar',
+  // Trabajo diario: lo que ha hecho cada día
+  'trabajo_registrar',
+  'trabajo_ver',
+  'trabajo_editar',
+  'trabajo_borrar',
   // Solo da formato a la respuesta (adjunta un listado largo); no lee nada
   'enviar_documento',
 ] as const
@@ -98,6 +103,7 @@ export function allowedToolNames(role: TeamRole): Set<string> {
 export const TEAM_READ_ONLY = new Set([
   'mis_tareas',
   'tarea_ver',
+  'trabajo_ver',
   'mis_proyectos',
   'proyecto_ver',
   'mcp_listar',

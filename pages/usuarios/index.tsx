@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ExternalLink, ListTodo, Loader2, UserPlus, RefreshCw } from 'lucide-react'
+import { ExternalLink, ListTodo, Loader2, ClipboardList, UserPlus, RefreshCw } from 'lucide-react'
 import type { CrmUserPublic } from '@/lib/crm-users'
 import type { CrmRole } from '@/lib/auth'
 import type { UserWorkStats } from '@/lib/developer/assignments'
@@ -196,6 +196,7 @@ export default function UsuariosPage() {
                         {u.stats?.open_tasks_count ?? '—'}
                       </td>
                       <td className="px-4 py-2 text-right">
+                        <div className="inline-flex gap-1.5">
                         <a
                           href={`/usuarios/${u.id}/tareas`}
                           target="_blank"
@@ -209,6 +210,22 @@ export default function UsuariosPage() {
                           Tareas
                           <ExternalLink className="h-3 w-3 text-gray-400" />
                         </a>
+                        {(u.role === 'developer' || u.role === 'project_manager') && (
+                          <a
+                            href={`/usuarios/${u.id}/trabajo`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900"
+                            title={`Abrir el trabajo diario de ${u.name} en una pestaña nueva`}
+                          >
+                            <ClipboardList className="h-3.5 w-3.5" />
+                            Trabajo
+                            <ExternalLink className="h-3 w-3 text-gray-400" />
+                          </a>
+                        )}
+                        </div>
                       </td>
                     </tr>
                   ))}

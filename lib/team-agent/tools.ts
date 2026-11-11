@@ -27,6 +27,8 @@ import {
 } from '@/lib/tareas/store'
 import type { WorkProject, WorkTask } from '@/lib/tareas/types'
 import { previewDelete, serializeRows } from '@/lib/telegram-agent/db-tools'
+import { addDays, groupByDay, isValidDay, todayMadrid, validateWorkItems } from '@/lib/trabajo/format'
+import { createWorkLog, getWorkEntry, listWorkEntries, updateWorkEntry } from '@/lib/trabajo/store'
 import { runMcpTool } from '@/lib/telegram-agent/mcp-tools'
 import { audit, createPending } from '@/lib/telegram-agent/store'
 import type { AgentContext, ToolSchema } from '@/lib/telegram-agent/tools'
@@ -158,6 +160,45 @@ const ALL_TOOLS: ToolSchema[] = [
     contenido: { type: 'string' },
     descripcion: { type: 'string' },
   }, ['nombre_archivo', 'contenido']),
+
+  // Trabajo diario (lo que ha hecho cada día)
+  tool(
+    'trabajo_registrar',
+    'Apunta en su Trabajo diario lo que cuenta que ha hecho (un día, una semana o varios días). Separa tú el mensaje en trabajos concretos, cada uno con su fecha, en español aunque te escriba en otro idioma. Guarda también el mensaje original tal cual.',
+    {
+      mensaje_original: { type: 'string', description: 'Lo que ha escrito o la transcripción del audio, tal cual' },
+      trabajos: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            fecha: { type: 'string', description: 'YYYY-MM-DD, nunca futura' },
+            titulo: { type: 'string', description: 'Corto, en español' },
+            detalle: { type: 'string', description: 'Qué, cómo, resultado o bloqueos (opcional)' },
+            proyecto: { type: 'string', description: 'Nombre de uno de sus proyectos, solo si está claro' },
+            horas: { type: 'number', description: 'Solo si lo dice' },
+          },
+          required: ['fecha', 'titulo'],
+        },
+      },
+    },
+    ['mensaje_original', 'trabajos']
+  ),
+  tool('trabajo_ver', 'Lo que tiene apuntado en su Trabajo diario entre dos fechas (por defecto, los últimos 7 días).', {
+    desde: { type: 'string', description: 'YYYY-MM-DD' },
+    hasta: { type: 'string', description: 'YYYY-MM-DD' },
+  }),
+  tool('trabajo_editar', 'Corrige un trabajo apuntado. Solo se cambia lo que mandes.', {
+    id: { type: 'string' },
+    fecha: { type: 'string' },
+    titulo: { type: 'string' },
+    detalle: { type: 'string' },
+    proyecto: { type: 'string', description: 'Nombre de uno de sus proyectos, o "" para quitarlo' },
+    horas: { type: 'number' },
+  }, ['id']),
+  tool('trabajo_borrar', 'Pide borrar un trabajo apuntado. NO lo borra: le llegan dos códigos para confirmarlo.', {
+    id: { type: 'string' },
+  }, ['id']),
 
   // Developers
   tool('tickets_listar', 'Tickets de clientes asignados a ti en tus proyectos.', {
@@ -560,6 +601,98 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
         caption: args.descripcion ? String(args.descripcion) : undefined,
       })
       return { ok: true, adjunto: filename }
+    }
+
+    // ——— Trabajo diario: siempre el de esta persona ———
+    case 'trabajo_registrar': {
+      const today = todayMadrid()
+      const checked = validateWorkItems(args.trabajos, { today, projects: scope.projects })
+      if (!checked.ok) return checked
+      const saved = await createWorkLog({
+        userId: me.id,
+        items: checked.items,
+        rawText: String(args.mensaje_original ?? '').trim() || null,
+        source: 'whatsapp',
+        createdByName: me.name,
+      })
+      return {
+        ok: true,
+        apuntados: groupByDay(saved.entries).map((d) => ({
+          dia: d.date,
+          trabajos: d.entries.map((e) => ({ titulo: e.title, proyecto: e.project_name, horas: e.hours })),
+        })),
+        ...(checked.warnings.length ? { avisos: checked.warnings } : {}),
+        enlace: `${baseUrl()}/trabajo`,
+      }
+    }
+
+    case 'trabajo_ver': {
+      const today = todayMadrid()
+      const to = isValidDay(args.hasta) ? String(args.hasta) : today
+      const from = isValidDay(args.desde) ? String(args.desde) : addDays(to, -6)
+      if (from > to) return fail('La fecha inicial va después de la final')
+      const entries = await listWorkEntries({ userIds: [me.id], from, to })
+      return {
+        ok: true,
+        desde: from,
+        hasta: to,
+        dias: groupByDay(entries).map((d) => ({
+          dia: d.date,
+          horas: d.hours || undefined,
+          trabajos: d.entries.map((e) => ({ id: e.id, titulo: e.title, detalle: e.detail, proyecto: e.project_name, horas: e.hours })),
+        })),
+      }
+    }
+
+    case 'trabajo_editar': {
+      const id = String(args.id ?? '').trim()
+      if (!UUID_RE.test(id)) return fail('id no válido: sácalo de trabajo_ver')
+      const entry = await getWorkEntry(id)
+      if (!entry || entry.user_id !== me.id) return fail('No tienes ningún trabajo con ese id')
+      const checked = validateWorkItems(
+        [
+          {
+            fecha: args.fecha ?? entry.work_date,
+            titulo: args.titulo ?? entry.title,
+            detalle: args.detalle !== undefined ? args.detalle : entry.detail,
+            proyecto: args.proyecto !== undefined ? args.proyecto : entry.project_id,
+            horas: args.horas !== undefined ? args.horas : entry.hours,
+          },
+        ],
+        { today: todayMadrid(), projects: scope.projects }
+      )
+      if (!checked.ok) return checked
+      const item = checked.items[0]
+      if (args.proyecto === undefined) item.project_id = entry.project_id
+      const updated = await updateWorkEntry(entry, item)
+      return updated
+        ? { ok: true, trabajo: { dia: updated.work_date, titulo: updated.title, proyecto: updated.project_name, horas: updated.hours } }
+        : fail('No se pudo guardar')
+    }
+
+    case 'trabajo_borrar': {
+      const id = String(args.id ?? '').trim()
+      if (!UUID_RE.test(id)) return fail('id no válido: sácalo de trabajo_ver')
+      const entry = await getWorkEntry(id)
+      if (!entry || entry.user_id !== me.id) return fail('No tienes ningún trabajo con ese id')
+      // El filtro vuelve a exigir que sea suyo al ejecutar el borrado
+      const preview = await previewDelete({
+        tabla: 'crm_work_entries',
+        where_sql: 'id = $1::uuid AND user_id = $2',
+        where_params: [entry.id, me.id],
+        max_filas: 1,
+      })
+      if (!preview.ok) return preview
+      const pending = await createPending({
+        chatId: ctx.chatId,
+        requestedBy: ctx.userId,
+        kind: 'delete_rows',
+        payload: preview.payload as unknown as Record<string, unknown>,
+        summary: `Borrar del trabajo diario: "${entry.title}" (${entry.work_date})`,
+        preview: { tabla: 'crm_work_entries', filas: preview.count, muestra: preview.sample },
+      })
+      ctx.pending.push(pending)
+      return { ok: true, estado: 'PENDIENTE_DOBLE_CONFIRMACION', mensaje: 'No se ha borrado todavía: le llegan dos códigos para confirmarlo.' }
     }
 
     // ——— Tickets (developers) ———

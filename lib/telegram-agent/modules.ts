@@ -92,6 +92,8 @@ export const AGENT_MODULES: AgentModule[] = [
       'proyectos',
       'project_dev_tasks',
       'crm_user_tasks',
+      'crm_work_entries',
+      'crm_work_reports',
       'project_dev_task_attachments',
       'project_dev_onboarding',
       'project_dev_onboarding_docs',
@@ -118,7 +120,8 @@ export const AGENT_MODULES: AgentModule[] = [
   - Subtareas: los pasos de una tarea, cada uno con su explicación. Se gestionan con tareas_subtareas.
   - Estados: pendiente, en_curso, validacion (validación por Buffalo), hecha. "Retirar" o "quitar de en medio" una tarea = moverla a hecha o borrarla; si no está claro, pregunta.
   - Borrar: tareas_borrar (pasa por la doble confirmación del socio).
-  - La tabla tasks es otra cosa (tareas comerciales antiguas): no la uses para esto.`,
+  - La tabla tasks es otra cosa (tareas comerciales antiguas): no la uses para esto.
+- TRABAJO DIARIO (lo que ya ha hecho cada developer/PM, por días): trabajo_consultar. Tareas = por hacer; trabajo diario = hecho.`,
   },
   {
     key: 'finanzas',
