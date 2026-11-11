@@ -23,6 +23,7 @@ import {
   Copy,
   ListChecks,
   ListTodo,
+  ClipboardList,
   HelpCircle,
   Video,
 } from 'lucide-react'
@@ -155,6 +156,8 @@ const NAV: NavItem[] = [
   },
   // Tareas sueltas + las de sus proyectos. El admin no lo tiene: pone tareas desde Usuarios.
   { href: '/tareas', label: 'Tareas', icon: ListTodo, roles: ['developer', 'comercial', 'project_manager'] },
+  // Lo que ha hecho cada día (también se apunta desde el agente de WhatsApp)
+  { href: '/trabajo', label: 'Trabajo diario', icon: ClipboardList, roles: ['developer', 'project_manager'] },
   { href: '/calendario', label: 'Calendario', icon: Calendar, roles: ['admin'] },
   { href: '/checklist', label: 'Checklist', icon: ListChecks, roles: ['admin'] },
 ]
@@ -193,7 +196,7 @@ export default function Sidebar({
     if (!role) return []
     const items = NAV.filter((item) => !item.roles || item.roles.includes(role))
     if (role === 'developer') {
-      const order = ['/developer', '/tareas', '/gestion-proyecto', '/retencion', '/developer/facturas']
+      const order = ['/developer', '/tareas', '/trabajo', '/gestion-proyecto', '/retencion', '/developer/facturas']
       return [...items].sort((a, b) => order.indexOf(a.href) - order.indexOf(b.href))
     }
     if (role === 'comercial') {

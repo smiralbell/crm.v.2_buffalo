@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Loader2, Plus, Trash2, FolderKanban, Copy, KeyRound, Eye, EyeOff, Pencil, ListTodo, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Trash2, FolderKanban, Copy, KeyRound, Eye, EyeOff, Pencil, ListTodo, ExternalLink, ClipboardList } from 'lucide-react'
 import type { DeveloperAssignment } from '@/lib/developer/assignments'
 import type { CrmRole } from '@/lib/auth'
 import UserProjectsEditor from '@/components/usuarios/UserProjectsEditor'
@@ -465,6 +465,29 @@ export default function UsuarioDetailPage() {
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </div>
+
+            {(isDeveloperUser || user.role === 'project_manager') && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white px-5 py-4">
+                <div className="min-w-0">
+                  <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                    <ClipboardList className="h-4 w-4 text-gray-500" />
+                    Trabajo diario
+                  </h2>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    Lo que ha hecho cada día, en historia o calendario, con el mensaje original si lo contó por WhatsApp.
+                  </p>
+                </div>
+                <a
+                  href={`/usuarios/${user.id}/trabajo`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gray-900 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+                >
+                  Abrir trabajo
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+            )}
 
             {(isDeveloperUser || user.role === 'project_manager') && (
               <UserWhatsAppAgentCard

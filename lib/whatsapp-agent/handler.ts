@@ -65,6 +65,8 @@ function teamHelp(member: TeamMember): string {
 
 Puedo ver y gestionar tus tareas: las sueltas y las de tus proyectos, con sus subtareas. Crear, cambiar, mover de columna y borrar las tuyas.
 
+También llevo tu trabajo diario: cuéntame lo que has hecho hoy, ayer o esta semana (por texto o con un audio, en el idioma que quieras) y lo apunto separado por días.
+
 Para borrar algo siempre te pediré confirmarlo dos veces escribiendo un código.
 
 Comandos: /nuevo (conversación nueva) · /pendientes (borrados por confirmar) · /ayuda`

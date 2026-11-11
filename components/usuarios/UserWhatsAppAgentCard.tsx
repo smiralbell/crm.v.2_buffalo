@@ -74,7 +74,7 @@ export default function UserWhatsAppAgentCard({ userId, userName }: Props) {
         )}
       </h2>
       <p className="mt-0.5 max-w-xl text-xs text-gray-500">
-        {userName} podrá escribir al agente desde este móvil. De momento solo tiene acceso a su módulo de Tareas: sus
+        {userName} podrá escribir al agente desde este móvil. De momento solo tiene acceso a su Trabajo diario (lo que ha hecho, también por audio) y a su módulo de Tareas: sus
         tareas sueltas y las de sus proyectos. Nada de facturación, proyectos ni otros usuarios. El agente lo reconoce
         por el número, no por lo que diga en el chat.
       </p>

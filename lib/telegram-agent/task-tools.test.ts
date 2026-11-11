@@ -26,6 +26,9 @@ describe('herramientas de tareas del agente', () => {
     expect(names(orchestratorTools())).toEqual(expect.arrayContaining(all))
     expect(names(subagentTools(getModule('proyectos')!))).toEqual(expect.arrayContaining(all))
     expect(names(subagentTools(getModule('finanzas')!))).not.toContain('tareas_crear')
+    // Los socios consultan el trabajo diario del equipo
+    expect(names(orchestratorTools())).toContain('trabajo_consultar')
+    expect(names(subagentTools(getModule('proyectos')!))).toContain('trabajo_consultar')
   })
 
   it('los campos obligatorios existen en cada esquema', () => {
