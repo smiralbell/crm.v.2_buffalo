@@ -1,3 +1,5 @@
+import type { Subtask } from '@/lib/subtasks'
+
 export type TaskStatus = 'pending' | 'in_progress' | 'buffalo_validation' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high'
 export type DocType = 'link' | 'file'
@@ -79,6 +81,8 @@ export interface ProjectTask {
   created_at: string
   updated_at: string
   attachments?: ProjectTaskAttachment[]
+  /** Pasos dentro de la tarea; se muestran plegados en la tarjeta */
+  subtasks?: Subtask[]
 }
 
 export interface ProjectDashboardTimeline {

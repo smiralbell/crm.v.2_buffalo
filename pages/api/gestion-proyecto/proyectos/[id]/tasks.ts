@@ -3,12 +3,23 @@ import { z } from 'zod'
 import { requireProjectAccessAPI } from '@/lib/gestion-proyecto/require-project-access'
 import { serializeTaskRow } from '@/lib/gestion-proyecto/task-stale'
 import { prisma } from '@/lib/prisma'
+import { saveProjectTaskSubtasks } from '@/lib/gestion-proyecto/task-subtasks'
 
 const dueDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida')
   .optional()
   .nullable()
+
+const subtasksSchema = z
+  .array(
+    z.object({
+      id: z.string().max(40).optional(),
+      title: z.string().max(300),
+      done: z.boolean().optional(),
+    })
+  )
+  .max(50, 'Máximo 50 subtareas')
 
 const createTaskSchema = z.object({
   title: z.string().min(1, 'El título es obligatorio'),
@@ -18,6 +29,7 @@ const createTaskSchema = z.object({
   assignee: z.string().optional(),
   estimated_hours: z.number().positive().optional(),
   due_date: dueDateSchema,
+  subtasks: subtasksSchema.optional(),
 })
 
 function formatTask(task: Record<string, unknown>) {
@@ -62,6 +74,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `
       const position = (maxPos[0]?.max_pos ?? -1) + 1
       const dueDate = data.due_date ?? null
+      const withSubtasks = async (row: Record<string, unknown>) => {
+        if (!data.subtasks?.length) return row
+        return (await saveProjectTaskSubtasks(projectId, String(row.id), data.subtasks)) ?? row
+      }
 
       try {
         const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
@@ -81,7 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           )
           RETURNING *
         `
-        return res.status(201).json(formatTask(rows[0]))
+        return res.status(201).json(formatTask(await withSubtasks(rows[0])))
       } catch (insertError) {
         const msg = insertError instanceof Error ? insertError.message : ''
         if (msg.includes('due_date')) {
@@ -101,7 +117,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             )
             RETURNING *
           `
-          return res.status(201).json({ ...formatTask(rows[0]), due_date: dueDate })
+          return res.status(201).json({ ...formatTask(await withSubtasks(rows[0])), due_date: dueDate })
         }
         if (!msg.includes('estimated_hours') && !msg.includes('status_changed_at')) throw insertError
         const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
@@ -119,7 +135,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           RETURNING *
         `
         return res.status(201).json({
-          ...formatTask(rows[0]),
+          ...formatTask(await withSubtasks(rows[0])),
           estimated_hours: data.estimated_hours ?? null,
           due_date: dueDate,
         })

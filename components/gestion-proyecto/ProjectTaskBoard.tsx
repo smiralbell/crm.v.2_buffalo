@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -36,6 +36,8 @@ import {
 import type { ProjectTask, TaskPriority, TaskStatus } from '@/lib/gestion-proyecto/types'
 import ProjectTaskCalendar from '@/components/gestion-proyecto/ProjectTaskCalendar'
 import ProjectTaskGantt from '@/components/gestion-proyecto/ProjectTaskGantt'
+import SubtaskList, { SubtaskChip } from '@/components/subtasks/SubtaskList'
+import type { Subtask } from '@/lib/subtasks'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -101,6 +103,21 @@ export default function ProjectTaskBoard({
   const [deleteTarget, setDeleteTarget] = useState<ProjectTask | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [staleActionId, setStaleActionId] = useState<string | null>(null)
+  const [newSubtasks, setNewSubtasks] = useState<Subtask[]>([])
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  /** Guardados de subtareas en cola por tarea, para que no lleguen desordenados. */
+  const subtaskSaves = useRef(new Map<string, Promise<void>>())
+  /** Última lista de tareas, para no pisar cambios hechos mientras se guarda. */
+  const tasksRef = useRef(tasks)
+  tasksRef.current = tasks
+
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   const assigneeColors = useMemo(
     () => buildAssigneeColorMap(tasks, teamMembers),
@@ -140,6 +157,7 @@ export default function ProjectTaskBoard({
     setEstimatedHours('')
     setDueDate('')
     setFiles([])
+    setNewSubtasks([])
     setCreateOpen(true)
   }
 
@@ -173,6 +191,7 @@ export default function ProjectTaskBoard({
           assignee: assignee.trim() || undefined,
           estimated_hours: estimatedHours ? Number(estimatedHours) : undefined,
           due_date: dueDate || null,
+          subtasks: newSubtasks.length > 0 ? newSubtasks : undefined,
         }),
       })
       const data = await res.json()
@@ -322,6 +341,34 @@ export default function ProjectTaskBoard({
     } finally {
       setStaleActionId(null)
     }
+  }
+
+  const updateSubtasks = (taskId: string, subtasks: Subtask[]) => {
+    // Optimista: se ve al momento y se guarda de fondo
+    const prevTask = tasksRef.current.find((t) => t.id === taskId)
+    const nextTasks = tasksRef.current.map((t) => (t.id === taskId ? { ...t, subtasks } : t))
+    tasksRef.current = nextTasks
+    onChange(nextTasks)
+    setViewTask((v) => (v && v.id === taskId ? { ...v, subtasks } : v))
+
+    const save = async () => {
+      try {
+        const res = await fetch(`/api/gestion-proyecto/proyectos/${projectId}/tasks/${taskId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subtasks }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || 'No se pudieron guardar las subtareas')
+      } catch (e) {
+        const restore = prevTask?.subtasks ?? []
+        onChange(tasksRef.current.map((t) => (t.id === taskId ? { ...t, subtasks: restore } : t)))
+        setViewTask((v) => (v && v.id === taskId ? { ...v, subtasks: restore } : v))
+        alert(e instanceof Error ? e.message : 'Error al guardar subtareas')
+      }
+    }
+    const next = (subtaskSaves.current.get(taskId) ?? Promise.resolve()).then(save)
+    subtaskSaves.current.set(taskId, next)
   }
 
   const columnLabel = (status: TaskStatus) => TASK_STATUS_LABELS[status] || status
@@ -566,7 +613,22 @@ export default function ProjectTaskBoard({
                               {formatDue(task.due_date)}
                             </span>
                           )}
+                          {(task.subtasks?.length ?? 0) > 0 && (
+                            <SubtaskChip
+                              subtasks={task.subtasks}
+                              open={expanded.has(task.id)}
+                              onToggle={() => toggleExpanded(task.id)}
+                            />
+                          )}
                         </div>
+                        {expanded.has(task.id) && (task.subtasks?.length ?? 0) > 0 && (
+                          <SubtaskList
+                            compact
+                            subtasks={task.subtasks}
+                            onChange={(next) => updateSubtasks(task.id, next)}
+                            className="mt-2 border-t border-gray-100 pt-2"
+                          />
+                        )}
                       </div>
                     </div>
 
@@ -697,6 +759,13 @@ export default function ProjectTaskBoard({
               </div>
             </div>
             <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Subtareas (opcional)</p>
+              <p className="text-xs text-gray-500">
+                Los pasos para completar esta tarea. En el tablero se ven plegados dentro de la tarjeta.
+              </p>
+              <SubtaskList subtasks={newSubtasks} onChange={setNewSubtasks} disabled={creating} />
+            </div>
+            <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700" htmlFor="task_files">
                 Adjuntos (opcional)
               </label>
@@ -768,6 +837,13 @@ export default function ProjectTaskBoard({
                       void patchTaskMeta(viewTask.id, { due_date: next })
                     }}
                     className="max-w-xs"
+                  />
+                </div>
+                <div className="mb-4 space-y-2">
+                  <p className="text-sm font-medium text-gray-700">Subtareas</p>
+                  <SubtaskList
+                    subtasks={viewTask.subtasks}
+                    onChange={(next) => updateSubtasks(viewTask.id, next)}
                   />
                 </div>
                 {viewTask.description ? (

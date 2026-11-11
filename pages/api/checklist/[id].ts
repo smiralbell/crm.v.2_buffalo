@@ -7,6 +7,7 @@ import {
   updateChecklistItem,
 } from '@/lib/checklist/store'
 import { isChecklistColumnId } from '@/lib/checklist/types'
+import { normalizeSubtasks } from '@/lib/subtasks'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -23,6 +24,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'PATCH') {
       const { title, done, column_key, position, remind_every_days, remind_weekday, remind_time } =
         req.body || {}
+      const rawSubtasks = (req.body || {}).subtasks
+      if (rawSubtasks !== undefined && !Array.isArray(rawSubtasks)) {
+        return res.status(400).json({ error: 'Subtareas inválidas' })
+      }
+      const subtasks = rawSubtasks !== undefined ? normalizeSubtasks(rawSubtasks) : undefined
       const remind =
         typeof remind_every_days === 'number' && Number.isFinite(remind_every_days)
           ? Math.max(0, Math.min(365, Math.floor(remind_every_days)))
@@ -57,13 +63,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
         if (!item) return res.status(404).json({ error: 'No encontrado' })
 
-        if (title != null || done != null || remind != null || weekday !== undefined || time !== undefined) {
+        if (
+          title != null ||
+          done != null ||
+          remind != null ||
+          weekday !== undefined ||
+          time !== undefined ||
+          subtasks !== undefined
+        ) {
           const updated = await updateChecklistItem(id, {
             title: typeof title === 'string' ? title : undefined,
             done: typeof done === 'boolean' ? done : undefined,
             ...(remind != null ? { remind_every_days: remind } : {}),
             ...(weekday !== undefined ? { remind_weekday: weekday } : {}),
             ...(time !== undefined ? { remind_time: time } : {}),
+            ...(subtasks !== undefined ? { subtasks } : {}),
           })
           return res.status(200).json({ item: updated })
         }
@@ -76,6 +90,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ...(remind != null ? { remind_every_days: remind } : {}),
         ...(weekday !== undefined ? { remind_weekday: weekday } : {}),
         ...(time !== undefined ? { remind_time: time } : {}),
+        ...(subtasks !== undefined ? { subtasks } : {}),
       })
       if (!item) return res.status(404).json({ error: 'No encontrado' })
       return res.status(200).json({ item })

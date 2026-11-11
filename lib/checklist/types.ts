@@ -8,6 +8,7 @@ export type ChecklistColumnId = (typeof CHECKLIST_COLUMNS)[number]['id']
 
 export { WEEKDAY_OPTIONS, checklistRemindLabel } from '@/lib/checklist/remind'
 export type { ChecklistRemindMode } from '@/lib/checklist/remind'
+import type { Subtask } from '@/lib/subtasks'
 
 export interface ChecklistItem {
   id: number
@@ -22,6 +23,8 @@ export interface ChecklistItem {
   created_at: string
   updated_at: string
   completed_at: string | null
+  /** Pasos dentro de la tarea; no salen como tarjetas propias */
+  subtasks: Subtask[]
 }
 
 export function isChecklistColumnId(v: unknown): v is ChecklistColumnId {
