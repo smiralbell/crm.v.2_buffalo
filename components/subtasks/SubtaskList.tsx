@@ -1,7 +1,14 @@
 import { useState } from 'react'
-import { Check, ChevronDown, ListChecks, Plus, X } from 'lucide-react'
+import { Check, ChevronDown, ListChecks, Plus, StickyNote, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { MAX_SUBTASKS, newSubtask, subtaskProgress, type Subtask } from '@/lib/subtasks'
+import {
+  MAX_SUBTASKS,
+  MAX_SUBTASK_DESCRIPTION,
+  MAX_SUBTASK_TITLE,
+  newSubtask,
+  subtaskProgress,
+  type Subtask,
+} from '@/lib/subtasks'
 
 /** Cuántas subtareas se ven en una tarjeta antes de "Ver todas". */
 const COMPACT_VISIBLE = 5
@@ -68,6 +75,7 @@ export default function SubtaskList({
   const list = subtasks || []
   const [draft, setDraft] = useState('')
   const [showAll, setShowAll] = useState(false)
+  const [openId, setOpenId] = useState<string | null>(null)
   const { done, total } = subtaskProgress(list)
   const full = list.length >= MAX_SUBTASKS
 
@@ -83,7 +91,19 @@ export default function SubtaskList({
 
   const toggle = (id: string) =>
     onChange(list.map((s) => (s.id === id ? { ...s, done: !s.done } : s)))
-  const remove = (id: string) => onChange(list.filter((s) => s.id !== id))
+  const remove = (id: string) => {
+    if (openId === id) setOpenId(null)
+    onChange(list.filter((s) => s.id !== id))
+  }
+  const edit = (id: string, patch: Partial<Pick<Subtask, 'title' | 'description'>>) =>
+    onChange(
+      list.map((s) => {
+        if (s.id !== id) return s
+        const next = { ...s, ...patch }
+        if (!next.description) delete next.description
+        return next
+      })
+    )
 
   return (
     <div
@@ -112,8 +132,11 @@ export default function SubtaskList({
 
       {visible.length > 0 && (
         <ul className={cn('space-y-0.5', !compact && 'max-h-72 overflow-y-auto pr-1')}>
-          {visible.map((s) => (
-            <li key={s.id} className="group/sub flex items-start gap-2 rounded-md px-1 py-0.5 hover:bg-gray-50">
+          {visible.map((s) => {
+            const isOpen = openId === s.id
+            return (
+            <li key={s.id} className={cn('rounded-md', isOpen && 'bg-gray-50 ring-1 ring-gray-200')}>
+            <div className="group/sub flex items-start gap-2 rounded-md px-1 py-0.5 hover:bg-gray-50">
               <button
                 type="button"
                 disabled={disabled}
@@ -129,15 +152,30 @@ export default function SubtaskList({
               >
                 {s.done && <Check className={compact ? 'h-2.5 w-2.5' : 'h-3 w-3'} />}
               </button>
-              <span
-                className={cn(
-                  'min-w-0 flex-1 leading-snug [overflow-wrap:anywhere]',
-                  compact ? 'text-xs' : 'text-sm',
-                  s.done ? 'text-gray-400 line-through' : 'text-gray-800'
-                )}
+              <button
+                type="button"
+                onClick={() => setOpenId(isOpen ? null : s.id)}
+                className="min-w-0 flex-1 text-left"
+                title={isOpen ? 'Cerrar' : s.description ? 'Ver explicación' : 'Añadir explicación'}
               >
-                {s.title}
-              </span>
+                <span
+                  className={cn(
+                    'block leading-snug [overflow-wrap:anywhere]',
+                    compact ? 'text-xs' : 'text-sm',
+                    s.done ? 'text-gray-400 line-through' : 'text-gray-800'
+                  )}
+                >
+                  {s.title}
+                  {s.description && !isOpen && (
+                    <StickyNote className="ml-1 inline h-3 w-3 -translate-y-px text-gray-400" />
+                  )}
+                </span>
+                {s.description && !isOpen && !compact && (
+                  <span className="mt-0.5 block line-clamp-2 whitespace-pre-line text-xs leading-snug text-gray-500 [overflow-wrap:anywhere]">
+                    {s.description}
+                  </span>
+                )}
+              </button>
               <button
                 type="button"
                 disabled={disabled}
@@ -147,8 +185,20 @@ export default function SubtaskList({
               >
                 <X className="h-3 w-3" />
               </button>
+            </div>
+            {isOpen && (
+              <SubtaskDetail
+                key={s.id}
+                subtask={s}
+                compact={compact}
+                disabled={disabled}
+                onSave={(patch) => edit(s.id, patch)}
+                onClose={() => setOpenId(null)}
+              />
+            )}
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
 
@@ -196,6 +246,77 @@ export default function SubtaskList({
         </form>
       )}
       {full && <p className="px-1 text-[11px] text-gray-400">Máximo {MAX_SUBTASKS} subtareas.</p>}
+    </div>
+  )
+}
+
+interface DetailProps {
+  subtask: Subtask
+  compact: boolean
+  disabled?: boolean
+  onSave: (patch: { title?: string; description?: string }) => void
+  onClose: () => void
+}
+
+/** Título y explicación de una subtarea. Se guarda al salir de cada campo. */
+function SubtaskDetail({ subtask, compact, disabled, onSave, onClose }: DetailProps) {
+  const [title, setTitle] = useState(subtask.title)
+  const [description, setDescription] = useState(subtask.description ?? '')
+
+  const saveTitle = () => {
+    const next = title.trim()
+    if (!next) {
+      setTitle(subtask.title)
+      return
+    }
+    if (next !== subtask.title) onSave({ title: next })
+  }
+  const saveDescription = () => {
+    const next = description.trim()
+    if (next !== (subtask.description ?? '')) onSave({ description: next })
+  }
+
+  const field =
+    'w-full rounded-lg border border-gray-200 bg-white px-2 outline-none placeholder:text-gray-400 focus:border-gray-400'
+
+  return (
+    <div className="space-y-1.5 px-1 pb-1.5 pt-0.5">
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onBlur={saveTitle}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            e.currentTarget.blur()
+          }
+        }}
+        disabled={disabled}
+        maxLength={MAX_SUBTASK_TITLE}
+        placeholder="Título de la subtarea"
+        className={cn(field, compact ? 'h-7 text-xs' : 'h-9 text-sm font-medium')}
+      />
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        onBlur={saveDescription}
+        disabled={disabled}
+        maxLength={MAX_SUBTASK_DESCRIPTION}
+        autoFocus
+        rows={compact ? 3 : 4}
+        placeholder="Explica qué hay que hacer, enlaces, criterios…"
+        className={cn(field, 'resize-y py-1.5 leading-snug', compact ? 'text-xs' : 'text-sm')}
+      />
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md px-2 py-0.5 text-[11px] font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+        >
+          Listo
+        </button>
+      </div>
     </div>
   )
 }
