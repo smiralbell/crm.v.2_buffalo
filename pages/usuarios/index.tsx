@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, UserPlus, RefreshCw } from 'lucide-react'
+import { ExternalLink, ListTodo, Loader2, UserPlus, RefreshCw } from 'lucide-react'
 import type { CrmUserPublic } from '@/lib/crm-users'
 import type { CrmRole } from '@/lib/auth'
 import type { UserWorkStats } from '@/lib/developer/assignments'
@@ -144,6 +144,9 @@ export default function UsuariosPage() {
                     <th className="px-4 py-3 text-center font-medium">Asignaciones</th>
                     <th className="px-4 py-3 text-center font-medium">Tickets</th>
                     <th className="px-4 py-3 text-center font-medium">Tareas</th>
+                    <th className="px-4 py-3 text-right font-medium">
+                      <span className="sr-only">Acceso rápido</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -191,6 +194,21 @@ export default function UsuariosPage() {
                       </td>
                       <td className="px-4 py-3 text-center tabular-nums text-gray-700">
                         {u.stats?.open_tasks_count ?? '—'}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <a
+                          href={`/usuarios/${u.id}/tareas`}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900"
+                          title={`Abrir las tareas de ${u.name} en una pestaña nueva`}
+                        >
+                          <ListTodo className="h-3.5 w-3.5" />
+                          Tareas
+                          <ExternalLink className="h-3 w-3 text-gray-400" />
+                        </a>
                       </td>
                     </tr>
                   ))}

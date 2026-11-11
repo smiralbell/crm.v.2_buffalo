@@ -5,6 +5,7 @@ export const DEVELOPER_PAGE_PREFIXES = [
   '/gestion-proyecto',
   '/retencion',
   '/tickets',
+  '/tareas',
   '/ayuda',
   '/login',
 ] as const
@@ -22,6 +23,7 @@ export const PROJECT_MANAGER_PAGE_PREFIXES = [
   '/onboarding',
   '/gestion-proyecto',
   '/retencion',
+  '/tareas',
   '/ayuda',
   '/login',
 ] as const
@@ -42,6 +44,7 @@ export const COMERCIAL_PAGE_PREFIXES = [
   '/coldcalling',
   '/pipelines',
   '/developer/facturas',
+  '/tareas',
   '/ayuda',
   '/login',
 ] as const
@@ -66,6 +69,7 @@ export const DEVELOPER_API_PREFIXES = [
   '/api/retencion/',
   '/api/tickets/',
   '/api/team-members',
+  '/api/tareas',
 ] as const
 
 export const COMERCIAL_API_PREFIXES = [
@@ -73,6 +77,7 @@ export const COMERCIAL_API_PREFIXES = [
   '/api/coldcall/',
   '/api/pipelines/',
   '/api/developer/invoices',
+  '/api/tareas',
 ] as const
 
 export function isAdmin(user: AuthUser): boolean {

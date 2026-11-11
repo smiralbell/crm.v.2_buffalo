@@ -9,6 +9,7 @@ import {
   FolderKanban,
   HeartHandshake,
   LayoutDashboard,
+  ListTodo,
   Megaphone,
   PackageCheck,
   Ticket,
@@ -74,12 +75,14 @@ const TABS: Record<CrmRole, Tab[]> = {
   ],
   developer: [
     { href: '/developer', label: 'Inicio', icon: LayoutDashboard, match: ['/developer'], exact: true },
+    { href: '/tareas', label: 'Tareas', icon: ListTodo, match: ['/tareas'] },
     { href: '/gestion-proyecto', label: 'Proyectos', icon: FolderKanban, match: ['/gestion-proyecto'] },
     { href: '/tickets', label: 'Tickets', icon: Ticket, match: ['/tickets'] },
     { href: '/retencion', label: 'Retención', icon: HeartHandshake, match: ['/retencion'] },
   ],
   comercial: [
     { href: '/comercial', label: 'Inicio', icon: LayoutDashboard, match: ['/comercial'], exact: true },
+    { href: '/tareas', label: 'Tareas', icon: ListTodo, match: ['/tareas'] },
     { href: '/comercial/campanas', label: 'Campañas', icon: Megaphone, match: ['/comercial/campanas'] },
     {
       href: '/comercial/pipeline',
@@ -90,6 +93,7 @@ const TABS: Record<CrmRole, Tab[]> = {
     { href: '/comercial/reuniones', label: 'Reuniones', icon: Calendar, match: ['/comercial/reuniones'] },
   ],
   project_manager: [
+    { href: '/tareas', label: 'Tareas', icon: ListTodo, match: ['/tareas'] },
     { href: '/leads', label: 'Leads', icon: TrendingUp, match: ['/leads', '/contacts'] },
     { href: '/pipelines', label: 'Pipelines', icon: Workflow, match: ['/pipelines'] },
     { href: '/marketing?tab=global', label: 'Marketing', icon: Megaphone, match: ['/marketing', '/blog'] },
