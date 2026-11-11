@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -38,12 +38,17 @@ import ProjectTaskCalendar from '@/components/gestion-proyecto/ProjectTaskCalend
 import ProjectTaskGantt from '@/components/gestion-proyecto/ProjectTaskGantt'
 import SubtaskList, { SubtaskChip } from '@/components/subtasks/SubtaskList'
 import type { Subtask } from '@/lib/subtasks'
+import {
+  projectTaskClient,
+  type TaskBoardClient,
+  type TaskCreateTarget,
+} from '@/components/gestion-proyecto/task-board-client'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 type TasksView = 'board' | 'calendar' | 'gantt'
 
-const VIEW_TABS: { id: TasksView; label: string; icon: typeof Kanban }[] = [
+export const VIEW_TABS: { id: TasksView; label: string; icon: typeof Kanban }[] = [
   { id: 'board', label: 'Tablero', icon: Kanban },
   { id: 'calendar', label: 'Calendario', icon: CalendarDays },
   { id: 'gantt', label: 'Gantt', icon: GanttChart },
@@ -63,23 +68,77 @@ const priorityBadge: Record<TaskPriority, string> = {
   high: 'bg-rose-100 text-rose-800',
 }
 
-interface ProjectTaskBoardProps {
-  projectId: string
-  tasks: ProjectTask[]
-  onChange: (tasks: ProjectTask[]) => void
+/** Agrupa las opciones de "Dónde va" por su grupo, en el orden en que llegan. */
+function groupTargets(targets: TaskCreateTarget[]): [string, TaskCreateTarget[]][] {
+  const groups: [string, TaskCreateTarget[]][] = []
+  for (const t of targets) {
+    const key = t.group ?? ''
+    const found = groups.find(([g]) => g === key)
+    if (found) found[1].push(t)
+    else groups.push([key, [t]])
+  }
+  return groups
+}
+
+interface ProjectTaskBoardProps<T extends ProjectTask = ProjectTask> {
+  /** Tablero de un proyecto. Si no se pasa, hace falta `client`. */
+  projectId?: string
+  tasks: T[]
+  onChange: (tasks: T[]) => void
   view?: TasksView
   onViewChange?: (view: TasksView) => void
   hideViewSwitcher?: boolean
+  /** Dónde guardar (módulo Tareas: tareas sueltas y de varios proyectos) */
+  client?: TaskBoardClient
+  /** Opciones de "Dónde" al crear; el selector sale si hay más de una */
+  createTargets?: TaskCreateTarget[]
+  defaultCreateTarget?: string
+  /** Etiqueta de origen encima del título (p. ej. el proyecto) */
+  renderCardContext?: (task: T) => ReactNode
+  /** Información extra en la cabecera de la tarea abierta */
+  renderDialogContext?: (task: T) => ReactNode
+  canDelete?: (task: T) => boolean
+  /** Texto cuando una columna está vacía */
+  emptyColumnText?: string
+  /**
+   * La página pone su propio botón de "Nueva tarea": cada vez que cambia este
+   * número se abre el formulario (y el tablero no pinta su barra de arriba).
+   */
+  createSignal?: number
 }
 
-export default function ProjectTaskBoard({
-  projectId,
-  tasks,
-  onChange,
-  view: controlledView,
-  onViewChange,
-  hideViewSwitcher = false,
-}: ProjectTaskBoardProps) {
+export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
+  props: ProjectTaskBoardProps<T>
+) {
+  // El tablero trabaja con ProjectTask; las propiedades extra de T se conservan
+  // porque cada cambio se hace con { ...tarea, ...cambios }.
+  const {
+    projectId,
+    view: controlledView,
+    onViewChange,
+    hideViewSwitcher = false,
+    createTargets,
+    defaultCreateTarget,
+    emptyColumnText = 'Sin tareas',
+    createSignal,
+  } = props
+  const tasks = props.tasks as ProjectTask[]
+  const onChange = props.onChange as (tasks: ProjectTask[]) => void
+  const renderCardContext = props.renderCardContext as ((task: ProjectTask) => ReactNode) | undefined
+  const renderDialogContext = props.renderDialogContext as
+    | ((task: ProjectTask) => ReactNode)
+    | undefined
+  const canDelete = (task: ProjectTask) =>
+    props.canDelete ? (props.canDelete as (t: ProjectTask) => boolean)(task) : true
+  const client = useMemo(
+    () => props.client ?? projectTaskClient(projectId ?? ''),
+    [props.client, projectId]
+  )
+  const [createTarget, setCreateTarget] = useState('')
+  const target = createTargets?.find((t) => t.id === createTarget)
+  /** En un proyecto siempre se puede asignar y adjuntar */
+  const targetAssignable = createTargets ? Boolean(target?.assignable) : true
+  const targetAttachments = createTargets ? Boolean(target?.attachments) : true
   const [internalView, setInternalView] = useState<TasksView>('board')
   const view = controlledView ?? internalView
   const setView = (next: TasksView) => {
@@ -158,49 +217,48 @@ export default function ProjectTaskBoard({
     setDueDate('')
     setFiles([])
     setNewSubtasks([])
+    setCreateTarget(
+      createTargets?.some((t) => t.id === defaultCreateTarget)
+        ? (defaultCreateTarget as string)
+        : createTargets?.length === 1
+          ? createTargets[0].id
+          : ''
+    )
     setCreateOpen(true)
   }
 
-  const uploadAttachments = async (taskId: string, list: File[]) => {
-    if (list.length === 0) return []
-    const formData = new FormData()
-    for (const file of list) {
-      formData.append('file', file)
-    }
-    const res = await fetch(
-      `/api/gestion-proyecto/proyectos/${projectId}/tasks/${taskId}/attachments/upload`,
-      { method: 'POST', body: formData }
-    )
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'No se pudieron subir los archivos')
-    return data.attachments || []
-  }
+  // Botón "Nueva tarea" de la página (módulo Tareas)
+  const lastCreateSignal = useRef(createSignal)
+  useEffect(() => {
+    if (createSignal === undefined || createSignal === lastCreateSignal.current) return
+    lastCreateSignal.current = createSignal
+    openCreate('pending')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createSignal])
 
   const createTask = async () => {
     if (!title.trim()) return
+    if (createTargets && !target) {
+      alert('Elige dónde va la tarea')
+      return
+    }
     setCreating(true)
     try {
-      const res = await fetch(`/api/gestion-proyecto/proyectos/${projectId}/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          status: createStatus,
-          priority,
-          assignee: assignee.trim() || undefined,
-          estimated_hours: estimatedHours ? Number(estimatedHours) : undefined,
-          due_date: dueDate || null,
-          subtasks: newSubtasks.length > 0 ? newSubtasks : undefined,
-        }),
+      const data = await client.create(createTarget, {
+        title: title.trim(),
+        description: description.trim() || undefined,
+        status: createStatus,
+        priority,
+        assignee: targetAssignable ? assignee.trim() || undefined : undefined,
+        estimated_hours: estimatedHours ? Number(estimatedHours) : undefined,
+        due_date: dueDate || null,
+        subtasks: newSubtasks.length > 0 ? newSubtasks : undefined,
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'No se pudo crear la tarea')
 
       let attachments = data.attachments || []
-      if (files.length > 0) {
+      if (targetAttachments && files.length > 0) {
         try {
-          attachments = await uploadAttachments(data.id, files)
+          attachments = await client.uploadAttachments(data, files)
         } catch (e) {
           alert(
             e instanceof Error
@@ -280,16 +338,7 @@ export default function ProjectTaskBoard({
     }
 
     try {
-      const res = await fetch(
-        `/api/gestion-proyecto/proyectos/${projectId}/tasks/${moved.id}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: targetStatus }),
-        }
-      )
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'No se pudo mover la tarea')
+      const data = await client.update(moved, { status: targetStatus })
       onChange(optimistic.map((t) => (t.id === data.id ? { ...t, ...data, attachments: t.attachments } : t)))
       if (viewTask?.id === data.id) {
         setViewTask((v) => (v ? { ...v, ...data, attachments: v.attachments } : v))
@@ -304,14 +353,7 @@ export default function ProjectTaskBoard({
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      const res = await fetch(
-        `/api/gestion-proyecto/proyectos/${projectId}/tasks/${deleteTarget.id}`,
-        { method: 'DELETE' }
-      )
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || 'No se pudo eliminar')
-      }
+      await client.remove(deleteTarget)
       onChange(tasks.filter((t) => t.id !== deleteTarget.id))
       if (viewTask?.id === deleteTarget.id) setViewTask(null)
       setDeleteTarget(null)
@@ -323,15 +365,11 @@ export default function ProjectTaskBoard({
   }
 
   const patchTaskMeta = async (taskId: string, body: Record<string, unknown>) => {
+    const current = tasks.find((t) => t.id === taskId)
+    if (!current) return
     setStaleActionId(taskId)
     try {
-      const res = await fetch(`/api/gestion-proyecto/proyectos/${projectId}/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'No se pudo actualizar')
+      const data = await client.update(current, body)
       onChange(tasks.map((t) => (t.id === taskId ? { ...t, ...data, attachments: t.attachments } : t)))
       if (viewTask?.id === taskId) {
         setViewTask((v) => (v ? { ...v, ...data, attachments: v.attachments } : v))
@@ -353,13 +391,8 @@ export default function ProjectTaskBoard({
 
     const save = async () => {
       try {
-        const res = await fetch(`/api/gestion-proyecto/proyectos/${projectId}/tasks/${taskId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subtasks }),
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.error || 'No se pudieron guardar las subtareas')
+        if (!prevTask) return
+        await client.update(prevTask, { subtasks })
       } catch (e) {
         const restore = prevTask?.subtasks ?? []
         onChange(tasksRef.current.map((t) => (t.id === taskId ? { ...t, subtasks: restore } : t)))
@@ -397,7 +430,7 @@ export default function ProjectTaskBoard({
 
   return (
     <div className="space-y-4 min-w-0">
-      {(!hideViewSwitcher || view !== 'board') && (
+      {createSignal === undefined && (!hideViewSwitcher || view !== 'board') && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           {!hideViewSwitcher && (
             <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
@@ -490,7 +523,7 @@ export default function ProjectTaskBoard({
 
             <div className="flex-1 p-3 space-y-3">
               {columnTasks.length === 0 && (
-                <p className="px-2 py-8 text-center text-xs text-gray-400">Sin tareas</p>
+                <p className="px-2 py-8 text-center text-xs text-gray-400">{emptyColumnText}</p>
               )}
               {columnTasks.map((task) => {
                 const isDragging = draggedTask?.id === task.id
@@ -558,6 +591,9 @@ export default function ProjectTaskBoard({
                         <Grip className="h-4 w-4" />
                       </div>
                       <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
+                        {renderCardContext && (
+                          <div className="mb-1 min-w-0">{renderCardContext(task)}</div>
+                        )}
                         <div className="flex items-start justify-between gap-2 min-w-0">
                           <p
                             className={cn(
@@ -567,17 +603,19 @@ export default function ProjectTaskBoard({
                           >
                             {task.title}
                           </p>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setDeleteTarget(task)
-                            }}
-                            className="text-gray-300 hover:text-red-600 shrink-0"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {canDelete(task) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDeleteTarget(task)
+                              }}
+                              className="text-gray-300 hover:text-red-600 shrink-0"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                         {task.description && (
                           <p className="mt-1.5 text-xs text-gray-500 line-clamp-2 break-all overflow-hidden">
@@ -671,6 +709,40 @@ export default function ProjectTaskBoard({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {createTargets && createTargets.length > 1 && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700" htmlFor="task_target">
+                  Dónde va *
+                </label>
+                <select
+                  id="task_target"
+                  value={createTarget}
+                  onChange={(e) => setCreateTarget(e.target.value)}
+                  className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                >
+                  <option value="" disabled>
+                    Elige una opción…
+                  </option>
+                  {groupTargets(createTargets).map(([group, items]) =>
+                    group ? (
+                      <optgroup key={group} label={group}>
+                        {items.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : (
+                      items.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.label}
+                        </option>
+                      ))
+                    )
+                  )}
+                </select>
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700" htmlFor="task_title">
                 Título *
@@ -697,6 +769,7 @@ export default function ProjectTaskBoard({
               />
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
+              {targetAssignable && (
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700" htmlFor="task_assignee">
                   Asignado a
@@ -715,6 +788,7 @@ export default function ProjectTaskBoard({
                   ))}
                 </select>
               </div>
+              )}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700" htmlFor="task_hours">
                   Horas estimadas
@@ -771,6 +845,7 @@ export default function ProjectTaskBoard({
                 parentTitle={title.trim() || 'Nueva tarea'}
               />
             </div>
+            {targetAttachments && (
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700" htmlFor="task_files">
                 Adjuntos (opcional)
@@ -786,12 +861,16 @@ export default function ProjectTaskBoard({
                 <p className="text-xs text-gray-500">{files.length} archivo(s) seleccionado(s)</p>
               )}
             </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>
               Cancelar
             </Button>
-            <Button onClick={createTask} disabled={creating || !title.trim()}>
+            <Button
+              onClick={createTask}
+              disabled={creating || !title.trim() || (Boolean(createTargets) && !target)}
+            >
               {creating ? 'Creando...' : 'Crear tarea'}
             </Button>
           </DialogFooter>
@@ -827,6 +906,7 @@ export default function ProjectTaskBoard({
                 <DialogTitle className="text-left text-lg leading-snug break-all [overflow-wrap:anywhere] pr-8">
                   {viewTask.title}
                 </DialogTitle>
+                {renderDialogContext && <div className="pr-8">{renderDialogContext(viewTask)}</div>}
               </DialogHeader>
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pb-4">
                 <div className="mb-4 space-y-2">
@@ -872,7 +952,7 @@ export default function ProjectTaskBoard({
                       {viewTask.attachments!.map((att) => (
                         <li key={att.id}>
                           <a
-                            href={`/api/gestion-proyecto/proyectos/${projectId}/tasks/${viewTask.id}/attachments/${att.id}/file`}
+                            href={client.attachmentUrl(viewTask, att.id)}
                             target="_blank"
                             rel="noreferrer"
                             className="text-sm text-indigo-600 hover:underline"
@@ -886,16 +966,18 @@ export default function ProjectTaskBoard({
                 )}
               </div>
               <DialogFooter className="shrink-0 gap-2 sm:gap-0 px-6 py-4 border-t border-gray-100 bg-white">
-                <Button
-                  variant="outline"
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                  onClick={() => {
-                    setDeleteTarget(viewTask)
-                  }}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Eliminar
-                </Button>
+                {canDelete(viewTask) && (
+                  <Button
+                    variant="outline"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                    onClick={() => {
+                      setDeleteTarget(viewTask)
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Eliminar
+                  </Button>
+                )}
                 <Button onClick={() => setViewTask(null)}>Cerrar</Button>
               </DialogFooter>
             </>

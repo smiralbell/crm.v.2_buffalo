@@ -86,10 +86,12 @@ export const AGENT_MODULES: AgentModule[] = [
   {
     key: 'proyectos',
     nombre: 'Proyectos y onboarding',
-    descripcion: 'Proyectos de clientes, tareas, developers asignados, onboarding, auditorías, formularios públicos.',
+    descripcion:
+      'Proyectos de clientes, tareas del equipo (sueltas y de proyecto, con subtareas), developers asignados, onboarding, auditorías, formularios públicos.',
     tablas: [
       'proyectos',
       'project_dev_tasks',
+      'crm_user_tasks',
       'project_dev_task_attachments',
       'project_dev_onboarding',
       'project_dev_onboarding_docs',
@@ -110,7 +112,13 @@ export const AGENT_MODULES: AgentModule[] = [
     ],
     guia: `- Cartera abierta = es_buffalo AND status IN (development, active, paused).
 - setup_fee_eur es el pago único; monthly_fee_eur la mensualidad.
-- Para crear tareas de proyecto usa create_project_task con confirm=true.`,
+- TAREAS DEL EQUIPO: usa SIEMPRE las herramientas tareas_* (no SQL ni create_project_task). Son las del módulo Tareas que ve cada developer, PM o comercial en el CRM.
+  - Tarea suelta (sin proyecto) para una persona: tareas_crear con persona. Tarea de un proyecto: tareas_crear con proyecto (y asignado si toca).
+  - Antes de editar, mover, tocar subtareas o borrar, saca el id con tareas_listar (y tareas_ver si necesitas las subtareas numeradas).
+  - Subtareas: los pasos de una tarea, cada uno con su explicación. Se gestionan con tareas_subtareas.
+  - Estados: pendiente, en_curso, validacion (validación por Buffalo), hecha. "Retirar" o "quitar de en medio" una tarea = moverla a hecha o borrarla; si no está claro, pregunta.
+  - Borrar: tareas_borrar (pasa por la doble confirmación del socio).
+  - La tabla tasks es otra cosa (tareas comerciales antiguas): no la uses para esto.`,
   },
   {
     key: 'finanzas',

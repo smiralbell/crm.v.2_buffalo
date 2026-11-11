@@ -33,3 +33,14 @@ describe('project_manager page access', () => {
     expect(defaultHomeForRole(pm)).toBe('/leads')
   })
 })
+
+describe('módulo Tareas', () => {
+  it('lo ven developer, comercial y PM; la ficha de usuarios sigue siendo solo de admin', () => {
+    for (const role of ['developer', 'comercial', 'project_manager'] as const) {
+      expect(canAccessPage('/tareas', role), role).toBe(true)
+    }
+    for (const role of ['developer', 'comercial', 'project_manager'] as const) {
+      expect(canAccessPage('/usuarios/3', role), role).toBe(false)
+    }
+  })
+})

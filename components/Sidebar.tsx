@@ -22,6 +22,7 @@ import {
   MessageSquare,
   Copy,
   ListChecks,
+  ListTodo,
   HelpCircle,
   Video,
 } from 'lucide-react'
@@ -152,6 +153,8 @@ const NAV: NavItem[] = [
       { href: '/developer/facturas/nueva', label: 'Nueva factura' },
     ],
   },
+  // Tareas sueltas + las de sus proyectos. El admin no lo tiene: pone tareas desde Usuarios.
+  { href: '/tareas', label: 'Tareas', icon: ListTodo, roles: ['developer', 'comercial', 'project_manager'] },
   { href: '/calendario', label: 'Calendario', icon: Calendar, roles: ['admin'] },
   { href: '/checklist', label: 'Checklist', icon: ListChecks, roles: ['admin'] },
 ]
@@ -190,12 +193,13 @@ export default function Sidebar({
     if (!role) return []
     const items = NAV.filter((item) => !item.roles || item.roles.includes(role))
     if (role === 'developer') {
-      const order = ['/developer', '/gestion-proyecto', '/retencion', '/developer/facturas']
+      const order = ['/developer', '/tareas', '/gestion-proyecto', '/retencion', '/developer/facturas']
       return [...items].sort((a, b) => order.indexOf(a.href) - order.indexOf(b.href))
     }
     if (role === 'comercial') {
       const order = [
         '/comercial',
+        '/tareas',
         '/comercial/campanas',
         '/comercial/pipeline',
         '/comercial/reuniones',
@@ -396,6 +400,7 @@ export default function Sidebar({
                 .filter((item) =>
                   [
                     '/comercial',
+                    '/tareas',
                     '/comercial/campanas',
                     '/comercial/pipeline',
                     '/comercial/reuniones',

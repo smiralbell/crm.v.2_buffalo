@@ -2,6 +2,7 @@ import { CRM_ASSISTANT_TOOLS, executeCrmAssistantTool } from '@/lib/demos/crm-as
 import { createAssistantContext } from '@/lib/demos/assistant-attachments'
 import * as db from './db-tools'
 import { MCP_TOOL_NAMES, MCP_TOOLS, runMcpTool } from './mcp-tools'
+import { TASK_READ_ONLY, TASK_TOOL_NAMES, TASK_TOOLS, runTaskTool } from './task-tools'
 import { AGENT_MODULES, MODULE_KEYS, type AgentModule } from './modules'
 import {
   addInstruction,
@@ -175,6 +176,7 @@ const READ_ONLY = new Set([
   'checklist_list',
   'delegar_subagentes',
   'mcp_listar',
+  ...TASK_READ_ONLY,
 ])
 
 /** Acciones de la secretaria que en Telegram se ejecutan directas (solo los borrados piden confirmación). */
@@ -192,13 +194,15 @@ const DIRECT_ACTIONS = new Set([
 ])
 
 export function orchestratorTools(): ToolSchema[] {
-  return [DELEGATE_TOOL, ...DB_TOOLS, ...AGENT_TOOLS, ...MCP_TOOLS, ...SECRETARIA_TOOLS]
+  return [DELEGATE_TOOL, ...DB_TOOLS, ...AGENT_TOOLS, ...MCP_TOOLS, ...TASK_TOOLS, ...SECRETARIA_TOOLS]
 }
 
 export function subagentTools(mod: AgentModule): ToolSchema[] {
   const allowed = new Set(mod.herramientas)
   const extra = mod.key === 'sistema' ? AGENT_TOOLS : AGENT_TOOLS.filter((t) => t.function.name === 'enviar_documento')
-  return [...DB_TOOLS, ...extra, ...MCP_TOOLS, ...SECRETARIA_TOOLS.filter((t) => allowed.has(t.function.name))]
+  // Tareas del equipo: el subagente de proyectos (y el de sistema, que lleva los usuarios)
+  const tasks = mod.key === 'proyectos' || mod.key === 'sistema' ? TASK_TOOLS : []
+  return [...DB_TOOLS, ...extra, ...MCP_TOOLS, ...tasks, ...SECRETARIA_TOOLS.filter((t) => allowed.has(t.function.name))]
 }
 
 // ——— Ejecución ———
@@ -367,6 +371,13 @@ async function runTool(name: string, args: Record<string, unknown>, ctx: AgentCo
   }
 
   if (MCP_TOOL_NAMES.has(name)) return runMcpTool(name, args)
+
+  if (TASK_TOOL_NAMES.has(name)) {
+    return runTaskTool(name, args, {
+      actorName: ctx.scheduled ? 'Agente CRM' : ctx.userName,
+      requestDeletion: (del) => requestDeletion(ctx, del),
+    })
+  }
 
   if (SECRETARIA_TOOLS.some((t) => t.function.name === name)) {
     const finalArgs = DIRECT_ACTIONS.has(name) ? { ...args, confirm: true } : args
