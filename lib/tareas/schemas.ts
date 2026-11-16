@@ -43,4 +43,6 @@ export const personalTaskUpdateSchema = z.object({
   subtasks: subtasksSchema.optional(),
   extend_stale: z.boolean().optional(),
   acknowledge_stale: z.boolean().optional(),
+  /** Solo admin: pasar la tarea suelta a otra persona */
+  user_id: z.number().int().positive().optional(),
 })

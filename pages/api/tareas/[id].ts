@@ -1,7 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
-import { deletePersonalTask, getPersonalTask, updatePersonalTask } from '@/lib/tareas/store'
+import { findCrmUserById } from '@/lib/crm-users'
+import {
+  deletePersonalTask,
+  getPersonalTask,
+  reassignPersonalTask,
+  updatePersonalTask,
+} from '@/lib/tareas/store'
 import { personalTaskUpdateSchema } from '@/lib/tareas/schemas'
 import { canDeletePersonalTask } from '@/lib/tareas/permissions'
 
@@ -25,8 +31,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'PATCH') {
-      const patch = personalTaskUpdateSchema.parse(req.body)
-      const updated = await updatePersonalTask(task, patch)
+      const { user_id: newOwnerId, ...patch } = personalTaskUpdateSchema.parse(req.body)
+      let current = task
+      // Solo admin cambia de persona una tarea suelta
+      if (newOwnerId !== undefined && newOwnerId !== task.owner_user_id) {
+        if (user.role !== 'admin') {
+          return res.status(403).json({ error: 'Solo un admin puede pasar la tarea a otra persona' })
+        }
+        const owner = await findCrmUserById(newOwnerId)
+        if (!owner || !owner.active) return res.status(400).json({ error: 'Usuario no válido' })
+        const moved = await reassignPersonalTask(task, owner.id)
+        if (!moved) return res.status(404).json({ error: 'Tarea no encontrada' })
+        current = moved
+      }
+      const hasOtherChanges = Object.values(patch).some((v) => v !== undefined)
+      const updated = hasOtherChanges ? await updatePersonalTask(current, patch) : current
       if (!updated) return res.status(404).json({ error: 'Tarea no encontrada' })
       return res.status(200).json(updated)
     }

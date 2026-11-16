@@ -12,6 +12,8 @@ interface Props {
   shown: number
   /** Al final de la fila (selector Tablero / Calendario / Gantt) */
   trailing?: ReactNode
+  /** Justo después del buscador (filtro de personas del admin) */
+  people?: ReactNode
 }
 
 const selectClass = (active: boolean) =>
@@ -21,7 +23,7 @@ const selectClass = (active: boolean) =>
   )
 
 /** Una sola fila: buscar, origen, prioridad, fecha y (a la derecha) la vista. */
-export default function TaskFiltersBar({ filters, onChange, projects, total, shown, trailing }: Props) {
+export default function TaskFiltersBar({ filters, onChange, projects, total, shown, trailing, people }: Props) {
   const set = <K extends keyof TaskFilterState>(key: K, value: TaskFilterState[K]) =>
     onChange({ ...filters, [key]: value })
   const active = countActiveFilters(filters)
@@ -50,6 +52,8 @@ export default function TaskFiltersBar({ filters, onChange, projects, total, sho
           </button>
         )}
       </div>
+
+      {people}
 
       <select
         value={filters.origin}

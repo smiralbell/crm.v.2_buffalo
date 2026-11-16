@@ -10,6 +10,15 @@ import {
   type TaskCreateTarget,
 } from '@/components/gestion-proyecto/task-board-client'
 import TaskFiltersBar from '@/components/tareas/TaskFiltersBar'
+import { PeopleFilter, PeopleSummary } from '@/components/tareas/PeopleFilter'
+import {
+  buildNameIndex,
+  buildPersonOptions,
+  filterByPeople,
+  normName,
+  userKey,
+  type PersonKey,
+} from '@/lib/tareas/people'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type { ProjectTask } from '@/lib/gestion-proyecto/types'
@@ -32,6 +41,8 @@ interface Props {
 interface Prefs {
   filters: TaskFilterState
   view: TasksView
+  /** Panel de admin: personas marcadas en el filtro */
+  people: PersonKey[]
 }
 
 const TASK_VIEWS: TasksView[] = ['board', 'calendar', 'gantt']
@@ -43,9 +54,10 @@ function readPrefs(key: string): Prefs {
     return {
       filters: { ...EMPTY_FILTERS, ...(parsed.filters ?? {}) },
       view: parsed.view && TASK_VIEWS.includes(parsed.view) ? parsed.view : 'board',
+      people: Array.isArray(parsed.people) ? parsed.people.filter((k) => typeof k === 'string') : [],
     }
   } catch {
-    return { filters: EMPTY_FILTERS, view: 'board' }
+    return { filters: EMPTY_FILTERS, view: 'board', people: [] }
   }
 }
 
@@ -70,20 +82,22 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
   const [error, setError] = useState('')
   const [filters, setFilters] = useState<TaskFilterState>(EMPTY_FILTERS)
   const [view, setView] = useState<TasksView>('board')
+  const [selectedPeople, setSelectedPeople] = useState<PersonKey[]>([])
   const restored = useRef(false)
   const prefsKey = `${storageKey}:prefs`
 
-  // Filtros y vista recordados en este navegador
+  // Filtros, vista y personas recordados en este navegador
   useEffect(() => {
     const prefs = readPrefs(prefsKey)
     setFilters({ ...prefs.filters, person: 'all', hideDone: false })
     setView(prefs.view)
+    setSelectedPeople(prefs.people)
     restored.current = true
   }, [prefsKey])
 
   useEffect(() => {
-    if (restored.current) writePrefs(prefsKey, { filters, view })
-  }, [filters, view, prefsKey])
+    if (restored.current) writePrefs(prefsKey, { filters, view, people: selectedPeople })
+  }, [filters, view, selectedPeople, prefsKey])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -203,20 +217,77 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
     }
   }, [projectNames, track])
 
-  const visible = useMemo(() => applyTaskFilters(tasks, filters), [tasks, filters])
+  const me = data?.me
+  const scope = data?.scope_user ?? null
+  const viewingSelf = !!scope && !!me && scope.id === me.id
+  /** Panel de super admin: las tareas de todo el equipo */
+  const adminOverview = me?.role === 'admin' && !scope
+
+  const people = useMemo(() => data?.people ?? [], [data])
+  const nameIndex = useMemo(() => buildNameIndex(people), [people])
+  // El filtro de personas solo existe en el panel de admin
+  const activePeople = useMemo(() => (adminOverview ? selectedPeople : []), [adminOverview, selectedPeople])
+
+  /** Todos los filtros juntos (los de la barra y el de personas). */
+  const visibleOf = useCallback(
+    (list: WorkTask[]) => filterByPeople(applyTaskFilters(list, filters), activePeople, nameIndex),
+    [filters, activePeople, nameIndex]
+  )
+  const visible = useMemo(() => visibleOf(tasks), [tasks, visibleOf])
+
+  // Recuentos por persona con el resto de filtros aplicados (buscar, prioridad…)
+  const personOptions = useMemo(
+    () => (adminOverview ? buildPersonOptions(applyTaskFilters(tasks, filters), people, nameIndex) : []),
+    [adminOverview, tasks, filters, people, nameIndex]
+  )
+  const meKey = me && me.id > 0 ? userKey(me.id) : null
 
   // El tablero devuelve la lista filtrada cambiada; se junta con la completa.
   const onBoardChange = useCallback(
     (next: WorkTask[]) => {
-      setTasks((prev) => mergeVisibleTasks(prev, applyTaskFilters(prev, filters), next))
+      setTasks((prev) => mergeVisibleTasks(prev, visibleOf(prev), next))
     },
-    [filters]
+    [visibleOf]
   )
 
-  const me = data?.me
-  const scope = data?.scope_user ?? null
-  const viewingSelf = !!scope && !!me && scope.id === me.id
-  const adminOverview = me?.role === 'admin' && !scope
+  /** Admin: pasar una tarea a otra persona (suelta → dueño; de proyecto → responsable). */
+  const reassign = useCallback(
+    async (task: WorkTask, personId: number | null) => {
+      const person = personId == null ? null : people.find((p) => p.id === personId) ?? null
+      try {
+        const updated = await track(async () => {
+          if (task.source === 'personal') {
+            if (!person) throw new Error('Elige a una persona')
+            return requestJson<WorkTask>(
+              `/api/tareas/${task.id}`,
+              jsonInit('PATCH', { user_id: person.id }),
+              'No se pudo cambiar de persona'
+            )
+          }
+          const res = await projectTaskClient(task.project_id).update(task, { assignee: person?.name ?? null })
+          return {
+            ...task,
+            ...res,
+            estimated_hours: toNumber(res.estimated_hours),
+            source: 'project' as const,
+            project_name: task.project_name,
+          }
+        })
+        setTasks((prev) =>
+          prev.map((t) => (t.id === updated.id ? { ...t, ...updated, attachments: t.attachments } : t))
+        )
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'No se pudo cambiar de persona')
+      }
+    },
+    [people, track]
+  )
+
+  // Con una sola persona marcada, "Nueva tarea" se la pone a ella
+  const singleUserTarget =
+    adminOverview && activePeople.length === 1 && activePeople[0].startsWith('u:')
+      ? `user:${activePeople[0].slice(2)}`
+      : undefined
 
   const createTargets = useMemo<TaskCreateTarget[]>(() => {
     if (!data) return []
@@ -249,6 +320,16 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
         projects={data?.projects ?? []}
         total={tasks.length}
         shown={visible.length}
+        people={
+          adminOverview ? (
+            <PeopleFilter
+              options={personOptions}
+              selected={selectedPeople}
+              onChange={setSelectedPeople}
+              meKey={meKey}
+            />
+          ) : undefined
+        }
         trailing={
           <div className="inline-flex h-10 shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-0.5">
             {VIEW_TABS.map((tab) => {
@@ -295,6 +376,9 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
               {error}
             </div>
           )}
+          {adminOverview && (
+            <PeopleSummary options={personOptions} selected={selectedPeople} onChange={setSelectedPeople} />
+          )}
           <ProjectTaskBoard<WorkTask>
             tasks={visible}
             onChange={onBoardChange}
@@ -303,15 +387,70 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
             onViewChange={setView}
             hideViewSwitcher
             createTargets={createTargets}
-            defaultCreateTarget={scope ? `user:${scope.id}` : undefined}
+            defaultCreateTarget={scope ? `user:${scope.id}` : singleUserTarget}
             canDelete={(task) => canDeleteWorkTask(viewer, task)}
             emptyColumnText={tasks.length > 0 && visible.length === 0 ? 'Nada con estos filtros' : 'Sin tareas'}
             renderCardContext={(task) => <TaskOrigin task={task} showOwner={adminOverview} />}
-            renderDialogContext={(task) => <TaskOriginDetail task={task} />}
+            renderDialogContext={(task) => {
+              // La tarea abierta puede ir por detrás: se usa la versión más reciente
+              const latest = tasks.find((t) => t.id === task.id) ?? task
+              return (
+                <div className="space-y-2">
+                  <TaskOriginDetail task={latest} />
+                  {adminOverview && people.length > 0 && (
+                    <PersonPicker task={latest} people={people} nameIndex={nameIndex} onPick={reassign} />
+                  )}
+                </div>
+              )
+            }}
           />
         </>
       )}
     </div>
+  )
+}
+
+/** Admin, en la tarea abierta: a quién le toca. */
+function PersonPicker({
+  task,
+  people,
+  nameIndex,
+  onPick,
+}: {
+  task: WorkTask
+  people: { id: number; name: string }[]
+  nameIndex: Map<string, number>
+  onPick: (task: WorkTask, personId: number | null) => Promise<void>
+}) {
+  const [saving, setSaving] = useState(false)
+  const current =
+    task.source === 'personal' ? task.owner_user_id : nameIndex.get(normName(task.assignee)) ?? null
+  const external = task.source === 'project' && task.assignee && current == null ? task.assignee : null
+  return (
+    <label className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+      <span className="font-medium text-gray-700">Persona</span>
+      <select
+        value={current ?? (external ? 'external' : '')}
+        disabled={saving}
+        onChange={async (e) => {
+          const v = e.target.value
+          if (v === 'external') return
+          setSaving(true)
+          await onPick(task, v === '' ? null : Number(v))
+          setSaving(false)
+        }}
+        className="h-9 min-w-[12rem] rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-900 outline-none focus:border-gray-400 disabled:opacity-60"
+      >
+        {task.source === 'project' && <option value="">Sin asignar</option>}
+        {external && <option value="external">{external} (fuera del CRM)</option>}
+        {people.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      {saving && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+    </label>
   )
 }
 

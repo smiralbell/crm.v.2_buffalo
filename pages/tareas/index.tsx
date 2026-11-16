@@ -4,15 +4,12 @@ import TasksWorkspace from '@/components/tareas/TasksWorkspace'
 import { requireAuth } from '@/lib/auth'
 
 /**
- * Módulo Tareas de developers, project managers y comerciales.
- * El admin no lo tiene: pone y mira tareas desde la ficha de cada usuario.
+ * Módulo Tareas. Developers, PMs y comerciales ven las suyas; los admins, las de
+ * todo el equipo, con filtro de personas, y pueden poner tareas a cualquiera.
  */
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
-    const user = await requireAuth(context)
-    if (user.role === 'admin') {
-      return { redirect: { destination: '/usuarios', permanent: false } }
-    }
+    await requireAuth(context)
   } catch {
     return { redirect: { destination: '/login', permanent: false } }
   }

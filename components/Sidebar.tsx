@@ -153,8 +153,8 @@ const NAV: NavItem[] = [
       { href: '/developer/facturas/nueva', label: 'Nueva factura' },
     ],
   },
-  // Tareas sueltas + las de sus proyectos. El admin no lo tiene: pone tareas desde Usuarios.
-  { href: '/tareas', label: 'Tareas', icon: ListTodo, roles: ['developer', 'comercial', 'project_manager'] },
+  // Tareas sueltas + las de sus proyectos. El admin ve las de todo el equipo (panel de super admin).
+  { href: '/tareas', label: 'Tareas', icon: ListTodo, roles: ['admin', 'developer', 'comercial', 'project_manager'] },
   { href: '/calendario', label: 'Calendario', icon: Calendar, roles: ['admin'] },
   { href: '/checklist', label: 'Checklist', icon: ListChecks, roles: ['admin'] },
 ]
