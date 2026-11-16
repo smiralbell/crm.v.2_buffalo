@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
 import { normalizeInvoiceDocument } from '@/lib/invoices/document'
 import { getNextBufInvoiceNumber } from '@/lib/invoices/numbers'
+import { queueRecurringInvoiceEmail } from '@/lib/invoices/recurring-email'
 import {
   formatSpanishDate,
   madridToday,
@@ -227,11 +228,15 @@ export async function generateRecurringInvoice(
       [id, created.id, following]
     )
 
+    const issuedOn = issueIso || `${year}-${String(month).padStart(2, '0')}-${String(issueDay).padStart(2, '0')}`
+    // Si la plantilla tiene el envío por email activado, queda en cola para su día y hora
+    await queueRecurringInvoiceEmail(id, created.id, issuedOn)
+
     return {
       ok: true,
       id: created.id,
       invoice_number: created.invoice_number,
-      issue_date: issueIso || `${year}-${String(month).padStart(2, '0')}-${String(issueDay).padStart(2, '0')}`,
+      issue_date: issuedOn,
     }
   } catch (error) {
     if (createdId == null) {

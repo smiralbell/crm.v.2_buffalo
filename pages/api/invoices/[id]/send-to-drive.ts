@@ -1,15 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import React from 'react'
-import { pdf } from '@react-pdf/renderer'
-import { InvoicePDF } from '@/components/InvoicePDF'
-import { readFile } from 'fs/promises'
-import { join } from 'path'
+import { renderInvoicePdf } from '@/lib/invoices/pdf'
 import { createPlaceholderNotePdfBuffer } from '@/lib/pdf/placeholder-note-pdf'
 import { uploadInvoiceToDrive } from '@/lib/integrations/google/drive-invoices'
-import { format } from 'date-fns'
-import { pdfDocumentFields } from '@/lib/invoices/document'
 import { readDevInvoicePdf } from '@/lib/developer/invoice-pdf'
 import { downloadDriveFile, syncDeveloperInvoiceToDrive } from '@/lib/developer/invoice-drive'
 
@@ -78,79 +72,9 @@ export default async function handler(
       pdfBuffer = createPlaceholderNotePdfBuffer(noInvoiceNote)
       pdfFileName = `sin_factura_${invoice.invoice_number}.pdf`
     } else {
-    const services = Array.isArray(invoice.services) ? invoice.services : []
-    const servicesWithTotals = services.map((service: any) => ({
-      description: service.description || '',
-      quantity: service.quantity || 0,
-      price: service.price || 0,
-      tax: service.tax || 0,
-      total: (service.quantity || 0) * (service.price || 0) * (1 + ((service.tax || 0) / 100)),
-    }))
-
-    // Cargar el logo y convertirlo a base64
-    let logoBase64 = ''
-    try {
-      const logoPath = join(process.cwd(), 'public', 'buffalo-logo.png')
-      const logoBuffer = await readFile(logoPath)
-      logoBase64 = `data:image/png;base64,${logoBuffer.toString('base64')}`
-    } catch (logoError) {
-      // Solo loguear en desarrollo
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[WARN] No se pudo cargar el logo:', logoError)
-      }
-      // Continuar sin logo si no se encuentra
-    }
-
-    let rectifiesNumber: string | null = null
-    let rectifiesDateLabel: string | null = null
-    if (invoice.rectifies_invoice_id) {
-      const original = await prisma.invoice.findUnique({
-        where: { id: invoice.rectifies_invoice_id },
-        select: { invoice_number: true, issue_date: true },
-      })
-      if (original) {
-        rectifiesNumber = original.invoice_number
-        rectifiesDateLabel = format(original.issue_date, 'dd/MM/yyyy')
-      }
-    }
-    const documentFields = pdfDocumentFields({
-      document_type: invoice.document_type,
-      document_title: invoice.document_title,
-      observations: invoice.observations,
-      rectification_reason: invoice.rectification_reason,
-      show_payment_info: invoice.show_payment_info,
-      payment_method: invoice.payment_method,
-      bank_name: invoice.bank_name,
-      bank_account_holder: invoice.bank_account_holder,
-      iban: invoice.iban,
-      payment_instructions: invoice.payment_instructions,
-      rectifiesNumber,
-      rectifiesDateLabel,
-    })
-
-    const pdfDoc = React.createElement(InvoicePDF, {
-      invoiceNumber: invoice.invoice_number,
-      clientName: invoice.client_name,
-      clientCompanyName: invoice.client_company_name || undefined,
-      clientEmail: invoice.client_email || undefined,
-      clientAddress: invoice.client_address || undefined,
-      clientTaxId: invoice.client_tax_id || undefined,
-      companyName: invoice.company_name || 'BUFFALO AI',
-      companyAddress: invoice.company_address || undefined,
-      issueDate: invoice.issue_date.toISOString(),
-      dueDate: invoice.due_date?.toISOString() || undefined,
-      services: servicesWithTotals,
-      subtotal: Number(invoice.subtotal),
-      iva: Number(invoice.iva),
-      total: Number(invoice.total),
-      logoUrl: logoBase64 || undefined,
-      ...documentFields,
-    })
-
-    // Generar el buffer del PDF
-    const pdfBlob = await pdf(pdfDoc as any).toBlob()
-    pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer())
-    pdfFileName = `factura_${invoice.invoice_number}.pdf`
+    const rendered = await renderInvoicePdf(invoice)
+    pdfBuffer = rendered.buffer
+    pdfFileName = rendered.filename
     }
 
     try {

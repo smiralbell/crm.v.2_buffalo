@@ -5,12 +5,14 @@ import Link from 'next/link'
 import { requireAuth } from '@/lib/auth'
 import { query } from '@/lib/db'
 import { ensureRecurringInvoiceColumns } from '@/lib/invoices/recurring'
+import { ensureRecurringEmailSchema } from '@/lib/invoices/recurring-email'
 import { formatSpanishDate, madridToday } from '@/lib/invoices/recurring-dates'
 import Layout from '@/components/Layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, Mail, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import RecurringEmailDialog from '@/components/invoices/RecurringEmailDialog'
 
 interface RecurringInvoiceRow {
   id: string
@@ -28,6 +30,11 @@ interface RecurringInvoiceRow {
   last_generated_invoice_id: number | null
   next_issue_date: string | null
   created_at: string
+  email_enabled: boolean
+  email_send_day: number | null
+  email_send_time: string | null
+  last_email_status: string | null
+  last_email_at: string | null
 }
 
 interface RecurringInvoicesPageProps {
@@ -49,6 +56,7 @@ export const getServerSideProps: GetServerSideProps<RecurringInvoicesPageProps> 
 
   try {
     await ensureRecurringInvoiceColumns()
+    await ensureRecurringEmailSchema()
     const result = await query<RecurringInvoiceRow>(
       `SELECT
          ri.id,
@@ -68,9 +76,21 @@ export const getServerSideProps: GetServerSideProps<RecurringInvoicesPageProps> 
            i.total,
            ROUND(ri.base_amount * (1 + COALESCE(ri.tax_percent, 21) / 100), 2)
          ) AS total,
-         i.status AS source_status
+         i.status AS source_status,
+         ri.email_enabled,
+         ri.email_send_day,
+         ri.email_send_time,
+         last_send.status AS last_email_status,
+         COALESCE(last_send.sent_at, last_send.scheduled_at)::text AS last_email_at
        FROM recurring_invoices ri
        LEFT JOIN invoices i ON i.id = ri.source_invoice_id
+       LEFT JOIN LATERAL (
+         SELECT s.status, s.sent_at, s.scheduled_at
+           FROM invoice_email_sends s
+          WHERE s.recurring_id = ri.id AND s.kind <> 'test'
+          ORDER BY s.created_at DESC
+          LIMIT 1
+       ) last_send ON TRUE
        WHERE ri.deleted_at IS NULL
        ORDER BY ri.created_at DESC`
     )
@@ -106,6 +126,7 @@ export default function RecurringInvoicesPage({
   const router = useRouter()
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [emailFor, setEmailFor] = useState<RecurringInvoiceRow | null>(null)
   const active = recurringInvoices.filter((item) => item.is_active)
   const paused = recurringInvoices.length - active.length
   const mrr = active.reduce((sum, item) => sum + Number(item.total || 0), 0)
@@ -275,6 +296,7 @@ export default function RecurringInvoicesPage({
                       <th className="p-3 text-left text-sm font-medium text-gray-700">Cliente</th>
                       <th className="p-3 text-left text-sm font-medium text-gray-700">Próxima factura</th>
                       <th className="p-3 text-left text-sm font-medium text-gray-700">Última generación</th>
+                      <th className="p-3 text-left text-sm font-medium text-gray-700">Email</th>
                       <th className="p-3 text-left text-sm font-medium text-gray-700">Estado</th>
                       <th className="p-3 text-right text-sm font-medium text-gray-700">Acciones</th>
                     </tr>
@@ -301,6 +323,9 @@ export default function RecurringInvoicesPage({
                             ? `${item.last_generated_period}${item.last_generated_invoice_id ? ` · #${item.last_generated_invoice_id}` : ''}`
                             : 'Nunca'}
                         </td>
+                        <td className="p-3 text-sm">
+                          <EmailCell item={item} />
+                        </td>
                         <td className="p-3">
                           <Badge variant={item.is_active ? 'default' : 'secondary'}>
                             {item.is_active ? 'Activa' : 'Pausada'}
@@ -314,6 +339,10 @@ export default function RecurringInvoicesPage({
                                 Editar
                               </Button>
                             </Link>
+                            <Button size="sm" variant="outline" onClick={() => setEmailFor(item)}>
+                              <Mail className="mr-2 h-4 w-4" />
+                              Email
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"
@@ -359,6 +388,50 @@ export default function RecurringInvoicesPage({
           </CardContent>
         </Card>
       </div>
+      {emailFor && (
+        <RecurringEmailDialog
+          recurringId={emailFor.id}
+          name={emailFor.name}
+          nextIssueDate={emailFor.next_issue_date ? emailFor.next_issue_date.slice(0, 10) : null}
+          open={Boolean(emailFor)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEmailFor(null)
+              router.replace(router.asPath, undefined, { scroll: false })
+            }
+          }}
+        />
+      )}
     </Layout>
+  )
+}
+
+const EMAIL_STATUS: Record<string, { label: string; className: string }> = {
+  pending: { label: 'Programado', className: 'text-blue-700' },
+  sending: { label: 'Enviando', className: 'text-blue-700' },
+  sent: { label: 'Enviado', className: 'text-emerald-700' },
+  failed: { label: 'Error al enviar', className: 'text-red-600' },
+  cancelled: { label: 'Cancelado', className: 'text-gray-500' },
+}
+
+function EmailCell({ item }: { item: RecurringInvoiceRow }) {
+  const last = item.last_email_status ? EMAIL_STATUS[item.last_email_status] : null
+  const when = item.last_email_at
+    ? new Date(item.last_email_at).toLocaleDateString('es-ES', { timeZone: 'Europe/Madrid', day: 'numeric', month: 'short' })
+    : ''
+  return (
+    <div className="space-y-0.5">
+      <div className={item.email_enabled ? 'font-medium text-gray-900' : 'text-gray-500'}>
+        {item.email_enabled
+          ? `Auto · ${item.email_send_day ? `día ${item.email_send_day}` : 'al crearla'}, ${(item.email_send_time || '09:00').slice(0, 5)}`
+          : 'Manual'}
+      </div>
+      {last && (
+        <div className={`text-xs ${last.className}`}>
+          {last.label}
+          {when ? ` · ${when}` : ''}
+        </div>
+      )}
+    </div>
   )
 }

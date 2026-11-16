@@ -43,6 +43,8 @@ interface Prefs {
   view: TasksView
   /** Panel de admin: personas marcadas en el filtro */
   people: PersonKey[]
+  /** De quién son estas preferencias (dos socios pueden usar el mismo navegador) */
+  ownerId?: number | null
 }
 
 const TASK_VIEWS: TasksView[] = ['board', 'calendar', 'gantt']
@@ -55,9 +57,10 @@ function readPrefs(key: string): Prefs {
       filters: { ...EMPTY_FILTERS, ...(parsed.filters ?? {}) },
       view: parsed.view && TASK_VIEWS.includes(parsed.view) ? parsed.view : 'board',
       people: Array.isArray(parsed.people) ? parsed.people.filter((k) => typeof k === 'string') : [],
+      ownerId: typeof parsed.ownerId === 'number' ? parsed.ownerId : null,
     }
   } catch {
-    return { filters: EMPTY_FILTERS, view: 'board', people: [] }
+    return { filters: EMPTY_FILTERS, view: 'board', people: [], ownerId: null }
   }
 }
 
@@ -84,6 +87,8 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
   const [view, setView] = useState<TasksView>('board')
   const [selectedPeople, setSelectedPeople] = useState<PersonKey[]>([])
   const restored = useRef(false)
+  /** Dueño de las preferencias leídas; se compara con quien mira al cargar */
+  const savedOwner = useRef<number | null | undefined>(undefined)
   const prefsKey = `${storageKey}:prefs`
 
   // Filtros, vista y personas recordados en este navegador
@@ -92,12 +97,25 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
     setFilters({ ...prefs.filters, person: 'all', hideDone: false })
     setView(prefs.view)
     setSelectedPeople(prefs.people)
+    savedOwner.current = prefs.ownerId
     restored.current = true
   }, [prefsKey])
 
+  const meId = data?.me?.id ?? null
   useEffect(() => {
-    if (restored.current) writePrefs(prefsKey, { filters, view, people: selectedPeople })
-  }, [filters, view, selectedPeople, prefsKey])
+    if (restored.current) writePrefs(prefsKey, { filters, view, people: selectedPeople, ownerId: meId })
+  }, [filters, view, selectedPeople, prefsKey, meId])
+
+  // Un socio que entra por primera vez (o en un navegador que usaba otro) empieza
+  // viendo sus tareas; con «Todos» o el filtro de personas ve las del resto.
+  useEffect(() => {
+    if (!data || !restored.current || scopeUserId) return
+    const me = data.me
+    if (me.role !== 'admin' || !(me.id > 0)) return
+    if (savedOwner.current === me.id) return
+    savedOwner.current = me.id
+    setSelectedPeople([userKey(me.id)])
+  }, [data, scopeUserId])
 
   const load = useCallback(async () => {
     setLoading(true)

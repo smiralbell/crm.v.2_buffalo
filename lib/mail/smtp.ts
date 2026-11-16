@@ -104,6 +104,8 @@ export interface SendMailInput {
   html?: string
   cc?: string | string[]
   bcc?: string | string[]
+  replyTo?: string
+  attachments?: { filename: string; content: Buffer; contentType?: string }[]
 }
 
 export async function sendMail(input: SendMailInput) {
@@ -114,9 +116,11 @@ export async function sendMail(input: SendMailInput) {
     to: input.to,
     cc: input.cc,
     bcc: input.bcc,
+    replyTo: input.replyTo,
     subject: input.subject,
     text: input.text,
     html: input.html,
+    attachments: input.attachments,
   })
 }
 
