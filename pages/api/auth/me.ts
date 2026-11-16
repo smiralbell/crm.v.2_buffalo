@@ -38,6 +38,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   void import('@/lib/whatsapp-agent/setup')
     .then((m) => m.startWhatsAppAgent())
     .catch(() => {})
+  // Demos por WhatsApp: webhook en Evolution (solo si EVOLUTION_DEMOS_INSTANCE).
+  void import('@/lib/demos/whatsapp')
+    .then((m) => m.startDemosWhatsApp())
+    .catch(() => {})
 
   try {
     let user = await requireAuthAPI(req, res)

@@ -8,7 +8,7 @@ export const ARTICLES_ENG1: HelpArticle[] = [
     category: 'eng1',
     order: 1,
     audience: ['admin'],
-    tags: ['marketing', 'ENG1', 'web', 'email', 'meta', 'google', 'instantly'],
+    tags: ['marketing', 'ENG1', 'web', 'email', 'meta', 'google'],
     body: `# Marketing · ENG 1
 
 Ruta: \`/marketing?tab=…\`
@@ -19,7 +19,6 @@ Ruta: \`/marketing?tab=…\`
 |-----|-----------|
 | **global** | Vista agregada de captación |
 | **web** | Formularios, calendario Cal.com |
-| **email** | Outreach Instantly (métricas / logs) |
 | **coldcalling** | Puente al mundo cold call |
 | **meta** | Meta Ads (métricas) |
 | **google** | Google Ads (métricas) |
@@ -36,7 +35,6 @@ Ruta: \`/marketing?tab=…\`
 - \`GET|PATCH /api/marketing/web-form-submissions\`
 - \`GET /api/marketing/cal-bookings\`
 - Webhook Cal.com: \`POST /api/webhooks/calcom\`
-- Instantly: \`POST /api/webhooks/instantly\` · logs en \`/api/webhooks/instantly/logs\`
 
 ## Flujo típico
 

@@ -159,3 +159,16 @@ export function normalizeVisionMimetype(mimetype: string): string {
   if (m === 'application/pdf') return 'image/jpeg'
   return m
 }
+
+/** Formato de audio para la transcripción a partir del mimetype */
+export function mimetypeToAudioFormat(mimetype: string): string {
+  const m = mimetype.toLowerCase()
+  if (m.includes('ogg')) return 'ogg'
+  if (m.includes('mpeg') || m.includes('mp3')) return 'mp3'
+  if (m.includes('mp4') || m.includes('m4a')) return 'm4a'
+  if (m.includes('webm')) return 'webm'
+  if (m.includes('wav')) return 'wav'
+  if (m.includes('aac')) return 'aac'
+  if (m.includes('flac')) return 'flac'
+  return 'ogg'
+}

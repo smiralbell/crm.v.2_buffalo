@@ -81,7 +81,7 @@ export const MARKETING_PAYMENT_RULES: MarketingPaymentRule[] = [
     label: 'Email marketing',
     model: 'Setup + mensualidad',
     concepts: [
-      { example: 'MKT EMAIL SETUP', detail: 'Setup / onboarding (Instantly, etc.)' },
+      { example: 'MKT EMAIL SETUP', detail: 'Setup / onboarding' },
       { example: 'MKT EMAIL MENSUAL', detail: 'Cuota mensual de la herramienta o gestión' },
     ],
   },
@@ -110,7 +110,7 @@ export const MARKETING_PAYMENT_RULES: MarketingPaymentRule[] = [
 export function marketingTokenToLeadChannel(token: string): LeadCostChannel | null {
   const t = (token || '').trim().toUpperCase()
   if (!t) return null
-  if (t === 'EMAIL' || t === 'INSTANTLY' || t === 'OUTREACH' || t === 'MAIL') return 'email'
+  if (t === 'EMAIL' || t === 'OUTREACH' || t === 'MAIL') return 'email'
   if (t === 'COLDCALL' || t === 'COLD' || t === 'COLDCALLING' || t === 'CALLING') {
     return 'cold_calling'
   }

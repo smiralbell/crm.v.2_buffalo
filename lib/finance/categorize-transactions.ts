@@ -39,7 +39,7 @@ const EXPENSE_RULES: Array<{ id: string; label: string; patterns: RegExp[] }> = 
   {
     id: 'marketing',
     label: 'Marketing y ads',
-    patterns: [/meta\b|facebook|instagram|google\s*ads|linkedin|instantly|publicidad|marketing|ads\b|outreach/i],
+    patterns: [/meta\b|facebook|instagram|google\s*ads|linkedin|publicidad|marketing|ads\b|outreach/i],
   },
   {
     id: 'professional',

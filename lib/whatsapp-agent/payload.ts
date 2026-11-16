@@ -39,7 +39,7 @@ function phoneFromJid(jid: string): string {
  * manda entonces el móvil en otro campo (remoteJidAlt / senderPn). Se usa el
  * primero que sea un número de verdad.
  */
-function senderPhone(key: Obj, data: Obj): string {
+export function senderPhone(key: Obj, data: Obj): string {
   const candidates = [key.remoteJid, key.remoteJidAlt, key.senderPn, key.participantAlt, data.remoteJidAlt]
   for (const c of candidates) {
     const p = phoneFromJid(str(c))

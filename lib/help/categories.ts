@@ -64,7 +64,7 @@ export const HELP_CATEGORIES: HelpCategory[] = [
   {
     id: 'integraciones',
     label: 'Integraciones y entorno',
-    description: 'Google, Cal.com, Wasender, Retell, banco y variables',
+    description: 'Google, Cal.com, Evolution, Retell, banco y variables',
     order: 11,
   },
 ]

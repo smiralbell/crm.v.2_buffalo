@@ -5,7 +5,7 @@ import {
   listAuthorizedPhones,
   saveConversationMessages,
 } from './store'
-import { normalizeWasenderPhone, phoneToWasenderJid, phoneToWasenderRecipient } from './phone'
+import { normalizeWhatsAppPhone } from './phone'
 import { generateDemoReply } from './chat'
 import { generateCrmAssistantReply } from './crm-assistant-chat'
 import {
@@ -13,17 +13,21 @@ import {
   splitReplyIntoWhatsAppMessages,
 } from './format-output'
 import { buildMessageDedupKey, claimIncomingDemoMessage, pruneOldProcessedMessages } from './dedup'
-import {
-  parseWasenderWebhook,
-  sendWasenderDocument,
-  sendWasenderImage,
-  sendWasenderMessageSequence,
-} from './wasender'
-import { resolveUserMessageFromWebhook } from './resolve-user-message'
+import { parseDemoWebhook, sendDemoMedia, sendDemoMessageSequence } from './whatsapp'
+import { resolveUserMessage } from './resolve-user-message'
 import { logDemoWebhook } from './webhook-log'
-import { ensureAttachmentPublicUrl } from './assistant-attachments'
+import type { AssistantAttachment } from './assistant-attachments'
 
-export async function handleDemoWasenderWebhook(body: unknown): Promise<{
+/** El adjunto en base64 si lo tenemos en memoria o en disco; si no, su URL pública. */
+async function attachmentMedia(att: AssistantAttachment): Promise<string | null> {
+  const buffer =
+    att.buffer ||
+    (att.filePath ? await import('fs/promises').then((fs) => fs.readFile(att.filePath!)) : null)
+  if (buffer) return buffer.toString('base64')
+  return att.publicUrl || null
+}
+
+export async function handleDemoWhatsAppWebhook(body: unknown): Promise<{
   handled: boolean
   reason?: string
 }> {
@@ -40,7 +44,7 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
     raw_body: body,
   })
 
-  const parsed = parseWasenderWebhook(body)
+  const parsed = parseDemoWebhook(body)
   if (!parsed.ok) {
     await logDemoWebhook({
       step: 'parse',
@@ -63,10 +67,10 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
     message: `Mensaje${data.hasMedia ? ` (${data.mediaType})` : ''}: "${previewText.slice(0, 80)}${previewText.length > 80 ? '…' : ''}"`,
     event: data.event,
     phone: data.senderPhone,
-    details: { fromMe: data.fromMe, sender_raw: data.senderPhone, has_media: data.hasMedia },
+    details: { sender_raw: data.senderPhone, has_media: data.hasMedia },
   })
 
-  const phone = normalizeWasenderPhone(data.senderPhone)
+  const phone = normalizeWhatsAppPhone(data.senderPhone)
   if (!phone) {
     await logDemoWebhook({
       step: 'phone',
@@ -187,7 +191,7 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
         details: { media_type: data.mediaType },
       })
 
-      const resolved = await resolveUserMessageFromWebhook(body, {
+      const resolved = await resolveUserMessage(data.messageId, {
         text: data.text,
         mediaType: data.mediaType,
         hasMedia: data.hasMedia,
@@ -276,13 +280,10 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
 
     await saveConversationMessages(demo.demo_id, phone, updatedHistory)
 
-    const recipient = phoneToWasenderRecipient(phone)
-    const jid = phoneToWasenderJid(phone)
-
     await logDemoWebhook({
-      step: 'wasender_send',
+      step: 'whatsapp_send',
       level: 'info',
-      message: `Enviando ${replyParts.length} mensaje(s) a ${recipient}…`,
+      message: `Enviando ${replyParts.length} mensaje(s) a ${phone}…`,
       phone,
       demo_id: demo.demo_id,
       details: {
@@ -293,27 +294,29 @@ export async function handleDemoWasenderWebhook(body: unknown): Promise<{
       },
     })
 
-    await sendWasenderMessageSequence(recipient, jid, replyParts)
+    await sendDemoMessageSequence(phone, replyParts)
 
     for (const att of replyRaw.attachments) {
       try {
-        const published = await ensureAttachmentPublicUrl(att)
-        if (!published.publicUrl) continue
-        if (published.kind === 'image') {
-          await sendWasenderImage(recipient, published.publicUrl, published.caption)
-        } else {
-          await sendWasenderDocument(recipient, published.publicUrl, published.caption)
-        }
+        const media = await attachmentMedia(att)
+        if (!media) continue
+        await sendDemoMedia(phone, {
+          kind: att.kind,
+          media,
+          filename: att.filename,
+          mime: att.mime,
+          caption: att.caption,
+        })
         await logDemoWebhook({
-          step: 'wasender_attachment',
+          step: 'whatsapp_attachment',
           level: 'success',
-          message: `Adjunto enviado: ${published.filename}`,
+          message: `Adjunto enviado: ${att.filename}`,
           phone,
           demo_id: demo.demo_id,
         })
       } catch (attErr) {
         await logDemoWebhook({
-          step: 'wasender_attachment',
+          step: 'whatsapp_attachment',
           level: 'error',
           message: attErr instanceof Error ? attErr.message : 'Error adjunto',
           phone,

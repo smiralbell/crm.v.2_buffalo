@@ -1,4 +1,4 @@
--- Evita procesar el mismo mensaje de Wasender dos veces (messages.received + messages.upsert)
+-- Evita procesar el mismo mensaje de WhatsApp dos veces (webhook reenviado)
 CREATE TABLE IF NOT EXISTS demo_processed_messages (
   message_key TEXT PRIMARY KEY,
   demo_id     INTEGER REFERENCES demos(id) ON DELETE SET NULL,

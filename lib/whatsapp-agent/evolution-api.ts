@@ -6,12 +6,21 @@ import { evolutionApiKey, evolutionBaseUrl, evolutionInstance, normalizePhone } 
  * EVOLUTION_INSTANCE: el número del agente es el que tenga conectado.
  */
 
-async function call<T = unknown>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+/**
+ * Llamada a Evolution. `apiKey` permite usar otra instancia con su propio token
+ * (las demos); por defecto, EVOLUTION_API_KEY.
+ */
+export async function evolutionRequest<T = unknown>(
+  method: 'GET' | 'POST',
+  path: string,
+  body?: unknown,
+  apiKey?: string
+): Promise<T> {
   const base = evolutionBaseUrl()
   if (!base) throw new Error('Falta EVOLUTION_API_URL')
   const res = await fetch(`${base}${path}`, {
     method,
-    headers: { apikey: evolutionApiKey(), 'Content-Type': 'application/json' },
+    headers: { apikey: apiKey || evolutionApiKey(), 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   const text = await res.text()
@@ -29,6 +38,10 @@ async function call<T = unknown>(method: 'GET' | 'POST', path: string, body?: un
     throw new Error(`Evolution ${path.split('/').slice(0, 3).join('/')} ${res.status}: ${JSON.stringify(detail).slice(0, 300)}`)
   }
   return data as T
+}
+
+function call<T = unknown>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  return evolutionRequest<T>(method, path, body)
 }
 
 function inst(): string {

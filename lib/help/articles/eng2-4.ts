@@ -40,18 +40,18 @@ export const ARTICLES_ENG2: HelpArticle[] = [
   {
     id: 'demos',
     title: 'Demos WhatsApp y voz',
-    summary: 'Crear demos, formulario público, llamadas Retell y webhooks Wasender',
+    summary: 'Crear demos, formulario público, llamadas Retell y WhatsApp por Evolution',
     category: 'eng2',
     order: 2,
     audience: ['admin'],
-    tags: ['demos', 'whatsapp', 'retell', 'wasender', 'formulario'],
+    tags: ['demos', 'whatsapp', 'retell', 'evolution', 'formulario'],
     body: `# Demos
 
 Rutas: \`/demos\`, \`/demos/[id]\` · Formulario público: \`/formulario/[token]\`
 
 ## Qué hace una demo
 
-Configura un agente de chat (WhatsApp vía Wasender) y/o voz (Retell) para enseñar el producto al prospecto. Puede incluir **formulario público** tokenizado y memoria de conversación.
+Configura un agente de chat (WhatsApp vía Evolution API, con su propia instancia) y/o voz (Retell) para enseñar el producto al prospecto. Puede incluir **formulario público** tokenizado y memoria de conversación.
 
 ## APIs principales
 
@@ -64,12 +64,12 @@ Configura un agente de chat (WhatsApp vía Wasender) y/o voz (Retell) para ense�
 | POST | \`/api/demos/[id]/llamar\` | Llamada outbound Retell |
 | POST, DELETE | \`/api/demos/[id]/memory\` | Memoria |
 | GET | \`/api/demos/retell-voices\` | Catálogo de voces |
-| POST | \`/api/demos/webhook\` · \`/webhook-voz\` | Wasender / Retell |
+| POST | \`/api/demos/webhook\` · \`/webhook-voz\` | Evolution / Retell |
 | GET/POST | \`/api/formulario/[token]\` | Formulario público |
 
 ## Variables
 
-\`WASENDER_API_KEY\`, \`WASENDER_WEBHOOK_SECRET\`, \`RETELL_API_KEY\`, \`RETELL_PHONE_NUMBER\`, \`FORM_ACCESS_SECRET\`.
+\`EVOLUTION_API_URL\`, \`EVOLUTION_DEMOS_INSTANCE\` (opcional \`EVOLUTION_DEMOS_API_KEY\`), \`RETELL_API_KEY\`, \`RETELL_PHONE_NUMBER\`, \`FORM_ACCESS_SECRET\`.
 `,
   },
 ]

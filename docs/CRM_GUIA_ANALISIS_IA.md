@@ -25,7 +25,7 @@ Buffalo vende proyectos de IA (agentes de voz/chat, dashboards, automatización,
 
 | Badge | Área | Significado |
 |-------|------|-------------|
-| ENG 1 | Marketing | Captación (web, email Instantly, cold call, ads) |
+| ENG 1 | Marketing | Captación (web, cold call, ads) |
 | ENG 2 | Onboarding | Configurar proyecto del cliente, propuesta/contrato/factura, **poner en marcha** |
 | ENG 3 | Proyectos | Ejecución interna (tareas, developers, tickets) solo proyectos Buffalo en marcha |
 | ENG 4 | Retención | Clientes con **mensualidad** (`has_mensualidad = true`) + KPIs Engranaje 5 |
@@ -129,7 +129,6 @@ Tabla `marketing_metrics`: por `channel` + `period` (`YYYY-MM`).
 Canales: `email_outreach`, `meta_ads`, `google_ads`, `organic`.  
 Campos: `spend`, emails/replies/meetings, impressions/clicks.
 
-Instantly: webhooks en `instantly_webhooks` (`event_type`, `email`, `campaign_*`, `payload`).
 
 #### 3.3.2 Web
 - Formularios: `web_form_submissions` (`payload` JSONB, `estado`: pendiente/contactado/descartado).
@@ -291,7 +290,7 @@ Emitidas por comerciales/developers en `/developer/facturas`.
 ### 3.9 Demos
 
 Tablas `demos`, `demo_numeros`, `demo_conversaciones`, `demo_llamadas`, …  
-WhatsApp (Wasender) y voz (Retell). Formulario público `/formulario/[token]`.
+WhatsApp (Evolution API) y voz (Retell). Formulario público `/formulario/[token]`.
 
 **Análisis:** demos activas, conversaciones, llamadas, conversión demo→lead (si se trackea en notas/origen).
 
@@ -525,7 +524,7 @@ Import stats, feed, peticiones de BBDD.
 
 ### 6.7 Marketing / web / demos / auth
 
-#### `marketing_metrics`, `instantly_webhooks`, `cal_bookings`, `web_form_submissions`
+#### `marketing_metrics`, `cal_bookings`, `web_form_submissions`
 Captación digital.
 
 #### `demos` + `demo_numeros` + `demo_conversaciones` + `demo_llamadas` + logs
@@ -602,7 +601,6 @@ GROUP BY 1;
 
 ### 8.5 Marketing & cold call
 - CAC aproximado: spend (`marketing_metrics`) / meetings o leads.
-- Instantly: replies / meetings_booked.
 - Cold call: dials, contact rate, meeting rate por user y campaña; callbacks pendientes (`llamar_tarde` / stage volver_a_llamar).
 
 ### 8.6 Delivery quality

@@ -15,7 +15,7 @@ Buffalo vende proyectos de IA (agentes de voz/chat, dashboards, automatización,
 
 | Badge | Área | Qué significa |
 |-------|------|---------------|
-| **ENG 1** | Marketing | Captación: web, email Instantly, cold call, Meta Ads, Google Ads |
+| **ENG 1** | Marketing | Captación: web, cold call, Meta Ads, Google Ads |
 | **ENG 2** | Onboarding | Configurar el proyecto del cliente, propuesta/contrato/factura y **poner en marcha** |
 | **ENG 3** | Proyectos | Ejecución interna: tareas, developers, tickets (solo proyectos Buffalo en marcha) |
 | **ENG 4** | Retención | Clientes con **mensualidad** + informes y KPIs de mantenimiento |

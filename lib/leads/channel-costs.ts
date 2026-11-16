@@ -129,7 +129,7 @@ function tokenToCostChannel(token: string): CostChannelKey | null {
   if (!t) return null
   if (t === 'META' || t === 'FACEBOOK' || t === 'FB' || t === 'INSTAGRAM') return 'meta'
   if (t === 'GOOGLE' || t === 'ADWORDS' || t === 'SEM') return 'google'
-  if (t === 'EMAIL' || t === 'INSTANTLY' || t === 'OUTREACH' || t === 'MAIL') return 'email'
+  if (t === 'EMAIL' || t === 'OUTREACH' || t === 'MAIL') return 'email'
   if (t === 'COLDCALL' || t === 'COLD' || t === 'COLDCALLING' || t === 'CALLING') {
     return 'cold_calling'
   }

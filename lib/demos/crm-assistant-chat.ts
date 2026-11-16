@@ -201,7 +201,7 @@ async function synthesizeFinalAnswer(
 
 /**
  * Secretaria CRM: lectura + escritura + documentos.
- * Devuelve texto + adjuntos (el webhook los envía por Wasender).
+ * Devuelve texto + adjuntos (el webhook los envía por WhatsApp con Evolution).
  */
 export async function generateCrmAssistantReply(
   systemPrompt: string,

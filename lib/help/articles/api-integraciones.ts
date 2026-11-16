@@ -208,7 +208,6 @@ Prefijo \`/api/retencion/\`:
 | Ruta | Uso |
 |------|-----|
 | \`POST /api/webhooks/calcom\` | Reservas Cal.com |
-| \`POST /api/webhooks/instantly\` | Email outreach |
 | \`POST /api/webhooks/onboarding-form\` | Form externo onboarding |
 | \`POST /api/webhooks/tickets\` | Tickets cliente |
 | \`POST /api/engranaje5/proyectos/sync\` | Sync KPIs retención |
@@ -262,7 +261,7 @@ await fetch('/api/leads', {
 
 ## Webhooks externos
 
-Llevan token propio (header o query según el handler). **No** usan la cookie de sesión del CRM. Consulta la ficha de cada webhook (Cal.com, Instantly, tickets, onboarding-form).
+Llevan token propio (header o query según el handler). **No** usan la cookie de sesión del CRM. Consulta la ficha de cada webhook (Cal.com, tickets, onboarding-form).
 
 ## Buenas prácticas
 
@@ -278,19 +277,18 @@ export const ARTICLES_INTEGRACIONES: HelpArticle[] = [
   {
     id: 'integraciones',
     title: 'Integraciones externas',
-    summary: 'Google, Cal.com, Wasender, Retell, Instantly, Enable Banking',
+    summary: 'Google, Cal.com, Evolution (WhatsApp), Retell, Enable Banking',
     category: 'integraciones',
     order: 1,
     audience: ['admin'],
-    tags: ['google', 'calcom', 'wasender', 'retell', 'instantly', 'banco'],
+    tags: ['google', 'calcom', 'evolution', 'whatsapp', 'retell', 'banco'],
     body: `# Integraciones
 
 | Sistema | Para qué | Entrada en el CRM |
 |---------|----------|-------------------|
 | **Google OAuth / Calendar** | Login admin, eventos, notas | \`/api/integrations/google/*\`, Calendario |
 | **Cal.com** | Reservas web | Webhook + marketing calendario |
-| **Instantly** | Email outreach | Webhook + tab Email |
-| **Wasender** | WhatsApp demos / secretaria | Webhooks demos |
+| **Evolution API** | WhatsApp: asistente del CRM y demos (instancias distintas) | Webhooks \`/api/webhooks/whatsapp\` y \`/api/demos/webhook\` |
 | **Retell** | Llamadas de voz demo | \`/api/demos/[id]/llamar\` |
 | **Enable Banking** | Extractos bancarios | Finanzas → sync |
 | **OpenRouter** | LLMs (análisis, demos, retención) | Server-side |
@@ -337,12 +335,12 @@ Cada integración exige variables de entorno (ver artículo siguiente). Los webh
 ## Comms
 
 - SMTP / Gmail app password
-- \`WASENDER_*\`, \`RETELL_*\`, \`FORM_ACCESS_SECRET\`
+- \`EVOLUTION_*\` (con \`EVOLUTION_DEMOS_INSTANCE\` para las demos), \`RETELL_*\`, \`FORM_ACCESS_SECRET\`
 
 ## Pipelines y webhooks
 
 - IDs de pipelines globales / web / coldcall
-- Tokens Cal.com, Instantly, onboarding-form, tickets
+- Tokens Cal.com, onboarding-form, tickets
 
 Consulta también el \`README.md\` del repo para el arranque local (\`npm run dev\`, migraciones SQL).
 `,

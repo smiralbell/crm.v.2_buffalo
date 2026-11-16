@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS team_members (
 DROP TABLE IF EXISTS invoice_template;
 DROP TABLE IF EXISTS marketing_outreach_contacts;
 DROP TABLE IF EXISTS instantly_webhooks_debug;
+DROP TABLE IF EXISTS instantly_webhooks;
 DROP TABLE IF EXISTS project_ai_analyses CASCADE;
 DROP TABLE IF EXISTS project_journal_entries CASCADE;
 DROP TABLE IF EXISTS evaluation_projects CASCADE;

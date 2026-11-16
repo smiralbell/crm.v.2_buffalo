@@ -13,7 +13,7 @@ export function buildMessageDedupKey(
 
 /**
  * Devuelve true si este mensaje debe procesarse (primera vez).
- * false = duplicado (mismo webhook reenviado o segundo evento Wasender).
+ * false = duplicado (mismo webhook reenviado o segundo evento del mismo mensaje).
  */
 export async function claimIncomingDemoMessage(
   messageKey: string,

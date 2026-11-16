@@ -77,7 +77,6 @@ export const AGENT_MODULES: AgentModule[] = [
       'web_form_submissions',
       'cal_bookings',
       'blog_docs',
-      'instantly_webhooks',
     ],
     herramientas: ['run_domain_agent'],
     guia: `- Para métricas rápidas usa run_domain_agent con domains ["marketing"].

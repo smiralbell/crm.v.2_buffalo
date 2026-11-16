@@ -4,10 +4,11 @@ import {
 } from '@/lib/openrouter'
 import {
   buildUnsupportedMediaUserText,
+  mimetypeToAudioFormat,
   normalizeVisionMimetype,
   type DemoMediaKind,
 } from './media'
-import { decryptWasenderMedia, fetchMediaAsBase64, mimetypeToAudioFormat } from './wasender-media'
+import { downloadDemoMedia } from './whatsapp'
 
 export type ResolvedUserInput = {
   text: string
@@ -15,8 +16,8 @@ export type ResolvedUserInput = {
   rawCaption?: string
 }
 
-export async function resolveUserMessageFromWebhook(
-  body: unknown,
+export async function resolveUserMessage(
+  messageId: string | null,
   parsed: {
     text: string
     mediaType: DemoMediaKind | 'text'
@@ -44,9 +45,8 @@ export async function resolveUserMessageFromWebhook(
 
   const caption = parsed.mediaCaption || parsed.text.trim()
 
-  const { publicUrl, mimetype } = await decryptWasenderMedia(body)
-  const { base64, mimetype: fetchedMime } = await fetchMediaAsBase64(publicUrl)
-  const mime = mimetype || fetchedMime || 'application/octet-stream'
+  if (!messageId) throw new Error('Mensaje sin id: no se puede descargar el archivo')
+  const { base64, mimetype: mime } = await downloadDemoMedia(messageId)
 
   if (parsed.mediaType === 'audio') {
     const format = mimetypeToAudioFormat(mime)

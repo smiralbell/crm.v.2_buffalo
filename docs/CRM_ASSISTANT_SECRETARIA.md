@@ -6,7 +6,7 @@ Arquitectura del asistente `es_asistente_crm` en Demos.
 
 ```mermaid
 flowchart TD
-  WA[WhatsApp usuario autorizado] -->|mensaje| WS[Wasender webhook]
+  WA[WhatsApp usuario autorizado] -->|mensaje| WS[Evolution webhook]
   WS --> WH[webhook-handler]
   WH -->|es_asistente_crm| ORCH[crm-assistant-chat]
   WH -->|demo cliente| DEMO[generateDemoReply]
@@ -26,8 +26,8 @@ flowchart TD
 
   LLM -->|texto final| ORCH
   ORCH -->|text + attachments + actions_log| WH
-  WH -->|texto| WST[Wasender send text]
-  WH -->|PDF/TXT/imagen| WSD[Wasender document/image]
+  WH -->|texto| WST[Evolution sendText]
+  WH -->|PDF/TXT/imagen| WSD[Evolution sendMedia]
   FILES -->|GET /api/demos/assistant-files/token| WSD
   WST --> WA
   WSD --> WA
@@ -35,11 +35,11 @@ flowchart TD
 
 ## Flujo de una petición
 
-1. Wasender entrega el mensaje → `handleDemoWasenderWebhook`.
+1. Evolution entrega el mensaje → `handleDemoWhatsAppWebhook`.
 2. Si el demo tiene `es_asistente_crm` y el teléfono está autorizado → orquestador secretaria.
 3. Prefetch de lectura (salvo si parece escritura) + hasta 8 rondas de tools.
 4. Escrituras: `confirm=false` → preview en WhatsApp → usuario dice sí → `confirm=true`.
-5. Documentos: se publican en `/api/demos/assistant-files/[token]` y Wasender los descarga.
+5. Documentos: se publican en `/api/demos/assistant-files/[token]` y se envían por Evolution (en base64).
 6. Se envía texto y luego cada adjunto.
 
 ## Capas
@@ -54,7 +54,7 @@ flowchart TD
 | Subagentes | `lib/demos/crm-assistant-subagents.ts` | finance/comercial/proyectos/ops/marketing/cliente |
 | Acciones | `lib/demos/crm-assistant-actions.ts` | Escritura + informes + email |
 | Adjuntos | `lib/demos/assistant-attachments.ts` + API | URL temporal |
-| Wasender | `lib/demos/wasender.ts` | text / documentUrl / imageUrl |
+| Evolution | `lib/demos/whatsapp.ts` | sendText / sendMedia |
 
 ## Qué puede hacer
 
@@ -71,7 +71,7 @@ flowchart TD
 
 ## Requisitos env
 
-- `OPENROUTER_API_KEY`, `WASENDER_API_KEY`
+- `OPENROUTER_API_KEY`, `EVOLUTION_API_URL`, `EVOLUTION_DEMOS_INSTANCE`
 - `NEXT_PUBLIC_BASE_URL` (obligatorio para documentos)
 - Opcional Calendar: `GOOGLE_REFRESH_TOKEN`, `CRM_ADMIN_EMAIL`
 - Opcional Email: `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`
