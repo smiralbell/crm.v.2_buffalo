@@ -149,7 +149,7 @@ function inferDomains(userMessage: string): { domains: CrmDomain[]; entityQuery?
 }
 
 function looksLikeWriteIntent(userMessage: string): boolean {
-  return /\b(crea|añade|agrega|apunta|anota|marca|cambia|actualiza|agenda|programa|env[ií]ame|manda(me)?|checklist|tarea|nota|reuni[oó]n|confirma|email|correo|pausa|churn|activa)\b/i.test(
+  return /\b(crea|añade|agrega|apunta|anota|marca|cambia|actualiza|agenda|programa|env[ií]ame|manda(me)?|tarea|nota|reuni[oó]n|confirma|email|correo|pausa|churn|activa)\b/i.test(
     userMessage
   )
 }
@@ -303,7 +303,7 @@ PROTOCOLO SECRETARIA
       messages.push({
         role: 'user',
         content:
-          'Debes usar tools ahora (run_domain_agent, checklist_*, append_lead_note, etc.). No respondas todavía al usuario.',
+          'Debes usar tools ahora (run_domain_agent, append_lead_note, etc.). No respondas todavía al usuario.',
       })
       continue
     }

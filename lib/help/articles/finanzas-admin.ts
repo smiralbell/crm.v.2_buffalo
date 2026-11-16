@@ -123,10 +123,6 @@ Al crear un usuario eliges rol (\`admin\` | \`developer\` | \`comercial\`). Los 
 
 Integración: \`/api/integrations/google/*\` (connect, callback, disconnect, status, events, event-notes).
 
-## Checklist
-
-\`/checklist\` — tareas internas del equipo.  
-API: \`GET|POST /api/checklist\` · \`/api/checklist/[id]\`
 `,
   },
   {

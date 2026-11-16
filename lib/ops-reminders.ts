@@ -1,11 +1,11 @@
 import { query } from '@/lib/db'
-import { isChecklistReminderDue, normalizeRemindTime, normalizeWeekday } from '@/lib/checklist/remind'
-import { ensureChecklistSchema } from '@/lib/checklist/store'
-import { type ChecklistColumnId, isChecklistColumnId } from '@/lib/checklist/types'
-import { prisma } from '@/lib/prisma'
-import { Prisma } from '@prisma/client'
-import { opsLink, sendOpsAlert, sendTelegramToChat } from '@/lib/ops-alerts'
+import { opsLink, sendOpsAlert } from '@/lib/ops-alerts'
 import { ensureIncidentsTable } from '@/lib/retencion/incidents'
+
+/**
+ * Recordatorio diario de incidencias de Retención que siguen abiertas.
+ * (Antes también recordaba el Checklist; ahora esas tareas viven en Tareas.)
+ */
 
 const TZ = 'Europe/Madrid'
 
@@ -27,29 +27,12 @@ export function madridCalendarDaysBetween(from: Date, to: Date): number {
   return Math.round((db - da) / 86_400_000)
 }
 
-function personLabel(column: ChecklistColumnId): string {
-  if (column === 'santi') return 'Santi'
-  if (column === 'sergi') return 'Sergi'
-  return 'Equipo'
-}
-
-function checklistLine(column: ChecklistColumnId, title: string): string {
-  if (column === 'inbox') return `En Checklist (sin asignar) falta: ${title}`
-  return `${personLabel(column)} te falta hacer: ${title}`
-}
-
 type DueIncident = {
   id: string
   proyecto_id: string
   proyecto_name: string
   error_text: string
   created_at: Date
-}
-
-type DueTask = {
-  id: number
-  title: string
-  column_key: ChecklistColumnId
 }
 
 async function claimDueIncidents(): Promise<DueIncident[]> {
@@ -96,65 +79,13 @@ async function claimDueIncidents(): Promise<DueIncident[]> {
   }))
 }
 
-async function claimDueChecklist(): Promise<DueTask[]> {
-  await ensureChecklistSchema()
-  return prisma.$transaction(async (tx) => {
-    const open = await tx.$queryRaw<
-      {
-        id: number
-        title: string
-        column_key: string
-        remind_every_days: number | null
-        remind_weekday: number | null
-        remind_time: string | null
-        last_reminded_at: Date | null
-        created_at: Date
-      }[]
-    >`
-      SELECT id, title, column_key, remind_every_days, remind_weekday, remind_time,
-             last_reminded_at, created_at
-        FROM crm_checklist_items
-       WHERE done = FALSE
-         AND imported_at IS NULL
-         AND (remind_every_days > 0 OR remind_weekday IS NOT NULL)
-       FOR UPDATE SKIP LOCKED
-    `
-    const now = new Date()
-    const due = open.filter((r) =>
-      isChecklistReminderDue(
-        {
-          remind_every_days: Number(r.remind_every_days) || 0,
-          remind_weekday: normalizeWeekday(r.remind_weekday),
-          remind_time: normalizeRemindTime(r.remind_time),
-          last_reminded_at: r.last_reminded_at ? r.last_reminded_at.toISOString() : null,
-          created_at: r.created_at.toISOString(),
-        },
-        now
-      )
-    )
-    if (!due.length) return []
-
-    const ids = due.map((r) => r.id)
-    await tx.$executeRaw`
-      UPDATE crm_checklist_items
-         SET last_reminded_at = NOW()
-       WHERE id IN (${Prisma.join(ids)})
-    `
-    return due.map((r) => ({
-      id: r.id,
-      title: r.title,
-      column_key: isChecklistColumnId(r.column_key) ? r.column_key : 'inbox',
-    }))
-  })
-}
-
-function buildDigest(incidents: DueIncident[], tasks: DueTask[]): {
+function buildDigest(incidents: DueIncident[]): {
   subject: string
   text: string
   html: string
   telegramHtml: string
 } | null {
-  if (!incidents.length && !tasks.length) return null
+  if (!incidents.length) return null
 
   const now = new Date()
   const incLines = incidents.map((i) => {
@@ -167,98 +98,24 @@ function buildDigest(incidents: DueIncident[], tasks: DueTask[]): {
       link,
     }
   })
-  const taskLines = tasks.map((t) => checklistLine(t.column_key, t.title.trim()))
-  const checkLink = opsLink('/checklist')
 
-  const textParts: string[] = []
-  if (incLines.length) {
-    textParts.push('INCIDENCIAS ABIERTAS')
-    for (const l of incLines) textParts.push(`• ${l.title}\n  ${l.err}\n  ${l.link}`)
-  }
-  if (taskLines.length) {
-    textParts.push('CHECKLIST')
-    for (const l of taskLines) textParts.push(`• ${l}`)
-    textParts.push(checkLink)
-  }
+  const textParts = ['INCIDENCIAS ABIERTAS', ...incLines.map((l) => `• ${l.title}\n  ${l.err}\n  ${l.link}`)]
 
-  const htmlParts: string[] = ['<p>Recordatorios del CRM Buffalo.</p>']
-  if (incLines.length) {
-    htmlParts.push('<p><b>Incidencias abiertas</b></p><ul>')
-    for (const l of incLines) {
-      htmlParts.push(
-        `<li><a href="${l.link}">${esc(l.title)}</a><br/>${esc(l.err)}</li>`
-      )
-    }
-    htmlParts.push('</ul>')
+  const htmlParts: string[] = ['<p>Recordatorios del CRM Buffalo.</p>', '<p><b>Incidencias abiertas</b></p><ul>']
+  for (const l of incLines) {
+    htmlParts.push(`<li><a href="${l.link}">${esc(l.title)}</a><br/>${esc(l.err)}</li>`)
   }
-  if (taskLines.length) {
-    htmlParts.push('<p><b>Checklist</b></p><ul>')
-    for (const l of taskLines) htmlParts.push(`<li>${esc(l)}</li>`)
-    htmlParts.push('</ul>')
-    htmlParts.push(`<p><a href="${checkLink}">Abrir checklist</a></p>`)
-  }
+  htmlParts.push('</ul>')
 
-  const tg: string[] = ['<b>Recordatorios CRM</b>']
-  if (incLines.length) {
-    tg.push('')
-    tg.push('<b>Incidencias abiertas</b>')
-    for (const l of incLines) tg.push(`• ${esc(l.title)}\n${esc(l.err)}\n${l.link}`)
-  }
-  if (taskLines.length) {
-    tg.push('')
-    tg.push('<b>Checklist</b>')
-    for (const l of taskLines) tg.push(`• ${esc(l)}`)
-    tg.push(checkLink)
-  }
-
-  const bits: string[] = []
-  if (incLines.length) bits.push(`${incLines.length} incidencia${incLines.length === 1 ? '' : 's'}`)
-  if (taskLines.length) bits.push(`${taskLines.length} tarea${taskLines.length === 1 ? '' : 's'} de checklist`)
+  const tg: string[] = ['<b>Recordatorios CRM</b>', '', '<b>Incidencias abiertas</b>']
+  for (const l of incLines) tg.push(`• ${esc(l.title)}\n${esc(l.err)}\n${l.link}`)
 
   return {
-    subject: `Recordatorios · ${bits.join(' y ')}`,
+    subject: `Recordatorios · ${incLines.length} incidencia${incLines.length === 1 ? '' : 's'}`,
     text: textParts.join('\n\n'),
     html: htmlParts.join(''),
     telegramHtml: tg.join('\n'),
   }
-}
-
-/** Chat privado de Telegram de cada persona: sus tareas de checklist le llegan solo a ella. */
-function personalChatId(column: ChecklistColumnId): string {
-  if (column === 'santi') return process.env.TELEGRAM_SANTI_CHAT_ID?.trim() || ''
-  if (column === 'sergi') return process.env.TELEGRAM_SERGI_CHAT_ID?.trim() || ''
-  return ''
-}
-
-function personalTelegramHtml(tasks: DueTask[]): string {
-  const lines = ['<b>Recordatorio · Checklist</b>', '', 'Te falta hacer:']
-  for (const t of tasks) lines.push(`• ${esc(t.title.trim())}`)
-  lines.push('', opsLink('/checklist'))
-  return lines.join('\n')
-}
-
-/**
- * Manda por privado las tareas de quien tenga chat configurado. Devuelve las que
- * no se han podido entregar así (sin asignar, sin chat o fallo de Telegram): esas
- * siguen en el resumen general.
- */
-async function sendPersonalChecklist(tasks: DueTask[]): Promise<{ rest: DueTask[]; sent: number }> {
-  const byChat = new Map<string, DueTask[]>()
-  const rest: DueTask[] = []
-  for (const t of tasks) {
-    const chatId = personalChatId(t.column_key)
-    if (!chatId) {
-      rest.push(t)
-      continue
-    }
-    byChat.set(chatId, [...(byChat.get(chatId) || []), t])
-  }
-  let sent = 0
-  for (const [chatId, own] of Array.from(byChat)) {
-    if (await sendTelegramToChat(chatId, personalTelegramHtml(own))) sent += own.length
-    else rest.push(...own)
-  }
-  return { rest, sent }
 }
 
 function esc(s: string): string {
@@ -267,6 +124,7 @@ function esc(s: string): string {
 
 export async function runDueOpsReminders(): Promise<{
   incidents: number
+  /** Siempre 0: el Checklist ya no existe (sus tareas están en Tareas) */
   checklist: number
   sent: boolean
 }> {
@@ -274,14 +132,8 @@ export async function runDueOpsReminders(): Promise<{
     console.warn('[ops-reminders] incidents', e)
     return [] as DueIncident[]
   })
-  const tasks = await claimDueChecklist().catch((e) => {
-    console.warn('[ops-reminders] checklist', e)
-    return [] as DueTask[]
-  })
-  const personal = await sendPersonalChecklist(tasks)
-  const digest = buildDigest(incidents, personal.rest)
-  if (!digest) return { incidents: 0, checklist: tasks.length, sent: personal.sent > 0 }
-  await sendOpsAlert({ ...digest, url: incidents.length ? '/alertas' : '/checklist' })
-  return { incidents: incidents.length, checklist: tasks.length, sent: true }
+  const digest = buildDigest(incidents)
+  if (!digest) return { incidents: 0, checklist: 0, sent: false }
+  await sendOpsAlert({ ...digest, url: '/alertas' })
+  return { incidents: incidents.length, checklist: 0, sent: true }
 }
-

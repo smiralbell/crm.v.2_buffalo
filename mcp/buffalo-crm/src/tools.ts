@@ -44,7 +44,7 @@ Sin el paso 2 no se borra nada. El token caduca en 10 minutos.
 
 ## Dominios del CRM (tablas habituales)
 - contacts, leads, pipelines / pipeline stages & cards
-- proyectos, tickets, checklist
+- proyectos, tickets, tareas
 - coldcall campaigns / prospects / calls
 - demos, invoices, finances
 - crm_users, retencion_agent_configs, retencion_monthly_reports

@@ -3,7 +3,7 @@ import { normalizeSubtasks } from '@/lib/subtasks'
 
 let columnEnsured = false
 
-/** Crea la columna `subtasks` si aún no existe (mismo patrón que el checklist). */
+/** Crea la columna `subtasks` si aún no existe. */
 export async function ensureProjectTaskSubtasksColumn(): Promise<void> {
   if (columnEnsured) return
   await prisma.$executeRawUnsafe(

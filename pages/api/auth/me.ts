@@ -42,6 +42,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   void import('@/lib/demos/whatsapp')
     .then((m) => m.startDemosWhatsApp())
     .catch(() => {})
+  // Una sola vez: el antiguo Checklist pasa a las Tareas de Santi y Sergi.
+  void import('@/lib/checklist/migrate-to-tareas')
+    .then((m) => m.startChecklistMigration())
+    .catch(() => {})
 
   try {
     let user = await requireAuthAPI(req, res)

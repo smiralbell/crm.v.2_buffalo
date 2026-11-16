@@ -173,7 +173,6 @@ const READ_ONLY = new Set([
   'search_tickets',
   'search_invoices',
   'get_pipeline_brief',
-  'checklist_list',
   'delegar_subagentes',
   'mcp_listar',
   ...TASK_READ_ONLY,
@@ -181,8 +180,6 @@ const READ_ONLY = new Set([
 
 /** Acciones de la secretaria que en Telegram se ejecutan directas (solo los borrados piden confirmación). */
 const DIRECT_ACTIONS = new Set([
-  'checklist_add',
-  'checklist_complete',
   'append_lead_note',
   'update_lead_estado',
   'create_contact_and_lead',

@@ -1,11 +1,5 @@
 import { prisma } from '@/lib/prisma'
 import {
-  createChecklistItem,
-  listChecklistItems,
-  updateChecklistItem,
-} from '@/lib/checklist/store'
-import { isChecklistColumnId, type ChecklistColumnId } from '@/lib/checklist/types'
-import {
   insertTicketUpdate,
   updateTicketStatus,
 } from '@/lib/tickets/updates'
@@ -106,34 +100,6 @@ export async function createContactAndLead(input: {
     contact_id: contact.id,
     lead_id: lead.id,
     deep_link: `/leads/${lead.id}`,
-  }
-}
-
-export async function checklistAdd(
-  title: string,
-  column_key: string | undefined,
-  confirm: boolean
-) {
-  const column: ChecklistColumnId =
-    column_key && isChecklistColumnId(column_key) ? column_key : 'inbox'
-  const preview = { title, column_key: column }
-  if (!confirm) return requireConfirm({ confirm }, preview)
-  const item = await createChecklistItem({ title, column_key: column })
-  return { ok: true, item, deep_link: '/checklist' }
-}
-
-export async function checklistComplete(id: number, confirm: boolean) {
-  const preview = { id, done: true }
-  if (!confirm) return requireConfirm({ confirm }, preview)
-  const item = await updateChecklistItem(id, { done: true })
-  return item ? { ok: true, item } : { ok: false, error: 'Item no encontrado' }
-}
-
-export async function checklistList() {
-  const items = await listChecklistItems()
-  return {
-    open: items.filter((i) => !i.done).slice(0, 30),
-    done_recent: items.filter((i) => i.done).slice(0, 10),
   }
 }
 

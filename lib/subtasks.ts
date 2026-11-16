@@ -1,5 +1,5 @@
 /**
- * Subtareas compartidas por el checklist y las tareas de proyecto.
+ * Subtareas compartidas por las tareas sueltas y las de proyecto.
  * Se guardan como un array JSON dentro de la tarea padre (columna `subtasks`),
  * así nunca aparecen como tarjetas sueltas en el tablero.
  */

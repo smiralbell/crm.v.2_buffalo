@@ -164,7 +164,6 @@ Agentes demo WhatsApp/voz. es_asistente_crm = este asistente interno (NO demos c
 ═══════════════════════════════════════════════════════════════
 3. ACCIONES DE SECRETARIA (escritura — confirm=true)
 ═══════════════════════════════════════════════════════════════
-· checklist_* → columnas inbox|santi|sergi
 · append_lead_note / update_lead_estado / create_contact_and_lead
 · ticket_reply / ticket_set_status
 · create_project_task / update_proyecto_status (development|active|paused|churned)

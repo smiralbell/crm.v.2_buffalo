@@ -21,7 +21,6 @@ import {
   Clock,
   MessageSquare,
   Copy,
-  ListChecks,
   ListTodo,
   HelpCircle,
   Video,
@@ -156,7 +155,6 @@ const NAV: NavItem[] = [
   // Tareas sueltas + las de sus proyectos. El admin ve las de todo el equipo (panel de super admin).
   { href: '/tareas', label: 'Tareas', icon: ListTodo, roles: ['admin', 'developer', 'comercial', 'project_manager'] },
   { href: '/calendario', label: 'Calendario', icon: Calendar, roles: ['admin'] },
-  { href: '/checklist', label: 'Checklist', icon: ListChecks, roles: ['admin'] },
 ]
 
 type SidebarProps = {

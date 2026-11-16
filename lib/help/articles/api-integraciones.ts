@@ -216,7 +216,6 @@ Prefijo \`/api/retencion/\`:
 ## Misc
 
 - \`GET /api/health\`
-- \`/api/checklist\` · \`/[id]\`
 `,
   },
   {

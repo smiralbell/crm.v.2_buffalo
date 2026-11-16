@@ -145,7 +145,7 @@ export const AGENT_MODULES: AgentModule[] = [
   {
     key: 'soporte',
     nombre: 'Soporte y operaciones',
-    descripcion: 'Tickets de clientes, respuestas, incidencias de retención, vigilancia de sistemas, checklist del equipo.',
+    descripcion: 'Tickets de clientes, respuestas, incidencias de retención y vigilancia de sistemas.',
     tablas: [
       'tickets',
       'ticket_updates',
@@ -153,18 +153,14 @@ export const AGENT_MODULES: AgentModule[] = [
       'retencion_incidents',
       'retencion_watch_runs',
       'retencion_watch_memory',
-      'crm_checklist_items',
       'ops_alert_messages',
     ],
     herramientas: [
       'search_tickets',
       'ticket_reply',
       'ticket_set_status',
-      'checklist_list',
-      'checklist_add',
-      'checklist_complete',
     ],
-    guia: `- Checklist: columnas inbox | santi | sergi. Usa checklist_* con confirm=true.
+    guia: `- Las tareas del equipo están en Tareas (herramientas de tareas), no en un checklist.
 - Para responder a un ticket usa ticket_reply (queda en ticket_updates).`,
   },
   {

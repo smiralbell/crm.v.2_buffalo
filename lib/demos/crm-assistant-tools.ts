@@ -418,46 +418,6 @@ export const CRM_ASSISTANT_TOOLS = [
   {
     type: 'function' as const,
     function: {
-      name: 'checklist_list',
-      description: 'Lista checklist interna (inbox/santi/sergi).',
-      parameters: { type: 'object', properties: {} },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'checklist_add',
-      description:
-        'Crea tarea en checklist. column_key: inbox|santi|sergi. Requiere confirm=true tras preview.',
-      parameters: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          column_key: { type: 'string' },
-          confirm: { type: 'boolean' },
-        },
-        required: ['title'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'checklist_complete',
-      description: 'Marca item checklist como hecho. Requiere confirm=true.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: { type: 'number' },
-          confirm: { type: 'boolean' },
-        },
-        required: ['id'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
       name: 'append_lead_note',
       description: 'Añade nota a un lead. Requiere confirm=true.',
       parameters: {
@@ -695,16 +655,6 @@ export async function executeCrmAssistantTool(
       return searchInvoices(String(args.query || ''))
     case 'get_pipeline_brief':
       return getPipelineBrief()
-    case 'checklist_list':
-      return actions.checklistList()
-    case 'checklist_add':
-      return actions.checklistAdd(
-        String(args.title || ''),
-        args.column_key ? String(args.column_key) : undefined,
-        args.confirm === true
-      )
-    case 'checklist_complete':
-      return actions.checklistComplete(Number(args.id), args.confirm === true)
     case 'append_lead_note':
       return actions.appendLeadNote(
         Number(args.lead_id),

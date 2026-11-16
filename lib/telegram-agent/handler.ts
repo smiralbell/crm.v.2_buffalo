@@ -187,7 +187,7 @@ const HELP = `Soy el agente del CRM de Buffalo. Tenéis acceso total: escribidme
 
 Qué puedo hacer:
 - Consultar cualquier dato: leads, proyectos, finanzas, banco, tickets, marketing, cold calling…
-- Crear y cambiar lo que sea: leads, notas, estados, tareas, tickets, checklist, reuniones, emails, configuraciones.
+- Crear y cambiar lo que sea: leads, notas, estados, tareas, tickets, reuniones, emails, configuraciones.
 - Trabajar con subagentes especialistas en paralelo: ${AGENT_MODULES.map((m) => m.key).join(', ')}.
 - Programar avisos («cada lunes a las 9 mándame los cobros pendientes»).
 - Guardar instrucciones permanentes («a partir de ahora…»).
