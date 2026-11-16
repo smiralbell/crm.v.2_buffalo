@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import { ensureRecurringInvoiceColumns } from '@/lib/invoices/recurring'
 import { getRecurringEmailState, updateRecurringEmailSettings } from '@/lib/invoices/recurring-email'
-import { normalizeSendTime, parseEmailList } from '@/lib/invoices/recurring-email-template'
+import { parseEmailList } from '@/lib/invoices/recurring-email-template'
 
 /**
  * GET   /api/invoices/recurring/[id]/email → configuración del envío + historial
@@ -25,7 +25,6 @@ const patchSchema = z.object({
   email_subject: optionalText,
   email_body: optionalText,
   email_send_day: z.number().int().min(1).max(31).nullable().optional(),
-  email_send_time: z.string().nullable().optional(),
 })
 
 function badEmails(label: string, raw: string | null | undefined): string | null {
@@ -59,12 +58,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         badEmails('Responder a', data.email_reply_to)
       if (problem) return res.status(400).json({ error: problem })
 
-      let sendTime: string | null | undefined = undefined
-      if (data.email_send_time !== undefined) {
-        sendTime = data.email_send_time ? normalizeSendTime(data.email_send_time) : null
-        if (data.email_send_time && !sendTime) return res.status(400).json({ error: 'La hora tiene que ser HH:MM' })
-      }
-
       if (data.email_enabled) {
         const current = await getRecurringEmailState(id)
         if (!current) return res.status(404).json({ error: 'Factura recurrente no encontrada' })
@@ -74,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       }
 
-      const ok = await updateRecurringEmailSettings(id, { ...data, email_send_time: sendTime })
+      const ok = await updateRecurringEmailSettings(id, data)
       if (!ok) return res.status(404).json({ error: 'Factura recurrente no encontrada' })
     } else if (req.method !== 'GET') {
       return res.status(405).json({ error: 'Método no permitido' })

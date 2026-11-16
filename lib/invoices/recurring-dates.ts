@@ -13,13 +13,49 @@ const MONTHS = [
   'diciembre',
 ]
 
-export function madridToday(): string {
+export function madridToday(now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/Madrid',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(new Date())
+  }).format(now)
+}
+
+/** Minutos que Madrid va por delante de UTC en ese instante (60 en invierno, 120 en verano). */
+function madridOffsetMinutes(utcMs: number): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Madrid',
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).formatToParts(new Date(utcMs))
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value)
+  const wall = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'))
+  return Math.round((wall - Math.floor(utcMs / 60_000) * 60_000) / 60_000)
+}
+
+/** «2026-11-05» a las «09:00» de Madrid, como instante real. */
+export function madridWallTime(dateIso: string, hhmm: string): Date {
+  const [y, m, d] = dateIso.slice(0, 10).split('-').map(Number)
+  const [h, min] = hhmm.split(':').map(Number)
+  const wall = Date.UTC(y, m - 1, d, h, min)
+  let ts = wall - madridOffsetMinutes(wall) * 60_000
+  ts = wall - madridOffsetMinutes(ts) * 60_000
+  return new Date(ts)
+}
+
+/** La próxima vez (estrictamente después de `now`) que en Madrid sean las `hhmm`. */
+export function nextMadridTime(hhmm: string, now: Date = new Date()): Date {
+  const today = madridToday(now)
+  const candidate = madridWallTime(today, hhmm)
+  if (candidate.getTime() > now.getTime()) return candidate
+  const [y, m, d] = today.split('-').map(Number)
+  const tomorrow = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10)
+  return madridWallTime(tomorrow, hhmm)
 }
 
 export function parseIsoDate(value: string): { year: number; month: number; day: number } | null {

@@ -9,8 +9,8 @@ import { formatSpanishDate } from '@/lib/invoices/recurring-dates'
 import {
   DEFAULT_EMAIL_BODY,
   DEFAULT_EMAIL_SUBJECT,
-  DEFAULT_SEND_TIME,
   EMAIL_PLACEHOLDERS,
+  RECURRING_DAILY_TIME,
   EXAMPLE_EMAIL_VARS,
   emailSendDate,
   fillTemplate,
@@ -37,7 +37,6 @@ type Form = {
   email_subject: string
   email_body: string
   email_send_day: string
-  email_send_time: string
 }
 
 const STATUS_LABEL: Record<InvoiceEmailSendRow['status'], string> = {
@@ -85,7 +84,6 @@ function toForm(state: RecurringEmailState): Form {
     email_subject: s.email_subject || DEFAULT_EMAIL_SUBJECT,
     email_body: s.email_body || DEFAULT_EMAIL_BODY,
     email_send_day: s.email_send_day ? String(s.email_send_day) : '',
-    email_send_time: s.email_send_time || DEFAULT_SEND_TIME,
   }
 }
 
@@ -158,7 +156,6 @@ export default function RecurringEmailDialog({ recurringId, name, nextIssueDate,
           email_subject: f.email_subject.trim() === DEFAULT_EMAIL_SUBJECT ? null : f.email_subject,
           email_body: f.email_body.trim() === DEFAULT_EMAIL_BODY.trim() ? null : f.email_body,
           email_send_day: f.email_send_day ? Number(f.email_send_day) : null,
-          email_send_time: f.email_send_time || null,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -219,7 +216,7 @@ export default function RecurringEmailDialog({ recurringId, name, nextIssueDate,
             Envío por email · {name}
           </DialogTitle>
           <DialogDescription>
-            Cada mes, cuando se crea la factura, se manda al cliente con el PDF adjunto el día y a la hora que elijas.
+            Cada mes, cuando se crea la factura, se manda al cliente con el PDF adjunto el día que elijas, a las {RECURRING_DAILY_TIME}.
           </DialogDescription>
         </DialogHeader>
 
@@ -251,8 +248,8 @@ export default function RecurringEmailDialog({ recurringId, name, nextIssueDate,
                 <span className="block text-xs text-gray-600">
                   {form.email_enabled
                     ? nextSend
-                      ? `La próxima factura se crea el ${formatSpanishDate(nextSend.issue)} y se envía el ${formatSpanishDate(nextSend.send)} a las ${form.email_send_time || DEFAULT_SEND_TIME}.`
-                      : 'Se enviará cada factura nueva el día y a la hora elegidos.'
+                      ? `La próxima factura se crea el ${formatSpanishDate(nextSend.issue)} y se envía el ${formatSpanishDate(nextSend.send)} a las ${RECURRING_DAILY_TIME}.`
+                      : `Se enviará cada factura nueva el día elegido, a las ${RECURRING_DAILY_TIME}.`
                     : 'Apagado: las facturas se crean igual, pero no se manda nada. Puedes enviar la última a mano.'}
                 </span>
               </span>
@@ -290,7 +287,7 @@ export default function RecurringEmailDialog({ recurringId, name, nextIssueDate,
                   disabled={busy !== null}
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="email_send_day">Día de envío</Label>
                 <select
                   id="email_send_day"
@@ -306,16 +303,7 @@ export default function RecurringEmailDialog({ recurringId, name, nextIssueDate,
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email_send_time">Hora (Madrid)</Label>
-                <Input
-                  id="email_send_time"
-                  type="time"
-                  value={form.email_send_time}
-                  onChange={(e) => set('email_send_time', e.target.value)}
-                  disabled={busy !== null}
-                />
+                <p className="text-xs text-gray-500">Sale a las {RECURRING_DAILY_TIME} (hora de Madrid), cuando el CRM revisa las recurrentes.</p>
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="email_subject">Asunto</Label>

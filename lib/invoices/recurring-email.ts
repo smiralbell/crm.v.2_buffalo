@@ -6,12 +6,11 @@ import { renderInvoicePdf } from '@/lib/invoices/pdf'
 import {
   DEFAULT_EMAIL_BODY,
   DEFAULT_EMAIL_SUBJECT,
-  DEFAULT_SEND_TIME,
+  RECURRING_DAILY_TIME,
   emailHtml,
   emailSendDate,
   fillTemplate,
   invoiceEmailVars,
-  normalizeSendTime,
   parseEmailList,
 } from '@/lib/invoices/recurring-email-template'
 
@@ -19,9 +18,9 @@ import {
  * Envío por email de las facturas recurrentes.
  *
  * Cada plantilla recurrente guarda su configuración (activado, para, cc, asunto,
- * mensaje, día y hora). Cuando se crea la factura del mes se pone en cola
- * (invoice_email_sends) para el día y la hora elegidos; el planificador de
- * recurrentes la manda con el PDF adjunto. El asunto, el mensaje y los
+ * mensaje y día). Cuando se crea la factura del mes se pone en cola
+ * (invoice_email_sends) para ese día a las 9:00; el planificador de recurrentes,
+ * que pasa cada día a esa hora, la manda con el PDF adjunto. El asunto, el mensaje y los
  * destinatarios se leen al enviar, así que los cambios valen también para lo que
  * ya está en cola.
  */
@@ -39,7 +38,6 @@ export async function ensureRecurringEmailSchema(): Promise<void> {
   await query(`ALTER TABLE recurring_invoices ADD COLUMN IF NOT EXISTS email_subject TEXT`)
   await query(`ALTER TABLE recurring_invoices ADD COLUMN IF NOT EXISTS email_body TEXT`)
   await query(`ALTER TABLE recurring_invoices ADD COLUMN IF NOT EXISTS email_send_day INTEGER`)
-  await query(`ALTER TABLE recurring_invoices ADD COLUMN IF NOT EXISTS email_send_time TEXT`)
   await query(`
     CREATE TABLE IF NOT EXISTS invoice_email_sends (
       id SERIAL PRIMARY KEY,
@@ -74,7 +72,6 @@ export type RecurringEmailSettings = {
   email_subject: string | null
   email_body: string | null
   email_send_day: number | null
-  email_send_time: string | null
 }
 
 type TemplateRow = RecurringEmailSettings & {
@@ -92,7 +89,7 @@ async function loadTemplate(recurringId: string): Promise<TemplateRow | null> {
   const res = await query<TemplateRow>(
     `SELECT ri.id, ri.name, ri.is_active, ri.issue_day, ri.last_generated_invoice_id, ri.deleted_at::text AS deleted_at,
             ri.email_enabled, ri.email_to, ri.email_cc, ri.email_reply_to, ri.email_subject, ri.email_body,
-            ri.email_send_day, ri.email_send_time,
+            ri.email_send_day,
             COALESCE(ri.client_email, i.client_email) AS client_email
        FROM recurring_invoices ri
        LEFT JOIN invoices i ON i.id = ri.source_invoice_id
@@ -103,11 +100,7 @@ async function loadTemplate(recurringId: string): Promise<TemplateRow | null> {
   return res.rows[0] ?? null
 }
 
-function sendTimeOf(t: Pick<RecurringEmailSettings, 'email_send_time'>): string {
-  return normalizeSendTime(t.email_send_time) || DEFAULT_SEND_TIME
-}
-
-/** Fecha y hora (Madrid) en que toca mandar la factura emitida ese día. */
+/** Fecha (a las 9:00 de Madrid) en que toca mandar la factura emitida ese día. */
 function scheduleSql(): string {
   return `(($1::date + $2::time) AT TIME ZONE 'Europe/Madrid')`
 }
@@ -125,14 +118,14 @@ export async function queueRecurringInvoiceEmail(recurringId: string, invoiceId:
       `INSERT INTO invoice_email_sends (invoice_id, recurring_id, kind, status, scheduled_at)
        VALUES ($3, $4, 'auto', 'pending', ${scheduleSql()})
        ON CONFLICT (invoice_id) WHERE kind = 'auto' DO NOTHING`,
-      [date, sendTimeOf(t), invoiceId, recurringId]
+      [date, RECURRING_DAILY_TIME, invoiceId, recurringId]
     )
   } catch (e) {
     console.warn('[recurring-email] no se pudo poner en cola', e instanceof Error ? e.message : e)
   }
 }
 
-/** Tras cambiar el día u hora: recoloca lo que aún está pendiente de esa plantilla. */
+/** Tras cambiar el día: recoloca lo que aún está pendiente de esa plantilla. */
 export async function rescheduleRecurringPending(recurringId: string): Promise<void> {
   const t = await loadTemplate(recurringId)
   if (!t) return
@@ -153,7 +146,7 @@ export async function rescheduleRecurringPending(recurringId: string): Promise<v
   for (const row of pending.rows) {
     await query(
       `UPDATE invoice_email_sends SET scheduled_at = ${scheduleSql()}, updated_at = NOW() WHERE id = $3`,
-      [emailSendDate(row.issue_date, t.email_send_day), sendTimeOf(t), row.id]
+      [emailSendDate(row.issue_date, t.email_send_day), RECURRING_DAILY_TIME, row.id]
     )
   }
 }
@@ -357,7 +350,7 @@ export type InvoiceEmailSendRow = {
 }
 
 export type RecurringEmailState = {
-  settings: RecurringEmailSettings & { email_send_time: string }
+  settings: RecurringEmailSettings
   client_email: string | null
   issue_day: number
   last_invoice: { id: number; invoice_number: string; issue_date: string; status: string } | null
@@ -394,7 +387,6 @@ export async function getRecurringEmailState(recurringId: string): Promise<Recur
       email_subject: t.email_subject,
       email_body: t.email_body,
       email_send_day: t.email_send_day,
-      email_send_time: sendTimeOf(t),
     },
     client_email: t.client_email,
     issue_day: t.issue_day,
@@ -431,7 +423,6 @@ export async function updateRecurringEmailSettings(
     'email_subject',
     'email_body',
     'email_send_day',
-    'email_send_time',
   ] as const) {
     if (patch[key] !== undefined) set(key, patch[key])
   }

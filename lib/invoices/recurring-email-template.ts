@@ -16,7 +16,8 @@ Si tienes cualquier duda, responde a este correo.
 Un saludo,
 Buffalo AI`
 
-export const DEFAULT_SEND_TIME = '09:00'
+/** Hora (Madrid) a la que se crean y se envían cada día las facturas recurrentes. */
+export const RECURRING_DAILY_TIME = '09:00'
 
 /** Lo que se puede poner entre llaves en el asunto y el mensaje. */
 export const EMAIL_PLACEHOLDERS = [
@@ -94,16 +95,6 @@ export function parseEmailList(raw: string | null | undefined): { emails: string
     else if (!emails.some((e) => e.toLowerCase() === p.toLowerCase())) emails.push(p)
   }
   return { emails, invalid }
-}
-
-/** «9:5» → null; «09:05» → «09:05». */
-export function normalizeSendTime(raw: string | null | undefined): string | null {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(raw || '').trim())
-  if (!m) return null
-  const h = Number(m[1])
-  const min = Number(m[2])
-  if (h > 23 || min > 59) return null
-  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
 }
 
 function isoOf(year: number, month: number, day: number): string {

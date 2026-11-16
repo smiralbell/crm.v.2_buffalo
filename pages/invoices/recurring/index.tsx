@@ -32,7 +32,6 @@ interface RecurringInvoiceRow {
   created_at: string
   email_enabled: boolean
   email_send_day: number | null
-  email_send_time: string | null
   last_email_status: string | null
   last_email_at: string | null
 }
@@ -79,7 +78,6 @@ export const getServerSideProps: GetServerSideProps<RecurringInvoicesPageProps> 
          i.status AS source_status,
          ri.email_enabled,
          ri.email_send_day,
-         ri.email_send_time,
          last_send.status AS last_email_status,
          COALESCE(last_send.sent_at, last_send.scheduled_at)::text AS last_email_at
        FROM recurring_invoices ri
@@ -423,7 +421,7 @@ function EmailCell({ item }: { item: RecurringInvoiceRow }) {
     <div className="space-y-0.5">
       <div className={item.email_enabled ? 'font-medium text-gray-900' : 'text-gray-500'}>
         {item.email_enabled
-          ? `Auto · ${item.email_send_day ? `día ${item.email_send_day}` : 'al crearla'}, ${(item.email_send_time || '09:00').slice(0, 5)}`
+          ? `Auto · ${item.email_send_day ? `día ${item.email_send_day}` : 'al crearla'}, 9:00`
           : 'Manual'}
       </div>
       {last && (

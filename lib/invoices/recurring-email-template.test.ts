@@ -6,7 +6,6 @@ import {
   emailSendDate,
   fillTemplate,
   invoiceEmailVars,
-  normalizeSendTime,
   parseEmailList,
 } from './recurring-email-template'
 
@@ -66,18 +65,6 @@ describe('parseEmailList', () => {
   it('señala lo que no es un email', () => {
     expect(parseEmailList('a@x.com, pepe').invalid).toEqual(['pepe'])
     expect(parseEmailList('')).toEqual({ emails: [], invalid: [] })
-  })
-})
-
-describe('normalizeSendTime', () => {
-  it('acepta HH:MM y H:MM', () => {
-    expect(normalizeSendTime('9:05')).toBe('09:05')
-    expect(normalizeSendTime('23:59')).toBe('23:59')
-  })
-  it('rechaza horas imposibles', () => {
-    expect(normalizeSendTime('24:00')).toBeNull()
-    expect(normalizeSendTime('9')).toBeNull()
-    expect(normalizeSendTime('')).toBeNull()
   })
 })
 
