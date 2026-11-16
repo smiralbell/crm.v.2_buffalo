@@ -176,7 +176,7 @@ async function listPeople(): Promise<Person[]> {
   `
 }
 
-export async function resolvePerson(raw: unknown): Promise<Resolved<Person>> {
+async function resolvePerson(raw: unknown): Promise<Resolved<Person>> {
   const q = String(raw ?? '').trim()
   if (!q) return { ok: false, error: 'Falta la persona' }
   const people = await listPeople()
@@ -194,7 +194,7 @@ export async function resolvePerson(raw: unknown): Promise<Resolved<Person>> {
   return { ok: false, error: `"${q}" coincide con varias personas: ${partial.map((p) => `${p.name} (id ${p.id})`).join(', ')}. Di cuál.` }
 }
 
-export async function resolveProject(raw: unknown): Promise<Resolved<WorkProject>> {
+async function resolveProject(raw: unknown): Promise<Resolved<WorkProject>> {
   const q = String(raw ?? '').trim()
   if (!q) return { ok: false, error: 'Falta el proyecto' }
   if (UUID_RE.test(q)) {

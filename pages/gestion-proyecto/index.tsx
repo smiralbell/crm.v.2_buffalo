@@ -36,9 +36,6 @@ function sameText(a: string, b: string) {
 
 /** Título de caja: cliente asociado grande, empresa debajo. Sin repetir el nombre del proyecto. */
 function cardIdentity(row: ProjectListRow): { title: string; subtitle: string | null } {
-  if (row.kind === 'assignment') {
-    return { title: row.name, subtitle: 'Asignación interna' }
-  }
   const nombre = (row.contact?.nombre || '').trim()
   const empresa = (row.contact?.empresa || '').trim()
   if (nombre && empresa && !sameText(nombre, empresa)) {
@@ -163,23 +160,14 @@ export default function GestionProyectoPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {rows.map((row) => {
-              const isAssignment = row.kind === 'assignment'
-              const href = isAssignment
-                ? `/gestion-proyecto/asignaciones/${row.id}`
-                : `/gestion-proyecto/proyectos/${row.id}`
+              const href = `/gestion-proyecto/proyectos/${row.id}`
               const { title, subtitle } = cardIdentity(row)
               const openTasks =
                 row.task_counts.pending +
                 row.task_counts.in_progress +
                 (row.task_counts.buffalo_validation ?? 0)
-              const assignmentStatusLabel: Record<string, string> = {
-                pending: 'Pendiente',
-                in_progress: 'En curso',
-                done: 'Hecha',
-                cancelled: 'Cancelada',
-              }
-              const inProduction = !isAssignment && row.status === 'active'
-              const isFinalized = !isAssignment && row.status === 'done'
+              const inProduction = row.status === 'active'
+              const isFinalized = row.status === 'done'
               const cardTone = inProduction
                 ? 'rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-50 via-emerald-50/80 to-white p-5 shadow-sm shadow-emerald-100 hover:border-emerald-400 hover:shadow-md transition-all ring-1 ring-emerald-200/60'
                 : isFinalized
@@ -215,9 +203,7 @@ export default function GestionProyectoPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className={`text-xs uppercase tracking-wide ${eyebrowCls}`}>
-                        {isAssignment
-                          ? 'Tarea puntual'
-                          : inProduction
+                        {inProduction
                             ? 'En producción'
                             : isFinalized
                               ? 'Finalizado'
@@ -229,8 +215,7 @@ export default function GestionProyectoPage() {
                       )}
                     </div>
                     <div className="shrink-0 flex flex-col items-end gap-1">
-                      {!isAssignment && (
-                        <span
+                                              <span
                           className={
                             inProduction
                               ? 'inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm'
@@ -242,7 +227,6 @@ export default function GestionProyectoPage() {
                           <CheckCircle2 className="h-3 w-3" />
                           {inProduction ? 'Producción' : isFinalized ? 'Finalizado' : 'Buffalo'}
                         </span>
-                      )}
                       <span
                         className={
                           inProduction
@@ -252,27 +236,13 @@ export default function GestionProyectoPage() {
                               : 'rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600'
                         }
                       >
-                        {isAssignment
-                          ? assignmentStatusLabel[row.status] || row.status
-                          : statusLabel[row.status] || row.status}
+                        {statusLabel[row.status] || row.status}
                       </span>
                     </div>
                   </div>
 
                   <div className={`mt-4 space-y-2 text-sm ${muted}`}>
-                    {isAssignment ? (
-                      <>
-                        {row.assignment_summary && (
-                          <p className="line-clamp-2">{row.assignment_summary}</p>
-                        )}
-                        {row.due_date && (
-                          <p className="text-xs text-gray-400">
-                            Entrega: {new Date(row.due_date).toLocaleDateString('es-ES')}
-                          </p>
-                        )}
-                      </>
-                    ) : (
-                      <>
+                                          <>
                         <p>{serviceLabel[row.service_type] || row.service_type}</p>
                         {row.config_ref && (
                           <p
@@ -291,16 +261,11 @@ export default function GestionProyectoPage() {
                           <DeveloperTags developers={row.developers} className="pt-1" />
                         )}
                       </>
-                    )}
                   </div>
 
                   <div className="mt-5 flex items-center justify-between text-xs">
                     <span className={subCls}>
-                      {isAssignment
-                        ? row.status === 'done'
-                          ? 'Completada'
-                          : 'Asignación activa'
-                        : inProduction
+                      {inProduction
                           ? 'Entregado · en producción'
                           : isFinalized
                             ? 'Cerrado · sin producción'

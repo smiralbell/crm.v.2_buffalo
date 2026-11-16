@@ -3,7 +3,6 @@ import { requireAuthAPI } from '@/lib/auth'
 import { canSeeClientPrices } from '@/lib/price-visibility'
 import { prisma } from '@/lib/prisma'
 import { getAccessibleProjectIds, getDevelopersByProjectIds } from '@/lib/project-access'
-import { listAssignmentsForUser } from '@/lib/developer/assignments'
 
 type ProyectoRow = {
   id: string
@@ -148,31 +147,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     })
 
-    const assignmentRows =
-      user.role === 'developer'
-        ? (await listAssignmentsForUser(user.id)).map((a) => ({
-            kind: 'assignment' as const,
-            id: a.id,
-            name: a.title,
-            status: a.status,
-            service_type: 'assignment',
-            config_ref: null as string | null,
-            lead_id: null as number | null,
-            updated_at: a.updated_at,
-            contact: null,
-            task_counts: {
-              pending: a.status === 'pending' ? 1 : 0,
-              in_progress: a.status === 'in_progress' ? 1 : 0,
-              buffalo_validation: 0,
-              done: a.status === 'done' ? 1 : 0,
-            },
-            developers: [] as { id: number; name: string; email: string }[],
-            assignment_summary: a.summary,
-            due_date: a.due_date,
-          }))
-        : []
-
-    const merged = [...assignmentRows, ...projectRows].sort(
+    const merged = [...projectRows].sort(
       (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     )
 

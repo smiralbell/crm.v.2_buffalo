@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAdminAPI } from '@/lib/auth'
 import { findCrmUserById, getCrmUserAdminPassword } from '@/lib/crm-users'
-import { getUserWorkStats, listAllAssignmentsForUser } from '@/lib/developer/assignments'
+import { getUserWorkStats } from '@/lib/developer/work-stats'
 import { prisma } from '@/lib/prisma'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,9 +19,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const adminPassword = await getCrmUserAdminPassword(userId)
 
-    const isDeveloper = user.role === 'developer'
+    const isDeveloper = user.role === 'developer' || user.role === 'project_manager'
     const stats = isDeveloper ? await getUserWorkStats(userId) : null
-    const assignments = isDeveloper ? await listAllAssignmentsForUser(userId) : []
 
     let projects: { id: string; name: string; status: string; service_type: string }[] = []
     if (isDeveloper) {
@@ -50,7 +49,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
       stats,
       projects,
-      assignments,
       credentials: {
         email: user.email,
         password: adminPassword,

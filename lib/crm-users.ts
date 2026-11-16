@@ -242,3 +242,23 @@ export async function listDeveloperUsers(): Promise<CrmUserPublic[]> {
   `
   return rows.map(toPublic)
 }
+
+/**
+ * Borra un usuario del CRM para siempre. La base de datos se encarga del resto:
+ * sus tareas personales y proyectos asignados se borran en cascada, y donde
+ * aparece como autor o responsable (facturas, campañas, tickets…) queda vacío.
+ */
+export async function deleteCrmUser(id: number): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    try {
+      // Avisos push del navegador de ese usuario (sin clave foránea)
+      await tx.$executeRaw`DELETE FROM push_subscriptions WHERE user_id = ${id}`
+    } catch {
+      // tabla opcional
+    }
+    const rows = await tx.$queryRaw<{ id: number }[]>`
+      DELETE FROM crm_users WHERE id = ${id} RETURNING id
+    `
+    return rows.length > 0
+  })
+}

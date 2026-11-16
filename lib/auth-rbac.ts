@@ -6,7 +6,6 @@ export const DEVELOPER_PAGE_PREFIXES = [
   '/retencion',
   '/tickets',
   '/tareas',
-  '/trabajo',
   '/ayuda',
   '/login',
 ] as const
@@ -25,7 +24,6 @@ export const PROJECT_MANAGER_PAGE_PREFIXES = [
   '/gestion-proyecto',
   '/retencion',
   '/tareas',
-  '/trabajo',
   '/ayuda',
   '/login',
 ] as const
@@ -72,7 +70,6 @@ export const DEVELOPER_API_PREFIXES = [
   '/api/tickets/',
   '/api/team-members',
   '/api/tareas',
-  '/api/trabajo',
 ] as const
 
 export const COMERCIAL_API_PREFIXES = [

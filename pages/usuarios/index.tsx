@@ -21,10 +21,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ExternalLink, ListTodo, Loader2, ClipboardList, UserPlus, RefreshCw } from 'lucide-react'
+import { ExternalLink, ListTodo, Loader2, Trash2, UserPlus, RefreshCw } from 'lucide-react'
 import type { CrmUserPublic } from '@/lib/crm-users'
 import type { CrmRole } from '@/lib/auth'
-import type { UserWorkStats } from '@/lib/developer/assignments'
+import type { UserWorkStats } from '@/lib/developer/work-stats'
+import DeleteUserDialog from '@/components/usuarios/DeleteUserDialog'
 
 type UserRow = CrmUserPublic & { stats: UserWorkStats | null }
 
@@ -58,6 +59,7 @@ export default function UsuariosPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<'developer' | 'comercial' | 'project_manager'>('developer')
+  const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null)
 
   const load = () => {
     setLoading(true)
@@ -141,7 +143,6 @@ export default function UsuariosPage() {
                     <th className="px-4 py-3 text-left font-medium">Rol</th>
                     <th className="px-4 py-3 text-left font-medium">Estado</th>
                     <th className="px-4 py-3 text-center font-medium">Proyectos</th>
-                    <th className="px-4 py-3 text-center font-medium">Asignaciones</th>
                     <th className="px-4 py-3 text-center font-medium">Tickets</th>
                     <th className="px-4 py-3 text-center font-medium">Tareas</th>
                     <th className="px-4 py-3 text-right font-medium">
@@ -187,16 +188,12 @@ export default function UsuariosPage() {
                         {u.stats?.projects_count ?? '—'}
                       </td>
                       <td className="px-4 py-3 text-center tabular-nums text-gray-700">
-                        {u.stats?.open_assignments_count ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-center tabular-nums text-gray-700">
                         {u.stats?.open_tickets_count ?? '—'}
                       </td>
                       <td className="px-4 py-3 text-center tabular-nums text-gray-700">
                         {u.stats?.open_tasks_count ?? '—'}
                       </td>
                       <td className="px-4 py-2 text-right">
-                        <div className="inline-flex gap-1.5">
                         <a
                           href={`/usuarios/${u.id}/tareas`}
                           target="_blank"
@@ -210,22 +207,18 @@ export default function UsuariosPage() {
                           Tareas
                           <ExternalLink className="h-3 w-3 text-gray-400" />
                         </a>
-                        {(u.role === 'developer' || u.role === 'project_manager') && (
-                          <a
-                            href={`/usuarios/${u.id}/trabajo`}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900"
-                            title={`Abrir el trabajo diario de ${u.name} en una pestaña nueva`}
-                          >
-                            <ClipboardList className="h-3.5 w-3.5" />
-                            Trabajo
-                            <ExternalLink className="h-3 w-3 text-gray-400" />
-                          </a>
-                        )}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteTarget(u)
+                          }}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          className="ml-1.5 inline-flex items-center justify-center rounded-lg border border-red-100 bg-white px-2 py-1.5 text-red-500 shadow-sm transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                          title={`Borrar a ${u.name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -235,6 +228,15 @@ export default function UsuariosPage() {
           )}
         </div>
       </div>
+
+      <DeleteUserDialog
+        open={deleteTarget != null}
+        onOpenChange={(v) => {
+          if (!v) setDeleteTarget(null)
+        }}
+        user={deleteTarget}
+        onDeleted={load}
+      />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">

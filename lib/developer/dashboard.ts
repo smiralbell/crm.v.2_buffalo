@@ -2,7 +2,6 @@ import { prisma } from '@/lib/prisma'
 import { getAccessibleProjectIds } from '@/lib/project-access'
 import type { AuthUser } from '@/lib/auth'
 import { taskEstimatedHours } from '@/lib/developer/task-hours'
-import { countOpenAssignmentsForUser } from '@/lib/developer/assignments'
 
 export interface DeveloperDashboardStats {
   projects_count: number
@@ -41,17 +40,12 @@ function taskHours(priority: string, estimated: number | null): number {
 
 export async function getDeveloperDashboardStats(user: AuthUser): Promise<DeveloperDashboardStats> {
   const projectIds = await getAccessibleProjectIds(user)
-  const openAssignments =
-    user.role === 'developer' ? await countOpenAssignmentsForUser(user.id) : 0
-
-  if (projectIds !== null && projectIds.length === 0 && openAssignments === 0) return EMPTY
+  if (projectIds !== null && projectIds.length === 0) return EMPTY
 
   const stats = { ...EMPTY }
 
   try {
-    if (user.role === 'developer') {
-      stats.projects_count = (projectIds?.length ?? 0) + openAssignments
-    } else if (projectIds && projectIds.length > 0) {
+    if (projectIds && projectIds.length > 0) {
       stats.projects_count = projectIds.length
     }
 

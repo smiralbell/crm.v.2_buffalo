@@ -81,24 +81,11 @@ describe('herramientas por rol', () => {
   const dev = teamTools('developer').map((t) => t.function.name)
   const pm = teamTools('project_manager').map((t) => t.function.name)
 
-  const PERMITIDAS = [
-    'mis_tareas',
-    'tarea_ver',
-    'tarea_crear',
-    'tarea_editar',
-    'tarea_mover',
-    'tarea_subtareas',
-    'tarea_borrar',
-    'trabajo_registrar',
-    'trabajo_ver',
-    'trabajo_editar',
-    'trabajo_borrar',
-    'enviar_documento',
-  ]
+  const TAREAS = ['mis_tareas', 'tarea_ver', 'tarea_crear', 'tarea_editar', 'tarea_mover', 'tarea_subtareas', 'tarea_borrar', 'enviar_documento']
 
-  it('de momento los dos roles solo tienen sus Tareas y su Trabajo diario', () => {
-    expect([...dev].sort()).toEqual([...PERMITIDAS].sort())
-    expect([...pm].sort()).toEqual([...PERMITIDAS].sort())
+  it('de momento los dos roles solo tienen su módulo de Tareas', () => {
+    expect(dev).toEqual(TAREAS)
+    expect(pm).toEqual(TAREAS)
   })
 
   it('proyectos, tickets, leads, pipelines y MCP están apagados', () => {
@@ -121,7 +108,6 @@ describe('herramientas por rol', () => {
       'get_bank_recent',
       'tareas_crear',
       'tareas_personas',
-      'trabajo_consultar',
       'instrucciones_guardar',
       'avisos_programar',
       'enviar_mensaje_socios',
@@ -158,8 +144,7 @@ describe('prompt del equipo', () => {
     expect(prompt).toContain('Hablas con Abel')
     expect(prompt).toContain('identificada por su número de móvil')
     expect(prompt).toContain('- PREICO')
-    expect(prompt).toContain('SOLO tiene acceso a dos cosas suyas')
-    expect(prompt).toContain('TRABAJO DIARIO')
+    expect(prompt).toContain('SOLO tiene acceso a su módulo de Tareas')
     expect(prompt).toContain('facturación')
   })
 })

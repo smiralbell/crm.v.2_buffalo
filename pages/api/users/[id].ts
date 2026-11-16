@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireAdminAPI } from '@/lib/auth'
 import {
   CrmUserEmailTakenError,
+  deleteCrmUser,
   findCrmUserById,
   setCrmUserActive,
   updateCrmUserPassword,
@@ -27,7 +28,7 @@ const patchSchema = z
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    await requireAdminAPI(req, res)
+    const admin = await requireAdminAPI(req, res)
     const id = parseInt(String(req.query.id), 10)
     if (Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido' })
 
@@ -71,6 +72,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       return res.status(400).json({ error: 'Sin cambios' })
+    }
+
+    if (req.method === 'DELETE') {
+      const existing = await findCrmUserById(id)
+      if (!existing) return res.status(404).json({ error: 'Usuario no encontrado' })
+      if (admin.id === id) {
+        return res.status(400).json({ error: 'No puedes borrar tu propio usuario' })
+      }
+      // Segunda verificación: hay que escribir el correo exacto del usuario
+      const confirmEmail = String(req.body?.confirm_email ?? '').trim().toLowerCase()
+      if (!confirmEmail || confirmEmail !== existing.email.trim().toLowerCase()) {
+        return res.status(400).json({ error: 'El correo de confirmación no coincide' })
+      }
+      try {
+        const deleted = await deleteCrmUser(id)
+        if (!deleted) return res.status(404).json({ error: 'Usuario no encontrado' })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : ''
+        if (msg.includes('foreign key') || msg.includes('violates')) {
+          return res.status(409).json({
+            error: 'No se puede borrar: hay datos que dependen de este usuario. Desactívalo en su lugar.',
+          })
+        }
+        throw err
+      }
+      return res.status(200).json({ success: true, id })
     }
 
     return res.status(405).json({ error: 'Method not allowed' })
