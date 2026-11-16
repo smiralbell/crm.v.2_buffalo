@@ -54,7 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const people: WorkPerson[] = isAdmin
         ? (await listCrmUsers())
-            .filter((u) => u.active && u.role !== 'admin')
+            .filter((u) => u.active)
             .map((u) => ({ id: u.id, name: u.name, role: u.role }))
             .sort((a, b) => a.name.localeCompare(b.name, 'es'))
         : []

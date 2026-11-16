@@ -58,7 +58,7 @@ export default function UsuariosPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<'developer' | 'comercial' | 'project_manager'>('developer')
+  const [role, setRole] = useState<'developer' | 'comercial' | 'project_manager' | 'admin'>('developer')
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null)
 
   const load = () => {
@@ -86,7 +86,7 @@ export default function UsuariosPage() {
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role }),
+        body: JSON.stringify({ name, email, role, ...(role === 'admin' ? {} : { password }) }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'No se pudo crear')
@@ -248,7 +248,7 @@ export default function UsuariosPage() {
               <Label htmlFor="u_role">Rol</Label>
               <Select
                 value={role}
-                onValueChange={(v) => setRole(v as 'developer' | 'comercial' | 'project_manager')}
+                onValueChange={(v) => setRole(v as 'developer' | 'comercial' | 'project_manager' | 'admin')}
               >
                 <SelectTrigger id="u_role" className="rounded-xl">
                   <SelectValue />
@@ -257,12 +257,15 @@ export default function UsuariosPage() {
                   <SelectItem value="developer">Developer</SelectItem>
                   <SelectItem value="comercial">Comercial</SelectItem>
                   <SelectItem value="project_manager">Project manager</SelectItem>
+                  <SelectItem value="admin">Admin (socio)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-gray-500">
                 {role === 'comercial'
                   ? 'Acceso a dashboard de campañas, cold calling y facturas propias.'
-                  : role === 'project_manager'
+                  : role === 'admin'
+                    ? 'Acceso completo al CRM. Entra solo con «Continuar con Google» usando este correo (su Google personal). Calendar, Gmail y Drive son los de la agencia.'
+                    : role === 'project_manager'
                     ? 'Acceso a Leads, Pipelines y Marketing. En Onboarding, Proyectos y Retención solo ve los proyectos que le asignes desde su ficha.'
                     : 'Acceso al panel de proyectos, tickets y facturas propias.'}
               </p>
@@ -288,18 +291,20 @@ export default function UsuariosPage() {
                 required
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="u_pass">Contraseña</Label>
-              <Input
-                id="u_pass"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mínimo 8 caracteres"
-                minLength={8}
-                required
-              />
-            </div>
+            {role !== 'admin' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="u_pass">Contraseña</Label>
+                <Input
+                  id="u_pass"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 8 caracteres"
+                  minLength={8}
+                  required
+                />
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
                 Cancelar

@@ -75,7 +75,7 @@ export default function Login() {
       <Card className="w-full max-w-md rounded-3xl border-border shadow-sm bg-card">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold tracking-tight text-foreground">CRM Buffalo</CardTitle>
-          <CardDescription>Accede con Google (admin) o con tu cuenta de equipo</CardDescription>
+          <CardDescription>Admins: con Google · Equipo: con email y contraseña</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <Button

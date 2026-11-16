@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { randomBytes } from 'crypto'
 import { z } from 'zod'
 import { requireAdminAPI } from '@/lib/auth'
 import { createCrmUser, listCrmUsers, setCrmUserActive } from '@/lib/crm-users'
@@ -7,9 +8,13 @@ import { getUserWorkStats } from '@/lib/developer/work-stats'
 const createSchema = z.object({
   name: z.string().min(1, 'El nombre es obligatorio'),
   email: z.string().email('Email inválido'),
-  password: z.string().min(8, 'Mínimo 8 caracteres'),
+  password: z.string().min(8, 'Mínimo 8 caracteres').optional(),
   role: z.enum(['admin', 'developer', 'comercial', 'project_manager']).optional(),
 })
+  .refine((d) => d.role === 'admin' || !!d.password, {
+    message: 'La contraseña es obligatoria',
+    path: ['password'],
+  })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -31,7 +36,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'POST') {
       const data = createSchema.parse(req.body)
-      const user = await createCrmUser(data)
+      // Los admins entran con Google: se les pone una contraseña aleatoria que no se usa
+      const password = data.password ?? randomBytes(24).toString('base64url')
+      const user = await createCrmUser({ ...data, password })
       return res.status(201).json({ user })
     }
 
