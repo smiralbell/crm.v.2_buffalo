@@ -84,7 +84,6 @@ export async function renderInvoicePdf(invoice: Invoice): Promise<{ buffer: Buff
     ...documentFields,
   })
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const blob = await pdf(doc as any).toBlob()
   return {
     buffer: Buffer.from(await blob.arrayBuffer()),
