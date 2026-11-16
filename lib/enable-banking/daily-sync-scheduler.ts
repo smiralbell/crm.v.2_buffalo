@@ -42,7 +42,7 @@ export async function runDailyBankSyncIfDue(reason: string = 'scheduler'): Promi
 
   try {
     console.info(`[bank-sync] auto (${reason}) · incremental`)
-    const result = await syncEnableBankingTransactions({ mode: 'incremental' })
+    const result = await syncEnableBankingTransactions({ mode: 'incremental', debugSample: false })
     console.info(
       `[bank-sync] auto ok · inserted=${result.inserted} total=${result.total}`
     )

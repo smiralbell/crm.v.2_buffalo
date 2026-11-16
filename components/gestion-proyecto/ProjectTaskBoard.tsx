@@ -170,6 +170,17 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
   const tasksRef = useRef(tasks)
   tasksRef.current = tasks
 
+  /**
+   * Cambia la lista partiendo SIEMPRE de la última versión, no de la que había
+   * cuando empezó la petición. Así dos cambios seguidos (mover dos tarjetas,
+   * crear mientras se guarda otra…) no se pisan al volver del servidor.
+   */
+  const applyChange = (fn: (list: ProjectTask[]) => ProjectTask[]) => {
+    const next = fn(tasksRef.current)
+    tasksRef.current = next
+    onChange(next)
+  }
+
   const toggleExpanded = (id: string) =>
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -268,8 +279,8 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
         }
       }
 
-      onChange([
-        ...tasks,
+      applyChange((list) => [
+        ...list.filter((t) => t.id !== data.id),
         {
           ...data,
           estimated_hours: data.estimated_hours ?? null,
@@ -315,20 +326,21 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
       return
     }
 
-    const prev = tasks
+    const original = tasksRef.current.find((t) => t.id === draggedTask.id) ?? draggedTask
     const now = new Date().toISOString()
-    const optimistic = tasks.map((t) =>
-      t.id === draggedTask.id
-        ? {
-            ...t,
-            status: targetStatus,
-            status_changed_at: now,
-            stale_notice_active: false,
-            stale_extension_until: null,
-          }
-        : t
+    applyChange((list) =>
+      list.map((t) =>
+        t.id === draggedTask.id
+          ? {
+              ...t,
+              status: targetStatus,
+              status_changed_at: now,
+              stale_notice_active: false,
+              stale_extension_until: null,
+            }
+          : t
+      )
     )
-    onChange(optimistic)
     const moved = draggedTask
     setDraggedTask(null)
     setDraggedOver(null)
@@ -339,12 +351,15 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
 
     try {
       const data = await client.update(moved, { status: targetStatus })
-      onChange(optimistic.map((t) => (t.id === data.id ? { ...t, ...data, attachments: t.attachments } : t)))
+      applyChange((list) =>
+        list.map((t) => (t.id === data.id ? { ...t, ...data, attachments: t.attachments } : t))
+      )
       if (viewTask?.id === data.id) {
         setViewTask((v) => (v ? { ...v, ...data, attachments: v.attachments } : v))
       }
     } catch (e) {
-      onChange(prev)
+      // Solo se deshace esta tarjeta; el resto de cambios se respeta
+      applyChange((list) => list.map((t) => (t.id === original.id ? original : t)))
       alert(e instanceof Error ? e.message : 'Error al mover tarea')
     }
   }
@@ -354,7 +369,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
     setDeleting(true)
     try {
       await client.remove(deleteTarget)
-      onChange(tasks.filter((t) => t.id !== deleteTarget.id))
+      applyChange((list) => list.filter((t) => t.id !== deleteTarget.id))
       if (viewTask?.id === deleteTarget.id) setViewTask(null)
       setDeleteTarget(null)
     } catch (e) {
@@ -365,12 +380,14 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
   }
 
   const patchTaskMeta = async (taskId: string, body: Record<string, unknown>) => {
-    const current = tasks.find((t) => t.id === taskId)
+    const current = tasksRef.current.find((t) => t.id === taskId)
     if (!current) return
     setStaleActionId(taskId)
     try {
       const data = await client.update(current, body)
-      onChange(tasks.map((t) => (t.id === taskId ? { ...t, ...data, attachments: t.attachments } : t)))
+      applyChange((list) =>
+        list.map((t) => (t.id === taskId ? { ...t, ...data, attachments: t.attachments } : t))
+      )
       if (viewTask?.id === taskId) {
         setViewTask((v) => (v ? { ...v, ...data, attachments: v.attachments } : v))
       }
@@ -384,9 +401,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
   const updateSubtasks = (taskId: string, subtasks: Subtask[]) => {
     // Optimista: se ve al momento y se guarda de fondo
     const prevTask = tasksRef.current.find((t) => t.id === taskId)
-    const nextTasks = tasksRef.current.map((t) => (t.id === taskId ? { ...t, subtasks } : t))
-    tasksRef.current = nextTasks
-    onChange(nextTasks)
+    applyChange((list) => list.map((t) => (t.id === taskId ? { ...t, subtasks } : t)))
     setViewTask((v) => (v && v.id === taskId ? { ...v, subtasks } : v))
 
     const save = async () => {
@@ -395,7 +410,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
         await client.update(prevTask, { subtasks })
       } catch (e) {
         const restore = prevTask?.subtasks ?? []
-        onChange(tasksRef.current.map((t) => (t.id === taskId ? { ...t, subtasks: restore } : t)))
+        applyChange((list) => list.map((t) => (t.id === taskId ? { ...t, subtasks: restore } : t)))
         setViewTask((v) => (v && v.id === taskId ? { ...v, subtasks: restore } : v))
         alert(e instanceof Error ? e.message : 'Error al guardar subtareas')
       }

@@ -430,6 +430,8 @@ function maxDate(a: string | null, b: string | null): string | null {
 
 export async function syncEnableBankingTransactions(options?: {
   mode?: 'incremental' | 'full'
+  /** Muestra de depuración de la API (pantalla Finanzas). La sync automática no la pide. */
+  debugSample?: boolean
 }): Promise<{
   inserted: number
   updated: number
@@ -472,27 +474,12 @@ export async function syncEnableBankingTransactions(options?: {
 
   let apiDebugSample: BankApiDebugSample | null = null
   let apiDebugError: string | null = null
-  if (mode === 'incremental') {
+  if (mode === 'incremental' && options?.debugSample !== false) {
     try {
       apiDebugSample = await fetchSampleMonthApiDebug(session.account_uid)
       if (apiDebugSample.error) {
         apiDebugError = apiDebugSample.error
         console.warn('[enable-banking] sample month debug error:', apiDebugSample.error)
-      } else {
-        console.info(
-          '[enable-banking] sample month debug',
-          JSON.stringify(
-            {
-              month: apiDebugSample.month_label,
-              keys: apiDebugSample.first_page.top_level_keys,
-              tx_count: apiDebugSample.first_page.transaction_count,
-              tx_fields: apiDebugSample.sample_transaction_keys,
-              preview: apiDebugSample.all_transactions_preview,
-            },
-            null,
-            2
-          )
-        )
       }
     } catch (err) {
       apiDebugError = err instanceof Error ? err.message : 'Error desconocido'
