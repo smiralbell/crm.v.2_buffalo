@@ -64,6 +64,9 @@ function buildCleanPack(input: {
   }
 }
 
+/** Proyectos cuya URL de BD ya se avisó que no se puede leer (un aviso por arranque). */
+const warnedUnreadableDbUrl = new Set<string>()
+
 export async function runWatchForProject(
   proyectoId: string,
   opts?: { trigger?: WatchRunTrigger }
@@ -93,7 +96,18 @@ export async function runWatchForProject(
 
   let deltas: Awaited<ReturnType<typeof collectWatchDbDelta>>['deltas'] = []
   let pendingMemory: Awaited<ReturnType<typeof collectWatchDbDelta>>['nextMemory'] | null = null
-  const dbUrl = await getDecryptedDbUrl(proyectoId)
+  let dbUrl: string | null = null
+  let dbUrlError: string | null = null
+  try {
+    dbUrl = await getDecryptedDbUrl(proyectoId)
+  } catch (e) {
+    // URL guardada con otra clave de cifrado: seguir sin BD en vez de fallar cada minuto
+    dbUrlError = e instanceof Error ? e.message : String(e)
+    if (!warnedUnreadableDbUrl.has(proyectoId)) {
+      warnedUnreadableDbUrl.add(proyectoId)
+      console.warn(`[retencion-watch] proyecto ${proyectoId}: ${dbUrlError}`)
+    }
+  }
 
   if (dbUrl) {
     try {
@@ -119,6 +133,19 @@ export async function runWatchForProject(
     }
     if (used.indexOf('db') === -1) bump('db')
   } else {
+    if (dbUrlError) {
+      deltas = [
+        {
+          schema: 'public',
+          table: '_error',
+          cursor: null,
+          new_rows: 0,
+          truncated: false,
+          sample: [],
+          note: `Base de datos del cliente sin conectar: ${dbUrlError}`,
+        },
+      ]
+    }
     bump('db')
   }
 

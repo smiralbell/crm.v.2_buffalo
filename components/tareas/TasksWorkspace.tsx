@@ -59,6 +59,9 @@ function writePrefs(key: string, prefs: Prefs) {
 
 const toNumber = (v: unknown) => (v == null ? null : Number(v))
 
+/** Cada cuánto se recargan las tareas con la pestaña abierta. */
+const REFRESH_MS = 30_000
+
 /** Módulo Tareas: tareas sueltas de la persona y las de sus proyectos, en el tablero de proyecto. */
 export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
   const [data, setData] = useState<TareasResponse | null>(null)
@@ -101,6 +104,47 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
     void load()
   }, [load])
 
+  // Cambios en curso (crear, mover, editar…): mientras haya alguno no se refresca,
+  // para no pisar lo que se ve en pantalla antes de que el servidor responda.
+  const pending = useRef(0)
+  const track = useCallback(async <R,>(work: () => Promise<R>): Promise<R> => {
+    pending.current += 1
+    try {
+      return await work()
+    } finally {
+      pending.current -= 1
+    }
+  }, [])
+
+  /** Recarga sin spinner: lo que cambien otros (o el agente de WhatsApp) aparece solo. */
+  const refresh = useCallback(async () => {
+    if (pending.current > 0 || document.hidden) return
+    try {
+      const url = scopeUserId ? `/api/tareas?user_id=${scopeUserId}` : '/api/tareas'
+      const res = await requestJson<TareasResponse>(url, { method: 'GET' }, 'No se pudieron cargar las tareas')
+      if (pending.current > 0) return // empezó un cambio mientras cargaba
+      setData(res)
+      setTasks(res.tasks)
+      setError('')
+    } catch {
+      // fallo puntual de red: se reintenta en el siguiente ciclo
+    }
+  }, [scopeUserId])
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) void refresh()
+    }
+    const timer = window.setInterval(() => void refresh(), REFRESH_MS)
+    window.addEventListener('focus', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [refresh])
+
   const projectNames = useMemo(
     () => new Map((data?.projects ?? []).map((p) => [p.id, p.name])),
     [data]
@@ -109,7 +153,7 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
   /** Cada tarea se guarda donde vive: las sueltas en /api/tareas, las de proyecto en su proyecto. */
   const client = useMemo<TaskBoardClient>(() => {
     const isPersonal = (task: ProjectTask) => (task as WorkTask).source === 'personal'
-    return {
+    const base: TaskBoardClient = {
       create: async (target, body) => {
         if (target.startsWith('user:')) {
           const { assignee: _assignee, ...rest } = body
@@ -150,7 +194,14 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
         isPersonal(task) ? [] : projectTaskClient(task.project_id).uploadAttachments(task, files),
       attachmentUrl: (task, attId) => projectTaskClient(task.project_id).attachmentUrl(task, attId),
     }
-  }, [projectNames])
+    return {
+      create: (target, body) => track(() => base.create(target, body)),
+      update: (task, body) => track(() => base.update(task, body)),
+      remove: (task) => track(() => base.remove(task)),
+      uploadAttachments: (task, files) => track(() => base.uploadAttachments(task, files)),
+      attachmentUrl: base.attachmentUrl,
+    }
+  }, [projectNames, track])
 
   const visible = useMemo(() => applyTaskFilters(tasks, filters), [tasks, filters])
 
