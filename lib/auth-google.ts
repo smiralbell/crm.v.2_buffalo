@@ -1,11 +1,9 @@
 import { createHmac, timingSafeEqual, randomBytes } from 'crypto'
 import { google } from 'googleapis'
-import type { AuthUser } from '@/lib/auth'
+import type { AuthUser, CrmRole } from '@/lib/auth'
+import { findCrmUserByEmail } from '@/lib/crm-users'
+import { AGENCY_GOOGLE_EMAIL } from '@/lib/agency-google'
 
-const DEFAULT_ADMIN_EMAILS = [
-  'agenciabuffaloo@gmail.com',
-  'smiralbell@gmail.com',
-]
 
 export function getGoogleLoginRedirectUri(): string {
   if (process.env.GOOGLE_LOGIN_REDIRECT_URI) {
@@ -24,18 +22,10 @@ export function getGoogleLoginOAuth2Client() {
   return new google.auth.OAuth2(clientId, clientSecret, getGoogleLoginRedirectUri())
 }
 
-export function getGoogleAdminAllowlist(): string[] {
-  const fromEnv = (process.env.GOOGLE_ADMIN_EMAILS || '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
-  if (fromEnv.length > 0) return fromEnv
-  return DEFAULT_ADMIN_EMAILS.map((e) => e.toLowerCase())
-}
-
-export function isGoogleAdminEmail(email: string | null | undefined): boolean {
+/** La cuenta de la agencia entra como administrador general (sin usuario propio). */
+export function isAgencyGoogleEmail(email: string | null | undefined): boolean {
   if (!email) return false
-  return getGoogleAdminAllowlist().includes(email.trim().toLowerCase())
+  return email.trim().toLowerCase() === AGENCY_GOOGLE_EMAIL
 }
 
 function stateSecret(): string {
@@ -108,4 +98,34 @@ export function authUserFromGoogleAdmin(email: string, name: string): AuthUser {
     name: name || 'Administrador',
     role: 'admin',
   }
+}
+
+export type GoogleLoginResult = { user: AuthUser } | { error: string }
+
+/**
+ * Quién entra con este Google:
+ * 1) un admin (socio) dado de alta en Usuarios con este correo → entra con su
+ *    propio usuario;
+ * 2) la cuenta de la agencia → administrador general, como hasta ahora;
+ * 3) un usuario del equipo (developer, PM, comercial) → no: entra con contraseña;
+ * 4) cualquier otro correo → no entra.
+ */
+export async function resolveGoogleLoginUser(email: string, name: string): Promise<GoogleLoginResult> {
+  const normalized = email.trim().toLowerCase()
+  const crmUser = await findCrmUserByEmail(normalized)
+  if (crmUser?.role === 'admin') {
+    return {
+      user: {
+        id: crmUser.id,
+        email: crmUser.email.trim().toLowerCase(),
+        name: crmUser.name || name || normalized,
+        role: 'admin' as CrmRole,
+      },
+    }
+  }
+  if (isAgencyGoogleEmail(normalized)) return { user: authUserFromGoogleAdmin(normalized, name) }
+  if (crmUser) {
+    return { error: 'Con Google solo entran los administradores. Entra con tu email y contraseña.' }
+  }
+  return { error: 'Este correo de Google no tiene acceso al CRM Buffalo.' }
 }

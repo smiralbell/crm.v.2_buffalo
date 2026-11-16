@@ -1,9 +1,12 @@
 import type { AuthUser } from '@/lib/auth'
+import { AGENCY_GOOGLE_OWNER_KEY } from '@/lib/agency-google'
 
-/** Clave estable por sesión CRM (admin env o usuario DB). */
+/** Clave de las conexiones de Google (Calendar, Gmail) de cada sesión del CRM. */
 export function googleOwnerKey(user: AuthUser): string {
-  if (user.role === 'admin' && user.id === 0) {
-    return `admin:${user.email.toLowerCase()}`
+  // Todos los admins (cada socio con su Google) usan las conexiones de la
+  // cuenta de la agencia: mismo Calendar y Gmail para los dos.
+  if (user.role === 'admin') {
+    return AGENCY_GOOGLE_OWNER_KEY
   }
   return `user:${user.id}`
 }

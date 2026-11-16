@@ -13,13 +13,6 @@ export interface AuthUser {
 
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
-function getAdminCredentials(): { email: string; password: string; name: string } | null {
-  const email = process.env.CRM_ADMIN_EMAIL?.trim()
-  const password = process.env.CRM_ADMIN_PASSWORD
-  if (!email || !password) return null
-  return { email, password, name: 'Administrador' }
-}
-
 function signToken(token: string): string {
   const secret = process.env.SESSION_SECRET || 'default-secret-change-in-production'
   const hmac = createHmac('sha256', secret)
@@ -88,16 +81,22 @@ function getUserFromSignedToken(signedToken: string): AuthUser | null {
   return decodeSessionPayload(verification.token)
 }
 
+/** Un admin ha intentado entrar con contraseña: tiene que usar Google. */
+export class AdminGoogleOnlyError extends Error {
+  constructor() {
+    super('ADMIN_GOOGLE_ONLY')
+    this.name = 'AdminGoogleOnlyError'
+  }
+}
+
 export async function authenticateCredentials(
   email: string,
   password: string
 ): Promise<AuthUser | null> {
-  const admin = getAdminCredentials()
-  if (admin && email === admin.email && password === admin.password) {
-    return { id: 0, email: admin.email, name: admin.name, role: 'admin' }
-  }
   const crmUser = await verifyCrmUserPassword(email, password)
   if (!crmUser) return null
+  // Los admins (socios) entran solo con «Continuar con Google»
+  if (crmUser.role === 'admin') throw new AdminGoogleOnlyError()
   return {
     id: crmUser.id,
     email: crmUser.email,

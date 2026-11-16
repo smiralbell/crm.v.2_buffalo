@@ -1,10 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createSession } from '@/lib/auth'
 import {
-  authUserFromGoogleAdmin,
   exchangeGoogleLoginCode,
-  isGoogleAdminEmail,
   parseGoogleLoginState,
+  resolveGoogleLoginUser,
 } from '@/lib/auth-google'
 import { defaultHomeForRole } from '@/lib/auth-rbac'
 
@@ -39,14 +38,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const profile = await exchangeGoogleLoginCode(code)
-    if (!isGoogleAdminEmail(profile.email)) {
-      console.warn('[auth/google/callback] email no autorizado', profile.email)
-      return fail(
-        'Este correo de Google no tiene acceso de administrador al CRM Buffalo'
-      )
+    const result = await resolveGoogleLoginUser(profile.email, profile.name)
+    if ('error' in result) {
+      console.warn('[auth/google/callback] acceso denegado', profile.email)
+      return fail(result.error)
     }
+    const { user } = result
 
-    const user = authUserFromGoogleAdmin(profile.email, profile.name)
     await createSession(user, res)
     return res.redirect(302, defaultHomeForRole(user.role))
   } catch (e) {

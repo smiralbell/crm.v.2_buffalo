@@ -286,7 +286,7 @@ export default function UsuarioDetailPage() {
               </div>
             </div>
 
-            {credentials && (
+            {credentials && user.role !== 'admin' && (
               <div className="rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-sm font-semibold text-gray-900">Credenciales de acceso</h2>

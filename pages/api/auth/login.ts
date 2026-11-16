@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { createSession, authenticateCredentials } from '@/lib/auth'
+import { AdminGoogleOnlyError, createSession, authenticateCredentials } from '@/lib/auth'
 import { defaultHomeForRole } from '@/lib/auth-rbac'
 import { z } from 'zod'
 
@@ -28,6 +28,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors[0].message })
+    }
+    if (error instanceof AdminGoogleOnlyError) {
+      return res.status(403).json({ error: 'Los administradores entran con «Continuar con Google».' })
     }
     console.error('Login error:', error)
     return res.status(500).json({ error: 'Error interno del servidor' })
