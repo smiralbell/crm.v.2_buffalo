@@ -6,7 +6,8 @@ import ChecklistBoard from '@/components/checklist/ChecklistBoard'
 import type { ChecklistColumnId, ChecklistItem } from '@/lib/checklist/types'
 import type { Subtask } from '@/lib/subtasks'
 import { Button } from '@/components/ui/button'
-import { Loader2, RefreshCw } from 'lucide-react'
+import { ListTodo, Loader2, RefreshCw } from 'lucide-react'
+import ChecklistImportDialog from '@/components/checklist/ChecklistImportDialog'
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   try {
@@ -26,6 +27,7 @@ export default function ChecklistPage() {
   const [warning, setWarning] = useState('')
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState<number | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
   /** Guardados de subtareas en cola por tarea, para que no lleguen desordenados. */
   const subtaskSaves = useRef(new Map<number, Promise<void>>())
 
@@ -181,7 +183,11 @@ export default function ChecklistPage() {
   return (
     <Layout>
       <div className="space-y-5">
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" className="rounded-xl gap-1.5" onClick={() => setImportOpen(true)}>
+            <ListTodo className="h-3.5 w-3.5" />
+            Pasar a Tareas
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -222,6 +228,7 @@ export default function ChecklistPage() {
           />
         )}
       </div>
+      <ChecklistImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={() => void load()} />
     </Layout>
   )
 }

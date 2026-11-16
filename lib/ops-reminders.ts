@@ -115,6 +115,7 @@ async function claimDueChecklist(): Promise<DueTask[]> {
              last_reminded_at, created_at
         FROM crm_checklist_items
        WHERE done = FALSE
+         AND imported_at IS NULL
          AND (remind_every_days > 0 OR remind_weekday IS NOT NULL)
        FOR UPDATE SKIP LOCKED
     `

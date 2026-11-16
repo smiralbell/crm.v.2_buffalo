@@ -69,6 +69,13 @@ export async function ensureChecklistSchema(): Promise<void> {
   await prisma.$executeRawUnsafe(
     `ALTER TABLE crm_checklist_items ADD COLUMN IF NOT EXISTS subtasks JSONB NOT NULL DEFAULT '[]'::jsonb`
   )
+  // Pasadas a Tareas: no se borran, dejan de verse y de recordarse
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE crm_checklist_items ADD COLUMN IF NOT EXISTS imported_task_id TEXT`
+  )
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE crm_checklist_items ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ`
+  )
   schemaEnsured = true
 }
 
@@ -78,6 +85,7 @@ export async function listChecklistItems(): Promise<ChecklistItem[]> {
     SELECT id, title, done, column_key, position, remind_every_days, remind_weekday, remind_time,
            last_reminded_at, created_at, updated_at, completed_at, subtasks
     FROM crm_checklist_items
+    WHERE imported_at IS NULL
     ORDER BY column_key ASC, position ASC, id ASC
   `
   return rows.map(mapRow)
