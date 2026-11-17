@@ -1,6 +1,22 @@
 import nodemailer from 'nodemailer'
 import type SMTPTransport from 'nodemailer/lib/smtp-transport'
 
+/**
+ * Correo saliente del CRM.
+ *
+ * Perfil «default» (avisos internos, alertas…):
+ *   SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM, SMTP_FROM_NAME
+ *
+ * Perfil «invoices» (facturas a clientes). Cada variable es opcional y, si no
+ * está, se usa la del perfil general:
+ *   INVOICES_SMTP_USER, INVOICES_SMTP_PASS   cuenta con la que se entra (p. ej. admin@)
+ *   INVOICES_SMTP_FROM                        dirección que ve el cliente (por defecto, INVOICES_SMTP_USER)
+ *   INVOICES_SMTP_FROM_NAME                   nombre que ve el cliente (por defecto «Buffalo AI»)
+ *   INVOICES_SMTP_HOST, INVOICES_SMTP_PORT, INVOICES_SMTP_SECURE   solo si es otro servidor
+ */
+
+export type SmtpProfile = 'default' | 'invoices'
+
 export interface SmtpConfig {
   host: string
   port: number
@@ -23,47 +39,53 @@ function parseBool(value: string | undefined, fallback: boolean): boolean {
   return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())
 }
 
-export function getSmtpConfig(): SmtpConfig {
-  const host = process.env.SMTP_HOST?.trim()
-  const user = process.env.SMTP_USER?.trim()
-  const pass = process.env.SMTP_PASS?.trim()
-  const from = process.env.SMTP_FROM?.trim() || user
-  const port = Number(process.env.SMTP_PORT || '465')
-  const secure = parseBool(process.env.SMTP_SECURE, port === 465)
-
-  if (!host) throw new SmtpConfigError('Falta SMTP_HOST en las variables de entorno')
-  if (!user) throw new SmtpConfigError('Falta SMTP_USER en las variables de entorno')
-  if (!pass) throw new SmtpConfigError('Falta SMTP_PASS en las variables de entorno')
-  if (!from) throw new SmtpConfigError('Falta SMTP_FROM o SMTP_USER en las variables de entorno')
-  if (!Number.isFinite(port) || port <= 0) {
-    throw new SmtpConfigError('SMTP_PORT no es válido')
-  }
-
-  return {
-    host,
-    port,
-    secure,
-    user,
-    pass,
-    from,
-    fromName: process.env.SMTP_FROM_NAME?.trim() || 'Buffalo CRM',
-  }
+function env(name: string): string | undefined {
+  const v = process.env[name]?.trim()
+  return v ? v : undefined
 }
 
-export function isSmtpConfigured(): boolean {
+export function getSmtpConfig(profile: SmtpProfile = 'default'): SmtpConfig {
+  const p = profile === 'invoices' ? 'INVOICES_SMTP_' : null
+  const pick = (key: string) => (p ? env(`${p}${key}`) : undefined) ?? env(`SMTP_${key}`)
+
+  const host = pick('HOST')
+  // Si las facturas tienen su propia cuenta, su contraseña es la suya (no la general)
+  const ownAccount = p ? env(`${p}USER`) : undefined
+  const user = ownAccount ?? env('SMTP_USER')
+  const pass = ownAccount ? env(`${p}PASS`) : env('SMTP_PASS')
+  const from = (p ? env(`${p}FROM`) ?? ownAccount : undefined) ?? env('SMTP_FROM') ?? user
+  const port = Number(pick('PORT') || '465')
+  const secure = parseBool(pick('SECURE'), port === 465)
+  const fromName = (p ? env(`${p}FROM_NAME`) ?? 'Buffalo AI' : undefined) ?? env('SMTP_FROM_NAME') ?? 'Buffalo CRM'
+
+  const label = p ? `${p}USER / SMTP_USER` : 'SMTP_USER'
+  if (!host) throw new SmtpConfigError('Falta SMTP_HOST en las variables de entorno')
+  if (!user) throw new SmtpConfigError(`Falta ${label} en las variables de entorno`)
+  if (!pass) {
+    throw new SmtpConfigError(
+      ownAccount ? 'Falta INVOICES_SMTP_PASS (la contraseña de la cuenta de facturas)' : 'Falta SMTP_PASS en las variables de entorno'
+    )
+  }
+  if (!from) throw new SmtpConfigError('Falta SMTP_FROM o SMTP_USER en las variables de entorno')
+  if (!Number.isFinite(port) || port <= 0) throw new SmtpConfigError('SMTP_PORT no es válido')
+
+  return { host, port, secure, user, pass, from, fromName }
+}
+
+export function isSmtpConfigured(profile: SmtpProfile = 'default'): boolean {
   try {
-    getSmtpConfig()
+    getSmtpConfig(profile)
     return true
   } catch {
     return false
   }
 }
 
-export function getSmtpPublicStatus() {
+export function getSmtpPublicStatus(profile: SmtpProfile = 'default') {
   try {
-    const cfg = getSmtpConfig()
+    const cfg = getSmtpConfig(profile)
     return {
-      configured: true,
+      configured: true as const,
       host: cfg.host,
       port: cfg.port,
       secure: cfg.secure,
@@ -73,14 +95,14 @@ export function getSmtpPublicStatus() {
     }
   } catch (error) {
     return {
-      configured: false,
+      configured: false as const,
       error: error instanceof Error ? error.message : 'SMTP no configurado',
     }
   }
 }
 
-export function createSmtpTransporter() {
-  const cfg = getSmtpConfig()
+export function createSmtpTransporter(profile: SmtpProfile = 'default') {
+  const cfg = getSmtpConfig(profile)
   const options: SMTPTransport.Options = {
     host: cfg.host,
     port: cfg.port,
@@ -106,11 +128,14 @@ export interface SendMailInput {
   bcc?: string | string[]
   replyTo?: string
   attachments?: { filename: string; content: Buffer; contentType?: string }[]
+  /** Con qué cuenta sale (por defecto, la general del CRM) */
+  profile?: SmtpProfile
 }
 
 export async function sendMail(input: SendMailInput) {
-  const cfg = getSmtpConfig()
-  const transporter = createSmtpTransporter()
+  const profile = input.profile ?? 'default'
+  const cfg = getSmtpConfig(profile)
+  const transporter = createSmtpTransporter(profile)
   return transporter.sendMail({
     from: formatFromAddress(cfg),
     to: input.to,
@@ -124,7 +149,7 @@ export async function sendMail(input: SendMailInput) {
   })
 }
 
-export async function verifySmtpConnection() {
-  const transporter = createSmtpTransporter()
+export async function verifySmtpConnection(profile: SmtpProfile = 'default') {
+  const transporter = createSmtpTransporter(profile)
   await transporter.verify()
 }

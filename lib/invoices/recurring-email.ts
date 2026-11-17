@@ -162,7 +162,7 @@ async function deliver(
   invoiceId: number | null,
   testTo?: string
 ): Promise<DeliverResult> {
-  if (!isSmtpConfigured()) return { ok: false, error: 'El correo del CRM (SMTP) no está configurado' }
+  if (!isSmtpConfigured('invoices')) return { ok: false, error: 'El correo de facturas (SMTP) no está configurado' }
 
   const invoice = invoiceId ? await prisma.invoice.findUnique({ where: { id: invoiceId } }) : null
   if (invoiceId && (!invoice || invoice.deleted_at)) return { ok: false, error: 'La factura ya no existe' }
@@ -204,7 +204,16 @@ async function deliver(
     attachments.push({ filename: pdf.filename, content: pdf.buffer, contentType: 'application/pdf' })
   }
 
-  await sendMail({ to, cc: cc.length ? cc : undefined, replyTo, subject, text, html: emailHtml(text), attachments })
+  await sendMail({
+    profile: 'invoices',
+    to,
+    cc: cc.length ? cc : undefined,
+    replyTo,
+    subject,
+    text,
+    html: emailHtml(text),
+    attachments,
+  })
   return { ok: true, to: [...to, ...cc], subject }
 }
 
@@ -377,7 +386,7 @@ export async function getRecurringEmailState(recurringId: string): Promise<Recur
       LIMIT 12`,
     [recurringId]
   )
-  const smtp = getSmtpPublicStatus()
+  const smtp = getSmtpPublicStatus('invoices')
   return {
     settings: {
       email_enabled: t.email_enabled,
@@ -400,7 +409,10 @@ export async function getRecurringEmailState(recurringId: string): Promise<Recur
           }
         : null,
     sends: sends.rows,
-    smtp: { configured: smtp.configured, from: smtp.configured ? (smtp as { from: string }).from : null },
+    smtp: {
+      configured: smtp.configured,
+      from: smtp.configured ? `${smtp.fromName} <${smtp.from}>` : null,
+    },
   }
 }
 
