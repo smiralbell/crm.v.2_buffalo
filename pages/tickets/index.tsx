@@ -154,7 +154,7 @@ export default function TicketsPage() {
             className="inline-flex items-center gap-2 px-4 h-10 border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:bg-gray-50"
           >
             <Settings className="h-4 w-4" />
-            Configurar respuestas
+            Conexión por cliente
           </Link>
           <button
             type="button"
