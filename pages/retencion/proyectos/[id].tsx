@@ -5,20 +5,22 @@ import Layout from '@/components/Layout'
 import { useAuth } from '@/components/AuthContext'
 import IncidentsPanel from '@/components/retencion/IncidentsPanel'
 import McpPanel from '@/components/retencion/McpPanel'
+import TicketsPanel from '@/components/retencion/TicketsPanel'
 import WatchSystemPanel from '@/components/retencion/WatchSystemPanel'
 import { ArrowLeft, AlertCircle, Link2, Clock, FileText } from 'lucide-react'
 import type { ProyectoRow } from '@/lib/engranaje5/project-services'
 
-type Tab = 'incidencias' | 'sistema' | 'mcp'
+type Tab = 'incidencias' | 'tickets' | 'sistema' | 'mcp'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'incidencias', label: 'Incidencias' },
+  { id: 'tickets', label: 'Tickets' },
   { id: 'sistema', label: 'Sistema' },
   { id: 'mcp', label: 'MCP' },
 ]
 
 function isValidTab(v: unknown): v is Tab {
-  return v === 'incidencias' || v === 'sistema' || v === 'mcp'
+  return v === 'incidencias' || v === 'tickets' || v === 'sistema' || v === 'mcp'
 }
 
 export default function RetencionProyectoDetailPage() {
@@ -31,6 +33,7 @@ export default function RetencionProyectoDetailPage() {
   const [error, setError] = useState('')
   const [proyecto, setProyecto] = useState<ProyectoRow | null>(null)
   const [webhookOpen, setWebhookOpen] = useState(false)
+  const [connectionOpen, setConnectionOpen] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [intervalLabel, setIntervalLabel] = useState('Frecuencia')
 
@@ -114,6 +117,16 @@ export default function RetencionProyectoDetailPage() {
                   Webhook
                 </button>
               )}
+              {activeTab === 'tickets' && (
+                <button
+                  type="button"
+                  onClick={() => setConnectionOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                >
+                  <Link2 className="h-4 w-4" />
+                  Conexión
+                </button>
+              )}
               {activeTab === 'sistema' && (
                 <div className="flex items-center gap-2">
                   <Link
@@ -154,6 +167,15 @@ export default function RetencionProyectoDetailPage() {
             proyectoName={proyecto.name}
             webhookOpen={webhookOpen}
             onWebhookOpenChange={setWebhookOpen}
+          />
+        )}
+
+        {proyecto && activeTab === 'tickets' && (
+          <TicketsPanel
+            proyectoId={proyecto.id}
+            proyectoName={proyecto.name}
+            connectionOpen={connectionOpen}
+            onConnectionOpenChange={setConnectionOpen}
           />
         )}
 
