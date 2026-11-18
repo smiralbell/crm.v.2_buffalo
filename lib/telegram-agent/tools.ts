@@ -190,8 +190,20 @@ const DIRECT_ACTIONS = new Set([
   'create_calendar_meeting',
 ])
 
+/**
+ * El orquestador (modelo caro) no consulta datos: entiende, delega y responde.
+ * Las consultas y búsquedas las hacen los subagentes (modelo barato), que le
+ * devuelven un informe corto en vez de filas. Se queda con lo que no necesita
+ * buscar nada: configurar el agente, avisos, documentos, tareas del equipo y
+ * las acciones directas de la secretaria cuando ya tiene los ids.
+ */
 export function orchestratorTools(): ToolSchema[] {
-  return [DELEGATE_TOOL, ...DB_TOOLS, ...AGENT_TOOLS, ...MCP_TOOLS, ...TASK_TOOLS, ...SECRETARIA_TOOLS]
+  return [
+    DELEGATE_TOOL,
+    ...AGENT_TOOLS,
+    ...TASK_TOOLS,
+    ...SECRETARIA_TOOLS.filter((t) => DIRECT_ACTIONS.has(t.function.name)),
+  ]
 }
 
 export function subagentTools(mod: AgentModule): ToolSchema[] {
