@@ -38,6 +38,7 @@ import ProjectTaskCalendar from '@/components/gestion-proyecto/ProjectTaskCalend
 import ProjectTaskGantt from '@/components/gestion-proyecto/ProjectTaskGantt'
 import SubtaskList, { SubtaskChip } from '@/components/subtasks/SubtaskList'
 import TaskAttachments from '@/components/gestion-proyecto/TaskAttachments'
+import FileChips, { filesFromClipboard } from '@/components/gestion-proyecto/FileChips'
 import type { Subtask } from '@/lib/subtasks'
 import {
   projectTaskClient,
@@ -159,6 +160,12 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
   const [dueDate, setDueDate] = useState('')
   const [teamMembers, setTeamMembers] = useState<{ id: number; name: string; color: string | null }[]>([])
   const [files, setFiles] = useState<File[]>([])
+  const [dragOver, setDragOver] = useState(false)
+  const createFileRef = useRef<HTMLInputElement>(null)
+  const addFiles = (list: File[]) => {
+    if (list.length) setFiles((prev) => [...prev, ...list])
+  }
+  const showTargetSelect = Boolean(createTargets && createTargets.length > 1)
   const [creating, setCreating] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ProjectTask | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -718,94 +725,87 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+          <DialogHeader className="sr-only">
             <DialogTitle>Nueva tarea</DialogTitle>
-            <DialogDescription>
-              Columna: {columnLabel(createStatus)}
-            </DialogDescription>
+            <DialogDescription>Columna: {columnLabel(createStatus)}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            {createTargets && createTargets.length > 1 && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700" htmlFor="task_target">
-                  Dónde va *
-                </label>
-                <select
-                  id="task_target"
-                  value={createTarget}
-                  onChange={(e) => setCreateTarget(e.target.value)}
-                  className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
-                >
-                  <option value="" disabled>
-                    Elige una opción…
-                  </option>
-                  {groupTargets(createTargets).map(([group, items]) =>
-                    group ? (
-                      <optgroup key={group} label={group}>
-                        {items.map((t) => (
+          <div className="space-y-4 pt-2">
+            <div className="grid gap-4 sm:grid-cols-3">
+              {showTargetSelect && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700" htmlFor="task_target">
+                    Dónde va *
+                  </label>
+                  <select
+                    id="task_target"
+                    value={createTarget}
+                    onChange={(e) => setCreateTarget(e.target.value)}
+                    className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                  >
+                    <option value="" disabled>
+                      Elige una opción…
+                    </option>
+                    {groupTargets(createTargets!).map(([group, items]) =>
+                      group ? (
+                        <optgroup key={group} label={group}>
+                          {items.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ) : (
+                        items.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.label}
                           </option>
-                        ))}
-                      </optgroup>
-                    ) : (
-                      items.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.label}
-                        </option>
-                      ))
-                    )
-                  )}
-                </select>
-              </div>
-            )}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700" htmlFor="task_title">
-                Título *
-              </label>
-              <Input
-                id="task_title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Qué hay que hacer"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700" htmlFor="task_desc">
-                Descripción
-              </label>
-              <Textarea
-                id="task_desc"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Detalles, criterios de aceptación, contexto técnico..."
-                rows={10}
-                className="min-h-[220px] resize-y"
-              />
-            </div>
-            <div className="grid sm:grid-cols-2 gap-4">
-              {targetAssignable && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700" htmlFor="task_assignee">
-                  Asignado a
-                </label>
-                <select
-                  id="task_assignee"
-                  value={assignee}
-                  onChange={(e) => setAssignee(e.target.value)}
-                  className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
-                >
-                  <option value="">Sin asignar</option>
-                  {teamMembers.map((m) => (
-                    <option key={m.id} value={m.name}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                        ))
+                      )
+                    )}
+                  </select>
+                </div>
               )}
-              <div className="space-y-2">
+              <div className={cn('space-y-1.5', showTargetSelect ? 'sm:col-span-2' : 'sm:col-span-3')}>
+                <p className="text-sm font-medium text-gray-700">Prioridad</p>
+                <div className="flex gap-2">
+                  {PRIORITIES.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPriority(p.id)}
+                      className={cn(
+                        'h-10 flex-1 rounded-lg border px-3 text-xs font-medium transition-colors',
+                        priority === p.id ? p.className : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className={cn('grid gap-4', targetAssignable ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+              {targetAssignable && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-gray-700" htmlFor="task_assignee">
+                    Asignado a
+                  </label>
+                  <select
+                    id="task_assignee"
+                    value={assignee}
+                    onChange={(e) => setAssignee(e.target.value)}
+                    className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                  >
+                    <option value="">Sin asignar</option>
+                    {teamMembers.map((m) => (
+                      <option key={m.id} value={m.name}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-700" htmlFor="task_hours">
                   Horas estimadas
                 </label>
@@ -819,40 +819,102 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                   placeholder="Ej. 4"
                 />
               </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700" htmlFor="task_due">
-                Fecha de finalización
-              </label>
-              <Input
-                id="task_due"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-gray-700">Prioridad</p>
-              <div className="flex gap-2 max-w-md">
-                {PRIORITIES.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setPriority(p.id)}
-                    className={cn(
-                      'flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-                      priority === p.id ? p.className : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
-                    )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700" htmlFor="task_due">
+                  Fecha de finalización
+                </label>
+                <Input id="task_due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
               </div>
             </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-gray-700">Subtareas (opcional)</p>
-              <p className="text-xs text-gray-500">
-                Los pasos para completar esta tarea. En el tablero se ven plegados dentro de la tarjeta.
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700" htmlFor="task_title">
+                Título *
+              </label>
+              <Input
+                id="task_title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Qué hay que hacer"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700" htmlFor="task_desc">
+                Descripción
+              </label>
+              <div
+                className={cn(
+                  'overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow focus-within:border-gray-300 focus-within:ring-2 focus-within:ring-gray-100',
+                  dragOver && 'border-indigo-300 ring-2 ring-indigo-100'
+                )}
+                onDragOver={(e) => {
+                  if (!targetAttachments) return
+                  e.preventDefault()
+                  setDragOver(true)
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  if (!targetAttachments) return
+                  e.preventDefault()
+                  setDragOver(false)
+                  addFiles(Array.from(e.dataTransfer.files || []))
+                }}
+              >
+                <Textarea
+                  id="task_desc"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  onPaste={(e) => {
+                    if (!targetAttachments) return
+                    const pasted = filesFromClipboard(e.clipboardData)
+                    if (!pasted.length) return
+                    if (!e.clipboardData.getData('text/plain')) e.preventDefault()
+                    addFiles(pasted)
+                  }}
+                  placeholder={
+                    targetAttachments
+                      ? 'Detalles, criterios de aceptación, contexto… Puedes pegar capturas con Ctrl+V.'
+                      : 'Detalles, criterios de aceptación, contexto técnico...'
+                  }
+                  rows={6}
+                  className="min-h-[140px] resize-y rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                />
+                {targetAttachments && (
+                  <div className="space-y-2 border-t border-gray-100 bg-gray-50/60 px-2.5 py-2">
+                    <FileChips files={files} onRemove={(i) => setFiles((prev) => prev.filter((_, j) => j !== i))} />
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={createFileRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          addFiles(Array.from(e.target.files || []))
+                          e.target.value = ''
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => createFileRef.current?.click()}
+                        className="rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-200/70 hover:text-gray-800"
+                        title="Adjuntar archivos"
+                        aria-label="Adjuntar archivos"
+                      >
+                        <Paperclip className="h-4 w-4" />
+                      </button>
+                      <span className="text-xs text-gray-400">
+                        {files.length
+                          ? `${files.length} adjunto${files.length === 1 ? '' : 's'} · se suben al crear la tarea`
+                          : 'Adjunta archivos, arrástralos aquí o pega capturas con Ctrl+V'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium text-gray-700">
+                Subtareas <span className="font-normal text-gray-400">(opcional)</span>
               </p>
               <SubtaskList
                 subtasks={newSubtasks}
@@ -861,23 +923,6 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                 parentTitle={title.trim() || 'Nueva tarea'}
               />
             </div>
-            {targetAttachments && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700" htmlFor="task_files">
-                Adjuntos (opcional)
-              </label>
-              <input
-                id="task_files"
-                type="file"
-                multiple
-                className="w-full text-sm"
-                onChange={(e) => setFiles(Array.from(e.target.files || []))}
-              />
-              {files.length > 0 && (
-                <p className="text-xs text-gray-500">{files.length} archivo(s) seleccionado(s)</p>
-              )}
-            </div>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>

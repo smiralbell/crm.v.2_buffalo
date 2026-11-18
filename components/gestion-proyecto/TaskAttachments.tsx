@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Download, ExternalLink, FileText, Loader2, Paperclip, Trash2, Upload } from 'lucide-react'
 import type { ProjectTask, ProjectTaskAttachment } from '@/lib/gestion-proyecto/types'
 import type { TaskBoardClient } from '@/components/gestion-proyecto/task-board-client'
 import { cn } from '@/lib/utils'
+import { filesFromClipboard } from '@/components/gestion-proyecto/FileChips'
 
 function fmtSize(bytes: number | null): string {
   if (bytes == null) return ''
@@ -54,6 +55,21 @@ export default function TaskAttachments({
       if (inputRef.current) inputRef.current.value = ''
     }
   }
+
+  // Ctrl+V con la tarea abierta: la captura se sube como adjunto
+  const uploadRef = useRef(upload)
+  uploadRef.current = upload
+  useEffect(() => {
+    if (readOnly) return
+    const onPaste = (e: ClipboardEvent) => {
+      const pasted = filesFromClipboard(e.clipboardData)
+      if (!pasted.length) return
+      if (!e.clipboardData?.getData('text/plain')) e.preventDefault()
+      void uploadRef.current(pasted)
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [readOnly])
 
   const remove = async (att: ProjectTaskAttachment) => {
     if (!window.confirm(`¿Quitar «${att.file_name}» de la tarea? Irá a la papelera de Drive.`)) return
@@ -119,7 +135,7 @@ export default function TaskAttachments({
             onClick={() => inputRef.current?.click()}
             className="w-full rounded-xl border border-dashed border-gray-200 px-4 py-5 text-center text-xs text-gray-400 hover:border-gray-300 hover:text-gray-500"
           >
-            Arrastra aquí imágenes o documentos, o pulsa para elegirlos (hasta 25 MB cada uno)
+            Arrastra aquí imágenes o documentos, pega una captura con Ctrl+V o pulsa para elegirlos (hasta 25 MB cada uno)
           </button>
         )
       ) : (
