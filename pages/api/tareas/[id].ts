@@ -10,6 +10,8 @@ import {
 } from '@/lib/tareas/store'
 import { personalTaskUpdateSchema } from '@/lib/tareas/schemas'
 import { canDeletePersonalTask } from '@/lib/tareas/permissions'
+import { personalAttachmentDriveIds } from '@/lib/tareas/attachments'
+import { trashAttachmentInDrive } from '@/lib/integrations/google/drive-attachments'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -56,6 +58,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .status(403)
           .json({ error: 'Esta tarea te la asignaron. Muévela a Hecho; solo quien la creó puede borrarla.' })
       }
+      // Sus adjuntos a la papelera de Drive (se pueden recuperar allí 30 días)
+      const driveIds = await personalAttachmentDriveIds(id).catch(() => [] as string[])
+      await Promise.all(driveIds.map((fileId) => trashAttachmentInDrive(fileId).catch(() => undefined)))
       await deletePersonalTask(id)
       return res.status(200).json({ success: true })
     }

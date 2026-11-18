@@ -222,9 +222,26 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
         }
         await projectTaskClient(task.project_id).remove(task)
       },
-      uploadAttachments: async (task, files) =>
-        isPersonal(task) ? [] : projectTaskClient(task.project_id).uploadAttachments(task, files),
-      attachmentUrl: (task, attId) => projectTaskClient(task.project_id).attachmentUrl(task, attId),
+      uploadAttachments: async (task, files) => {
+        if (!isPersonal(task)) return projectTaskClient(task.project_id).uploadAttachments(task, files)
+        if (files.length === 0) return []
+        const formData = new FormData()
+        for (const file of files) formData.append('file', file)
+        const data = await requestJson<{ attachments?: WorkTask['attachments'] }>(
+          `/api/tareas/${task.id}/attachments`,
+          { method: 'POST', body: formData },
+          'No se pudieron subir los archivos'
+        )
+        return data.attachments || []
+      },
+      attachmentUrl: (task, attId) =>
+        isPersonal(task)
+          ? `/api/tareas/${task.id}/attachments/${attId}`
+          : projectTaskClient(task.project_id).attachmentUrl(task, attId),
+      deleteAttachment: async (task, attId) => {
+        if (!isPersonal(task)) return projectTaskClient(task.project_id).deleteAttachment(task, attId)
+        await requestJson(`/api/tareas/${task.id}/attachments/${attId}`, { method: 'DELETE' }, 'No se pudo quitar el archivo')
+      },
     }
     return {
       create: (target, body) => track(() => base.create(target, body)),
@@ -232,6 +249,7 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
       remove: (task) => track(() => base.remove(task)),
       uploadAttachments: (task, files) => track(() => base.uploadAttachments(task, files)),
       attachmentUrl: base.attachmentUrl,
+      deleteAttachment: (task, attId) => track(() => base.deleteAttachment(task, attId)),
     }
   }, [projectNames, track])
 
@@ -315,9 +333,10 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
             id: `user:${scope.id}`,
             label: viewingSelf ? 'Tarea suelta (mía)' : `Tarea suelta para ${scope.name}`,
             group: 'Sin proyecto',
+            attachments: true,
           },
         ]
-      : data.people.map((p) => ({ id: `user:${p.id}`, label: p.name, group: 'Tarea suelta para…' }))
+      : data.people.map((p) => ({ id: `user:${p.id}`, label: p.name, group: 'Tarea suelta para…', attachments: true }))
     const projects: TaskCreateTarget[] = data.projects.map((p) => ({
       id: `project:${p.id}`,
       label: p.name,

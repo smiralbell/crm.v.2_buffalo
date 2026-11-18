@@ -37,6 +37,7 @@ import type { ProjectTask, TaskPriority, TaskStatus } from '@/lib/gestion-proyec
 import ProjectTaskCalendar from '@/components/gestion-proyecto/ProjectTaskCalendar'
 import ProjectTaskGantt from '@/components/gestion-proyecto/ProjectTaskGantt'
 import SubtaskList, { SubtaskChip } from '@/components/subtasks/SubtaskList'
+import TaskAttachments from '@/components/gestion-proyecto/TaskAttachments'
 import type { Subtask } from '@/lib/subtasks'
 import {
   projectTaskClient,
@@ -957,28 +958,14 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                 ) : (
                   <p className="text-sm text-gray-400 italic">Sin descripción</p>
                 )}
-                {(viewTask.attachments?.length ?? 0) > 0 && (
-                  <div className="mt-5 space-y-2">
-                    <p className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
-                      <Paperclip className="h-4 w-4" />
-                      Adjuntos
-                    </p>
-                    <ul className="space-y-1.5">
-                      {viewTask.attachments!.map((att) => (
-                        <li key={att.id}>
-                          <a
-                            href={client.attachmentUrl(viewTask, att.id)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-sm text-indigo-600 hover:underline"
-                          >
-                            {att.file_name}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                <TaskAttachments
+                  task={viewTask}
+                  client={client}
+                  onChange={(attachments) => {
+                    setViewTask((v) => (v ? { ...v, attachments } : v))
+                    applyChange((list) => list.map((t) => (t.id === viewTask.id ? { ...t, attachments } : t)))
+                  }}
+                />
               </div>
               <DialogFooter className="shrink-0 gap-2 sm:gap-0 px-6 py-4 border-t border-gray-100 bg-white">
                 {canDelete(viewTask) && (

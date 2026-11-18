@@ -1,3 +1,4 @@
+import { listPersonalAttachments } from '@/lib/tareas/attachments'
 import { prisma } from '@/lib/prisma'
 import { serializeTaskRow, STALE_EXTENSION_DAYS } from '@/lib/gestion-proyecto/task-stale'
 import type { TaskPriority, TaskStatus } from '@/lib/gestion-proyecto/types'
@@ -133,13 +134,29 @@ export async function listPersonalTasks(userId: number | null): Promise<WorkTask
           `${PERSONAL_SELECT} WHERE t.user_id = $1 ORDER BY t.position ASC, t.created_at ASC`,
           userId
         )
-  return rows.map(mapPersonalRow)
+  const tasks = rows.map(mapPersonalRow)
+  await attachPersonalFiles(tasks)
+  return tasks
+}
+
+/** Adjuntos (en Drive) de las tareas sueltas. Si la tabla aún no existe, sin adjuntos. */
+async function attachPersonalFiles(tasks: WorkTask[]): Promise<void> {
+  if (!tasks.length) return
+  try {
+    const byTask = await listPersonalAttachments(tasks.map((t) => t.id))
+    for (const t of tasks) t.attachments = byTask.get(t.id) ?? []
+  } catch {
+    // sin adjuntos
+  }
 }
 
 export async function getPersonalTask(id: string): Promise<WorkTask | null> {
   await ensureUserTasksSchema()
   const rows = await prisma.$queryRawUnsafe<Row[]>(`${PERSONAL_SELECT} WHERE t.id = $1::uuid`, id)
-  return rows[0] ? mapPersonalRow(rows[0]) : null
+  if (!rows[0]) return null
+  const task = mapPersonalRow(rows[0])
+  await attachPersonalFiles([task])
+  return task
 }
 
 /** Proyectos abiertos. `projectIds` null = todos (admin). */

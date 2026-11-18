@@ -11,6 +11,8 @@ export interface TaskBoardClient {
   remove(task: ProjectTask): Promise<void>
   uploadAttachments(task: ProjectTask, files: File[]): Promise<ProjectTaskAttachment[]>
   attachmentUrl(task: ProjectTask, attachmentId: string): string
+  /** Quita un adjunto (va a la papelera de Drive) */
+  deleteAttachment(task: ProjectTask, attachmentId: string): Promise<void>
 }
 
 /** Dónde se puede crear una tarea (el selector solo sale si hay más de una opción). */
@@ -20,7 +22,7 @@ export interface TaskCreateTarget {
   group?: string
   /** Permite elegir persona asignada (las de proyecto) */
   assignable?: boolean
-  /** Permite adjuntar archivos (las de proyecto) */
+  /** Permite adjuntar archivos */
   attachments?: boolean
 }
 
@@ -59,5 +61,8 @@ export function projectTaskClient(projectId: string): TaskBoardClient {
       return data.attachments || []
     },
     attachmentUrl: (task, attId) => `${base}/${task.id}/attachments/${attId}/file`,
+    deleteAttachment: async (task, attId) => {
+      await requestJson(`${base}/${task.id}/attachments/${attId}`, { method: 'DELETE' }, 'No se pudo quitar el archivo')
+    },
   }
 }
