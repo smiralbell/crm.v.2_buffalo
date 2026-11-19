@@ -1,5 +1,31 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { ProyectoContext } from './retention-agent'
+
+/**
+ * Quién entra en Retención:
+ * - Todo proyecto Buffalo "En producción" (status = active): al pulsar Producción en Proyectos.
+ * - Además, los que tienen mensualidad y siguen en desarrollo o pausados (criterio anterior).
+ * Los "Finalizado" (done) se quedan en Proyectos y no entran.
+ */
+export function isRetencionEligible(p: {
+  es_buffalo: boolean
+  has_mensualidad: boolean
+  status: string
+}): boolean {
+  if (!p.es_buffalo) return false
+  if (p.status === 'active') return true
+  return p.has_mensualidad && ['development', 'paused'].includes(p.status)
+}
+
+/** Mismo criterio que isRetencionEligible, para el WHERE de SQL. */
+export const RETENCION_ELIGIBLE_SQL = Prisma.sql`(
+  COALESCE(es_buffalo, false) = true
+  AND (
+    status = 'active'
+    OR (COALESCE(has_mensualidad, false) = true AND status IN ('development', 'paused'))
+  )
+)`
 
 export async function assertRetencionEligible(proyectoId: string): Promise<{
   ok: true
@@ -46,15 +72,12 @@ export async function assertRetencionEligible(proyectoId: string): Promise<{
   `
   const row = rows[0]
   if (!row) return { ok: false, error: 'Proyecto no encontrado', status: 404 }
-  if (!row.es_buffalo || !row.has_mensualidad) {
+  if (!isRetencionEligible(row)) {
     return {
       ok: false,
-      error: 'Solo proyectos Buffalo en marcha con mensualidad entran en Retención',
+      error: 'Solo proyectos Buffalo en producción (o con mensualidad en marcha) entran en Retención',
       status: 403,
     }
-  }
-  if (!['development', 'active', 'paused'].includes(row.status)) {
-    return { ok: false, error: 'Proyecto no activo en retención', status: 403 }
   }
   return { ok: true, row }
 }

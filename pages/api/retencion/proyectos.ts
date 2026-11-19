@@ -3,6 +3,7 @@ import { requireAuthAPI } from '@/lib/auth'
 import { getAccessibleProjectIds } from '@/lib/project-access'
 import { isDeveloperViewer, stripRetencionListRowForDeveloper } from '@/lib/retencion/developer-view'
 import { prisma } from '@/lib/prisma'
+import { RETENCION_ELIGIBLE_SQL } from '@/lib/retencion/eligibility'
 
 type ProyectoRow = {
   id: string
@@ -35,10 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           id, lead_id, name, config_ref, status, service_type,
           setup_fee_eur, monthly_fee_eur, maint_plan, has_mensualidad, updated_at
         FROM proyectos
-        WHERE has_mensualidad = true
-          AND es_buffalo = true
-          AND lead_id IS NOT NULL
-          AND status IN ('development', 'active', 'paused')
+        WHERE ${RETENCION_ELIGIBLE_SQL}
         ORDER BY updated_at DESC
       `
     } else if (accessibleIds.length === 0) {
@@ -49,10 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           id, lead_id, name, config_ref, status, service_type,
           setup_fee_eur, monthly_fee_eur, maint_plan, has_mensualidad, updated_at
         FROM proyectos
-        WHERE has_mensualidad = true
-          AND es_buffalo = true
-          AND lead_id IS NOT NULL
-          AND status IN ('development', 'active', 'paused')
+        WHERE ${RETENCION_ELIGIBLE_SQL}
           AND id = ANY(${accessibleIds}::uuid[])
         ORDER BY updated_at DESC
       `

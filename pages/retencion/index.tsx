@@ -112,12 +112,12 @@ export default function RetencionPage() {
             <div className="py-16 text-center">
               <p className="text-sm text-gray-400">
                 {isAdmin
-                  ? 'No hay proyectos Buffalo en marcha con mensualidad.'
+                  ? 'No hay proyectos en producción.'
                   : 'No tienes proyectos asignados en retención.'}
               </p>
               {isAdmin && (
                 <p className="text-xs text-gray-300 mt-1">
-                  Criterio: es_buffalo + has_mensualidad + status development/active/paused.
+                  Entran los proyectos que pasas a Producción desde Proyectos (y los que tienen mensualidad en desarrollo o pausados).
                 </p>
               )}
             </div>
