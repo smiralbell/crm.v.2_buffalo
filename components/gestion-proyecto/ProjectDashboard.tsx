@@ -18,7 +18,7 @@ import {
 } from 'recharts'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, Loader2, Rocket, Sparkles } from 'lucide-react'
+import { CheckCircle2, Loader2, Rocket, RotateCcw, Sparkles } from 'lucide-react'
 import { formatDashboardDate } from '@/lib/gestion-proyecto/dashboard-metrics'
 import type { ProjectDashboardData } from '@/lib/gestion-proyecto/types'
 import ProjectAiPanel from '@/components/gestion-proyecto/ProjectAiPanel'
@@ -154,6 +154,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
   const [savingEnd, setSavingEnd] = useState(false)
   const [finalizing, setFinalizing] = useState(false)
   const [promoting, setPromoting] = useState(false)
+  const [reopening, setReopening] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -239,6 +240,43 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
     }
   }
 
+  const volverADesarrollo = async () => {
+    const msg =
+      data?.proyecto.status === 'active'
+        ? '¿Deshacer «En producción»? El proyecto vuelve a En desarrollo y sale de Retención.'
+        : '¿Deshacer «Finalizado»? El proyecto vuelve a En desarrollo.'
+    if (!window.confirm(msg)) return
+    setReopening(true)
+    try {
+      const res = await fetch(`/api/gestion-proyecto/proyectos/${projectId}/reabrir`, {
+        method: 'POST',
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'No se pudo volver a desarrollo')
+      await load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al volver a desarrollo')
+    } finally {
+      setReopening(false)
+    }
+  }
+
+  const undoButton = (
+    <button
+      type="button"
+      onClick={() => void volverADesarrollo()}
+      disabled={reopening || finalizing || promoting}
+      className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+    >
+      {reopening ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <RotateCcw className="h-3.5 w-3.5" />
+      )}
+      {reopening ? 'Volviendo…' : 'Volver a desarrollo'}
+    </button>
+  )
+
   const enProduccion = data?.proyecto.status === 'active'
   const finalizado = data?.proyecto.status === 'done'
 
@@ -293,7 +331,8 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
               <div>
                 <p className="text-sm font-semibold text-emerald-900">En producción</p>
                 <p className="text-xs text-emerald-700/80">
-                  Live con el cliente. Si se marcó por error, puedes dejarlo solo como Finalizado.
+                  Live con el cliente y en Retención. Si se marcó por error, déjalo solo como
+                  Finalizado o vuelve a desarrollo.
                 </p>
               </div>
             </div>
@@ -311,6 +350,7 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
                 {finalizing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 Solo finalizado (sin producción)
               </button>
+              {undoButton}
             </div>
           </div>
         </div>
@@ -329,19 +369,22 @@ export default function ProjectDashboard({ projectId }: ProjectDashboardProps) {
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => void pasarAProduccion()}
-              disabled={promoting}
-              className="group relative inline-flex items-center justify-center gap-2.5 shrink-0 h-11 px-5 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-600/25 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-60"
-            >
-              {promoting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Rocket className="h-4 w-4" />
-              )}
-              {promoting ? 'Pasando…' : 'En producción'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {undoButton}
+              <button
+                type="button"
+                onClick={() => void pasarAProduccion()}
+                disabled={promoting || reopening}
+                className="group relative inline-flex items-center justify-center gap-2.5 shrink-0 h-11 px-5 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-600/25 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-60"
+              >
+                {promoting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Rocket className="h-4 w-4" />
+                )}
+                {promoting ? 'Pasando…' : 'En producción'}
+              </button>
+            </div>
           </div>
         </div>
       ) : (

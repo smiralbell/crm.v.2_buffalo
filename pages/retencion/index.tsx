@@ -117,7 +117,7 @@ export default function RetencionPage() {
               </p>
               {isAdmin && (
                 <p className="text-xs text-gray-300 mt-1">
-                  Entran los proyectos que pasas a Producción desde Proyectos (y los que tienen mensualidad en desarrollo o pausados).
+                  Entran los proyectos que pasas a Producción desde Proyectos.
                 </p>
               )}
             </div>
