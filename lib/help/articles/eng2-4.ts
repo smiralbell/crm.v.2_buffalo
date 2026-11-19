@@ -123,7 +123,9 @@ Developers solo ven lo asignado vía \`crm_user_projects\`.
     tags: ['tickets', 'soporte', 'webhook', 'cliente'],
     body: `# Tickets
 
-Rutas: \`/tickets\`, \`/tickets/[id]\`, \`/tickets/config\`
+Dónde: **Retención → proyecto → pestaña Tickets**. Cada ticket se abre en \`/tickets/[id]\`.
+El botón **Conexión** de esa pestaña tiene lo que hay que poner en el panel del cliente para los tickets.
+Lo de incidencias (errores de producción) está aparte, en la pestaña **Incidencias → Conexión**.
 
 ## Uso interno
 

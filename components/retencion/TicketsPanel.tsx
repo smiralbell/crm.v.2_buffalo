@@ -6,6 +6,7 @@ import TicketConnectionDetails, {
   type TicketConnection,
   type TicketProjectConfig,
 } from '@/components/tickets/TicketConnectionDetails'
+import TicketsWebhookGuideDownload from '@/components/tickets/TicketsWebhookGuideDownload'
 import { PRIORITY_LABELS, STATUS_LABELS, type TicketPriority, type TicketStatus } from '@/lib/tickets/ingest'
 import { cn } from '@/lib/utils'
 
@@ -129,6 +130,9 @@ export default function TicketsPanel({
               Todo lo que necesita el panel de este cliente para mandar tickets al CRM y recibir vuestras respuestas.
             </DialogDescription>
           </DialogHeader>
+          <div className="flex justify-end">
+            <TicketsWebhookGuideDownload compact />
+          </div>
           {project && conn ? (
             <TicketConnectionDetails key={project.id} project={project} conn={conn} onSaved={() => void load()} />
           ) : (

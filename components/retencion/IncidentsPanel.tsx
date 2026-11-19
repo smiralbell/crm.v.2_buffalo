@@ -42,7 +42,7 @@ export default function IncidentsPanel({
   const [clientId, setClientId] = useState(proyectoId)
   const [markdown, setMarkdown] = useState('')
   const [incidents, setIncidents] = useState<Incident[]>([])
-  const [copied, setCopied] = useState<'id' | 'url' | 'token' | null>(null)
+  const [copied, setCopied] = useState<'id' | 'url' | 'token' | 'env' | null>(null)
   const [solving, setSolving] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -68,7 +68,13 @@ export default function IncidentsPanel({
     void load()
   }, [load])
 
-  const copy = async (text: string, which: 'id' | 'url' | 'token') => {
+  const envBlock = [
+    `BUFFALO_INCIDENTS_WEBHOOK_URL=${webhookUrl}`,
+    `BUFFALO_INCIDENTS_WEBHOOK_TOKEN=${webhookToken}`,
+    `BUFFALO_CLIENT_ID=${clientId}`,
+  ].join('\n')
+
+  const copy = async (text: string, which: 'id' | 'url' | 'token' | 'env') => {
     try {
       await navigator.clipboard.writeText(text)
       setCopied(which)
@@ -111,16 +117,36 @@ export default function IncidentsPanel({
   return (
     <div className="space-y-5">
       <Dialog open={webhookOpen} onOpenChange={onWebhookOpenChange}>
-        <DialogContent className="max-w-2xl rounded-[28px] border-2 border-white sm:rounded-[28px]">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto rounded-[28px] border-2 border-white sm:rounded-[28px]">
           <DialogHeader>
-            <DialogTitle>Webhook de incidencias</DialogTitle>
+            <DialogTitle>Conexión de incidencias · {proyectoName}</DialogTitle>
             <DialogDescription>
-              El developer de este proyecto tiene que enviar <code className="text-xs">{'{ error, client_id }'}</code> a
-              este endpoint. El <code className="text-xs">client_id</code> es el id de este proyecto, para que no caiga en
-              otro.
+              Lo que necesita el panel de este cliente para avisarnos de errores de producción. Su sistema envía{' '}
+              <code className="text-xs">{'{ error, client_id }'}</code> a este endpoint; el{' '}
+              <code className="text-xs">client_id</code> es el id de este proyecto, para que no caiga en otro.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <section className="space-y-2">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                Variables para el panel del cliente
+              </span>
+              <pre className="overflow-x-auto rounded-xl bg-gray-950 px-4 py-3 font-mono text-xs leading-relaxed text-gray-100">
+                {envBlock}
+              </pre>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] text-gray-400">Pégalas en el .env o en EasyPanel de su panel.</p>
+                <button
+                  type="button"
+                  onClick={() => copy(envBlock, 'env')}
+                  disabled={!webhookUrl}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {copied === 'env' ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                  Copiar todo
+                </button>
+              </div>
+            </section>
             <div className="flex justify-end">
               <button
                 type="button"

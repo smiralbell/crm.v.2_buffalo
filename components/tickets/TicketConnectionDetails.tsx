@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { ArrowRightLeft, Check, Copy, KeyRound, Save, Siren, Ticket } from 'lucide-react'
+import { ArrowRightLeft, Check, Copy, KeyRound, Save, Ticket } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 /**
- * Todo lo que el panel de un cliente necesita para conectarse con el CRM:
- * variables listas para pegar, webhook de tickets, callback de respuestas e
- * incidencias. Se usa en Retención (pestaña Tickets) y en Tickets → Conexión.
+ * Lo que el panel de un cliente necesita para los tickets: variables listas
+ * para pegar, webhook de tickets y callback de respuestas. Se usa en
+ * Retención → pestaña Tickets → Conexión. Las incidencias van aparte, en la
+ * pestaña Incidencias.
  */
 
 export interface TicketProjectConfig {
@@ -20,8 +21,6 @@ export interface TicketProjectConfig {
 export interface TicketConnection {
   tickets_webhook_url: string
   tickets_webhook_token: string
-  incidents_webhook_url: string
-  incidents_webhook_token: string | null
 }
 
 function useCopy(): [string | null, (key: string, text: string) => void] {
@@ -252,36 +251,6 @@ export default function TicketConnectionDetails({
             )}
           </Button>
         </div>
-      </Block>
-
-      <Block
-        icon={Siren}
-        title="Incidencias · errores de producción"
-        subtitle="Para que su sistema nos avise de errores (pestaña Incidencias)."
-      >
-        <CopyField
-          label="Endpoint"
-          value={conn.incidents_webhook_url}
-          copied={copied === 'iurl'}
-          onCopy={() => copy('iurl', conn.incidents_webhook_url)}
-        />
-        <CopyField
-          label="Token (Authorization: Bearer)"
-          value={conn.incidents_webhook_token || ''}
-          copied={copied === 'itok'}
-          onCopy={() => copy('itok', conn.incidents_webhook_token || '')}
-          hint={
-            <>
-              El mismo para todos. Viene de <code className="text-[10px]">RETENCION_INCIDENTS_TOKEN</code>.
-            </>
-          }
-        />
-        <CopyField
-          label="client_id (este proyecto)"
-          value={project.id}
-          copied={copied === 'cid'}
-          onCopy={() => copy('cid', project.id)}
-        />
       </Block>
     </div>
   )

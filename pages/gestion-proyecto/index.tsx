@@ -4,7 +4,7 @@ import Layout from '@/components/Layout'
 import { canSeeClientPrices } from '@/lib/price-visibility'
 import { useAuth } from '@/components/AuthContext'
 import { DeveloperTags } from '@/components/gestion-proyecto/ProjectDevelopersPanel'
-import { AlertCircle, CheckCircle2, FolderKanban, RefreshCw, Ticket, Wallet } from 'lucide-react'
+import { AlertCircle, CheckCircle2, FolderKanban, RefreshCw, Wallet } from 'lucide-react'
 import type { ProjectListRow } from '@/lib/gestion-proyecto/types'
 
 const fmtEur = (n: number) =>
@@ -114,13 +114,6 @@ export default function GestionProyectoPage() {
               </div>
             </div>
           )}
-          <Link
-            href="/tickets"
-            className="inline-flex items-center justify-center gap-2 px-4 h-10 flex-1 sm:flex-initial border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-colors"
-          >
-            <Ticket className="h-4 w-4" />
-            Tickets
-          </Link>
           <button
             type="button"
             onClick={load}

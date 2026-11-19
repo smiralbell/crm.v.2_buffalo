@@ -50,7 +50,6 @@ const ROOTS = new Set([
   '/finances',
   '/invoices',
   '/gestion-proyecto',
-  '/tickets',
   '/retencion',
   '/marketing',
   '/onboarding',

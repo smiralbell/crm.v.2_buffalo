@@ -12,7 +12,6 @@ import {
   ListTodo,
   Megaphone,
   PackageCheck,
-  Ticket,
   TrendingUp,
   Workflow,
 } from 'lucide-react'
@@ -61,7 +60,7 @@ const TABS: Record<CrmRole, Tab[]> = {
         {
           href: '/gestion-proyecto',
           label: 'Proyectos',
-          description: 'Proyectos abiertos y tickets',
+          description: 'Proyectos abiertos',
           icon: FolderKanban,
         },
         {
@@ -77,8 +76,7 @@ const TABS: Record<CrmRole, Tab[]> = {
     { href: '/developer', label: 'Inicio', icon: LayoutDashboard, match: ['/developer'], exact: true },
     { href: '/tareas', label: 'Tareas', icon: ListTodo, match: ['/tareas'] },
     { href: '/gestion-proyecto', label: 'Proyectos', icon: FolderKanban, match: ['/gestion-proyecto'] },
-    { href: '/tickets', label: 'Tickets', icon: Ticket, match: ['/tickets'] },
-    { href: '/retencion', label: 'Retención', icon: HeartHandshake, match: ['/retencion'] },
+    { href: '/retencion', label: 'Retención', icon: HeartHandshake, match: ['/retencion', '/tickets'] },
   ],
   comercial: [
     { href: '/comercial', label: 'Inicio', icon: LayoutDashboard, match: ['/comercial'], exact: true },

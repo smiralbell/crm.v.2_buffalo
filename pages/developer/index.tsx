@@ -129,7 +129,7 @@ export default function DeveloperDashboardPage() {
               </Link>
 
               <Link
-                href="/tickets"
+                href="/retencion"
                 className="rounded-2xl border border-sky-100 bg-sky-50/40 p-5 hover:bg-sky-50 transition-all"
               >
                 <Ticket className="h-5 w-5 text-sky-600 mb-3" />

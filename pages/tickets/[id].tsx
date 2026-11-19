@@ -18,6 +18,7 @@ import {
 
 interface TicketDetail {
   id: string
+  project_id: string
   project_name: string
   title: string
   description: string | null
@@ -191,6 +192,11 @@ export default function TicketDetailPage({ role: ssrRole }: { role: string }) {
     }
   }
 
+  /** Los tickets se ven desde cada proyecto de Retención: volvemos a su pestaña Tickets. */
+  const backHref = ticket?.project_id
+    ? `/retencion/proyectos/${ticket.project_id}?tab=tickets`
+    : '/retencion'
+
   const deleteTicket = async () => {
     if (!ticket) return
     if (!window.confirm('¿Eliminar esta incidencia? También se notificará al dashboard del cliente si tiene callback configurado.')) {
@@ -206,11 +212,11 @@ export default function TicketDetailPage({ role: ssrRole }: { role: string }) {
 
       if (data.notify && !data.notify.sent && data.notify.error) {
         setNotifyWarning(`Eliminado en Buffalo, pero no se pudo notificar al cliente: ${data.notify.error}`)
-        setTimeout(() => router.push('/tickets'), 1500)
+        setTimeout(() => router.push(backHref), 1500)
         return
       }
 
-      router.push('/tickets')
+      router.push(backHref)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al eliminar')
     } finally {
@@ -223,7 +229,7 @@ export default function TicketDetailPage({ role: ssrRole }: { role: string }) {
       <div className="space-y-5 max-w-3xl mx-auto">
         <div className="flex flex-wrap items-start gap-3">
           <Link
-            href="/tickets"
+            href={backHref}
             className="inline-flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 shrink-0 mt-1"
           >
             <ArrowLeft className="h-4 w-4" />

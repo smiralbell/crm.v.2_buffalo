@@ -15,6 +15,13 @@ const nextConfig = {
     '@fullcalendar/timegrid',
     '@fullcalendar/interaction',
   ],
+  // Tickets ya no tiene listado propio: se entra desde cada proyecto de Retención.
+  async redirects() {
+    return [
+      { source: '/tickets', destination: '/retencion', permanent: false },
+      { source: '/tickets/config', destination: '/retencion', permanent: false },
+    ]
+  },
   webpack: (config) => {
     // Apuntar al ESM (export default), no al CJS: el alias a index.cjs
     // rompe el import default en el bundle de producción → "Application error".

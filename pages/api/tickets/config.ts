@@ -2,15 +2,12 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { listProjectTicketConfigs, saveProjectTicketConfig } from '@/lib/tickets/updates'
 import { TICKETS_WEBHOOK_TOKEN, getTicketsWebhookUrl } from '@/lib/tickets/config'
-import { incidentsWebhookToken, incidentsWebhookUrl } from '@/lib/retencion/incidents'
 
-/** Lo que el panel de cada cliente necesita para hablar con el CRM (igual para todos). */
+/** Lo que el panel de cada cliente necesita para mandar tickets al CRM (igual para todos). */
 function connection(req: NextApiRequest) {
   return {
     tickets_webhook_url: getTicketsWebhookUrl(req),
     tickets_webhook_token: TICKETS_WEBHOOK_TOKEN,
-    incidents_webhook_url: incidentsWebhookUrl(),
-    incidents_webhook_token: incidentsWebhookToken(),
   }
 }
 
