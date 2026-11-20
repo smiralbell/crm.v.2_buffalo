@@ -188,7 +188,12 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
     const base: TaskBoardClient = {
       create: async (target, body) => {
         if (target.startsWith('user:')) {
-          const { assignee: _assignee, ...rest } = body
+          const {
+            assignee: _assignee,
+            assignee_user_ids: _ids,
+            extra_assignees: _extra,
+            ...rest
+          } = body
           return requestJson<WorkTask>(
             '/api/tareas',
             jsonInit('POST', { ...rest, user_id: Number(target.slice('user:'.length)) }),
@@ -434,7 +439,8 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
               return (
                 <div className="space-y-2">
                   <TaskOriginDetail task={latest} />
-                  {adminOverview && people.length > 0 && (
+                  {/* Las de proyecto se reparten con «Para quién» (uno o varios developers) */}
+                  {adminOverview && people.length > 0 && latest.source === 'personal' && (
                     <PersonPicker task={latest} people={people} nameIndex={nameIndex} onPick={reassign} />
                   )}
                 </div>

@@ -4,6 +4,11 @@ import { requireProjectAccessAPI } from '@/lib/gestion-proyecto/require-project-
 import { STALE_EXTENSION_DAYS, serializeTaskRow } from '@/lib/gestion-proyecto/task-stale'
 import { prisma } from '@/lib/prisma'
 import { saveProjectTaskSubtasks } from '@/lib/gestion-proyecto/task-subtasks'
+import {
+  assigneesFromBody,
+  canViewerSeeTask,
+  saveTaskAssigneeIds,
+} from '@/lib/gestion-proyecto/task-assignees-db'
 
 const dueDateSchema = z
   .string()
@@ -28,6 +33,8 @@ const updateTaskSchema = z.object({
   status: z.enum(['pending', 'in_progress', 'buffalo_validation', 'done']).optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
   assignee: z.string().nullable().optional(),
+  assignee_user_ids: z.array(z.number().int().positive()).max(30).optional(),
+  extra_assignees: z.array(z.string().max(120)).max(30).optional(),
   estimated_hours: z.number().positive().nullable().optional(),
   due_date: dueDateSchema,
   position: z.number().int().optional(),
@@ -55,7 +62,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!projectId || !taskId) return res.status(400).json({ error: 'IDs requeridos' })
 
   try {
-    await requireProjectAccessAPI(req, res, projectId)
+    const user = await requireProjectAccessAPI(req, res, projectId)
+
+    // Un developer solo toca las tareas que le tocan (las demás ni las ve).
+    const allowed = async (): Promise<boolean> => {
+      const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
+        SELECT * FROM project_dev_tasks
+        WHERE id = ${taskId}::uuid AND project_id = ${projectId}::uuid
+        LIMIT 1
+      `
+      if (!rows[0]) return true // el 404 lo da cada método
+      return canViewerSeeTask(
+        {
+          project_id: projectId,
+          assignee: (rows[0].assignee as string | null) ?? null,
+          assignee_user_ids: (rows[0].assignee_user_ids as number[] | undefined) ?? [],
+        },
+        user
+      )
+    }
+    if ((req.method === 'PATCH' || req.method === 'DELETE') && !(await allowed())) {
+      return res.status(403).json({ error: 'Esta tarea es de otra persona' })
+    }
 
     if (req.method === 'PATCH') {
       const data = updateTaskSchema.parse(req.body)
@@ -73,6 +101,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       const current = currentRows[0]
       if (!current) return res.status(404).json({ error: 'Tarea no encontrada' })
+
+      // A quién va: se guardan los ids y el texto que se enseña va en `assignee`.
+      const assignees = await assigneesFromBody(data)
+      if (assignees) {
+        await saveTaskAssigneeIds(taskId, assignees.ids)
+        data.assignee = assignees.text
+      }
 
       if (data.subtasks !== undefined) {
         const saved = await saveProjectTaskSubtasks(projectId, taskId, data.subtasks)

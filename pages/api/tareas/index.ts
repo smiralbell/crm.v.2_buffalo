@@ -10,6 +10,7 @@ import {
   listProjectTasks,
 } from '@/lib/tareas/store'
 import { personalTaskCreateSchema } from '@/lib/tareas/schemas'
+import { filterProjectTasksForViewer } from '@/lib/gestion-proyecto/task-assignees-db'
 import type { TareasResponse, WorkPerson } from '@/lib/tareas/types'
 
 /** Los comerciales no entran en Proyectos, así que no ven tareas de proyecto. */
@@ -50,7 +51,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             : (await getUserProjects(scopeUser.id)).map((p) => p.id)
       }
       const projects = await listOpenProjects(projectIds)
-      const projectTasks = await listProjectTasks(projects)
+      // De cada proyecto, solo las tareas de la persona que se mira (admin y PM, todas).
+      const allProjectTasks = await listProjectTasks(projects)
+      const projectTasks = scopeUser
+        ? await filterProjectTasksForViewer(allProjectTasks, scopeUser)
+        : allProjectTasks
 
       const people: WorkPerson[] = isAdmin
         ? (await listCrmUsers())

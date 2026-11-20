@@ -9,6 +9,7 @@ import {
 import type { ProjectOnboarding } from '@/lib/gestion-proyecto/types'
 import { canSeeClientPrices } from '@/lib/price-visibility'
 import { serializeTaskRow } from '@/lib/gestion-proyecto/task-stale'
+import { filterProjectTasksForViewer } from '@/lib/gestion-proyecto/task-assignees-db'
 
 type DbProyecto = {
   id: string
@@ -195,7 +196,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           WHERE project_id = ${id}::uuid
           ORDER BY position ASC, created_at ASC
         `
-        tasks = taskRows.map((t) => {
+        // Cada developer ve solo sus tareas; admin y PM, todas.
+        const visibleRows = await filterProjectTasksForViewer(
+          taskRows.map((t) => ({
+            ...t,
+            project_id: id,
+            assignee_user_ids: ((t as Record<string, unknown>).assignee_user_ids as number[] | undefined) ?? [],
+          })),
+          user
+        )
+        tasks = visibleRows.map((t) => {
           const serialized = serializeTaskRow(t as Record<string, unknown>)
           return {
             ...serialized,

@@ -4,6 +4,7 @@ import { serializeTaskRow, STALE_EXTENSION_DAYS } from '@/lib/gestion-proyecto/t
 import type { TaskPriority, TaskStatus } from '@/lib/gestion-proyecto/types'
 import { normalizeSubtasks } from '@/lib/subtasks'
 import { ensureProjectTaskSubtasksColumn } from '@/lib/gestion-proyecto/task-subtasks'
+import { saveTaskAssigneeIds } from '@/lib/gestion-proyecto/task-assignees-db'
 import type { WorkProject, WorkTask } from '@/lib/tareas/types'
 
 /** Proyectos que se ven en el módulo Proyectos (mismo criterio que "Proyectos abiertos"). */
@@ -98,6 +99,7 @@ function mapProjectRow(row: Row): WorkTask {
     status: row.status as TaskStatus,
     priority: row.priority as TaskPriority,
     assignee: (row.assignee as string | null) ?? null,
+    assignee_user_ids: Array.isArray(row.assignee_user_ids) ? (row.assignee_user_ids as number[]).map(Number) : [],
     estimated_hours: hours(row.estimated_hours),
     due_date: s.due_date,
     position: Number(row.position) || 0,
@@ -428,6 +430,10 @@ export async function updateProjectTask(current: WorkTask, patch: ProjectTaskPat
       UPDATE project_dev_tasks SET subtasks = ${subtasks}::jsonb, updated_at = NOW()
       WHERE id = ${current.id}::uuid
     `
+  }
+  // Un responsable puesto a mano (texto) sustituye a los usuarios elegidos antes.
+  if (patch.assignee !== undefined && (current.assignee_user_ids?.length ?? 0) > 0) {
+    await saveTaskAssigneeIds(current.id, [])
   }
   const touchesFields = (
     ['title', 'description', 'status', 'priority', 'assignee', 'estimated_hours', 'due_date'] as const

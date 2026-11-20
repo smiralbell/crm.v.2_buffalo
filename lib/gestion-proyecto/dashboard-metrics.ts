@@ -9,6 +9,7 @@ import type {
   TaskPriority,
   TaskStatus,
 } from './types'
+import { splitAssigneeNames } from './task-assignees'
 
 const PRIORITY_LABELS: Record<TaskPriority, string> = {
   low: 'Baja',
@@ -140,23 +141,26 @@ function buildHours(tasks: DashboardTaskInput[]): ProjectDashboardHours {
 function buildAssigneeRows(tasks: DashboardTaskInput[]): ProjectDashboardAssigneeRow[] {
   const map = new Map<string, ProjectDashboardAssigneeRow>()
   for (const t of tasks) {
-    const key = (t.assignee?.trim() || 'Sin asignar')
-    const row = map.get(key) || {
-      assignee: key,
-      total: 0,
-      pending: 0,
-      in_progress: 0,
-      buffalo_validation: 0,
-      done: 0,
-      hours: 0,
+    // Una tarea de varias personas cuenta para cada una
+    const names = splitAssigneeNames(t.assignee)
+    for (const key of names.length ? names : ['Sin asignar']) {
+      const row = map.get(key) || {
+        assignee: key,
+        total: 0,
+        pending: 0,
+        in_progress: 0,
+        buffalo_validation: 0,
+        done: 0,
+        hours: 0,
+      }
+      row.total += 1
+      row.hours += estimateTaskHours(t)
+      if (t.status === 'pending') row.pending += 1
+      else if (t.status === 'in_progress') row.in_progress += 1
+      else if (t.status === 'buffalo_validation') row.buffalo_validation += 1
+      else row.done += 1
+      map.set(key, row)
     }
-    row.total += 1
-    row.hours += estimateTaskHours(t)
-    if (t.status === 'pending') row.pending += 1
-    else if (t.status === 'in_progress') row.in_progress += 1
-    else if (t.status === 'buffalo_validation') row.buffalo_validation += 1
-    else row.done += 1
-    map.set(key, row)
   }
   return Array.from(map.values())
     .map((r) => ({ ...r, hours: Math.round(r.hours * 10) / 10 }))

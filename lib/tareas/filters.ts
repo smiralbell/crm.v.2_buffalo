@@ -1,3 +1,4 @@
+import { splitAssigneeNames } from '@/lib/gestion-proyecto/task-assignees'
 import type { TaskPriority } from '@/lib/gestion-proyecto/types'
 import type { WorkTask } from '@/lib/tareas/types'
 
@@ -58,7 +59,12 @@ export function matchesTaskFilters(task: WorkTask, f: TaskFilterState, today = n
   }
 
   if (f.person === 'none' && task.assignee?.trim()) return false
-  if (f.person !== 'all' && f.person !== 'none' && norm(task.assignee) !== norm(f.person)) {
+  if (
+    f.person !== 'all' &&
+    f.person !== 'none' &&
+    norm(task.assignee) !== norm(f.person) &&
+    !splitAssigneeNames(task.assignee).some((n) => norm(n) === norm(f.person))
+  ) {
     return false
   }
 

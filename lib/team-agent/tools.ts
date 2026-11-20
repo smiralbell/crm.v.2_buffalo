@@ -14,6 +14,7 @@ import {
   taskSummaryForAgent,
 } from '@/lib/tareas/agent-format'
 import { EMPTY_FILTERS, applyTaskFilters } from '@/lib/tareas/filters'
+import { filterProjectTasksForViewer } from '@/lib/gestion-proyecto/task-assignees-db'
 import {
   createPersonalTask,
   createProjectTask,
@@ -362,7 +363,11 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
       }
       const tipo = String(args.tipo ?? 'todas')
       const personal = tipo !== 'proyecto' && !project ? await listPersonalTasks(me.id) : []
-      const projectTasks = tipo !== 'sueltas' ? await listProjectTasks(project ? [project] : scope.projects) : []
+      // De los proyectos, solo las tareas que le tocan (como en su tablero del CRM)
+      const projectTasks =
+        tipo !== 'sueltas'
+          ? await filterProjectTasksForViewer(await listProjectTasks(project ? [project] : scope.projects), me)
+          : []
       let tasks = [...personal, ...projectTasks].filter((t) => canSeeTask(me, t, myProjectIds))
 
       const estado = args.estado ? parseAgentStatus(args.estado) : null

@@ -4,6 +4,12 @@ import { requireProjectAccessAPI } from '@/lib/gestion-proyecto/require-project-
 import { serializeTaskRow } from '@/lib/gestion-proyecto/task-stale'
 import { prisma } from '@/lib/prisma'
 import { saveProjectTaskSubtasks } from '@/lib/gestion-proyecto/task-subtasks'
+import {
+  assigneesFromBody,
+  filterProjectTasksForViewer,
+  saveTaskAssigneeIds,
+} from '@/lib/gestion-proyecto/task-assignees-db'
+import { seesAllProjectTasks } from '@/lib/gestion-proyecto/task-assignees'
 
 const dueDateSchema = z
   .string()
@@ -28,6 +34,8 @@ const createTaskSchema = z.object({
   status: z.enum(['pending', 'in_progress', 'buffalo_validation', 'done']).optional(),
   priority: z.enum(['low', 'medium', 'high']).optional(),
   assignee: z.string().optional(),
+  assignee_user_ids: z.array(z.number().int().positive()).max(30).optional(),
+  extra_assignees: z.array(z.string().max(120)).max(30).optional(),
   estimated_hours: z.number().positive().optional(),
   due_date: dueDateSchema,
   subtasks: subtasksSchema.optional(),
@@ -51,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!projectId) return res.status(400).json({ error: 'ID de proyecto requerido' })
 
   try {
-    await requireProjectAccessAPI(req, res, projectId)
+    const user = await requireProjectAccessAPI(req, res, projectId)
 
     if (req.method === 'GET') {
       const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
@@ -60,13 +68,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         WHERE project_id = ${projectId}::uuid
         ORDER BY position ASC, created_at ASC
       `
-      return res.status(200).json({
-        tasks: rows.map((t) => formatTask(t)),
-      })
+      // Cada developer ve solo sus tareas; admin y PM, todas.
+      const tasks = await filterProjectTasksForViewer(
+        rows.map((t) => ({
+          ...formatTask(t),
+          project_id: projectId,
+          assignee: (t.assignee as string | null) ?? null,
+          assignee_user_ids: (t.assignee_user_ids as number[] | undefined) ?? [],
+        })),
+        user
+      )
+      return res.status(200).json({ tasks })
     }
 
     if (req.method === 'POST') {
       const data = createTaskSchema.parse(req.body)
+      let assignees = await assigneesFromBody(data)
+      // Un developer que no elige a nadie se la queda (si no, dejaría de verla).
+      if (!seesAllProjectTasks(user.role) && (!assignees || (!assignees.ids.length && !assignees.text))) {
+        assignees = { ids: [user.id], text: user.name }
+      }
+      data.assignee = assignees?.text ?? undefined
       const maxPos = await prisma.$queryRaw<{ max_pos: number | null }[]>`
         SELECT MAX(position)::int AS max_pos
         FROM project_dev_tasks
@@ -75,7 +97,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `
       const position = (maxPos[0]?.max_pos ?? -1) + 1
       const dueDate = data.due_date ?? null
-      const withSubtasks = async (row: Record<string, unknown>) => {
+      const withSubtasks = async (inserted: Record<string, unknown>) => {
+        let row = inserted
+        if (assignees?.ids.length) {
+          row = (await saveTaskAssigneeIds(String(row.id), assignees.ids)) ?? row
+        }
         if (!data.subtasks?.length) return row
         return (await saveProjectTaskSubtasks(projectId, String(row.id), data.subtasks)) ?? row
       }

@@ -38,6 +38,13 @@ import ProjectTaskCalendar from '@/components/gestion-proyecto/ProjectTaskCalend
 import ProjectTaskGantt from '@/components/gestion-proyecto/ProjectTaskGantt'
 import SubtaskList, { SubtaskChip } from '@/components/subtasks/SubtaskList'
 import TaskAttachments from '@/components/gestion-proyecto/TaskAttachments'
+import AssigneePicker, {
+  EMPTY_SELECTION,
+  selectionBody,
+  selectionFromTask,
+  useProjectDevelopers,
+  type AssigneeSelection,
+} from '@/components/gestion-proyecto/AssigneePicker'
 import FileChips, { filesFromClipboard } from '@/components/gestion-proyecto/FileChips'
 import type { Subtask } from '@/lib/subtasks'
 import {
@@ -155,7 +162,9 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState<TaskPriority>('medium')
-  const [assignee, setAssignee] = useState('')
+  const [newAssignees, setNewAssignees] = useState<AssigneeSelection>(EMPTY_SELECTION)
+  /** Si ya se tocó el selector, no se cambia la preselección al cargar */
+  const assigneesTouched = useRef(false)
   const [estimatedHours, setEstimatedHours] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [teamMembers, setTeamMembers] = useState<{ id: number; name: string; color: string | null }[]>([])
@@ -169,6 +178,26 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
   const [creating, setCreating] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<ProjectTask | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  /** Proyecto de la tarea que se crea (en el módulo Tareas sale de "Dónde va") */
+  const createProjectId = !targetAssignable
+    ? null
+    : projectId || (createTarget.startsWith('project:') ? createTarget.slice('project:'.length) : null)
+  const createDevs = useProjectDevelopers(createOpen ? createProjectId : null)
+  /** Developers del proyecto de la tarea abierta (las sueltas no tienen) */
+  const viewDevs = useProjectDevelopers(viewTask?.project_id || null)
+  // Otro proyecto en "Dónde va": se vuelve a preseleccionar
+  useEffect(() => {
+    assigneesTouched.current = false
+  }, [createProjectId])
+  // Preselección: el único developer del proyecto, o quien crea la tarea si es developer de él
+  useEffect(() => {
+    if (!createOpen || assigneesTouched.current || createDevs.loading) return
+    if (createDevs.projectId !== createProjectId) return
+    const { devs, meId } = createDevs
+    const pick = devs.length === 1 ? [devs[0].id] : meId != null && devs.some((d) => d.id === meId) ? [meId] : []
+    setNewAssignees({ ids: pick, extra: [] })
+  }, [createOpen, createProjectId, createDevs])
   const [staleActionId, setStaleActionId] = useState<string | null>(null)
   const [newSubtasks, setNewSubtasks] = useState<Subtask[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
@@ -231,7 +260,8 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
     setTitle('')
     setDescription('')
     setPriority('medium')
-    setAssignee('')
+    setNewAssignees(EMPTY_SELECTION)
+    assigneesTouched.current = false
     setEstimatedHours('')
     setDueDate('')
     setFiles([])
@@ -268,7 +298,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
         description: description.trim() || undefined,
         status: createStatus,
         priority,
-        assignee: targetAssignable ? assignee.trim() || undefined : undefined,
+        ...(targetAssignable ? selectionBody(newAssignees) : {}),
         estimated_hours: estimatedHours ? Number(estimatedHours) : undefined,
         due_date: dueDate || null,
         subtasks: newSubtasks.length > 0 ? newSubtasks : undefined,
@@ -784,27 +814,25 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                 </div>
               </div>
             </div>
-            <div className={cn('grid gap-4', targetAssignable ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
-              {targetAssignable && (
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-gray-700" htmlFor="task_assignee">
-                    Asignado a
-                  </label>
-                  <select
-                    id="task_assignee"
-                    value={assignee}
-                    onChange={(e) => setAssignee(e.target.value)}
-                    className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
-                  >
-                    <option value="">Sin asignar</option>
-                    {teamMembers.map((m) => (
-                      <option key={m.id} value={m.name}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            {targetAssignable && createProjectId && (
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium text-gray-700">
+                  Para quién{' '}
+                  <span className="font-normal text-gray-400">(solo lo verán las personas marcadas)</span>
+                </p>
+                <AssigneePicker
+                  devs={createDevs.devs}
+                  loading={createDevs.loading}
+                  value={newAssignees}
+                  disabled={creating}
+                  onChange={(next) => {
+                    assigneesTouched.current = true
+                    setNewAssignees(next)
+                  }}
+                />
+              </div>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-700" htmlFor="task_hours">
                   Horas estimadas
@@ -970,6 +998,18 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                 {renderDialogContext && <div className="pr-8">{renderDialogContext(viewTask)}</div>}
               </DialogHeader>
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pb-4">
+                {viewTask.project_id && (
+                  <div className="mb-4 space-y-2">
+                    <p className="text-sm font-medium text-gray-700">Para quién</p>
+                    <AssigneePicker
+                      devs={viewDevs.devs}
+                      loading={viewDevs.loading}
+                      value={selectionFromTask(viewTask, viewDevs.devs)}
+                      disabled={staleActionId === viewTask.id}
+                      onChange={(next) => void patchTaskMeta(viewTask.id, selectionBody(next))}
+                    />
+                  </div>
+                )}
                 <div className="mb-4 space-y-2">
                   <label className="text-sm font-medium text-gray-700" htmlFor="view_task_due">
                     Fecha de finalización

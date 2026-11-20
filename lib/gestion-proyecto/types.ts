@@ -70,7 +70,10 @@ export interface ProjectTask {
   description: string | null
   status: TaskStatus
   priority: TaskPriority
+  /** Nombres de quien la tiene, separados por comas (lo que se enseña) */
   assignee: string | null
+  /** Usuarios del CRM a los que va la tarea; vacío en las antiguas (se casan por nombre) */
+  assignee_user_ids?: number[]
   estimated_hours: number | null
   /** Fecha de finalización (YYYY-MM-DD) */
   due_date: string | null

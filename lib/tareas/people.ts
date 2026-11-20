@@ -1,3 +1,4 @@
+import { assigneeIds, splitAssigneeNames } from '@/lib/gestion-proyecto/task-assignees'
 import type { WorkPerson, WorkTask } from '@/lib/tareas/types'
 
 /**
@@ -35,11 +36,20 @@ export function buildNameIndex(people: WorkPerson[]): Map<string, number> {
 }
 
 export function taskPersonKey(task: WorkTask, nameIndex: Map<string, number>): PersonKey {
-  if (task.source === 'personal' && task.owner_user_id != null) return userKey(task.owner_user_id)
-  const name = normName(task.assignee)
-  if (!name) return NO_PERSON
-  const id = nameIndex.get(name)
-  return id != null ? userKey(id) : `n:${name}`
+  return taskPersonKeys(task, nameIndex)[0]
+}
+
+/** Una tarea de proyecto puede ser de varias personas. */
+export function taskPersonKeys(task: WorkTask, nameIndex: Map<string, number>): PersonKey[] {
+  if (task.source === 'personal' && task.owner_user_id != null) return [userKey(task.owner_user_id)]
+  const ids = assigneeIds(task)
+  if (ids.length > 0) return ids.map(userKey)
+  const keys = splitAssigneeNames(task.assignee).map((raw) => {
+    const name = normName(raw)
+    const id = nameIndex.get(name)
+    return id != null ? userKey(id) : `n:${name}`
+  })
+  return keys.length ? Array.from(new Set(keys)) : [NO_PERSON]
 }
 
 export interface PersonOption {
@@ -67,19 +77,22 @@ export function buildPersonOptions(
     byKey.set(userKey(p.id), { key: userKey(p.id), label: p.name, open: 0, total: 0, userId: p.id, role: p.role })
   }
   for (const t of tasks) {
-    const key = taskPersonKey(t, nameIndex)
-    let opt = byKey.get(key)
-    if (!opt) {
-      opt =
-        key === NO_PERSON
-          ? { key, label: 'Sin asignar', open: 0, total: 0, userId: null, role: null }
-          : key.startsWith('u:')
-            ? { key, label: t.assignee || 'Usuario', open: 0, total: 0, userId: Number(key.slice(2)), role: null }
-            : { key, label: (t.assignee || '').trim(), open: 0, total: 0, userId: null, role: null }
-      byKey.set(key, opt)
-    }
-    opt.total += 1
-    if (t.status !== 'done') opt.open += 1
+    const names = t.source === 'personal' ? [t.assignee ?? ''] : splitAssigneeNames(t.assignee)
+    taskPersonKeys(t, nameIndex).forEach((key, i) => {
+      let opt = byKey.get(key)
+      if (!opt) {
+        const label = names[i] ?? names[0] ?? ''
+        opt =
+          key === NO_PERSON
+            ? { key, label: 'Sin asignar', open: 0, total: 0, userId: null, role: null }
+            : key.startsWith('u:')
+              ? { key, label: label || 'Usuario', open: 0, total: 0, userId: Number(key.slice(2)), role: null }
+              : { key, label, open: 0, total: 0, userId: null, role: null }
+        byKey.set(key, opt)
+      }
+      opt.total += 1
+      if (t.status !== 'done') opt.open += 1
+    })
   }
   const all = Array.from(byKey.values())
   const rank = (o: PersonOption) => (o.key === NO_PERSON ? 2 : o.userId != null ? 0 : 1)
@@ -94,5 +107,5 @@ export function filterByPeople(
 ): WorkTask[] {
   if (selected.length === 0) return tasks
   const set = new Set(selected)
-  return tasks.filter((t) => set.has(taskPersonKey(t, nameIndex)))
+  return tasks.filter((t) => taskPersonKeys(t, nameIndex).some((k) => set.has(k)))
 }

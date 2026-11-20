@@ -20,7 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const user = await requireAuthAPI(req, res)
       await assertProjectAccess(user, projectId, res)
       const developers = await getProjectDevelopers(projectId)
-      return res.status(200).json({ developers })
+      // me_id: para que el formulario de tareas preseleccione a quien la crea
+      return res.status(200).json({ developers, me_id: user.id })
     }
 
     if (req.method === 'PUT') {
