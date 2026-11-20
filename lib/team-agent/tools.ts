@@ -38,7 +38,8 @@ import {
 import type { WorkProject, WorkTask } from '@/lib/tareas/types'
 import { previewDelete, serializeRows } from '@/lib/telegram-agent/db-tools'
 import { runMcpTool } from '@/lib/telegram-agent/mcp-tools'
-import { audit, createPending } from '@/lib/telegram-agent/store'
+import { PERSONAL_INSTRUCTION_TOOLS, TEAM_REMINDER_TOOLS, runPersonalTool } from '@/lib/telegram-agent/personal-tools'
+import { audit, createPending, personalOwnerKey } from '@/lib/telegram-agent/store'
 import type { AgentContext, ToolSchema } from '@/lib/telegram-agent/tools'
 import { listTickets } from '@/lib/tickets/list'
 import { notifyClientTicketUpdate } from '@/lib/tickets/notify'
@@ -192,6 +193,10 @@ const ALL_TOOLS: ToolSchema[] = [
     contenido: { type: 'string' },
     descripcion: { type: 'string' },
   }, ['nombre_archivo', 'contenido']),
+
+  // Su propio agente: preferencias y avisos de su chat
+  ...PERSONAL_INSTRUCTION_TOOLS,
+  ...TEAM_REMINDER_TOOLS,
 
   // Developers
   tool('tickets_listar', 'Tickets de clientes asignados a ti en tus proyectos de Retención.', {
@@ -393,6 +398,15 @@ export async function executeTeamTool(
 async function runTeamTool(name: string, args: Record<string, unknown>, ctx: AgentContext, scope: TeamScope): Promise<unknown> {
   const me = scope.member
   const myProjectIds = scope.projects.map((p) => p.id)
+
+  // Preferencias y avisos: los suyos (dueño = su usuario del CRM, avisos = su chat)
+  const personal = await runPersonalTool(name, args, {
+    ownerKey: personalOwnerKey({ crmUserId: me.id, chatId: ctx.chatId }),
+    chatId: ctx.chatId,
+    userId: ctx.userId,
+    ownChatOnly: true,
+  })
+  if (personal !== undefined) return personal
 
   switch (name) {
     // ——— Tareas ———

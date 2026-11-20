@@ -120,8 +120,15 @@ const RETENCION_TOOLS = [
   'mcp_usar',
 ] as const
 
-/** Su propio agente. */
+/** Su propio agente: sus preferencias y sus avisos (solo los de su chat). */
 const PERSONAL_TOOLS = [
+  'mis_instrucciones',
+  'instruccion_guardar',
+  'instruccion_cambiar',
+  'instruccion_quitar',
+  'avisos_programar',
+  'avisos_listar',
+  'avisos_cambiar',
   // Solo da formato a la respuesta (adjunta un listado largo); no lee nada
   'enviar_documento',
 ] as const

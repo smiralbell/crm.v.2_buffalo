@@ -3,7 +3,15 @@ import { channelOf } from './channel'
 import { agentModel, subagentModel } from './config'
 import { runToolLoop, type LlmMessage } from './llm'
 import { AGENT_MODULES, getModule, type AgentModule } from './modules'
-import { listInstructions, type HistoryMessage, type Instruction } from './store'
+import {
+  listInstructions,
+  listPersonalInstructions,
+  personalInstructionsBlock,
+  personalOwnerKey,
+  type HistoryMessage,
+  type Instruction,
+  type PersonalInstruction,
+} from './store'
 import { executeTool, orchestratorTools, subagentTools, type AgentContext } from './tools'
 
 const ORCHESTRATOR_ROUNDS = 14
@@ -38,7 +46,11 @@ const SHARED_RULES = `REGLAS DE SEGURIDAD (no negociables)
 - No inventes datos ni IDs: búscalos. Si algo falla, di el error tal cual.
 - Antes de escribir en una tabla que no conoces, usa db_describir_tabla.`
 
-export function orchestratorPrompt(ctx: AgentContext, instructions: Instruction[]): string {
+export function orchestratorPrompt(
+  ctx: AgentContext,
+  instructions: Instruction[],
+  personal: PersonalInstruction[] = []
+): string {
   return `Eres el AGENTE DEL CRM DE BUFFALO AI en ${channelOf(ctx.chatId) === 'whatsapp' ? 'WhatsApp' : 'Telegram'}. Hablas con ${ctx.scheduled ? 'el sistema (aviso programado; tu respuesta se enviará a los socios)' : `${ctx.userName}, uno de los dos socios de Buffalo`}. Los socios tienen permiso total: pueden consultar, crear, cambiar, configurar y (con doble confirmación) borrar cualquier cosa del CRM.
 
 Fecha y hora actual (Madrid): ${nowMadrid()}.
@@ -50,7 +62,8 @@ CÓMO TRABAJAS
 - Escrituras que necesitan buscar algo antes (un lead por su nombre, una factura, un cliente…) → encárgale al subagente la tarea COMPLETA: que lo busque y lo cambie, y te diga qué ha hecho. Las acciones directas (notas, estados, tickets, reuniones) úsalas tú solo cuando ya tengas el id.
 - Borrar datos del CRM → encárgaselo al subagente del módulo: él usa solicitar_borrado y al socio le llega la doble confirmación igual. Las instrucciones y los avisos del propio agente sí los gestionas tú.
 - Escrituras sin ambigüedad: hazlas sin pedir permiso. Después confirma qué ha quedado hecho con los datos clave (id, nombre, enlace).
-- "Configura / añade / quita" algo del propio agente → instrucciones_* (reglas permanentes) y avisos_* (avisos programados). Si piden avisos recurrentes o informes periódicos, usa avisos_programar con tipo "tarea".
+- "Configura / añade / quita" algo del propio agente → instrucciones_* (reglas permanentes para los dos socios) y avisos_* (avisos programados). Si piden avisos recurrentes o informes periódicos, usa avisos_programar con tipo "tarea"; para cambiarlos o pausarlos, avisos_cambiar.
+- Preferencias de ESTE socio sobre cómo le hablas («sé más breve», «háblame en este formato», «dame siempre el enlace») → instruccion_guardar: solo cambian su chat, no el del otro socio. Verlas, cambiarlas o quitarlas: mis_instrucciones, instruccion_cambiar, instruccion_quitar.
 - Preguntas sobre lo que pasa DENTRO del sistema de un cliente (sus leads, conversaciones, llamadas, citas, errores, costes…) → delega en el módulo retencion: el subagente usa el MCP de ese cliente (solo lectura). Lo que sean datos personales de sus clientes, úsalo solo para responder lo que te piden.
 - Tareas del equipo (developers, project managers, comerciales): leer, crear, cambiar, mover de columna, gestionar subtareas o borrar → herramientas tareas_*. Son las mismas que cada persona ve en su módulo Tareas del CRM. "Ponle una tarea a X" sin proyecto = tarea suelta (tareas_crear con persona); si es de un proyecto, con proyecto. Si no sabes a quién o a qué proyecto, mira tareas_personas. Al crear, devuelve el título, para quién es y el enlace.
 - Listados largos → resume en el mensaje y adjunta el detalle con enviar_documento (csv o txt).
@@ -73,7 +86,7 @@ CÓMO RESPONDES: COMO UNA BUENA SECRETARIA
 
 MÓDULOS (subagentes disponibles)
 ${AGENT_MODULES.map((m) => `- ${m.key}: ${m.descripcion}`).join('\n')}
-${instructionsBlock(instructions, null)}
+${instructionsBlock(instructions, null)}${personalInstructionsBlock(personal)}
 ${CRM_ASSISTANT_ONTOLOGY}`
 }
 
@@ -126,9 +139,12 @@ async function runSubagent(
 
 /** Respuesta del agente a un mensaje (o a un aviso programado de tipo tarea). */
 export async function runAgent(ctx: AgentContext, history: HistoryMessage[], userText: string): Promise<string> {
-  const instructions = await listInstructions().catch(() => [] as Instruction[])
+  const [instructions, personal] = await Promise.all([
+    listInstructions().catch(() => [] as Instruction[]),
+    listPersonalInstructions(personalOwnerKey({ chatId: ctx.chatId })).catch(() => [] as PersonalInstruction[]),
+  ])
 
-  const messages: LlmMessage[] = [{ role: 'system', content: orchestratorPrompt(ctx, instructions) }]
+  const messages: LlmMessage[] = [{ role: 'system', content: orchestratorPrompt(ctx, instructions, personal) }]
   for (const m of history) messages.push({ role: m.role, content: m.content })
   messages.push({ role: 'user', content: userText })
 

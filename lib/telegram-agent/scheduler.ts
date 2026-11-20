@@ -2,10 +2,12 @@ import { crmPublicBaseUrl } from '@/lib/ops-alerts'
 import { runAgent } from './agent'
 import { alertChatIds, isAgentEnabled, webhookSecret } from './config'
 import { deliver } from './handler'
-import { claimDueReminders, type Reminder } from './store'
+import { claimDueReminders, updateReminder, type Reminder } from './store'
 import { getWebhookInfo, setCommands, setWebhook } from './telegram-api'
 import { sendChatText } from './channel'
-import { allowedWhatsAppNumbers, isWhatsAppChat, waChatId } from '@/lib/whatsapp-agent/config'
+import { allowedWhatsAppNumbers, isWhatsAppChat, phoneFromChatId, waChatId } from '@/lib/whatsapp-agent/config'
+import { runTeamAgent } from '@/lib/team-agent/agent'
+import { findTeamMemberByPhone } from '@/lib/team-agent/identity'
 import type { AgentContext } from './tools'
 
 declare global {
@@ -70,7 +72,44 @@ function reminderTargets(r: Reminder): string[] {
   return alertChatIds()
 }
 
+/**
+ * Aviso de alguien del equipo (su chat de WhatsApp, que no es de un socio): lo
+ * hace SU agente, con sus permisos. Si ya no tiene acceso, el aviso se apaga.
+ */
+async function runTeamReminder(r: Reminder): Promise<void> {
+  const phone = phoneFromChatId(r.chat_id)
+  const member = await findTeamMemberByPhone(phone)
+  if (!member) {
+    await updateReminder(r.id, r.chat_id, { activo: false })
+    return
+  }
+  if (r.tipo === 'texto') {
+    await sendChatText(String(r.chat_id), `Recordatorio: ${r.texto}`)
+    return
+  }
+  const ctx: AgentContext = {
+    chatId: r.chat_id,
+    userId: Number(phone),
+    userName: member.name,
+    pending: [],
+    documents: [],
+    actions: [],
+    scheduled: true,
+  }
+  let reply: string
+  try {
+    reply = await runTeamAgent(ctx, member, [], `Aviso programado #${r.id}. Hazlo y responde con el resultado: ${r.texto}`)
+  } catch (e) {
+    console.warn('[team-agent] aviso', r.id, e instanceof Error ? e.message : e)
+    reply = `No he podido preparar tu aviso #${r.id}. Lo intentaré la próxima vez.`
+  }
+  await deliver(ctx, reply)
+}
+
 async function runReminder(r: Reminder): Promise<void> {
+  if (isWhatsAppChat(r.chat_id) && !allowedWhatsAppNumbers().has(phoneFromChatId(r.chat_id))) {
+    return runTeamReminder(r)
+  }
   const targets = reminderTargets(r)
   if (r.tipo === 'texto') {
     for (const chat of targets) await sendChatText(chat, `Recordatorio: ${r.texto}`)

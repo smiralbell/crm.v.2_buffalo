@@ -3,6 +3,7 @@ import { createAssistantContext } from '@/lib/demos/assistant-attachments'
 import * as db from './db-tools'
 import { MCP_TOOL_NAMES, MCP_TOOLS, runMcpTool } from './mcp-tools'
 import { TASK_READ_ONLY, TASK_TOOL_NAMES, TASK_TOOLS, runTaskTool } from './task-tools'
+import { PERSONAL_INSTRUCTION_TOOLS, REMINDER_CHANGE_TOOL, runPersonalTool } from './personal-tools'
 import { AGENT_MODULES, MODULE_KEYS, type AgentModule } from './modules'
 import {
   addInstruction,
@@ -12,6 +13,7 @@ import {
   listInstructions,
   listOpenPending,
   listReminders,
+  personalOwnerKey,
   setReminderActive,
   updateInstruction,
   type PendingAction,
@@ -127,6 +129,9 @@ export const AGENT_TOOLS: ToolSchema[] = [
     activo: { type: 'boolean' },
   }, ['id', 'activo']),
   tool('borrados_pendientes', 'Lista los borrados que esperan la doble confirmación en este chat.', {}),
+  REMINDER_CHANGE_TOOL,
+  // Preferencias de ESTE socio (solo su chat), distintas de las instrucciones de los socios
+  ...PERSONAL_INSTRUCTION_TOOLS,
 ]
 
 export const DELEGATE_TOOL: ToolSchema = tool(
@@ -175,6 +180,7 @@ const READ_ONLY = new Set([
   'get_pipeline_brief',
   'delegar_subagentes',
   'mcp_listar',
+  'mis_instrucciones',
   ...TASK_READ_ONLY,
 ])
 
@@ -378,6 +384,14 @@ async function runTool(name: string, args: Record<string, unknown>, ctx: AgentCo
         pendientes: (await listOpenPending(ctx.chatId)).map((p) => ({ id: p.id, resumen: p.summary, paso: p.step })),
       }
   }
+
+  const personal = await runPersonalTool(name, args, {
+    ownerKey: personalOwnerKey({ chatId: ctx.chatId }),
+    chatId: ctx.chatId,
+    userId: ctx.userId,
+    ownChatOnly: false,
+  })
+  if (personal !== undefined) return personal
 
   if (MCP_TOOL_NAMES.has(name)) return runMcpTool(name, args)
 

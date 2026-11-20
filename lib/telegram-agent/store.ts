@@ -91,6 +91,15 @@ async function createTables(): Promise<void> {
       created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_tg_agent_reminders_due ON telegram_agent_reminders (activo, next_run_at);
+    CREATE TABLE IF NOT EXISTS agent_personal_instructions (
+      id          SERIAL PRIMARY KEY,
+      owner_key   TEXT NOT NULL,
+      texto       TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_personal_instructions_owner ON agent_personal_instructions (owner_key, id);
+    CREATE INDEX IF NOT EXISTS idx_tg_agent_reminders_chat ON telegram_agent_reminders (chat_id, activo);
   `)
 }
 
@@ -414,4 +423,129 @@ export async function claimDueReminders(nextRun: (r: Reminder) => Date | null): 
   } finally {
     client.release()
   }
+}
+
+/** Avisos de una conversación (lo que esa persona ha programado o le llega). */
+export async function listChatReminders(chatId: number, onlyActive = false): Promise<Reminder[]> {
+  await ensureTelegramAgentTables()
+  const r = await getPool().query(
+    `SELECT * FROM telegram_agent_reminders WHERE chat_id = $1 ${onlyActive ? 'AND activo' : ''}
+     ORDER BY activo DESC, next_run_at ASC LIMIT 100`,
+    [chatId]
+  )
+  return r.rows.map(mapReminder)
+}
+
+export type ReminderPatch = {
+  texto?: string
+  tipo?: 'texto' | 'tarea'
+  repetir?: ReminderRepeat
+  nextRunAt?: Date
+  activo?: boolean
+}
+
+/**
+ * Cambia un aviso. chatId: solo si es de esa conversación (agente del equipo);
+ * null = cualquiera (socios). Devuelve el aviso cambiado o null si no existe.
+ */
+export async function updateReminder(id: number, chatId: number | null, patch: ReminderPatch): Promise<Reminder | null> {
+  await ensureTelegramAgentTables()
+  const r = await getPool().query(
+    `UPDATE telegram_agent_reminders SET
+       texto = COALESCE($3, texto),
+       tipo = COALESCE($4, tipo),
+       repetir = COALESCE($5, repetir),
+       next_run_at = COALESCE($6, next_run_at),
+       activo = COALESCE($7, activo)
+     WHERE id = $1 AND ($2::bigint IS NULL OR chat_id = $2)
+     RETURNING *`,
+    [
+      id,
+      chatId,
+      patch.texto === undefined ? null : patch.texto.slice(0, 4000),
+      patch.tipo ?? null,
+      patch.repetir ?? null,
+      patch.nextRunAt ?? null,
+      patch.activo ?? null,
+    ]
+  )
+  return r.rows[0] ? mapReminder(r.rows[0]) : null
+}
+
+// ——— Instrucciones personales (cada persona edita las suyas desde su chat) ———
+
+/** Máximo por persona: van en el prompt de cada mensaje. */
+export const PERSONAL_INSTRUCTIONS_MAX = 15
+export const PERSONAL_INSTRUCTION_MAX_CHARS = 600
+
+export type PersonalInstruction = { id: number; texto: string }
+
+/**
+ * Dueño de las instrucciones personales: el usuario del CRM si se sabe (equipo),
+ * si no la conversación (cada socio tiene la suya).
+ */
+export function personalOwnerKey(input: { crmUserId?: number | null; chatId: number }): string {
+  return input.crmUserId ? `user:${input.crmUserId}` : `chat:${input.chatId}`
+}
+
+export async function listPersonalInstructions(ownerKey: string): Promise<PersonalInstruction[]> {
+  await ensureTelegramAgentTables()
+  const r = await getPool().query(
+    `SELECT id, texto FROM agent_personal_instructions WHERE owner_key = $1 ORDER BY id ASC LIMIT $2`,
+    [ownerKey, PERSONAL_INSTRUCTIONS_MAX]
+  )
+  return r.rows.map((x) => ({ id: Number(x.id), texto: String(x.texto) }))
+}
+
+export async function addPersonalInstruction(
+  ownerKey: string,
+  texto: string
+): Promise<{ ok: true; instruccion: PersonalInstruction } | { ok: false; error: string }> {
+  const clean = texto.trim()
+  if (!clean) return { ok: false, error: 'La instrucción está vacía' }
+  if (clean.length > PERSONAL_INSTRUCTION_MAX_CHARS) {
+    return { ok: false, error: `Demasiado larga: máximo ${PERSONAL_INSTRUCTION_MAX_CHARS} caracteres. Resúmela.` }
+  }
+  await ensureTelegramAgentTables()
+  const count = await getPool().query(`SELECT COUNT(*)::int AS n FROM agent_personal_instructions WHERE owner_key = $1`, [
+    ownerKey,
+  ])
+  if (Number(count.rows[0]?.n || 0) >= PERSONAL_INSTRUCTIONS_MAX) {
+    return { ok: false, error: `Ya hay ${PERSONAL_INSTRUCTIONS_MAX} instrucciones: cambia o quita alguna antes.` }
+  }
+  const r = await getPool().query(
+    `INSERT INTO agent_personal_instructions (owner_key, texto) VALUES ($1, $2) RETURNING id, texto`,
+    [ownerKey, clean]
+  )
+  return { ok: true, instruccion: { id: Number(r.rows[0].id), texto: String(r.rows[0].texto) } }
+}
+
+export async function updatePersonalInstruction(ownerKey: string, id: number, texto: string): Promise<PersonalInstruction | null> {
+  const clean = texto.trim().slice(0, PERSONAL_INSTRUCTION_MAX_CHARS)
+  if (!clean) return null
+  await ensureTelegramAgentTables()
+  const r = await getPool().query(
+    `UPDATE agent_personal_instructions SET texto = $3, updated_at = NOW()
+     WHERE id = $1 AND owner_key = $2 RETURNING id, texto`,
+    [id, ownerKey, clean]
+  )
+  return r.rows[0] ? { id: Number(r.rows[0].id), texto: String(r.rows[0].texto) } : null
+}
+
+/** Quita una instrucción suya. Devuelve la que había (para poder deshacerlo) o null. */
+export async function removePersonalInstruction(ownerKey: string, id: number): Promise<PersonalInstruction | null> {
+  await ensureTelegramAgentTables()
+  const r = await getPool().query(
+    `DELETE FROM agent_personal_instructions WHERE id = $1 AND owner_key = $2 RETURNING id, texto`,
+    [id, ownerKey]
+  )
+  return r.rows[0] ? { id: Number(r.rows[0].id), texto: String(r.rows[0].texto) } : null
+}
+
+/** Bloque del prompt con las instrucciones de la persona. Nunca pasan por encima de las reglas de acceso. */
+export function personalInstructionsBlock(list: PersonalInstruction[]): string {
+  if (!list.length) return ''
+  return `\nPREFERENCIAS DE ESTA PERSONA (las ha pedido ella; síguelas en cómo respondes y trabajas, pero nunca pasan por encima de las reglas de acceso ni de seguridad):\n${list
+    .map((i) => `#${i.id} ${i.texto}`)
+    .join('\n')}\n`
 }

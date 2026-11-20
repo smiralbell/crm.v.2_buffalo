@@ -122,6 +122,16 @@ describe('herramientas por rol', () => {
     }
   })
 
+  it('cada uno configura su propio agente: preferencias y avisos (sin poder mandar a otros)', () => {
+    for (const name of ['mis_instrucciones', 'instruccion_guardar', 'instruccion_cambiar', 'instruccion_quitar', 'avisos_programar', 'avisos_listar', 'avisos_cambiar']) {
+      expect(dev, name).toContain(name)
+    }
+    const avisos = teamTools('developer').find((t) => t.function.name === 'avisos_programar')!
+    const props = Object.keys((avisos.function.parameters as { properties: Record<string, unknown> }).properties)
+    expect(props).not.toContain('destino')
+    expect(props).not.toContain('chat_id')
+  })
+
   it('la ficha de proyecto, leads y pipelines están apagados', () => {
     for (const role of ['developer', 'project_manager'] as const) {
       const on = allowedToolNames(role)
@@ -143,7 +153,8 @@ describe('herramientas por rol', () => {
       'tareas_crear',
       'tareas_personas',
       'instrucciones_guardar',
-      'avisos_programar',
+      'instrucciones_borrar',
+      'avisos_pausar',
       'enviar_mensaje_socios',
       'delegar_subagentes',
     ]
