@@ -5,6 +5,7 @@ import { MCP_TOOL_NAMES, MCP_TOOLS, runMcpTool } from './mcp-tools'
 import { TASK_READ_ONLY, TASK_TOOL_NAMES, TASK_TOOLS, runTaskTool } from './task-tools'
 import { PERSONAL_INSTRUCTION_TOOLS, REMINDER_CHANGE_TOOL, runPersonalTool } from './personal-tools'
 import { UNDO_TOOLS, recordUndo, runUndoTool, runWithUndo, type UndoStep } from './undo'
+import { PERSON_CONTEXT_TOOL, gatherPersonContext } from './person-context'
 import { AGENT_MODULES, MODULE_KEYS, type AgentModule } from './modules'
 import {
   addInstruction,
@@ -183,6 +184,7 @@ const READ_ONLY = new Set([
   'delegar_subagentes',
   'mcp_listar',
   'mis_instrucciones',
+  'contexto_persona',
   ...TASK_READ_ONLY,
 ])
 
@@ -208,6 +210,7 @@ const DIRECT_ACTIONS = new Set([
 export function orchestratorTools(): ToolSchema[] {
   return [
     DELEGATE_TOOL,
+    PERSON_CONTEXT_TOOL,
     ...AGENT_TOOLS,
     ...TASK_TOOLS,
     ...SECRETARIA_TOOLS.filter((t) => DIRECT_ACTIONS.has(t.function.name)),
@@ -219,7 +222,7 @@ export function subagentTools(mod: AgentModule): ToolSchema[] {
   const extra = mod.key === 'sistema' ? AGENT_TOOLS : AGENT_TOOLS.filter((t) => t.function.name === 'enviar_documento')
   // Tareas del equipo: el subagente de proyectos (y el de sistema, que lleva los usuarios)
   const tasks = mod.key === 'proyectos' || mod.key === 'sistema' ? TASK_TOOLS : []
-  return [...DB_TOOLS, ...extra, ...MCP_TOOLS, ...tasks, ...SECRETARIA_TOOLS.filter((t) => allowed.has(t.function.name))]
+  return [...DB_TOOLS, PERSON_CONTEXT_TOOL, ...extra, ...MCP_TOOLS, ...tasks, ...SECRETARIA_TOOLS.filter((t) => allowed.has(t.function.name))]
 }
 
 // ——— Ejecución ———
@@ -392,6 +395,8 @@ async function runTool(name: string, args: Record<string, unknown>, ctx: AgentCo
       return { ok: await setReminderActive(Number(args.id), args.activo === true) }
     case 'deshacer':
       return runUndoTool(ctx.chatId, args)
+    case 'contexto_persona':
+      return gatherPersonContext(args.nombre)
     case 'borrados_pendientes':
       return {
         ok: true,

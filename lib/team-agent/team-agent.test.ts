@@ -155,6 +155,8 @@ describe('herramientas por rol', () => {
       'instrucciones_guardar',
       'instrucciones_borrar',
       'avisos_pausar',
+      // Reúne datos de cualquier persona: solo para los socios
+      'contexto_persona',
       'enviar_mensaje_socios',
       'delegar_subagentes',
     ]
