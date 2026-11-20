@@ -129,6 +129,8 @@ const PERSONAL_TOOLS = [
   'avisos_programar',
   'avisos_listar',
   'avisos_cambiar',
+  // Solo lo de su propia conversación (y si nadie lo ha tocado después)
+  'deshacer',
   // Solo da formato a la respuesta (adjunta un listado largo); no lee nada
   'enviar_documento',
 ] as const

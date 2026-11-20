@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg'
 import { getPool } from '@/lib/db'
+import { captureDelete, snapshotWhere, type UndoStep } from './undo'
 
 /**
  * Acceso completo al Postgres del CRM para el agente de Telegram.
@@ -147,9 +148,15 @@ export async function insertRow(args: Record<string, unknown>) {
   const cols = keys.map((k) => q(assertIdent(k, 'columna'))).join(', ')
   const ph = keys.map((_, i) => `$${i + 1}`).join(', ')
   const values = keys.map((k) => normalizeValue(data[k]))
+  const table = assertIdent(args.tabla, 'tabla')
   return withTx(false, async (c) => {
-    const r = await c.query(`INSERT INTO ${tableRef(args.tabla)} (${cols}) VALUES (${ph}) RETURNING *`, values)
-    return { ok: true, insertado: serializeRows(r.rows)[0] }
+    const r = await c.query(
+      `INSERT INTO ${tableRef(table)} AS _t (${cols}) VALUES (${ph}) RETURNING *, to_jsonb(_t) AS "__undo_j"`,
+      values
+    )
+    const { __undo_j: after, ...row } = r.rows[0] as Record<string, unknown>
+    const undo: UndoStep[] = [{ op: 'remove', table, after }]
+    return { ok: true, insertado: serializeRows([row])[0], undo }
   })
 }
 
@@ -161,13 +168,33 @@ export async function updateRows(args: Record<string, unknown>) {
   const values = keys.map((k) => normalizeValue(data[k]))
   const { where, params } = buildWhere(args, keys.length)
   const max = Math.min(Math.max(Number(args.max_filas) || 25, 1), 1000)
-  const table = tableRef(args.tabla)
+  const name = assertIdent(args.tabla, 'tabla')
+  const table = tableRef(name)
+  const plain = buildWhere(args)
   return withTx(false, async (c) => {
-    const r = await c.query(`UPDATE ${table} SET ${set} WHERE ${where} RETURNING *`, [...values, ...params])
+    // Cómo estaban antes (para deshacer), bloqueadas hasta terminar
+    const before = await snapshotWhere(c, name, `${plain.where} FOR UPDATE`, plain.params)
+    const r = await c.query(`UPDATE ${table} AS _t SET ${set} WHERE ${where} RETURNING *, to_jsonb(_t) AS "__undo_j"`, [
+      ...values,
+      ...params,
+    ])
     if ((r.rowCount || 0) > max) {
       throw new Error(`Cancelado: afectaría ${r.rowCount} filas (tope ${max}). Acota el filtro o sube max_filas.`)
     }
-    return { ok: true, actualizadas: r.rowCount, filas: serializeRows(r.rows).slice(0, 20) }
+    const rows = r.rows.map((x: Record<string, unknown>) => {
+      const { __undo_j: _j, ...rest } = x
+      return rest
+    })
+    // Se empareja por id; sin columna id no se puede deshacer de forma segura
+    const byId = new Map(before.map((b) => [String((b as Record<string, unknown>).id), b]))
+    const undo: UndoStep[] = []
+    for (const x of r.rows as Record<string, unknown>[]) {
+      const after = x.__undo_j as Record<string, unknown>
+      const prev = after && after.id !== undefined ? byId.get(String(after.id)) : undefined
+      if (!prev) return { ok: true, actualizadas: r.rowCount, filas: serializeRows(rows).slice(0, 20) }
+      undo.push({ op: 'revert', table: name, before: prev, after })
+    }
+    return { ok: true, actualizadas: r.rowCount, filas: serializeRows(rows).slice(0, 20), undo }
   })
 }
 
@@ -234,16 +261,25 @@ export async function previewDelete(args: Record<string, unknown>): Promise<
   })
 }
 
-/** Ejecuta un borrado ya confirmado dos veces. Aborta si ahora coinciden más filas que en el preview. */
-export async function executeDeleteRows(p: DeleteRowsPayload) {
+/**
+ * Ejecuta un borrado ya confirmado. Aborta si ahora coinciden más filas que en el preview.
+ * Antes de borrar, en la misma transacción, apunta cómo deshacerlo (también lo que cae en cascada).
+ */
+export async function executeDeleteRows(p: DeleteRowsPayload): Promise<{
+  ok: true
+  borradas: number | null
+  filas: Record<string, unknown>[]
+  undo: UndoStep[]
+}> {
   return withTx(false, async (c) => {
+    const undo = await captureDelete(c, assertIdent(p.table, 'tabla'), p.where, p.params)
     const r = await c.query(`DELETE FROM ${tableRef(p.table)} WHERE ${p.where} RETURNING *`, p.params)
     if ((r.rowCount || 0) > p.expected) {
       throw new Error(
         `Abortado: ahora coinciden ${r.rowCount} filas y el preview mostraba ${p.expected}. No se ha borrado nada.`
       )
     }
-    return { ok: true, borradas: r.rowCount, filas: serializeRows(r.rows).slice(0, 5) }
+    return { ok: true as const, borradas: r.rowCount, filas: serializeRows(r.rows).slice(0, 5), undo }
   })
 }
 

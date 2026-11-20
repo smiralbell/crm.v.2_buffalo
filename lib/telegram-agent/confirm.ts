@@ -4,21 +4,91 @@ import {
   advancePending,
   audit,
   getPending,
+  listFreshPending,
   resolvePending,
   saveMessage,
   setPendingMessage,
   type PendingAction,
 } from './store'
 import { answerCallback, editText, sendText, type TgCallbackQuery } from './telegram-api'
+import { recordUndo, type UndoStep } from './undo'
 import { isWhatsAppChat } from '@/lib/whatsapp-agent/config'
 import { sendWhatsAppPendingConfirmation } from '@/lib/whatsapp-agent/confirm'
 
 /**
- * Doble confirmación de borrados. El agente (LLM) nunca borra: solo crea una
- * petición pendiente. El borrado lo ejecuta este archivo cuando un socio pulsa
- *   1) «Sí, eliminar»  →  2) «ELIMINAR DEFINITIVAMENTE»
- * en el mensaje de Telegram. Cada pulsación avanza el paso de forma atómica en BD.
+ * Confirmación de borrados. El agente (LLM) nunca borra: solo crea una petición
+ * pendiente. El borrado lo ejecuta este archivo cuando la persona confirma:
+ *  - borrar filas: un paso («ok» en el chat o el botón «Sí, borrar»). Se puede deshacer.
+ *  - SQL destructivo (DROP, TRUNCATE…): dos pasos, porque no se puede deshacer.
+ * Cada paso avanza de forma atómica en BD: solo una confirmación gana.
  */
+
+/** ¿Este borrado se confirma en un solo paso? (los de filas, que se pueden deshacer) */
+export function isOneStep(p: Pick<PendingAction, 'kind'>): boolean {
+  return p.kind === 'delete_rows'
+}
+
+const AFFIRM = /^(ok|okay|okey|vale|s[ií]|confirmo|confirmado|adelante|dale|hazlo|b[oó]rralo|b[oó]rralos|s[ií],? b[oó]rralo)$/i
+const DENY = /^(no|cancela|cancelar|d[eé]jalo|no lo borres|mejor no)$/i
+
+/** «ok», «vale», «sí»… (o «ok <código>»), «no», «cancela»… Devuelve null si no es eso. */
+export function parseQuickReply(text: string): { answer: 'yes' | 'no'; id: string | null } | null {
+  const t = text
+    .trim()
+    .toLowerCase()
+    .replace(/[.!¡¿?\s]+$/g, '')
+    .replace(/^[¡¿\s]+/, '')
+    .replace(/\s+/g, ' ')
+  const m = /^(.*?)(?: #?([a-f0-9]{10}))?$/.exec(t)
+  const word = (m?.[1] ?? t).trim()
+  const id = m?.[2] ?? null
+  if (AFFIRM.test(word)) return { answer: 'yes', id }
+  if (DENY.test(word)) return { answer: 'no', id }
+  return null
+}
+
+/**
+ * Respuesta rápida a los borrados que el agente ACABA de pedir. Devuelve el texto
+ * para contestar, o null si no había nada que confirmar (entonces el mensaje va a la IA).
+ */
+export async function confirmFreshByText(
+  chatId: number,
+  userId: number | null,
+  who: string,
+  text: string
+): Promise<string | null> {
+  const quick = parseQuickReply(text)
+  if (!quick) return null
+  const fresh = (await listFreshPending(chatId)).filter((p) => !quick.id || p.id === quick.id)
+  if (!fresh.length) return null
+  await saveMessage(chatId, userId, 'user', `${who}: ${text.trim()}`)
+
+  if (quick.answer === 'no') {
+    for (const p of fresh) await resolvePending(p.id, 'cancelled', { by: who })
+    const line = fresh.length === 1 ? 'Cancelado. No he borrado nada.' : `Cancelados los ${fresh.length} borrados. No he borrado nada.`
+    await saveMessage(chatId, null, 'assistant', line)
+    return line
+  }
+
+  const lines: string[] = []
+  for (const p of fresh) {
+    if (!isOneStep(p)) {
+      // SQL destructivo: no se puede deshacer, así que el «ok» solo cuenta como primer paso
+      if (isWhatsAppChat(chatId)) {
+        await advancePending(p.id, 0, 1, who)
+        lines.push(`${p.summary}: esto no se puede deshacer. Para hacerlo, responde exactamente: ELIMINAR DEFINITIVAMENTE ${p.id}`)
+      } else {
+        lines.push(`${p.summary}: esto no se puede deshacer. Confírmalo con los botones del mensaje.`)
+      }
+      continue
+    }
+    const claimed = await advancePending(p.id, 0, 2, who, 'executing')
+    if (!claimed) continue
+    const result = await executeConfirmedPending(p, claimed, chatId, userId)
+    lines.push(fresh.length === 1 ? result : `${p.summary}: ${result}`)
+  }
+  return lines.join('\n') || 'Ya estaba resuelto.'
+}
 
 function describe(p: PendingAction): string {
   const lines = [`Petición de borrado #${p.id}`, '', p.summary]
@@ -78,6 +148,15 @@ export async function executeConfirmedPending(
     ok = false
     outcome = { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
+  // Cómo deshacerlo (solo los borrados de filas; el SQL destructivo no se puede deshacer)
+  let undoId: number | null = null
+  if (ok && Array.isArray(outcome.undo)) {
+    undoId = await recordUndo(chatId, `Borrar: ${pending.summary}`, outcome.undo as UndoStep[]).catch((e) => {
+      console.warn('[agent-undo] borrado', e instanceof Error ? e.message : e)
+      return null
+    })
+    delete outcome.undo
+  }
   await resolvePending(pending.id, ok ? 'done' : 'failed', outcome)
   await audit({
     chatId,
@@ -89,7 +168,9 @@ export async function executeConfirmedPending(
     result: outcome,
   })
   const resultLine = ok
-    ? `Eliminado (${String(outcome.borradas ?? outcome.filas_afectadas ?? 0)} fila(s)). Confirmado por ${claimed.confirmed_by}.`
+    ? `Eliminado (${String(outcome.borradas ?? outcome.filas_afectadas ?? 0)} fila(s)).${
+        undoId ? ' Si te has equivocado, escribe «deshacer».' : ''
+      }`
     : `No se ha podido borrar: ${String(outcome.error)}`
   await saveMessage(chatId, userId, 'assistant', `[Borrado #${pending.id}: ${resultLine}]`)
   return resultLine
@@ -101,11 +182,13 @@ export async function sendPendingConfirmation(p: PendingAction): Promise<void> {
     await sendWhatsAppPendingConfirmation(p)
     return
   }
-  const text = `${describe(p)}\n\nPaso 1 de 2 · ¿Quieres eliminarlo? Caduca en ${DELETE_CONFIRM_TTL_MIN} min.`
+  const text = isOneStep(p)
+    ? `${describe(p)}\n\n¿Lo borro? Pulsa «Sí, borrar» o escribe ok. Se puede deshacer. Caduca en ${DELETE_CONFIRM_TTL_MIN} min.`
+    : `${describe(p)}\n\nPaso 1 de 2 · Esto no se puede deshacer. ¿Quieres ejecutarlo? Caduca en ${DELETE_CONFIRM_TTL_MIN} min.`
   const messageId = await sendText(p.chat_id, text, {
     buttons: [
       [
-        { text: 'Sí, eliminar', callback_data: `del:1:${p.id}` },
+        { text: isOneStep(p) ? 'Sí, borrar' : 'Sí, eliminar', callback_data: `del:1:${p.id}` },
         { text: 'Cancelar', callback_data: `del:x:${p.id}` },
       ],
     ],
@@ -150,6 +233,18 @@ export async function handleDeleteCallback(cb: TgCallbackQuery): Promise<void> {
     await answerCallback(cb.id, 'Cancelado')
     await editText(chatId, messageId, `${describe(pending)}\n\nCancelado por ${who(cb)}. No se ha borrado nada.`)
     await saveMessage(chatId, cb.from.id, 'assistant', `[Borrado #${pending.id} cancelado por ${who(cb)}]`)
+    return
+  }
+
+  if (step === '1' && isOneStep(pending)) {
+    const claimed = await advancePending(pending.id, 0, 2, who(cb), 'executing')
+    if (!claimed) {
+      await answerCallback(cb.id, 'Ya se había pulsado')
+      return
+    }
+    await answerCallback(cb.id, 'Borrando…')
+    const resultLine = await executeConfirmedPending(pending, claimed, chatId, cb.from.id)
+    await editText(chatId, messageId, `${describe(pending)}\n\n${resultLine}`)
     return
   }
 

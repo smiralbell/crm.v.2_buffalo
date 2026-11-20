@@ -4,6 +4,7 @@ import * as db from './db-tools'
 import { MCP_TOOL_NAMES, MCP_TOOLS, runMcpTool } from './mcp-tools'
 import { TASK_READ_ONLY, TASK_TOOL_NAMES, TASK_TOOLS, runTaskTool } from './task-tools'
 import { PERSONAL_INSTRUCTION_TOOLS, REMINDER_CHANGE_TOOL, runPersonalTool } from './personal-tools'
+import { UNDO_TOOLS, recordUndo, runUndoTool, runWithUndo, type UndoStep } from './undo'
 import { AGENT_MODULES, MODULE_KEYS, type AgentModule } from './modules'
 import {
   addInstruction,
@@ -132,6 +133,7 @@ export const AGENT_TOOLS: ToolSchema[] = [
   REMINDER_CHANGE_TOOL,
   // Preferencias de ESTE socio (solo su chat), distintas de las instrucciones de los socios
   ...PERSONAL_INSTRUCTION_TOOLS,
+  ...UNDO_TOOLS,
 ]
 
 export const DELEGATE_TOOL: ToolSchema = tool(
@@ -245,8 +247,17 @@ async function requestDeletion(
     id: pending.id,
     filas: preview.count,
     mensaje:
-      'No se ha borrado nada todavía. El socio recibirá la confirmación en dos pasos (botones en Telegram, códigos en WhatsApp). Díselo así; no digas que está borrado.',
+      'No se ha borrado nada todavía. Le llega un mensaje de confirmación: le basta con contestar ok (o pulsar «Sí, borrar» en Telegram). Díselo en una frase; no digas que está borrado.',
   }
+}
+
+/** db_insertar / db_actualizar devuelven cómo deshacerlos: se apunta y no se le enseña a la IA. */
+async function keepDbUndo(chatId: number, name: string, args: Record<string, unknown>, result: unknown): Promise<unknown> {
+  if (!result || typeof result !== 'object' || !Array.isArray((result as { undo?: unknown }).undo)) return result
+  const { undo, ...rest } = result as { undo: UndoStep[] } & Record<string, unknown>
+  const label = name === 'db_insertar' ? `Crear una fila en ${String(args.tabla)}` : `Cambiar ${undo.length} fila(s) de ${String(args.tabla)}`
+  const id = await recordUndo(chatId, label, undo).catch(() => null)
+  return id ? { ...rest, deshacer: `Se puede deshacer (cambio #${id}).` } : rest
 }
 
 export async function executeTool(
@@ -258,7 +269,8 @@ export async function executeTool(
   let result: unknown
   let ok = true
   try {
-    result = await runTool(name, args, ctx)
+    result = await runWithUndo(ctx.chatId, name, args, () => runTool(name, args, ctx))
+    result = await keepDbUndo(ctx.chatId, name, args, result)
     if (result && typeof result === 'object' && (result as { ok?: unknown }).ok === false) ok = false
   } catch (e) {
     ok = false
@@ -378,6 +390,8 @@ async function runTool(name: string, args: Record<string, unknown>, ctx: AgentCo
       }
     case 'avisos_pausar':
       return { ok: await setReminderActive(Number(args.id), args.activo === true) }
+    case 'deshacer':
+      return runUndoTool(ctx.chatId, args)
     case 'borrados_pendientes':
       return {
         ok: true,

@@ -40,6 +40,7 @@ import { previewDelete, serializeRows } from '@/lib/telegram-agent/db-tools'
 import { runMcpTool } from '@/lib/telegram-agent/mcp-tools'
 import { PERSONAL_INSTRUCTION_TOOLS, TEAM_REMINDER_TOOLS, runPersonalTool } from '@/lib/telegram-agent/personal-tools'
 import { audit, createPending, personalOwnerKey } from '@/lib/telegram-agent/store'
+import { UNDO_TOOLS, runUndoTool, runWithUndo } from '@/lib/telegram-agent/undo'
 import type { AgentContext, ToolSchema } from '@/lib/telegram-agent/tools'
 import { listTickets } from '@/lib/tickets/list'
 import { notifyClientTicketUpdate } from '@/lib/tickets/notify'
@@ -165,7 +166,7 @@ const ALL_TOOLS: ToolSchema[] = [
   ),
   tool(
     'tarea_borrar',
-    'Pide borrar una tarea. NO la borra: te llegan dos códigos para confirmarlo. Las tareas que te puso un socio no se pueden borrar (muévelas a hecha).',
+    'Pide borrar una tarea. NO la borra: le llega un mensaje de confirmación y basta con que conteste ok. Las tareas que te puso un socio no se pueden borrar (muévelas a hecha).',
     { id: { type: 'string' }, motivo: { type: 'string' } },
     ['id']
   ),
@@ -197,6 +198,7 @@ const ALL_TOOLS: ToolSchema[] = [
   // Su propio agente: preferencias y avisos de su chat
   ...PERSONAL_INSTRUCTION_TOOLS,
   ...TEAM_REMINDER_TOOLS,
+  ...UNDO_TOOLS,
 
   // Developers
   tool('tickets_listar', 'Tickets de clientes asignados a ti en tus proyectos de Retención.', {
@@ -373,7 +375,8 @@ export async function executeTeamTool(
     if (!allowedToolNames(scope.member.role).has(name)) {
       result = fail(`No tienes acceso a ${name}.`)
     } else {
-      result = await runTeamTool(name, args, ctx, scope)
+      // Lo que se puede deshacer queda apuntado en SU conversación
+      result = await runWithUndo(ctx.chatId, name, args, () => runTeamTool(name, args, ctx, scope))
     }
     if (isFail(result)) ok = false
   } catch (e) {
@@ -407,6 +410,8 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
     ownChatOnly: true,
   })
   if (personal !== undefined) return personal
+  // Solo deshace lo de su propia conversación, y solo si nadie lo ha tocado después
+  if (name === 'deshacer') return runUndoTool(ctx.chatId, args)
 
   switch (name) {
     // ——— Tareas ———
@@ -550,7 +555,7 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
       return {
         ok: true,
         estado: 'PENDIENTE_DOBLE_CONFIRMACION',
-        mensaje: 'No se ha borrado todavía: le llegan dos códigos para confirmarlo. Díselo así.',
+        mensaje: 'No se ha borrado todavía: le llega un mensaje de confirmación y basta con que conteste ok. Díselo así.',
       }
     }
 

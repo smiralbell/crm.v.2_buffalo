@@ -1,14 +1,16 @@
 import { DELETE_CONFIRM_TTL_MIN } from '@/lib/telegram-agent/config'
-import { describePending, executeConfirmedPending } from '@/lib/telegram-agent/confirm'
+import { confirmFreshByText, describePending, executeConfirmedPending, isOneStep } from '@/lib/telegram-agent/confirm'
 import { advancePending, getPending, resolvePending, saveMessage, type PendingAction } from '@/lib/telegram-agent/store'
 import { phoneFromChatId } from './config'
 import { sendWhatsAppText } from './evolution-api'
 
 /**
- * Doble confirmación de borrados en WhatsApp. Sin botones: el socio escribe
- *   1) BORRAR <código>  →  2) ELIMINAR DEFINITIVAMENTE <código>
- * (o CANCELAR <código>). Igual que en Telegram, cada paso avanza de forma
- * atómica en BD y el agente (LLM) nunca ejecuta el borrado: lo hace este archivo.
+ * Confirmación de borrados en WhatsApp. Sin botones:
+ *  - borrar filas: la persona contesta «ok» (o «no») al mensaje de confirmación,
+ *    o escribe BORRAR <código>. Se puede deshacer después con «deshacer».
+ *  - SQL destructivo: BORRAR <código> y luego ELIMINAR DEFINITIVAMENTE <código>.
+ * CANCELAR <código> lo cancela. Cada paso avanza de forma atómica en BD y el
+ * agente (LLM) nunca ejecuta el borrado: lo hace este archivo.
  */
 
 export type WaConfirmCommand = { step: '1' | '2' | 'x'; id: string }
@@ -28,7 +30,9 @@ export function parseConfirmCommand(text: string): WaConfirmCommand | null {
 export async function sendWhatsAppPendingConfirmation(p: PendingAction): Promise<void> {
   await sendWhatsAppText(
     phoneFromChatId(p.chat_id),
-    `${describePending(p)}\n\nPaso 1 de 2. Para eliminarlo responde exactamente:\nBORRAR ${p.id}\n\nPara no borrar nada: CANCELAR ${p.id}\nCaduca en ${DELETE_CONFIRM_TTL_MIN} min.`
+    isOneStep(p)
+      ? `${describePending(p)}\n\n¿Lo borro? Responde ok para borrarlo o no para dejarlo. Si te equivocas, se puede deshacer.\nCaduca en ${DELETE_CONFIRM_TTL_MIN} min.`
+      : `${describePending(p)}\n\nEsto no se puede deshacer. Paso 1 de 2. Para hacerlo responde exactamente:\nBORRAR ${p.id}\n\nPara no hacer nada: CANCELAR ${p.id}\nCaduca en ${DELETE_CONFIRM_TTL_MIN} min.`
   )
 }
 
@@ -42,10 +46,18 @@ export async function handleWhatsAppConfirmation(
   who: string,
   text: string
 ): Promise<boolean> {
-  const cmd = parseConfirmCommand(text)
-  if (!cmd) return false
   const phone = phoneFromChatId(chatId)
   const reply = (t: string) => sendWhatsAppText(phone, t)
+
+  // «ok» / «no» a lo que el agente acaba de pedir
+  const quick = await confirmFreshByText(chatId, userId, who, text)
+  if (quick !== null) {
+    await reply(quick)
+    return true
+  }
+
+  const cmd = parseConfirmCommand(text)
+  if (!cmd) return false
 
   const pending = await getPending(cmd.id)
   if (!pending || pending.chat_id !== chatId) {
@@ -70,6 +82,17 @@ export async function handleWhatsAppConfirmation(
     await resolvePending(pending.id, 'cancelled', { by: who })
     await saveMessage(chatId, userId, 'assistant', `[Borrado #${pending.id} cancelado por ${who}]`)
     await reply(`Cancelado. No se ha borrado nada (petición ${pending.id}).`)
+    return true
+  }
+
+  // Borrar filas: un solo paso (se puede deshacer)
+  if (isOneStep(pending) && pending.step === 0) {
+    const claimed = await advancePending(pending.id, 0, 2, who, 'executing')
+    if (!claimed) {
+      await reply(`No se ha podido confirmar la petición ${pending.id}.`)
+      return true
+    }
+    await reply(`Petición ${pending.id}: ${await executeConfirmedPending(pending, claimed, chatId, userId)}`)
     return true
   }
 

@@ -232,6 +232,25 @@ export async function listOpenPending(chatId: number): Promise<PendingAction[]> 
   return r.rows.map(mapPending)
 }
 
+/**
+ * Borrados que el agente acaba de pedir: abiertos y creados después del último
+ * mensaje de la persona. Son a los que responde un «ok» justo ahora (si después
+ * ha seguido hablando de otra cosa, un «ok» ya no confirma un borrado antiguo).
+ */
+export async function listFreshPending(chatId: number): Promise<PendingAction[]> {
+  await ensureTelegramAgentTables()
+  const r = await getPool().query(
+    `SELECT * FROM telegram_agent_pending
+     WHERE chat_id = $1 AND status = 'pending' AND expires_at > NOW()
+       AND created_at > COALESCE(
+         (SELECT MAX(created_at) FROM telegram_agent_messages WHERE chat_id = $1 AND role = 'user'),
+         '-infinity'::timestamptz)
+     ORDER BY created_at ASC LIMIT 20`,
+    [chatId]
+  )
+  return r.rows.map(mapPending)
+}
+
 export async function setPendingMessage(id: string, messageId: number): Promise<void> {
   await getPool().query(`UPDATE telegram_agent_pending SET message_id = $2 WHERE id = $1`, [id, messageId])
 }

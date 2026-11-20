@@ -2,7 +2,8 @@ import { openRouterDescribeImage, openRouterTranscribeAudio } from '@/lib/openro
 import { runAgent } from './agent'
 import { sendChatDocument, sendChatText } from './channel'
 import { isAgentEnabled, isAuthorized } from './config'
-import { handleDeleteCallback, sendPendingConfirmation } from './confirm'
+import { confirmFreshByText, handleDeleteCallback, sendPendingConfirmation } from './confirm'
+import { isUndoRequest, undoLastReply } from './undo'
 import { AGENT_MODULES } from './modules'
 import {
   claimUpdate,
@@ -86,9 +87,24 @@ async function processMessage(msg: TgMessage): Promise<void> {
   const userName = [from.first_name, from.last_name].filter(Boolean).join(' ') || from.username || 'socio'
 
   const raw = (msg.text || '').trim()
-  if (raw.startsWith('/')) {
+  if (raw.startsWith('/') && !isUndoRequest(raw)) {
     const handled = await handleCommand(raw, msg)
     if (handled) return
+  }
+  if (raw) {
+    // «ok» / «no» a un borrado que el agente acaba de pedir, y «deshacer»: sin pasar por la IA
+    const quick = await confirmFreshByText(chatId, from.id, userName, raw)
+    if (quick !== null) {
+      await sendText(chatId, quick)
+      return
+    }
+    if (isUndoRequest(raw)) {
+      const line = await undoLastReply(chatId)
+      await saveMessage(chatId, from.id, 'user', `${userName}: ${raw}`)
+      await saveMessage(chatId, null, 'assistant', line)
+      await sendText(chatId, line)
+      return
+    }
   }
 
   const typing = setInterval(() => void sendTyping(chatId), 4500)
@@ -193,9 +209,9 @@ Qué puedo hacer:
 - Guardar instrucciones permanentes («a partir de ahora…»).
 - Adjuntar exportaciones en CSV o texto.
 
-Borrar algo siempre pide doble confirmación con botones.
+Para borrar te pido confirmación: pulsa «Sí, borrar» o escribe ok. Si me equivoco, escribe «deshacer» y lo vuelvo atrás.
 
-Comandos: /nuevo (conversación nueva) · /pendientes · /avisos · /instrucciones · /id`
+Comandos: /nuevo (conversación nueva) · /pendientes · /avisos · /instrucciones · /deshacer · /id`
 
 async function handleCommand(raw: string, msg: TgMessage): Promise<boolean> {
   const chatId = msg.chat.id

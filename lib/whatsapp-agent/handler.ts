@@ -4,6 +4,7 @@ import { sendPendingConfirmation } from '@/lib/telegram-agent/confirm'
 import { deliver } from '@/lib/telegram-agent/handler'
 import { claimUpdate, listOpenPending, loadHistory, saveMessage } from '@/lib/telegram-agent/store'
 import type { AgentContext } from '@/lib/telegram-agent/tools'
+import { isUndoRequest, undoLastReply } from '@/lib/telegram-agent/undo'
 import { runTeamAgent } from '@/lib/team-agent/agent'
 import { findTeamMemberByPhone, type TeamMember } from '@/lib/team-agent/identity'
 import { isAllowedWhatsAppNumber, isWhatsAppAgentEnabled, waChatId } from './config'
@@ -56,18 +57,20 @@ const HELP = `Soy el agente del CRM de Buffalo, el mismo que en Telegram. Escrí
 
 Puedo consultar y cambiar cualquier cosa del CRM, programar avisos, guardar instrucciones y mandarte exportaciones en CSV.
 
-Para borrar algo siempre te pediré confirmarlo dos veces escribiendo un código.
+Para borrar algo te pido confirmación: contesta ok. Si me equivoco, escribe «deshacer» y lo vuelvo atrás.
 
-Comandos: /nuevo (conversación nueva) · /pendientes (borrados por confirmar) · /ayuda`
+Comandos: /nuevo (conversación nueva) · /pendientes (borrados por confirmar) · /deshacer · /ayuda`
 
 function teamHelp(member: TeamMember): string {
   return `Soy el asistente del CRM de Buffalo para el equipo. Hola, ${member.name}.
 
-Puedo ver y gestionar tus tareas: las sueltas y las de tus proyectos, con sus subtareas. Crear, cambiar, mover de columna y borrar las tuyas.
+Puedo ver y gestionar tus tareas (las sueltas y las tuyas de tus proyectos) y la Retención de tus proyectos en producción: incidencias, vigilancia, tus tickets y el MCP del cliente.
 
-Para borrar algo siempre te pediré confirmarlo dos veces escribiendo un código.
+También puedes decirme cómo quieres que te hable («sé más breve») y pedirme avisos («cada lunes a las 9, mis tareas»).
 
-Comandos: /nuevo (conversación nueva) · /pendientes (borrados por confirmar) · /ayuda`
+Para borrar algo te pido confirmación: contesta ok. Si me equivoco, escribe «deshacer» y lo vuelvo atrás.
+
+Comandos: /nuevo (conversación nueva) · /pendientes (borrados por confirmar) · /deshacer · /ayuda`
 }
 
 /** member = null: socio. Si no, la persona del equipo resuelta por su móvil. */
@@ -77,8 +80,16 @@ async function processMessage(chatId: number, msg: WaIncoming, member: TeamMembe
   const userName = member ? member.name : msg.pushName.trim() || 'socio'
   const raw = msg.text.trim()
 
-  if (raw.startsWith('/') && (await handleCommand(chatId, userId, raw, member))) return
+  if (raw.startsWith('/') && !isUndoRequest(raw) && (await handleCommand(chatId, userId, raw, member))) return
   if (raw && (await handleWhatsAppConfirmation(chatId, userId, userName, raw))) return
+  // «deshacer»: vuelve atrás lo último que hizo el agente en esta conversación, sin pasar por la IA
+  if (raw && isUndoRequest(raw)) {
+    const line = await undoLastReply(chatId)
+    await saveMessage(chatId, userId, 'user', `${userName}: ${raw}`)
+    await saveMessage(chatId, null, 'assistant', line)
+    await sendWhatsAppText(msg.phone, line)
+    return
+  }
   // Stickers, ubicaciones, contactos, reacciones…: no se pasan a la IA
   if (msg.kind === 'other' && !raw) {
     await sendWhatsAppText(msg.phone, 'Solo puedo leer texto, notas de voz, fotos y archivos de texto (csv, txt, json).')
