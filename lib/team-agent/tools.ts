@@ -14,7 +14,16 @@ import {
   taskSummaryForAgent,
 } from '@/lib/tareas/agent-format'
 import { EMPTY_FILTERS, applyTaskFilters } from '@/lib/tareas/filters'
-import { filterProjectTasksForViewer } from '@/lib/gestion-proyecto/task-assignees-db'
+import { seesAllProjectTasks } from '@/lib/gestion-proyecto/task-assignees'
+import {
+  countProjectDevelopers,
+  filterProjectTasksForViewer,
+  saveTaskAssigneeIds,
+} from '@/lib/gestion-proyecto/task-assignees-db'
+import { RETENCION_ELIGIBLE_SQL } from '@/lib/retencion/eligibility'
+import { listIncidents, markIncidentSolved } from '@/lib/retencion/incidents'
+import { listWatchRuns } from '@/lib/retencion/watch-store'
+import { listMcpServers } from '@/lib/retencion/mcp/store'
 import {
   createPersonalTask,
   createProjectTask,
@@ -34,7 +43,7 @@ import type { AgentContext, ToolSchema } from '@/lib/telegram-agent/tools'
 import { listTickets } from '@/lib/tickets/list'
 import { notifyClientTicketUpdate } from '@/lib/tickets/notify'
 import { getTicketWithProject, insertTicketUpdate, listTicketUpdates, updateTicketStatus } from '@/lib/tickets/updates'
-import { TEAM_READ_ONLY, allowedToolNames, canDeleteTask, canSeeTask, deleteFilterFor } from './access'
+import { TEAM_READ_ONLY, allowedToolNames, canDeleteTask, canSeeTask, canSeeTicket, deleteFilterFor } from './access'
 import type { TeamMember } from './identity'
 
 /**
@@ -56,6 +65,10 @@ export interface TeamScope {
   assignedIds: string[]
   /** Sus proyectos abiertos: los que salen en Proyectos y en Tareas del CRM */
   projects: WorkProject[]
+  /** Sus proyectos en producción: los que ve en Retención (MCP, incidencias, tickets) */
+  retencion: WorkProject[]
+  /** Developers de cada uno de sus proyectos (las tareas sin asignar solo las ve el único) */
+  devCounts: Map<string, number>
 }
 
 export async function loadTeamScope(member: TeamMember): Promise<TeamScope> {
@@ -63,8 +76,18 @@ export async function loadTeamScope(member: TeamMember): Promise<TeamScope> {
     SELECT project_id::text AS project_id FROM crm_user_projects WHERE user_id = ${member.id}
   `
   const assignedIds = rows.map((r) => r.project_id)
-  const projects = await listOpenProjects(assignedIds)
-  return { member, assignedIds, projects }
+  const [projects, retencion, devCounts] = await Promise.all([
+    listOpenProjects(assignedIds),
+    assignedIds.length
+      ? prisma.$queryRaw<WorkProject[]>`
+          SELECT id::text AS id, name FROM proyectos
+          WHERE id = ANY(${assignedIds}::uuid[]) AND ${RETENCION_ELIGIBLE_SQL}
+          ORDER BY name
+        `
+      : Promise.resolve([] as WorkProject[]),
+    countProjectDevelopers(assignedIds),
+  ])
+  return { member, assignedIds, projects, retencion, devCounts }
 }
 
 function tool(name: string, description: string, properties: Record<string, unknown>, required: string[] = []): ToolSchema {
@@ -145,9 +168,19 @@ const ALL_TOOLS: ToolSchema[] = [
     { id: { type: 'string' }, motivo: { type: 'string' } },
     ['id']
   ),
-  tool('mis_proyectos', 'Tus proyectos asignados, con su estado y cuántas tareas abiertas tienen.', {}),
+  tool('mis_proyectos', 'Tus proyectos asignados, con su estado, cuántas tareas abiertas tuyas tienen y si están en Retención (producción).', {}),
+  tool(
+    'retencion_ver',
+    'Retención de uno de tus proyectos en producción: incidencias abiertas, últimos informes de vigilancia, tus tickets abiertos y sus MCP.',
+    { proyecto: proyectoProp, incluir_solucionadas: { type: 'boolean' } },
+    ['proyecto']
+  ),
+  tool('incidencia_resolver', 'Marca como solucionada una incidencia de uno de tus proyectos de Retención (id de retencion_ver).', {
+    proyecto: proyectoProp,
+    id: { type: 'string' },
+  }, ['proyecto', 'id']),
   tool('proyecto_ver', 'Información de trabajo de uno de tus proyectos: resumen, contexto, alcance, stack, entregables, contactos, notas y documentos.', { proyecto: proyectoProp }, ['proyecto']),
-  tool('mcp_listar', 'MCP conectados a tus proyectos (para consultar los sistemas de esos clientes), con sus herramientas. Solo lectura.', { proyecto: proyectoProp }),
+  tool('mcp_listar', 'MCP conectados a tus proyectos de Retención (para consultar los sistemas de esos clientes), con sus herramientas. Solo lectura.', { proyecto: proyectoProp }),
   tool(
     'mcp_usar',
     'Consulta el sistema de un cliente de tus proyectos con una herramienta de su MCP (siempre de solo lectura). Saca mcp_id y herramienta de mcp_listar.',
@@ -161,7 +194,7 @@ const ALL_TOOLS: ToolSchema[] = [
   }, ['nombre_archivo', 'contenido']),
 
   // Developers
-  tool('tickets_listar', 'Tickets de clientes asignados a ti en tus proyectos.', {
+  tool('tickets_listar', 'Tickets de clientes asignados a ti en tus proyectos de Retención.', {
     estado: { type: 'string', enum: [...TICKET_STATUSES] },
     proyecto: proyectoProp,
   }),
@@ -259,23 +292,32 @@ function hoursArg(v: unknown): number | null | undefined {
   return n
 }
 
-/** Uno de SUS proyectos abiertos por nombre o id. Nunca uno que no tenga asignado. */
-function findMyProject(scope: TeamScope, raw: unknown): WorkProject | Fail {
+/**
+ * Uno de SUS proyectos por nombre o id. Nunca uno que no tenga asignado.
+ * list: sus proyectos abiertos (tareas) o los de Retención.
+ */
+function findMyProject(scope: TeamScope, raw: unknown, list: WorkProject[] = scope.projects): WorkProject | Fail {
   const q = String(raw ?? '').trim()
   if (!q) return fail('Falta el proyecto')
-  const byId = scope.projects.find((p) => p.id === q)
+  const byId = list.find((p) => p.id === q)
   if (byId) return byId
   const n = norm(q)
-  const exact = scope.projects.filter((p) => norm(p.name) === n)
+  const exact = list.filter((p) => norm(p.name) === n)
   if (exact.length === 1) return exact[0]
-  const partial = scope.projects.filter((p) => norm(p.name).includes(n))
+  const partial = list.filter((p) => norm(p.name).includes(n))
   if (partial.length === 1) return partial[0]
   if (partial.length > 1) return fail(`"${q}" coincide con varios de tus proyectos: ${partial.map((p) => p.name).join(', ')}`)
+  const what = list === scope.retencion ? 'proyecto en Retención' : 'proyecto'
   return fail(
-    scope.projects.length
-      ? `No tienes ningún proyecto que coincida con "${q}". Tus proyectos: ${scope.projects.map((p) => p.name).join(', ')}`
-      : 'No tienes proyectos asignados.'
+    list.length
+      ? `No tienes ningún ${what} que coincida con "${q}". Los tuyos: ${list.map((p) => p.name).join(', ')}`
+      : `No tienes ningún ${what} asignado.`
   )
+}
+
+/** ¿Puede ver esta tarea? Con el número de developers de su proyecto ya cargado. */
+function seesTask(scope: TeamScope, task: WorkTask): boolean {
+  return canSeeTask(scope.member, task, scope.projects.map((p) => p.id), scope.devCounts.get(task.project_id) ?? 0)
 }
 
 const isFail = (v: unknown): v is Fail => !!v && typeof v === 'object' && (v as Fail).ok === false
@@ -285,7 +327,7 @@ async function findMyTask(scope: TeamScope, raw: unknown): Promise<WorkTask | Fa
   const id = String(raw ?? '').trim()
   if (!UUID_RE.test(id)) return fail('id de tarea no válido: sácalo de mis_tareas')
   const task = (await getPersonalTask(id)) ?? (await getProjectTask(id))
-  if (!task || !canSeeTask(scope.member, task, scope.projects.map((p) => p.id))) {
+  if (!task || !seesTask(scope, task)) {
     return fail('No tienes ninguna tarea con ese id')
   }
   return task
@@ -304,8 +346,8 @@ async function myTicket(scope: TeamScope, raw: unknown) {
   const id = String(raw ?? '').trim()
   if (!UUID_RE.test(id)) return fail('id de ticket no válido: sácalo de tickets_listar')
   const row = await getTicketWithProject(id)
-  // Igual que en el CRM: asignado a él y en uno de sus proyectos
-  if (!row || row.assignee_user_id !== scope.member.id || !scope.assignedIds.includes(row.project_id)) {
+  // Asignado a él y en uno de sus proyectos de Retención
+  if (!row || !canSeeTicket(scope.member, row, scope.retencion.map((p) => p.id))) {
     return fail('No tienes ningún ticket con ese id')
   }
   return row
@@ -368,7 +410,7 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
         tipo !== 'sueltas'
           ? await filterProjectTasksForViewer(await listProjectTasks(project ? [project] : scope.projects), me)
           : []
-      let tasks = [...personal, ...projectTasks].filter((t) => canSeeTask(me, t, myProjectIds))
+      let tasks = [...personal, ...projectTasks].filter((t) => seesTask(scope, t))
 
       const estado = args.estado ? parseAgentStatus(args.estado) : null
       if (args.estado && !estado) return fail(`estado no válido. Usa: ${AGENT_STATUSES.join(', ')}`)
@@ -420,7 +462,11 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
       }
       const p = findMyProject(scope, args.proyecto)
       if (isFail(p)) return p
-      const task = await createProjectTask({ ...common, project_id: p.id, assignee: textArg(args.asignado) ?? null })
+      const asked = textArg(args.asignado) ?? null
+      // Un developer que no dice para quién: es para él (si no, en un proyecto compartido ni la vería)
+      const forMe = !asked && !seesAllProjectTasks(me.role)
+      const task = await createProjectTask({ ...common, project_id: p.id, assignee: forMe ? me.name : asked })
+      if (forMe) await saveTaskAssigneeIds(task.id, [me.id])
       return { ok: true, creada: taskSummaryForAgent(task) }
     }
 
@@ -472,7 +518,7 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
     case 'tarea_borrar': {
       const t = await findMyTask(scope, args.id)
       if (isFail(t)) return t
-      if (!canDeleteTask(me, t, myProjectIds)) {
+      if (!canDeleteTask(me, t, myProjectIds, scope.devCounts.get(t.project_id) ?? 0)) {
         return fail('Esta tarea te la puso un socio: no se puede borrar. Si ya no hace falta, muévela a hecha.')
       }
       const filter = deleteFilterFor(me, t, myProjectIds)
@@ -496,19 +542,24 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
 
     // ——— Proyectos ———
     case 'mis_proyectos': {
-      if (!scope.projects.length) return { ok: true, proyectos: [], nota: 'No tienes proyectos asignados.' }
-      const ids = scope.projects.map((p) => p.id)
+      const all = [...scope.projects, ...scope.retencion.filter((r) => !myProjectIds.includes(r.id))]
+      if (!all.length) return { ok: true, proyectos: [], nota: 'No tienes proyectos asignados.' }
+      const ids = all.map((p) => p.id)
       const rows = await prisma.$queryRaw<
-        { id: string; name: string; status: string; service_type: string | null; cliente: string | null; abiertas: number }[]
+        { id: string; name: string; status: string; service_type: string | null; cliente: string | null }[]
       >`
         SELECT p.id::text AS id, p.name, p.status, p.service_type,
-               COALESCE(NULLIF(c.empresa, ''), c.nombre) AS cliente,
-               (SELECT COUNT(*)::int FROM project_dev_tasks t WHERE t.project_id = p.id AND t.status <> 'done') AS abiertas
+               COALESCE(NULLIF(c.empresa, ''), c.nombre) AS cliente
         FROM proyectos p
         LEFT JOIN contacts c ON c.id = p.contact_id
         WHERE p.id = ANY(${ids}::uuid[])
         ORDER BY p.name
       `
+      // Solo cuenta SUS tareas abiertas, no las de otros developers del proyecto
+      const mine = (await filterProjectTasksForViewer(await listProjectTasks(scope.projects), me)).filter(
+        (t) => t.status !== 'done' && seesTask(scope, t)
+      )
+      const retencionIds = new Set(scope.retencion.map((p) => p.id))
       return {
         ok: true,
         proyectos: rows.map((r) => ({
@@ -516,10 +567,59 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
           estado: r.status,
           servicio: r.service_type,
           cliente: r.cliente,
-          tareas_abiertas: r.abiertas,
-          enlace: `${baseUrl()}/gestion-proyecto/proyectos/${r.id}?tab=tareas`,
+          mis_tareas_abiertas: mine.filter((t) => t.project_id === r.id).length,
+          en_retencion: retencionIds.has(r.id),
+          enlace: retencionIds.has(r.id)
+            ? `${baseUrl()}/retencion/proyectos/${r.id}`
+            : `${baseUrl()}/gestion-proyecto/proyectos/${r.id}?tab=tareas`,
         })),
       }
+    }
+
+    case 'retencion_ver': {
+      const p = findMyProject(scope, args.proyecto, scope.retencion)
+      if (isFail(p)) return p
+      const [incidents, runs, mcps, tickets] = await Promise.all([
+        listIncidents(p.id).catch(() => []),
+        listWatchRuns(p.id, 3).catch(() => []),
+        listMcpServers(p.id).catch(() => []),
+        listTickets({ status: null, projectIds: [p.id], assigneeUserId: me.id, limit: 20, offset: 0 }).catch(() => []),
+      ])
+      const open = incidents.filter((i) => i.status === 'open')
+      const shown = args.incluir_solucionadas === true ? incidents.slice(0, 40) : open.slice(0, 40)
+      return {
+        ok: true,
+        proyecto: p.name,
+        incidencias_abiertas: open.length,
+        incidencias: shown.map((i) => ({
+          id: i.id,
+          estado: i.status === 'open' ? 'abierta' : 'solucionada',
+          error: String(i.error_text).slice(0, 400),
+          veces: i.occurrences,
+          ultima_vez: new Date(i.last_seen_at).toISOString(),
+        })),
+        vigilancia: runs.map((r) => ({
+          fecha: r.created_at,
+          ok: r.ok,
+          informe: stripPriceLines(String(r.report || r.error || '')).slice(0, 1500) || undefined,
+        })),
+        mis_tickets_abiertos: tickets
+          .filter((t) => t.status === 'open' || t.status === 'in_progress')
+          .map((t) => ({ id: t.id, titulo: t.title, estado: TICKET_TO[t.status] ?? t.status })),
+        mcp: mcps.map((m) => ({ mcp_id: m.id, nombre: m.nombre, estado: m.estado })),
+        enlace: `${baseUrl()}/retencion/proyectos/${p.id}`,
+      }
+    }
+
+    case 'incidencia_resolver': {
+      const p = findMyProject(scope, args.proyecto, scope.retencion)
+      if (isFail(p)) return p
+      const id = String(args.id ?? '').trim()
+      if (!/^\d+$/.test(id)) return fail('id de incidencia no válido: sácalo de retencion_ver')
+      const row = await markIncidentSolved(p.id, id)
+      return row
+        ? { ok: true, solucionada: String(row.error_text).slice(0, 200) }
+        : fail('No hay ninguna incidencia abierta con ese id en ese proyecto')
     }
 
     case 'proyecto_ver': {
@@ -551,8 +651,8 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
 
     case 'mcp_listar':
     case 'mcp_usar':
-      // Solo los MCP de sus proyectos: lo filtra mcp-tools con la lista que pone el servidor
-      return runMcpTool(name, args, { projectIds: scope.assignedIds })
+      // Solo los MCP de sus proyectos en Retención: lo filtra mcp-tools con la lista que pone el servidor
+      return runMcpTool(name, args, { projectIds: scope.retencion.map((p) => p.id) })
 
     case 'enviar_documento': {
       const filename = String(args.nombre_archivo || 'documento.txt').replace(/[^\w.\-áéíóúñÁÉÍÓÚÑ]/g, '_')
@@ -569,9 +669,9 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
 
     // ——— Tickets (developers) ———
     case 'tickets_listar': {
-      let ids = scope.assignedIds
+      let ids = scope.retencion.map((p) => p.id)
       if (args.proyecto) {
-        const p = findMyProject(scope, args.proyecto)
+        const p = findMyProject(scope, args.proyecto, scope.retencion)
         if (isFail(p)) return p
         ids = [p.id]
       }

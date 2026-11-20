@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkTask } from '@/lib/tareas/types'
-import { FUTURE_TOOLS, allowedToolNames, canDeleteTask, canSeeTask, deleteFilterFor } from './access'
+import { FUTURE_TOOLS, allowedToolNames, canDeleteTask, canSeeTask, canSeeTicket, deleteFilterFor } from './access'
 import { validateTeamPhone } from './identity'
 import { teamTools } from './tools'
 import { teamPrompt } from './agent'
@@ -48,21 +48,49 @@ function task(over: Partial<WorkTask>): WorkTask {
 }
 
 describe('acceso a tareas', () => {
-  const me = { id: 5 }
+  const me = { id: 5, name: 'Abel', role: 'developer' as const }
   const mine = ['p1']
+
+  const projectTask = (over: Partial<WorkTask>) => task({ source: 'project', project_id: 'p1', owner_user_id: null, ...over })
 
   it('ve sus tareas sueltas y las de sus proyectos, nada más', () => {
     expect(canSeeTask(me, task({}), mine)).toBe(true)
     expect(canSeeTask(me, task({ owner_user_id: 6 }), mine)).toBe(false)
-    expect(canSeeTask(me, task({ source: 'project', project_id: 'p1', owner_user_id: null }), mine)).toBe(true)
-    expect(canSeeTask(me, task({ source: 'project', project_id: 'p2', owner_user_id: null }), mine)).toBe(false)
+    expect(canSeeTask(me, projectTask({ assignee_user_ids: [5] }), mine, 2)).toBe(true)
+    expect(canSeeTask(me, projectTask({ project_id: 'p2', assignee_user_ids: [5] }), mine, 2)).toBe(false)
+  })
+
+  it('de un proyecto compartido no ve las tareas de otro developer', () => {
+    expect(canSeeTask(me, projectTask({ assignee_user_ids: [6], assignee: 'Calvin' }), mine, 2)).toBe(false)
+    expect(canSeeTask(me, projectTask({ assignee_user_ids: [5, 6], assignee: 'Abel, Calvin' }), mine, 2)).toBe(true)
+    // Tareas antiguas sin ids: se casa por nombre
+    expect(canSeeTask(me, projectTask({ assignee: 'Calvin' }), mine, 2)).toBe(false)
+    expect(canSeeTask(me, projectTask({ assignee: 'Abel' }), mine, 2)).toBe(true)
+    // Sin asignar: solo si es el único developer del proyecto
+    expect(canSeeTask(me, projectTask({}), mine, 2)).toBe(false)
+    expect(canSeeTask(me, projectTask({}), mine, 1)).toBe(true)
+    // Y tampoco las puede borrar
+    expect(canDeleteTask(me, projectTask({ assignee_user_ids: [6] }), mine, 2)).toBe(false)
+  })
+
+  it('el project manager ve todas las de sus proyectos, pero no las de otros proyectos', () => {
+    const pm = { id: 7, name: 'Pepa', role: 'project_manager' as const }
+    expect(canSeeTask(pm, projectTask({ assignee_user_ids: [6] }), mine, 2)).toBe(true)
+    expect(canSeeTask(pm, projectTask({ project_id: 'p2' }), mine, 2)).toBe(false)
+  })
+
+  it('solo ve los tickets asignados a él en sus proyectos de Retención', () => {
+    expect(canSeeTicket(me, { assignee_user_id: 5, project_id: 'p1' }, ['p1'])).toBe(true)
+    expect(canSeeTicket(me, { assignee_user_id: 6, project_id: 'p1' }, ['p1'])).toBe(false)
+    expect(canSeeTicket(me, { assignee_user_id: null, project_id: 'p1' }, ['p1'])).toBe(false)
+    expect(canSeeTicket(me, { assignee_user_id: 5, project_id: 'p2' }, ['p1'])).toBe(false)
   })
 
   it('no borra lo que le puso un socio ni nada ajeno', () => {
     expect(canDeleteTask(me, task({}), mine)).toBe(true)
     expect(canDeleteTask(me, task({ created_by_id: null }), mine)).toBe(false)
     expect(canDeleteTask(me, task({ owner_user_id: 6, created_by_id: 5 }), mine)).toBe(false)
-    expect(canDeleteTask(me, task({ source: 'project', project_id: 'p2' }), mine)).toBe(false)
+    expect(canDeleteTask(me, task({ source: 'project', project_id: 'p2' }), mine, 1)).toBe(false)
   })
 
   it('el filtro del borrado vuelve a exigir que sea suyo al ejecutarlo', () => {
@@ -71,9 +99,13 @@ describe('acceso a tareas', () => {
       where_sql: 'id = $1::uuid AND user_id = $2 AND created_by_id = $2',
       where_params: [task({}).id, 5],
     })
-    const f = deleteFilterFor(me, task({ source: 'project', project_id: 'p1' }), mine)
+    const f = deleteFilterFor(me, task({ source: 'project', project_id: 'p1', assignee: 'Abel' }), mine)
     expect(f.tabla).toBe('project_dev_tasks')
-    expect(f.where_params).toEqual([task({}).id, ['p1']])
+    // Developer: además tiene que seguir siendo suya al ejecutar el DELETE
+    expect(f.where_sql).toContain('$3::int = ANY(assignee_user_ids)')
+    expect(f.where_params).toEqual([task({}).id, ['p1'], 5, 'Abel'])
+    const pm = deleteFilterFor({ id: 7, name: 'Pepa', role: 'project_manager' }, task({ source: 'project', project_id: 'p1' }), mine)
+    expect(pm.where_params).toEqual([task({}).id, ['p1']])
   })
 })
 
@@ -81,14 +113,16 @@ describe('herramientas por rol', () => {
   const dev = teamTools('developer').map((t) => t.function.name)
   const pm = teamTools('project_manager').map((t) => t.function.name)
 
-  const TAREAS = ['mis_tareas', 'tarea_ver', 'tarea_crear', 'tarea_editar', 'tarea_mover', 'tarea_subtareas', 'tarea_borrar', 'enviar_documento']
+  const TAREAS = ['mis_tareas', 'tarea_ver', 'tarea_crear', 'tarea_editar', 'tarea_mover', 'tarea_subtareas', 'tarea_borrar']
+  const RETENCION = ['mis_proyectos', 'retencion_ver', 'incidencia_resolver', 'tickets_listar', 'ticket_ver', 'ticket_responder', 'ticket_estado', 'mcp_listar', 'mcp_usar']
 
-  it('de momento los dos roles solo tienen su módulo de Tareas', () => {
-    expect(dev).toEqual(TAREAS)
-    expect(pm).toEqual(TAREAS)
+  it('los dos roles tienen sus Tareas y la Retención de sus proyectos', () => {
+    for (const list of [dev, pm]) {
+      for (const name of [...TAREAS, ...RETENCION, 'enviar_documento']) expect(list, name).toContain(name)
+    }
   })
 
-  it('proyectos, tickets, leads, pipelines y MCP están apagados', () => {
+  it('la ficha de proyecto, leads y pipelines están apagados', () => {
     for (const role of ['developer', 'project_manager'] as const) {
       const on = allowedToolNames(role)
       for (const name of FUTURE_TOOLS[role]) expect(on.has(name), `${role}:${name}`).toBe(false)
@@ -140,11 +174,14 @@ describe('prompt del equipo', () => {
       member: { id: 5, name: 'Abel', email: 'a@b.c', role: 'developer', phone: '34611223344' },
       assignedIds: ['p1'],
       projects: [{ id: 'p1', name: 'PREICO' }],
+      retencion: [{ id: 'p1', name: 'PREICO' }],
+      devCounts: new Map(),
     })
     expect(prompt).toContain('Hablas con Abel')
     expect(prompt).toContain('identificada por su número de móvil')
     expect(prompt).toContain('- PREICO')
-    expect(prompt).toContain('SOLO tiene acceso a su módulo de Tareas')
+    expect(prompt).toContain('Nunca puede ver nada de otra persona')
+    expect(prompt).toContain('Sus proyectos en Retención')
     expect(prompt).toContain('facturación')
   })
 })

@@ -1,3 +1,4 @@
+import { canViewerSeeProjectTask, isTaskAssignedTo, seesAllProjectTasks } from '@/lib/gestion-proyecto/task-assignees'
 import type { WorkTask } from '@/lib/tareas/types'
 import type { TeamMember, TeamRole } from '@/lib/team-agent/identity'
 
@@ -5,20 +6,41 @@ import type { TeamMember, TeamRole } from '@/lib/team-agent/identity'
  * Reglas de acceso del agente del equipo. Sin base de datos, para poder probarlas.
  * Todas reciben al usuario ya resuelto por su móvil y la lista de SUS proyectos:
  * la IA no puede ampliar ninguna de las dos cosas.
+ *
+ * Un developer nunca ve nada de otro developer: de un proyecto compartido solo
+ * ve las tareas que tiene asignadas (las sin asignar, solo si es el único
+ * developer del proyecto), igual que en su tablero del CRM.
  */
 
-/** Una tarea es suya si es una tarea suelta suya o es de uno de sus proyectos. */
-export function canSeeTask(member: Pick<TeamMember, 'id'>, task: WorkTask, myProjectIds: string[]): boolean {
+export type TaskMember = Pick<TeamMember, 'id' | 'name' | 'role'>
+
+/**
+ * Una tarea es suya si es una tarea suelta suya, o es de uno de sus proyectos
+ * y le toca a él (project manager: todas las de sus proyectos).
+ * projectDeveloperCount: developers del proyecto de la tarea (para las sin asignar).
+ */
+export function canSeeTask(
+  member: TaskMember,
+  task: WorkTask,
+  myProjectIds: string[],
+  projectDeveloperCount = 0
+): boolean {
   if (task.source === 'personal') return task.owner_user_id === member.id
-  return myProjectIds.includes(task.project_id)
+  if (!myProjectIds.includes(task.project_id)) return false
+  return canViewerSeeProjectTask(task, member, projectDeveloperCount)
 }
 
 /**
  * Borrar: una tarea suelta solo si se la creó él mismo (las que pone un socio no,
- * igual que en el CRM); las de proyecto, si el proyecto es suyo.
+ * igual que en el CRM); las de proyecto, si la puede ver.
  */
-export function canDeleteTask(member: Pick<TeamMember, 'id'>, task: WorkTask, myProjectIds: string[]): boolean {
-  if (!canSeeTask(member, task, myProjectIds)) return false
+export function canDeleteTask(
+  member: TaskMember,
+  task: WorkTask,
+  myProjectIds: string[],
+  projectDeveloperCount = 0
+): boolean {
+  if (!canSeeTask(member, task, myProjectIds, projectDeveloperCount)) return false
   if (task.source === 'personal') return task.created_by_id === member.id
   return true
 }
@@ -29,7 +51,7 @@ export function canDeleteTask(member: Pick<TeamMember, 'id'>, task: WorkTask, my
  * confirma, no se borraría nada que ya no sea suyo.
  */
 export function deleteFilterFor(
-  member: Pick<TeamMember, 'id'>,
+  member: TaskMember,
   task: WorkTask,
   myProjectIds: string[]
 ): { tabla: string; where_sql: string; where_params: unknown[] } {
@@ -40,16 +62,40 @@ export function deleteFilterFor(
       where_params: [task.id, member.id],
     }
   }
+  if (seesAllProjectTasks(member.role)) {
+    return {
+      tabla: 'project_dev_tasks',
+      where_sql: 'id = $1::uuid AND project_id = ANY($2::uuid[])',
+      where_params: [task.id, myProjectIds],
+    }
+  }
+  // Developer: además, que siga siendo suya. Con ids, que esté entre los asignados;
+  // sin ids (tareas antiguas), que el asignado no haya cambiado desde que lo pidió.
   return {
     tabla: 'project_dev_tasks',
-    where_sql: 'id = $1::uuid AND project_id = ANY($2::uuid[])',
-    where_params: [task.id, myProjectIds],
+    where_sql:
+      'id = $1::uuid AND project_id = ANY($2::uuid[]) AND ($3::int = ANY(assignee_user_ids) OR (cardinality(assignee_user_ids) = 0 AND assignee IS NOT DISTINCT FROM $4::text))',
+    where_params: [task.id, myProjectIds, member.id, task.assignee],
   }
+}
+
+/** Un ticket es suyo si se lo han asignado a él y es de uno de sus proyectos de Retención. */
+export function canSeeTicket(
+  member: Pick<TeamMember, 'id'>,
+  ticket: { assignee_user_id: number | null; project_id: string },
+  retencionIds: string[]
+): boolean {
+  return ticket.assignee_user_id === member.id && retencionIds.includes(ticket.project_id)
+}
+
+/** ¿La tarea va a nombre de esta persona? */
+export function isAssignedToMember(task: WorkTask, member: TaskMember): boolean {
+  return task.source === 'personal' ? task.owner_user_id === member.id : isTaskAssignedTo(task, member)
 }
 
 /**
  * Herramientas ENCENDIDAS de cada rol. Lo que no está aquí no se ejecuta aunque
- * la IA lo pida. De momento, developers y PMs solo tienen su módulo de Tareas.
+ * la IA lo pida.
  */
 const TASK_TOOLS = [
   'mis_tareas',
@@ -59,13 +105,30 @@ const TASK_TOOLS = [
   'tarea_mover',
   'tarea_subtareas',
   'tarea_borrar',
+] as const
+
+/** Retención de SUS proyectos en producción: incidencias, vigilancia, sus tickets y el MCP del cliente. */
+const RETENCION_TOOLS = [
+  'mis_proyectos',
+  'retencion_ver',
+  'incidencia_resolver',
+  'tickets_listar',
+  'ticket_ver',
+  'ticket_responder',
+  'ticket_estado',
+  'mcp_listar',
+  'mcp_usar',
+] as const
+
+/** Su propio agente. */
+const PERSONAL_TOOLS = [
   // Solo da formato a la respuesta (adjunta un listado largo); no lee nada
   'enviar_documento',
 ] as const
 
 const ENABLED: Record<TeamRole, readonly string[]> = {
-  developer: TASK_TOOLS,
-  project_manager: TASK_TOOLS,
+  developer: [...TASK_TOOLS, ...RETENCION_TOOLS, ...PERSONAL_TOOLS],
+  project_manager: [...TASK_TOOLS, ...RETENCION_TOOLS, ...PERSONAL_TOOLS],
 }
 
 /**
@@ -73,12 +136,9 @@ const ENABLED: Record<TeamRole, readonly string[]> = {
  * al rol en ENABLED (y se revisa su texto en el prompt del agente).
  */
 export const FUTURE_TOOLS: Record<TeamRole, readonly string[]> = {
-  developer: ['mis_proyectos', 'proyecto_ver', 'mcp_listar', 'mcp_usar', 'tickets_listar', 'ticket_ver', 'ticket_responder', 'ticket_estado'],
+  developer: ['proyecto_ver'],
   project_manager: [
-    'mis_proyectos',
     'proyecto_ver',
-    'mcp_listar',
-    'mcp_usar',
     'leads_buscar',
     'lead_ver',
     'lead_nota',
@@ -100,6 +160,7 @@ export const TEAM_READ_ONLY = new Set([
   'tarea_ver',
   'mis_proyectos',
   'proyecto_ver',
+  'retencion_ver',
   'mcp_listar',
   'tickets_listar',
   'ticket_ver',
@@ -108,4 +169,6 @@ export const TEAM_READ_ONLY = new Set([
   'contactos_buscar',
   'pipelines_listar',
   'pipeline_tarjetas',
+  'mis_instrucciones',
+  'avisos_listar',
 ])
