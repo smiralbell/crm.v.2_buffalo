@@ -44,11 +44,29 @@ function destinoProp(withDestino: boolean) {
     ? {
         destino: {
           type: 'string',
-          enum: ['yo', 'comun'],
-          description: '"yo" = su WhatsApp (por defecto). "comun" = el correo, el Telegram y el push que reciben los dos socios.',
+          enum: ['yo', 'equipo'],
+          description:
+            '"yo" = su WhatsApp (por defecto). "equipo" = los avisos de un developer o PM: indica quién en persona. Todo llega por WhatsApp.',
+        },
+        persona: {
+          type: 'string',
+          description: 'Solo con destino="equipo": el nombre del developer o PM (p. ej. "Abel")',
         },
       }
     : {}
+}
+
+/** Un developer o PM por su nombre. Falla si no hay nadie o hay varios que encajan. */
+async function findTeamMemberByName(name: string): Promise<{ id: number; name: string } | Fail> {
+  const r = await getPool().query<{ id: number; name: string }>(
+    `SELECT id, name FROM crm_users
+      WHERE active = TRUE AND role IN ('developer', 'project_manager') AND lower(name) LIKE lower($1)
+      ORDER BY name LIMIT 5`,
+    [`%${name.trim()}%`]
+  )
+  if (!r.rows.length) return fail(`No encuentro a nadie del equipo que se llame «${name}».`)
+  if (r.rows.length > 1) return fail(`Hay varias personas que encajan con «${name}»: ${r.rows.map((x) => x.name).join(', ')}. Di el nombre completo.`)
+  return r.rows[0]
 }
 
 /** Esquemas: los socios eligen destino (suyo o común); el equipo, solo lo suyo. */
@@ -65,7 +83,15 @@ export function notificationTools(kind: 'socio' | 'equipo') {
     tool(
       'avisos_auto_cambiar',
       `Cambia cómo le llega un tipo de aviso automático. Solo cambia lo que mandes. aviso: ${list}, o "todos". Ejemplos: «no me avises de los blogs» → activo=false; «los leads en un resumen a las 9» → modo=resumen, hora=09:00; «solo tickets urgentes» → prioridad_min=crítica.`,
-      { ...destinoProp(withDestino), aviso: { type: 'string', enum: [...events.map((e) => e.key), 'todos'] }, ...ruleProps },
+      {
+        ...destinoProp(withDestino),
+        // Los socios pueden tocar también los avisos de los developers (destino="equipo")
+        aviso: {
+          type: 'string',
+          enum: Array.from(new Set([...events.map((e) => e.key), ...(withDestino ? eventsFor('equipo').map((e) => e.key) : [])])).concat('todos'),
+        },
+        ...ruleProps,
+      },
       ['aviso']
     ),
     tool(
@@ -112,9 +138,17 @@ export type NotificationToolOptions = {
 type Fail = { ok: false; error: string }
 const fail = (error: string): Fail => ({ ok: false, error })
 
-function target(args: Record<string, unknown>, opts: NotificationToolOptions): { key: string; kind: RecipientKind } | Fail {
+async function target(args: Record<string, unknown>, opts: NotificationToolOptions): Promise<{ key: string; kind: RecipientKind } | Fail> {
   if (opts.kind === 'equipo') return opts.ownerKey ? { key: opts.ownerKey, kind: 'equipo' } : fail('No tienes avisos configurables')
-  if (args.destino === 'comun') return { key: COMMON_KEY, kind: 'comun' }
+  if (args.destino === 'comun') return fail('Ya no hay canal común: todo llega por WhatsApp.')
+  // Un socio configura los avisos de un developer o PM (los suyos, con su WhatsApp)
+  if (args.destino === 'equipo') {
+    const name = String(args.persona ?? '').trim()
+    if (!name) return fail('Dime de quién: indica el nombre del developer o PM en «persona».')
+    const member = await findTeamMemberByName(name)
+    if ('ok' in member) return member
+    return { key: `user:${member.id}`, kind: 'equipo' }
+  }
   if (!opts.ownerKey) {
     return fail(
       'Tu configuración personal va con tu WhatsApp. Desde aquí puedes cambiar la del canal común (correo, Telegram y push): usa destino="comun".'
@@ -164,7 +198,7 @@ export async function runNotificationTool(
   opts: NotificationToolOptions
 ): Promise<unknown> {
   if (!NOTIFICATION_TOOL_NAMES.has(name)) return undefined
-  const t = target(args, opts)
+  const t = await target(args, opts)
   if ('ok' in t) return t
   const prefs = await getPrefs(t.key)
   const who = t.kind === 'comun' ? 'canal común' : 'tus avisos'

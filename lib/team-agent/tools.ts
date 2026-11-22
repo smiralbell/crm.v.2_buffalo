@@ -42,11 +42,13 @@ import { PERSONAL_INSTRUCTION_TOOLS, TEAM_REMINDER_TOOLS, runPersonalTool } from
 import { audit, createPending, personalOwnerKey } from '@/lib/telegram-agent/store'
 import { UNDO_TOOLS, runUndoTool, runWithUndo } from '@/lib/telegram-agent/undo'
 import { notificationTools, runNotificationTool } from '@/lib/notifications/tools'
+import { notifyTaskMoved } from '@/lib/notifications/team-events'
+import { cancelReminders, scheduleReminder } from '@/lib/notifications/reminders'
 import type { AgentContext, ToolSchema } from '@/lib/telegram-agent/tools'
 import { listTickets } from '@/lib/tickets/list'
 import { notifyClientTicketUpdate } from '@/lib/tickets/notify'
 import { getTicketWithProject, insertTicketUpdate, listTicketUpdates, updateTicketStatus } from '@/lib/tickets/updates'
-import { TEAM_READ_ONLY, allowedToolNames, canDeleteTask, canSeeTask, canSeeTicket, deleteFilterFor } from './access'
+import { TEAM_READ_ONLY, allowedToolNames, canDeleteTask, canReadTicket, canSeeTask, canSeeTicket, deleteFilterFor } from './access'
 import type { TeamMember } from './identity'
 
 /**
@@ -153,6 +155,16 @@ const ALL_TOOLS: ToolSchema[] = [
   ),
   tool('tarea_mover', 'Mueve una de tus tareas de columna.', { id: { type: 'string' }, estado: estadoProp }, ['id', 'estado']),
   tool(
+    'tarea_recordar',
+    'Recuérdame una de mis tareas cada X horas por WhatsApp, hasta que esté hecha. Solo para las tareas que yo pida: por defecto no se recuerda ninguna. Con quitar=true deja de recordármela.',
+    {
+      id: { type: 'string' },
+      cada_horas: { type: 'number', description: 'Cada cuántas horas (1 a 720)' },
+      quitar: { type: 'boolean', description: 'true = dejar de recordármela' },
+    },
+    ['id']
+  ),
+  tool(
     'tarea_subtareas',
     'Subtareas de una de tus tareas. accion: anadir (titulo, explicacion), editar (numero, titulo/explicacion), marcar, desmarcar, quitar (numero) o reemplazar (subtareas).',
     {
@@ -203,11 +215,12 @@ const ALL_TOOLS: ToolSchema[] = [
   ...UNDO_TOOLS,
 
   // Developers
-  tool('tickets_listar', 'Tickets de clientes asignados a ti en tus proyectos de Retención.', {
+  tool('tickets_listar', 'Tickets de clientes de tus proyectos de Retención (todos, también los de tus compañeros). Con solo_mios=true, solo los asignados a ti.', {
     estado: { type: 'string', enum: [...TICKET_STATUSES] },
     proyecto: proyectoProp,
+    solo_mios: { type: 'boolean', description: 'true = solo los asignados a ti' },
   }),
-  tool('ticket_ver', 'Un ticket asignado a ti, con su conversación.', { id: { type: 'string' } }, ['id']),
+  tool('ticket_ver', 'Un ticket de tus proyectos de Retención, con su conversación. Para responderlo o cambiar su estado tiene que estar asignado a ti.', { id: { type: 'string' } }, ['id']),
   tool(
     'ticket_responder',
     'Responde a un ticket asignado a ti. El mensaje LE LLEGA AL CLIENTE. Primero llámala con confirmado=false para enseñar el texto, y solo con confirmado=true cuando el developer haya dicho que sí a ese texto exacto.',
@@ -355,8 +368,19 @@ async function myTicket(scope: TeamScope, raw: unknown) {
   const id = String(raw ?? '').trim()
   if (!UUID_RE.test(id)) return fail('id de ticket no válido: sácalo de tickets_listar')
   const row = await getTicketWithProject(id)
-  // Asignado a él y en uno de sus proyectos de Retención
+  // Asignado a él y en uno de sus proyectos de Retención (para responder o cambiar el estado)
   if (!row || !canSeeTicket(scope.member, row, scope.retencion.map((p) => p.id))) {
+    return fail('No tienes ningún ticket con ese id')
+  }
+  return row
+}
+
+/** Para leer: cualquier ticket de sus proyectos de Retención. */
+async function readableTicket(scope: TeamScope, raw: unknown) {
+  const id = String(raw ?? '').trim()
+  if (!UUID_RE.test(id)) return fail('id de ticket no válido: sácalo de tickets_listar')
+  const row = await getTicketWithProject(id)
+  if (!row || !canReadTicket(row, scope.retencion.map((p) => p.id))) {
     return fail('No tienes ningún ticket con ese id')
   }
   return row
@@ -494,6 +518,30 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
       return { ok: true, creada: taskSummaryForAgent(task) }
     }
 
+    case 'tarea_recordar': {
+      const t = await findMyTask(scope, args.id)
+      if (isFail(t)) return t
+      const entity = t.source === 'personal' ? 'tarea_personal' : 'tarea_proyecto'
+      // Quitar el recordatorio de esa tarea
+      if (args.quitar === true) {
+        await cancelReminders('recordatorio_tarea', entity, t.id)
+        return { ok: true, tarea: t.title, nota: 'Dejo de recordártela.' }
+      }
+      const every = Number(args.cada_horas)
+      if (!Number.isInteger(every) || every < 1 || every > 720) return fail('cada_horas debe ser un número entero entre 1 y 720')
+      if (t.status === 'done') return fail('Esa tarea ya está hecha: no hace falta recordarla.')
+      await scheduleReminder({
+        event: 'recordatorio_tarea',
+        entityType: entity,
+        entityId: t.id,
+        title: `Tarea pendiente: ${t.title}`,
+        url: '/tareas',
+        everyHours: every,
+        userIds: [me.id],
+      })
+      return { ok: true, tarea: t.title, cada_horas: every, nota: 'Te la recordaré hasta que esté hecha.' }
+    }
+
     case 'tarea_editar':
     case 'tarea_mover': {
       const t = await findMyTask(scope, args.id)
@@ -503,6 +551,19 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
       if (name === 'tarea_mover') {
         if (!status) return fail('Falta el estado')
         const moved = t.source === 'personal' ? await updatePersonalTask(t, { status }) : await updateProjectTask(t, { status })
+        if (moved) {
+          // Aviso a los asignados de la tarea de proyecto (una tarea suelta es solo suya)
+          await notifyTaskMoved({
+            userIds: t.source === 'personal' ? [] : t.assignee_user_ids ?? [],
+            actorId: me.id,
+            actorName: me.name,
+            taskId: t.id,
+            title: t.title,
+            projectName: t.project_name,
+            from: statusLabel(t.status),
+            to: statusLabel(status),
+          }).catch(() => null)
+        }
         return moved ? { ok: true, tarea: taskSummaryForAgent(moved), antes: statusLabel(t.status) } : fail('No se pudo mover')
       }
       const priority = args.prioridad !== undefined ? parseAgentPriority(args.prioridad) : undefined
@@ -702,7 +763,8 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
       if (!ids.length) return { ok: true, tickets: [] }
       const status = args.estado ? TICKET_FROM[norm(args.estado)] : null
       if (args.estado && !status) return fail(`estado no válido. Usa: ${TICKET_STATUSES.join(', ')}`)
-      const rows = await listTickets({ status, projectIds: ids, assigneeUserId: me.id, limit: 50, offset: 0 })
+      // Todos los de sus proyectos; solo los suyos si lo pide
+      const rows = await listTickets({ status, projectIds: ids, assigneeUserId: args.solo_mios === true ? me.id : null, limit: 50, offset: 0 })
       return {
         ok: true,
         tickets: rows.map((r) => ({
@@ -718,7 +780,7 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
     }
 
     case 'ticket_ver': {
-      const row = await myTicket(scope, args.id)
+      const row = await readableTicket(scope, args.id)
       if (isFail(row)) return row
       const updates = await listTicketUpdates(row.id).catch(() => [])
       return {

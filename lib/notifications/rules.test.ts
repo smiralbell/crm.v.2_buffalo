@@ -60,12 +60,10 @@ describe('hora de Madrid', () => {
 })
 
 describe('reglas por defecto', () => {
-  it('el canal común sigue como siempre: todo al momento por correo, Telegram y push', () => {
+  it('todo por WhatsApp: el canal común (correo, Telegram y push) no recibe avisos', () => {
     for (const e of eventsFor('comun')) {
       const r = effectiveRule(e, 'comun', emptyPrefs())
-      expect(r.activo, e.key).toBe(true)
-      expect(r.modo, e.key).toBe('inmediato')
-      expect(r.canales).toEqual(['email', 'telegram', 'push'])
+      expect(r.canales, e.key).toEqual([])
     }
   })
 
@@ -77,13 +75,22 @@ describe('reglas por defecto', () => {
 
   it('el equipo solo ve sus avisos, no los de los socios', () => {
     const keys = eventsFor('equipo').map((e) => e.key)
-    expect(keys).toEqual(['ticket_asignado', 'incidencia_mi_proyecto', 'tarea_asignada', 'tarea_vence'])
+    expect(keys).toEqual([
+      'ticket_asignado',
+      'incidencia_mi_proyecto',
+      'tarea_asignada',
+      'recordatorio_incidencia_equipo',
+      'recordatorio_ticket_equipo',
+      'recordatorio_tarea',
+      'tarea_movida',
+      'tarea_vence',
+    ])
     expect(keys).not.toContain('lead_nuevo')
     expect(EVENTS.every((e) => e.nombre && e.descripcion)).toBe(true)
   })
 
   it('lo que cambia la persona va encima de lo de por defecto, y nunca un canal que no es suyo', () => {
-    const prefs: Prefs = { ...emptyPrefs(), reglas: { lead_nuevo: { modo: 'resumen', canales: ['email', 'whatsapp'] } } }
+    const prefs: Prefs = { ...emptyPrefs(), reglas: { lead_nuevo: { modo: 'resumen', canales: ['telegram', 'whatsapp'] } } }
     const r = effectiveRule(ev('lead_nuevo'), 'socio', prefs)
     expect(r.modo).toBe('resumen')
     expect(r.canales).toEqual(['whatsapp'])
@@ -151,7 +158,7 @@ describe('cambios desde el chat', () => {
   })
 
   it('no deja canales de otro, filtros que el aviso no tiene ni valores raros', () => {
-    expect(ruleChange(ev('lead_nuevo'), 'socio', { canales: ['email'] }).ok).toBe(false)
+    expect(ruleChange(ev('lead_nuevo'), 'socio', { canales: ['telegram'] }).ok).toBe(false)
     expect(ruleChange(ev('tarea_asignada'), 'equipo', { canales: 'telegram' }).ok).toBe(false)
     expect(ruleChange(ev('blog_revision'), 'socio', { origen: 'meta' }).ok).toBe(false)
     expect(ruleChange(ev('lead_nuevo'), 'socio', { hora: '27:00' }).ok).toBe(false)

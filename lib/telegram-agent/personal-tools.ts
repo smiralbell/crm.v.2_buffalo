@@ -1,3 +1,4 @@
+import { REMINDER_EVERY_MAX_DAYS, REMINDER_EVERY_MIN_DAYS } from './reminder-limits'
 import {
   addPersonalInstruction,
   addReminder,
@@ -22,7 +23,15 @@ function tool(name: string, description: string, properties: Record<string, unkn
   return { type: 'function' as const, function: { name, description, parameters: { type: 'object', properties, required } } }
 }
 
-const REPEATS = ['nunca', 'diario', 'laborables', 'semanal', 'mensual'] as const
+const REPEATS = ['nunca', 'diario', 'laborables', 'semanal', 'mensual', 'cada_n_dias'] as const
+
+/** Lo que el agente pide en repetir y cada_dias. Devuelve el intervalo, o null si no es válido. */
+function parseEvery(repetir: ReminderRepeat, cadaDias: unknown): number | null {
+  if (repetir !== 'cada_n_dias') return null
+  const n = Number(cadaDias)
+  return Number.isInteger(n) && n >= REMINDER_EVERY_MIN_DAYS && n <= REMINDER_EVERY_MAX_DAYS ? n : null
+}
+const EVERY_HELP = `cada_dias debe ser un número entero entre ${REMINDER_EVERY_MIN_DAYS} y ${REMINDER_EVERY_MAX_DAYS}, p. ej. 2 para cada dos días`
 const MADRID = 'Europe/Madrid'
 /** Avisos activos por conversación del equipo: los de tipo tarea gastan IA cada vez. */
 export const TEAM_MAX_ACTIVE_REMINDERS = 20
@@ -44,13 +53,14 @@ export const PERSONAL_INSTRUCTION_TOOLS = [
 
 export const REMINDER_CHANGE_TOOL = tool(
   'avisos_cambiar',
-  'Cambia un aviso programado: el texto o la tarea, la próxima vez (fecha_hora), cada cuánto (repetir), o lo pausa / reactiva (activo). Solo se cambia lo que mandes.',
+  'Cambia un aviso programado: el texto o la tarea, la próxima vez (fecha_hora), cada cuánto (repetir, y con cada_n_dias el número de días en cada_dias), o lo pausa / reactiva (activo). Solo se cambia lo que mandes.',
   {
     id: { type: 'number' },
     texto: { type: 'string' },
     tipo: { type: 'string', enum: ['texto', 'tarea'] },
     fecha_hora: { type: 'string', description: 'ISO 8601 con zona (Europe/Madrid)' },
     repetir: { type: 'string', enum: [...REPEATS] },
+    cada_dias: { type: 'number', description: `Solo con repetir=cada_n_dias: cada cuántos días (${REMINDER_EVERY_MIN_DAYS}-${REMINDER_EVERY_MAX_DAYS})` },
     activo: { type: 'boolean' },
   },
   ['id']
@@ -66,6 +76,7 @@ export const TEAM_REMINDER_TOOLS = [
       texto: { type: 'string', description: 'El recordatorio, o la tarea y cómo quiere el resultado' },
       fecha_hora: { type: 'string', description: 'Primera vez, ISO 8601 con zona (Europe/Madrid), p. ej. 2026-11-23T09:00:00+01:00' },
       repetir: { type: 'string', enum: [...REPEATS] },
+      cada_dias: { type: 'number', description: `Solo con repetir=cada_n_dias: cada cuántos días (${REMINDER_EVERY_MIN_DAYS}-${REMINDER_EVERY_MAX_DAYS})` },
     },
     ['tipo', 'texto', 'fecha_hora']
   ),
@@ -145,6 +156,8 @@ export async function runPersonalTool(
       if (!texto) return fail('Falta el texto del aviso')
       const repetir = args.repetir === undefined ? 'nunca' : parseRepeat(args.repetir)
       if (!repetir) return fail(`repetir no válido. Usa: ${REPEATS.join(', ')}`)
+      const intervalo = parseEvery(repetir, args.cada_dias)
+      if (repetir === 'cada_n_dias' && intervalo === null) return fail(EVERY_HELP)
       if (repetir === 'nunca' && when.getTime() < Date.now() - 60_000) return fail('Esa hora ya ha pasado')
       const active = (await listChatReminders(opts.chatId, true)).length
       if (active >= TEAM_MAX_ACTIVE_REMINDERS) {
@@ -157,6 +170,7 @@ export async function runPersonalTool(
         texto,
         destino: 'chat',
         repetir,
+        intervaloDias: intervalo,
         nextRunAt: when,
       })
       return { ok: true, aviso: reminderForAgent(reminder) }
@@ -178,6 +192,18 @@ export async function runPersonalTool(
         const r = parseRepeat(args.repetir)
         if (!r) return fail(`repetir no válido. Usa: ${REPEATS.join(', ')}`)
         patch.repetir = r
+        if (r === 'cada_n_dias') {
+          const n = parseEvery(r, args.cada_dias)
+          if (n === null) return fail(EVERY_HELP)
+          patch.intervaloDias = n
+        }
+      }
+      // Solo cambiar el número de días de un aviso que ya es «cada N días»
+      if (args.repetir === undefined && args.cada_dias !== undefined) {
+        const n = parseEvery('cada_n_dias', args.cada_dias)
+        if (n === null) return fail(EVERY_HELP)
+        patch.repetir = 'cada_n_dias'
+        patch.intervaloDias = n
       }
       if (args.fecha_hora !== undefined) {
         const when = parseWhen(args.fecha_hora)

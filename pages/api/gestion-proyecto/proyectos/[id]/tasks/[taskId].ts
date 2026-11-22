@@ -9,7 +9,10 @@ import {
   canViewerSeeTask,
   saveTaskAssigneeIds,
 } from '@/lib/gestion-proyecto/task-assignees-db'
-import { notifyTaskAssigned } from '@/lib/notifications/team-events'
+import { notifyTaskAssigned, notifyTaskMoved } from '@/lib/notifications/team-events'
+import { statusLabel } from '@/lib/tareas/agent-format'
+
+type StatusKey = Parameters<typeof statusLabel>[0]
 
 const dueDateSchema = z
   .string()
@@ -201,6 +204,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           WHERE id = ${taskId}::uuid AND project_id = ${projectId}::uuid
           RETURNING *
         `
+        // Tarea movida desde el tablero: avisa a quien la tiene asignada (no a quien la mueve)
+        if (statusChanged) {
+          const assigned = assignees ? assignees.ids : ((current.assignee_user_ids as number[] | null) ?? []).map(Number)
+          void notifyTaskMoved({
+            userIds: assigned,
+            actorId: user.id,
+            actorName: user.name,
+            taskId,
+            title: String(current.title ?? 'Tarea'),
+            projectName: null,
+            from: statusLabel(current.status as StatusKey),
+            to: statusLabel(nextStatus as StatusKey),
+          })
+        }
         return res.status(200).json(formatTaskResponse(rows[0]))
       } catch (updateError) {
         const msg = updateError instanceof Error ? updateError.message : ''

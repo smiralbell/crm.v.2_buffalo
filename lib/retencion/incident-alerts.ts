@@ -1,5 +1,6 @@
 import { notify } from '@/lib/notifications/notify'
 import { notifyProjectIncident } from '@/lib/notifications/team-events'
+import { scheduleReminder } from '@/lib/notifications/reminders'
 import { opsLink } from '@/lib/ops-alerts'
 
 export async function alertIncident(input: {
@@ -24,5 +25,15 @@ export async function alertIncident(input: {
     urgent: true,
     data: { proyecto: input.proyectoName },
   })
+  // Recordatorio para los socios: cada 2 días hasta que se resuelva
+  await scheduleReminder({
+    event: 'recordatorio_incidencia',
+    entityType: 'incidencia',
+    entityId: input.incidentId,
+    title: `Incidencia sin resolver: ${input.proyectoName}`,
+    url: `/retencion/proyectos/${input.proyectoId}?tab=incidencias`,
+    everyHours: 48,
+    userIds: null,
+  }).catch((e) => console.warn('[avisos] recordatorio incidencia', e instanceof Error ? e.message : e))
   await notifyProjectIncident(input)
 }

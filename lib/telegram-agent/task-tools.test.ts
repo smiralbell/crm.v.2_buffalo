@@ -16,6 +16,7 @@ describe('herramientas de tareas del agente', () => {
       'tareas_crear',
       'tareas_editar',
       'tareas_mover',
+      'tareas_recordar',
       'tareas_subtareas',
       'tareas_borrar',
     ])

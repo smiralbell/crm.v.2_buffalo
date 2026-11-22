@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkTask } from '@/lib/tareas/types'
-import { FUTURE_TOOLS, allowedToolNames, canDeleteTask, canSeeTask, canSeeTicket, deleteFilterFor } from './access'
+import { FUTURE_TOOLS, allowedToolNames, canDeleteTask, canReadTicket, canSeeTask, canSeeTicket, deleteFilterFor } from './access'
 import { validateTeamPhone } from './identity'
 import { teamTools } from './tools'
 import { teamPrompt } from './agent'
@@ -84,6 +84,14 @@ describe('acceso a tareas', () => {
     expect(canSeeTicket(me, { assignee_user_id: 6, project_id: 'p1' }, ['p1'])).toBe(false)
     expect(canSeeTicket(me, { assignee_user_id: null, project_id: 'p1' }, ['p1'])).toBe(false)
     expect(canSeeTicket(me, { assignee_user_id: 5, project_id: 'p2' }, ['p1'])).toBe(false)
+  })
+
+  it('lee todos los tickets de sus proyectos, aunque estén asignados a un compañero', () => {
+    // Leer: cualquiera de sus proyectos de Retención
+    expect(canReadTicket({ project_id: 'p1' }, ['p1'])).toBe(true)
+    expect(canReadTicket({ project_id: 'p2' }, ['p1'])).toBe(false)
+    // Responder sigue siendo solo de lo asignado a él
+    expect(canSeeTicket(me, { assignee_user_id: 6, project_id: 'p1' }, ['p1'])).toBe(false)
   })
 
   it('no borra lo que le puso un socio ni nada ajeno', () => {
@@ -206,7 +214,7 @@ describe('prompt del equipo', () => {
     expect(prompt).toContain('Hablas con Abel')
     expect(prompt).toContain('identificada por su número de móvil')
     expect(prompt).toContain('- PREICO')
-    expect(prompt).toContain('Nunca puede ver nada de otra persona')
+    expect(prompt).toContain('Nunca puede ver nada de proyectos que no son suyos')
     expect(prompt).toContain('Sus proyectos en Retención')
     expect(prompt).toContain('facturación')
   })

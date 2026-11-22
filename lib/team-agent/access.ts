@@ -88,6 +88,14 @@ export function canSeeTicket(
   return ticket.assignee_user_id === member.id && retencionIds.includes(ticket.project_id)
 }
 
+/**
+ * Leer un ticket: cualquiera de sus proyectos de Retención, lo tenga asignado quien lo tenga.
+ * Responder o cambiar su estado sigue siendo solo de los asignados a él (canSeeTicket).
+ */
+export function canReadTicket(ticket: { project_id: string }, retencionIds: string[]): boolean {
+  return retencionIds.includes(ticket.project_id)
+}
+
 /** ¿La tarea va a nombre de esta persona? */
 export function isAssignedToMember(task: WorkTask, member: TaskMember): boolean {
   return task.source === 'personal' ? task.owner_user_id === member.id : isTaskAssignedTo(task, member)
@@ -103,6 +111,7 @@ const TASK_TOOLS = [
   'tarea_crear',
   'tarea_editar',
   'tarea_mover',
+  'tarea_recordar',
   'tarea_subtareas',
   'tarea_borrar',
 ] as const

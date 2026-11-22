@@ -100,6 +100,7 @@ async function createTables(): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_agent_personal_instructions_owner ON agent_personal_instructions (owner_key, id);
     CREATE INDEX IF NOT EXISTS idx_tg_agent_reminders_chat ON telegram_agent_reminders (chat_id, activo);
+    ALTER TABLE telegram_agent_reminders ADD COLUMN IF NOT EXISTS intervalo_dias INTEGER;
   `)
 }
 
@@ -354,7 +355,7 @@ export async function updateInstruction(id: number, texto: string): Promise<bool
 
 // ——— Avisos programados ———
 
-export type ReminderRepeat = 'nunca' | 'diario' | 'laborables' | 'semanal' | 'mensual'
+export type ReminderRepeat = 'nunca' | 'diario' | 'laborables' | 'semanal' | 'mensual' | 'cada_n_dias'
 
 export type Reminder = {
   id: number
@@ -363,6 +364,8 @@ export type Reminder = {
   texto: string
   destino: 'chat' | 'socios'
   repetir: ReminderRepeat
+  /** Solo con repetir = cada_n_dias: cada cuántos días. */
+  intervalo_dias: number | null
   next_run_at: string
   activo: boolean
 }
@@ -375,6 +378,7 @@ function mapReminder(x: Record<string, unknown>): Reminder {
     texto: String(x.texto),
     destino: x.destino === 'socios' ? 'socios' : 'chat',
     repetir: (x.repetir as ReminderRepeat) || 'nunca',
+    intervalo_dias: x.intervalo_dias == null ? null : Number(x.intervalo_dias),
     next_run_at: new Date(x.next_run_at as string).toISOString(),
     activo: Boolean(x.activo),
   }
@@ -387,13 +391,15 @@ export async function addReminder(input: {
   texto: string
   destino: 'chat' | 'socios'
   repetir: ReminderRepeat
+  intervaloDias?: number | null
   nextRunAt: Date
 }): Promise<Reminder> {
   await ensureTelegramAgentTables()
+  const every = input.repetir === 'cada_n_dias' ? input.intervaloDias ?? null : null
   const r = await getPool().query(
-    `INSERT INTO telegram_agent_reminders (chat_id, created_by, tipo, texto, destino, repetir, next_run_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [input.chatId, input.createdBy, input.tipo, input.texto.slice(0, 4000), input.destino, input.repetir, input.nextRunAt]
+    `INSERT INTO telegram_agent_reminders (chat_id, created_by, tipo, texto, destino, repetir, intervalo_dias, next_run_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [input.chatId, input.createdBy, input.tipo, input.texto.slice(0, 4000), input.destino, input.repetir, every, input.nextRunAt]
   )
   return mapReminder(r.rows[0])
 }
@@ -459,6 +465,7 @@ export type ReminderPatch = {
   texto?: string
   tipo?: 'texto' | 'tarea'
   repetir?: ReminderRepeat
+  intervaloDias?: number | null
   nextRunAt?: Date
   activo?: boolean
 }
@@ -475,7 +482,13 @@ export async function updateReminder(id: number, chatId: number | null, patch: R
        tipo = COALESCE($4, tipo),
        repetir = COALESCE($5, repetir),
        next_run_at = COALESCE($6, next_run_at),
-       activo = COALESCE($7, activo)
+       activo = COALESCE($7, activo),
+       -- Solo «cada N días» guarda N; cualquier otra repetición lo limpia
+       intervalo_dias = CASE
+         WHEN $5::text IS NULL THEN intervalo_dias
+         WHEN $5::text = 'cada_n_dias' THEN COALESCE($8::int, intervalo_dias)
+         ELSE NULL
+       END
      WHERE id = $1 AND ($2::bigint IS NULL OR chat_id = $2)
      RETURNING *`,
     [
@@ -486,6 +499,7 @@ export async function updateReminder(id: number, chatId: number | null, patch: R
       patch.repetir ?? null,
       patch.nextRunAt ?? null,
       patch.activo ?? null,
+      patch.intervaloDias ?? null,
     ]
   )
   return r.rows[0] ? mapReminder(r.rows[0]) : null

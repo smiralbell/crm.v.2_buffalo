@@ -22,6 +22,7 @@ import * as store from './store'
 import type { BlogRules, BlogSettings, Post, RunLog, Slot, Topic } from './types'
 import { checkAndFix, hasSergiPlaceholders, log, makeBrief, makeDraft, makeImages, stripSergiPlaceholders } from './writer'
 import { alertBlogReadyForReview, alertBlogReviewDigest } from './alerts'
+import { notify } from '@/lib/notifications/notify'
 
 const DAY = 24 * 3600 * 1000
 const nowIso = () => new Date().toISOString()
@@ -187,9 +188,9 @@ export async function planAndAssign(): Promise<Slot[]> {
 async function saveImagesApart(post: Post) {
   for (const img of post.images || []) {
     if (!img.dataUrl) continue
-    const ext = img.dataUrl.startsWith('data:image/jpeg') ? 'jpg' : img.dataUrl.startsWith('data:image/webp') ? 'webp' : 'png'
     await store.put('images', { id: `${post.id}-${img.slot}`, dataUrl: img.dataUrl })
-    img.file = `${img.slot}.${ext}`
+    // Nombre de referencia; al publicar se escribe en WebP (lib/blog/image-formats.ts)
+    img.file = `${img.slot}.webp`
     delete img.dataUrl
   }
 }
@@ -393,6 +394,13 @@ export async function publishPost(post: Post, by?: string): Promise<{ uploaded: 
   log(post, 'Publicado', undefined, by)
   await store.put('posts', post)
   await record('publicar', true, post.h1, { postId: post.id })
+  // Aviso a los socios: el artículo ya está publicado (sin esperar a la subida a la web)
+  await notify({
+    event: 'blog_publicado',
+    subject: `Blog publicado: ${post.h1}`,
+    text: `Se ha publicado el artículo «${post.h1}».`,
+    url: '/blog',
+  }).catch(() => null)
   return syncWeb()
 }
 

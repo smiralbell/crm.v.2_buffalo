@@ -10,7 +10,8 @@
  * Cada uno tiene su configuración; lo que no ha tocado sale con la de por defecto.
  */
 
-export type Channel = 'whatsapp' | 'telegram' | 'email' | 'push'
+/** Sin correo: los avisos del CRM van por WhatsApp, Telegram y push. */
+export type Channel = 'whatsapp' | 'telegram' | 'push'
 export type RecipientKind = 'comun' | 'socio' | 'equipo'
 export type Audience = 'socios' | 'equipo'
 export type DigestRepeat = 'cada_hora' | 'diario' | 'laborables'
@@ -60,7 +61,8 @@ export const DIGEST_REPEATS: DigestRepeat[] = ['cada_hora', 'diario', 'laborable
 
 /** Canales que puede usar cada tipo de destinatario. */
 export const CHANNELS_BY_KIND: Record<RecipientKind, Channel[]> = {
-  comun: ['email', 'telegram', 'push'],
+  // Todo por WhatsApp: el canal común (Telegram y push) ya no recibe avisos del CRM
+  comun: [],
   socio: ['whatsapp'],
   equipo: ['whatsapp'],
 }
@@ -111,6 +113,48 @@ export const EVENTS: EventDef[] = [
     filtros: [],
   },
   {
+    key: 'recordatorio_incidencia',
+    nombre: 'Recordatorio: incidencia sin resolver',
+    descripcion: 'Cada 6 horas mientras una incidencia siga abierta (como mucho 2 días)',
+    audience: 'socios',
+    filtros: ['proyectos'],
+  },
+  {
+    key: 'recordatorio_ticket',
+    nombre: 'Recordatorio: ticket sin resolver',
+    descripcion: 'Cada día mientras un ticket siga abierto',
+    audience: 'socios',
+    filtros: ['prioridad', 'proyectos'],
+  },
+  {
+    key: 'recordatorio_tarea_socio',
+    nombre: 'Recordatorio de tarea',
+    descripcion: 'Cada X horas, solo para las tareas que tú pidas, hasta que estén hechas',
+    audience: 'socios',
+    filtros: [],
+  },
+  {
+    key: 'blog_publicado',
+    nombre: 'Blog publicado',
+    descripcion: 'Se publica un artículo nuevo del blog',
+    audience: 'socios',
+    filtros: [],
+  },
+  {
+    key: 'ingreso_grande',
+    nombre: 'Ingreso de más de 100 €',
+    descripcion: 'Entra en el banco un ingreso de más de 100 €',
+    audience: 'socios',
+    filtros: [],
+  },
+  {
+    key: 'gasto_grande',
+    nombre: 'Gasto de más de 100 €',
+    descripcion: 'Sale del banco un gasto de más de 100 €',
+    audience: 'socios',
+    filtros: [],
+  },
+  {
     key: 'factura_fallida',
     nombre: 'Factura que no se envía',
     descripcion: 'Una factura recurrente no se ha podido mandar por correo',
@@ -155,12 +199,41 @@ export const EVENTS: EventDef[] = [
     filtros: ['proyectos'],
   },
   {
-    key: 'tarea_vence',
-    nombre: 'Tareas que vencen',
-    descripcion: 'Tus tareas que vencen hoy o mañana, o que ya están vencidas',
+    key: 'recordatorio_incidencia_equipo',
+    nombre: 'Recordatorio: incidencia de tu proyecto',
+    descripcion: 'Cada 6 horas mientras una incidencia de tu proyecto siga abierta',
     audience: 'equipo',
     filtros: ['proyectos'],
-    defaults: { equipo: { modo: 'resumen', repetir: 'laborables', hora: '09:00' } },
+  },
+  {
+    key: 'recordatorio_ticket_equipo',
+    nombre: 'Recordatorio: ticket asignado',
+    descripcion: 'Cada día mientras un ticket asignado a ti siga abierto',
+    audience: 'equipo',
+    filtros: ['prioridad', 'proyectos'],
+  },
+  {
+    key: 'recordatorio_tarea',
+    nombre: 'Recordatorio de tarea',
+    descripcion: 'Cada X horas, solo para las tareas en las que tú lo pidas, hasta que estén hechas',
+    audience: 'equipo',
+    filtros: [],
+  },
+  {
+    key: 'tarea_movida',
+    nombre: 'Tarea movida',
+    descripcion: 'Alguien mueve una de tus tareas de columna o de estado',
+    audience: 'equipo',
+    filtros: ['proyectos'],
+  },
+  {
+    // Ya no se recuerdan las tareas que vencen: solo si se activa a mano
+    key: 'tarea_vence',
+    nombre: 'Tareas que vencen',
+    descripcion: 'Tus tareas que vencen hoy o mañana (apagado: no se recuerdan tareas)',
+    audience: 'equipo',
+    filtros: ['proyectos'],
+    defaults: { equipo: { activo: false } },
   },
 ]
 

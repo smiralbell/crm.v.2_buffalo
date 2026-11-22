@@ -84,7 +84,7 @@ export function zip(files: Record<string, Buffer>): Buffer {
 
 /* ---------- Ficheros del blog ---------- */
 
-const dataUrlToBuffer = (d: string) => Buffer.from(d.split(',')[1] || '', 'base64')
+import { SHARE_THUMB_NAME, shareJpgFromDataUrl, webpFromDataUrl, webpName } from './image-formats'
 
 export async function buildSiteFiles(posts: Post[], s: BlogSettings): Promise<Record<string, Buffer>> {
   const pub = posts.filter((p) => p.status === 'publicado')
@@ -99,7 +99,10 @@ export async function buildSiteFiles(posts: Post[], s: BlogSettings): Promise<Re
     for (const img of p.images || []) {
       if (!img.file) continue
       const doc = await store.get<{ id: string; dataUrl: string }>('images', `${p.id}-${img.slot}`)
-      if (doc?.dataUrl) add(`blog/${p.slug}/${img.file}`, dataUrlToBuffer(doc.dataUrl))
+      if (!doc?.dataUrl) continue
+      // Todas en WebP; la destacada además lleva la miniatura .jpg para compartir
+      add(`blog/${p.slug}/${webpName(img.slot)}`, await webpFromDataUrl(doc.dataUrl))
+      if (img.slot === 'destacada') add(`blog/${p.slug}/${SHARE_THUMB_NAME}`, await shareJpgFromDataUrl(doc.dataUrl))
     }
   }
   add('blog/feed.xml', feedXml(posts, s))

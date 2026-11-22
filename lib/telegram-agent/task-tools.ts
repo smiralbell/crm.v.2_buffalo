@@ -28,7 +28,8 @@ import {
   updateProjectTask,
 } from '@/lib/tareas/store'
 import type { WorkProject, WorkTask } from '@/lib/tareas/types'
-import { notifyTaskAssigned } from '@/lib/notifications/team-events'
+import { notifyTaskAssigned, notifyTaskMoved } from '@/lib/notifications/team-events'
+import { cancelReminders, scheduleReminder } from '@/lib/notifications/reminders'
 
 /**
  * Tareas de developers, project managers y comerciales para el agente de los socios
@@ -119,6 +120,16 @@ export const TASK_TOOLS = [
     id: { type: 'string' },
     estado: estadoProp,
   }, ['id', 'estado']),
+  tool(
+    'tareas_recordar',
+    'Recuérdame una tarea cada X horas por WhatsApp, hasta que esté hecha. Solo cuando lo pida. Con quitar=true dejo de recordármela.',
+    {
+      id: { type: 'string' },
+      cada_horas: { type: 'number', description: 'Cada cuántas horas (1 a 720)' },
+      quitar: { type: 'boolean', description: 'true = dejar de recordármela' },
+    },
+    ['id']
+  ),
   tool(
     'tareas_subtareas',
     'Gestiona las subtareas de una tarea. accion: anadir (titulo, explicacion), editar (numero, titulo y/o explicacion), marcar / desmarcar (numero), quitar (numero), reemplazar (subtareas: la lista entera nueva). Los números salen de tareas_ver.',
@@ -398,6 +409,30 @@ export async function runTaskTool(
       return { ok: true, creada: taskDetailForAgent(task, baseUrl()) }
     }
 
+    case 'tareas_recordar': {
+      const r = await findTask(args.id)
+      if (!r.ok) return r
+      const task = r.value
+      const entity = task.source === 'personal' ? 'tarea_personal' : 'tarea_proyecto'
+      if (args.quitar === true) {
+        await cancelReminders('recordatorio_tarea_socio', entity, task.id)
+        return { ok: true, tarea: task.title, nota: 'Dejo de recordártela.' }
+      }
+      const every = Number(args.cada_horas)
+      if (!Number.isInteger(every) || every < 1 || every > 720) return { ok: false, error: 'cada_horas debe ser un número entero entre 1 y 720' }
+      if (task.status === 'done') return { ok: false, error: 'Esa tarea ya está hecha: no hace falta recordarla.' }
+      await scheduleReminder({
+        event: 'recordatorio_tarea_socio',
+        entityType: entity,
+        entityId: task.id,
+        title: `Tarea pendiente: ${task.title}`,
+        url: '/tareas',
+        everyHours: every,
+        userIds: null,
+      })
+      return { ok: true, tarea: task.title, cada_horas: every, nota: 'Te la recordaré hasta que esté hecha.' }
+    }
+
     case 'tareas_editar':
     case 'tareas_mover': {
       const r = await findTask(args.id)
@@ -410,6 +445,16 @@ export async function runTaskTool(
         const moved =
           task.source === 'personal' ? await updatePersonalTask(task, { status }) : await updateProjectTask(task, { status })
         if (!moved) return { ok: false, error: 'No se pudo mover' }
+        // Aviso a los asignados de la tarea de proyecto (la suelta es solo de quien la tiene)
+        await notifyTaskMoved({
+          userIds: task.source === 'personal' ? [] : task.assignee_user_ids ?? [],
+          actorName: 'Un socio',
+          taskId: task.id,
+          title: task.title,
+          projectName: task.project_name,
+          from: statusLabel(task.status),
+          to: statusLabel(status),
+        }).catch(() => null)
         return { ok: true, tarea: taskSummaryForAgent(moved), antes: statusLabel(task.status) }
       }
       const priority = args.prioridad !== undefined ? parseAgentPriority(args.prioridad) : undefined

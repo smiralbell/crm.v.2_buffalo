@@ -23,6 +23,7 @@ import {
   type PendingAction,
   type ReminderRepeat,
 } from './store'
+import { REMINDER_EVERY_MAX_DAYS, REMINDER_EVERY_MIN_DAYS } from './reminder-limits'
 import { alertChatIds } from './config'
 import { sendText } from './telegram-api'
 
@@ -124,7 +125,8 @@ export const AGENT_TOOLS: ToolSchema[] = [
     tipo: { type: 'string', enum: ['texto', 'tarea'] },
     texto: { type: 'string' },
     fecha_hora: { type: 'string', description: 'Primera ejecución, ISO 8601 con zona (Europe/Madrid), p. ej. 2026-11-02T09:00:00+01:00' },
-    repetir: { type: 'string', enum: ['nunca', 'diario', 'laborables', 'semanal', 'mensual'] },
+    repetir: { type: 'string', enum: ['nunca', 'diario', 'laborables', 'semanal', 'mensual', 'cada_n_dias'] },
+    cada_dias: { type: 'number', description: 'Solo con repetir=cada_n_dias: cada cuántos días (2-365)' },
     destino: { type: 'string', enum: ['chat', 'socios'] },
   }, ['tipo', 'texto', 'fecha_hora']),
   tool('avisos_listar', 'Lista los avisos programados activos.', {}),
@@ -370,15 +372,23 @@ async function runTool(name: string, args: Record<string, unknown>, ctx: AgentCo
     case 'avisos_programar': {
       const when = new Date(String(args.fecha_hora || ''))
       if (Number.isNaN(when.getTime())) return { ok: false, error: 'fecha_hora no es una fecha válida (ISO 8601)' }
+      const repetir = (['diario', 'laborables', 'semanal', 'mensual', 'cada_n_dias'].includes(String(args.repetir))
+        ? args.repetir
+        : 'nunca') as ReminderRepeat
+      // «Cada N días» exige un N válido: sin él no se crea, para no mandarlo a cada día por error
+      const every = Number(args.cada_dias)
+      const intervalo = Number.isInteger(every) && every >= REMINDER_EVERY_MIN_DAYS && every <= REMINDER_EVERY_MAX_DAYS ? every : null
+      if (repetir === 'cada_n_dias' && intervalo === null) {
+        return { ok: false, error: `cada_dias debe ser un número entero entre ${REMINDER_EVERY_MIN_DAYS} y ${REMINDER_EVERY_MAX_DAYS}` }
+      }
       const reminder = await addReminder({
         chatId: ctx.chatId,
         createdBy: ctx.userId,
         tipo: args.tipo === 'tarea' ? 'tarea' : 'texto',
         texto: String(args.texto || ''),
         destino: args.destino === 'socios' ? 'socios' : 'chat',
-        repetir: (['diario', 'laborables', 'semanal', 'mensual'].includes(String(args.repetir))
-          ? args.repetir
-          : 'nunca') as ReminderRepeat,
+        repetir,
+        intervaloDias: intervalo,
         nextRunAt: when,
       })
       return {

@@ -2,6 +2,7 @@ import { getPool } from '@/lib/db'
 import { opsLink } from '@/lib/ops-alerts'
 import { getProjectDevelopers } from '@/lib/project-access'
 import { notify } from './notify'
+import { cancelReminders, scheduleReminder } from './reminders'
 import { madridParts, madridYmd } from './rules'
 
 /**
@@ -56,6 +57,33 @@ export async function notifyTaskAssigned(input: {
   })
 }
 
+/** Alguien ha movido una tarea que es suya (de columna o de estado). No se avisa a quien la mueve. */
+export async function notifyTaskMoved(input: {
+  userIds: number[]
+  actorId?: number | null
+  actorName?: string | null
+  taskId: string
+  title: string
+  projectName?: string | null
+  from: string
+  to: string
+}): Promise<void> {
+  const to = others(input.userIds, input.actorId)
+  if (!to.length) return
+  const where = input.projectName ? ` (${input.projectName})` : ''
+  const by = input.actorName ? `${input.actorName}` : 'Alguien'
+  const subject = `${by} ha movido tu tarea${where}: ${input.title}`
+  await notify({
+    event: 'tarea_movida',
+    subject,
+    text: `${subject}\nDe «${input.from}» a «${input.to}».\n\nAbrir: ${opsLink('/tareas')}`,
+    url: '/tareas',
+    userIds: to,
+    data: { proyecto: input.projectName ?? null },
+    dedupeKey: `tarea_movida:${input.taskId}:${input.to}:${new Date().toISOString().slice(0, 16)}`,
+  })
+}
+
 /** Te han asignado un ticket. */
 export async function notifyTicketAssigned(input: {
   userId: number | null
@@ -78,6 +106,18 @@ export async function notifyTicketAssigned(input: {
     data: { prioridad: input.priority ?? null, proyecto: input.projectName },
     dedupeKey: `ticket_asignado:${input.ticketId}:${to[0]}`,
   })
+  // Ya tiene dueño: el recordatorio diario pasa al developer y se apaga el de los socios
+  await cancelReminders('recordatorio_ticket', 'ticket', input.ticketId).catch(() => null)
+  // Recordatorio diario para quien lo tiene asignado, hasta que el ticket se resuelva
+  await scheduleReminder({
+    event: 'recordatorio_ticket_equipo',
+    entityType: 'ticket',
+    entityId: input.ticketId,
+    title: `Ticket asignado sin resolver (${input.projectName}): ${input.title}`,
+    url: `/tickets/${input.ticketId}`,
+    everyHours: 24,
+    userIds: to,
+  }).catch((e) => console.warn('[avisos] recordatorio ticket', e instanceof Error ? e.message : e))
 }
 
 /** Error en el sistema de uno de sus proyectos: a los developers asignados al proyecto. */
@@ -89,6 +129,16 @@ export async function notifyProjectIncident(input: {
 }): Promise<void> {
   const devs = await getProjectDevelopers(input.proyectoId)
   if (!devs.length) return
+  // Los developers del proyecto: recordatorio cada 6 horas hasta que se resuelva
+  await scheduleReminder({
+    event: 'recordatorio_incidencia_equipo',
+    entityType: 'incidencia',
+    entityId: input.incidentId,
+    title: `Incidencia sin resolver en ${input.proyectoName}`,
+    url: `/retencion/proyectos/${input.proyectoId}?tab=incidencias`,
+    everyHours: 6,
+    userIds: devs.map((d) => d.id),
+  }).catch((e) => console.warn('[avisos] recordatorio incidencia equipo', e instanceof Error ? e.message : e))
   const subject = `Incidencia en ${input.proyectoName}`
   await notify({
     event: 'incidencia_mi_proyecto',

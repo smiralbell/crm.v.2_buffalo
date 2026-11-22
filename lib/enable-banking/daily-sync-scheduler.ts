@@ -11,11 +11,11 @@ declare global {
   var __buffaloBankSyncSchedulerStarted: boolean | undefined
 }
 
-/** Mínimo entre syncs automáticos (horas). Por defecto ~20h → ~1 vez al día. */
+/** Mínimo entre dos sincronizaciones automáticas, en minutos. Por defecto 20 min. */
 export function bankSyncMinGapMs(): number {
-  const hours = Number(process.env.BANK_SYNC_MIN_HOURS || 20)
-  const safe = Number.isFinite(hours) && hours > 0 ? hours : 20
-  return safe * 60 * 60 * 1000
+  const minutes = Number(process.env.BANK_SYNC_MIN_MINUTES || 20)
+  const safe = Number.isFinite(minutes) && minutes > 0 ? minutes : 20
+  return safe * 60_000
 }
 
 export function isBankSyncStale(lastSyncedAt: Date | null | undefined, now = Date.now()): boolean {
@@ -54,11 +54,11 @@ export async function runDailyBankSyncIfDue(reason: string = 'scheduler'): Promi
   }
 }
 
-/** Intervalo de comprobación (ms). Default 1h. */
-function checkIntervalMs(): number {
-  const hours = Number(process.env.BANK_SYNC_CHECK_HOURS || 1)
-  const safe = Number.isFinite(hours) && hours > 0 ? hours : 1
-  return safe * 60 * 60 * 1000
+/** Intervalo de comprobación (ms). Por defecto 20 min: así los movimientos nuevos salen en el día. */
+export function checkIntervalMs(): number {
+  const minutes = Number(process.env.BANK_SYNC_CHECK_MINUTES || 20)
+  const safe = Number.isFinite(minutes) && minutes > 0 ? minutes : 20
+  return safe * 60_000
 }
 
 /**
@@ -77,7 +77,7 @@ export function startBankSyncScheduler(): void {
   const interval = checkIntervalMs()
 
   console.info(
-    `[bank-sync] scheduler activo · check cada ${Math.round(interval / 3600000)}h · min gap ${Math.round(bankSyncMinGapMs() / 3600000)}h`
+    `[bank-sync] scheduler activo · check cada ${Math.round(interval / 60000)} min · min gap ${Math.round(bankSyncMinGapMs() / 60000)} min`
   )
 
   const tick = () => {

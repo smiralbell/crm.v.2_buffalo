@@ -30,7 +30,8 @@ export function formatMetaLeadAlert(input: {
     .filter(Boolean)
     .join('\n')
 
-  const subject = `Lead Meta Ads: ${who}`
+  // Por dónde entra, en mayúsculas: «NUEVO LEAD · META ADS: nombre»
+  const subject = `NUEVO LEAD · META ADS: ${who}`
   const text = `${body}\n\nFicha: ${ficha}\nMeta Ads: ${inbox}`
   const safe = (s: string) => s.replace(/</g, '')
   return {

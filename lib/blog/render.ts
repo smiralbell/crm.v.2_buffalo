@@ -38,7 +38,8 @@ export type ImageResolver = (p: Post, slot: 'destacada' | 'imagen1' | 'imagen2')
 
 export const publishedImage: ImageResolver = (p, slot) => {
   const img = p.images?.find((i) => i.slot === slot)
-  return img?.file ? `${'/blog/'}${p.slug}/${img.file}` : null
+  // Todas las imágenes del artículo se publican en WebP (ver image-formats.ts)
+  return img?.file ? `${'/blog/'}${p.slug}/${slot}.webp` : null
 }
 
 function page(opts: {
@@ -251,7 +252,9 @@ ${related.map((r) => card(r, s, img)).join('\n')}
   </div>
 </section>` : ''}`
 
-  return page({ s, preview, title: `${p.h1} | BuffaloIA`, description: p.metaDescription, canonical: url, ogImage: hero && !hero.startsWith('data:') ? hero : undefined, jsonLd, body })
+  // Al compartir se usa la miniatura .jpg de la destacada (WhatsApp y LinkedIn no siempre muestran WebP)
+  const share = hero && !hero.startsWith('data:') ? `/blog/${p.slug}/destacada.jpg` : undefined
+  return page({ s, preview, title: `${p.h1} | BuffaloIA`, description: p.metaDescription, canonical: url, ogImage: share, jsonLd, body })
 }
 
 /* ---------------- Índice y páginas de tema ---------------- */

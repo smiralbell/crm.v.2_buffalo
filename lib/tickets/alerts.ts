@@ -1,4 +1,5 @@
 import { notify } from '@/lib/notifications/notify'
+import { scheduleReminder } from '@/lib/notifications/reminders'
 import { opsLink } from '@/lib/ops-alerts'
 import { PRIORITY_LABELS, type IngestedTicket, type TicketPriority } from './ingest'
 
@@ -64,6 +65,16 @@ export async function alertNewTicket(input: {
       url: `/tickets/${input.ticketId}`,
       urgent: input.ticket.priority === 'critical',
       data: { prioridad: input.ticket.priority, proyecto: input.projectName },
+    })
+    // Recordatorio diario para los socios hasta que el ticket se resuelva
+    await scheduleReminder({
+      event: 'recordatorio_ticket',
+      entityType: 'ticket',
+      entityId: input.ticketId,
+      title: `Ticket sin resolver (${input.projectName}): ${input.ticket.title}`,
+      url: `/tickets/${input.ticketId}`,
+      everyHours: 24,
+      userIds: null,
     })
   } catch (e) {
     console.warn('[tickets] aviso', e instanceof Error ? e.message : e)

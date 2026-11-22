@@ -99,7 +99,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         await notify({
           event: 'lead_nuevo',
           data: { origen: 'web' },
-          subject: `Nuevo lead web: ${who}`,
+          // Por dónde entra, en mayúsculas: «NUEVO LEAD · WEB: nombre» (o el sitio de origen)
+          subject: `NUEVO LEAD · ${String(submission.source || submission.site || 'web').toUpperCase()}: ${who}`,
           text: lines.join('\n'),
           telegramHtml: lines.map(escHtml).join('\n'),
           url: '/marketing',

@@ -58,6 +58,7 @@
     "recharts": "^2.10.3",
     "remark-directive": "^4.0.0",
     "remark-gfm": "^4.0.1",
+    "sharp": "^0.33.5",
     "tailwind-merge": "^2.2.0",
     "tailwindcss-animate": "^1.0.7",
     "uuid": "^13.0.0",

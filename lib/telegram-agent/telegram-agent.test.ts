@@ -91,4 +91,27 @@ describe('nextRunFor', () => {
     )
     expect(next?.toISOString()).toBe('2026-11-09T08:00:00.000Z')
   })
+
+  it('cada N días: la siguiente vez es N días después, a la misma hora de Madrid', () => {
+    // Lunes 23-nov-2026 09:00 Madrid, cada 2 días → miércoles 25-nov 09:00
+    const next = nextRunFor(
+      { repetir: 'cada_n_dias', intervalo_dias: 2, next_run_at: '2026-11-23T08:00:00Z' },
+      new Date('2026-11-23T08:00:01Z')
+    )
+    expect(next?.toISOString()).toBe('2026-11-25T08:00:00.000Z')
+  })
+
+  it('cada N días: mantiene la hora de Madrid al cambiar de horario', () => {
+    // 24-oct-2026 09:00 Madrid, cada 3 días → 27-oct 09:00 Madrid (ya es UTC+1)
+    const next = nextRunFor(
+      { repetir: 'cada_n_dias', intervalo_dias: 3, next_run_at: '2026-10-24T07:00:00Z' },
+      new Date('2026-10-24T07:00:01Z')
+    )
+    expect(next?.toISOString()).toBe('2026-10-27T08:00:00.000Z')
+  })
+
+  it('cada N días sin un N válido no se repite', () => {
+    expect(nextRunFor({ repetir: 'cada_n_dias', intervalo_dias: null, next_run_at: '2026-11-23T08:00:00Z' })).toBeNull()
+    expect(nextRunFor({ repetir: 'cada_n_dias', intervalo_dias: 1, next_run_at: '2026-11-23T08:00:00Z' })).toBeNull()
+  })
 })

@@ -1,6 +1,5 @@
 import { getPool } from '@/lib/db'
-import { isSmtpConfigured, sendMail } from '@/lib/mail/smtp'
-import { adminAlertEmails, opsLink, sendTelegramToChat, telegramChatIds } from '@/lib/ops-alerts'
+import { opsLink, sendTelegramToChat, telegramChatIds } from '@/lib/ops-alerts'
 import { insertOpsAlertMessage } from '@/lib/ops-alerts-store'
 import { isPushConfigured, sendPush } from '@/lib/push'
 import { subagentModel } from '@/lib/telegram-agent/config'
@@ -167,17 +166,6 @@ function escHtml(s: string): string {
 type Outgoing = { subject: string; text: string; html?: string | null; telegramHtml?: string | null; url?: string | null }
 
 async function sendOn(channel: Channel, ownerKey: string, msg: Outgoing): Promise<void> {
-  if (channel === 'email') {
-    const to = adminAlertEmails()
-    if (!isSmtpConfigured() || !to.length) throw new Error('correo sin configurar')
-    await sendMail({
-      to,
-      subject: msg.subject.startsWith('[CRM]') ? msg.subject : `[CRM] ${msg.subject}`,
-      text: msg.text,
-      html: msg.html || `<pre style="font-family:inherit;white-space:pre-wrap">${escHtml(msg.text)}</pre>`,
-    })
-    return
-  }
   if (channel === 'telegram') {
     const chats = telegramChatIds()
     if (!process.env.TELEGRAM_BOT_TOKEN?.trim() || !chats.length) throw new Error('Telegram sin configurar')
@@ -461,9 +449,13 @@ export function startNotificationScheduler(): void {
   globalThis.__buffaloNotifications = true
   const run = () => {
     void flushNotifications().catch((e) => console.warn('[avisos] cola', e instanceof Error ? e.message : e))
-    void import('./team-events')
-      .then((m) => m.maybeQueueDueTaskAlerts())
-      .catch((e) => console.warn('[avisos] tareas que vencen', e instanceof Error ? e.message : e))
+    // Recordatorios hasta resolver (incidencias, tickets, tareas pedidas). Ya no se recuerdan tareas por defecto.
+    void import('./reminders')
+      .then((m) => m.tickReminders())
+      .catch((e) => console.warn('[avisos] recordatorios', e instanceof Error ? e.message : e))
+    void import('./money-alerts')
+      .then((m) => m.tickMoneyAlerts())
+      .catch((e) => console.warn('[avisos] banco', e instanceof Error ? e.message : e))
   }
   setTimeout(run, 30_000)
   setInterval(run, 60_000)

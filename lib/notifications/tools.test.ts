@@ -49,21 +49,20 @@ describe('socios', () => {
     )
   })
 
-  it('el canal común solo si lo pide con destino="comun"', async () => {
-    await runNotificationTool('avisos_auto_cambiar', { destino: 'comun', aviso: 'lead_nuevo', modo: 'resumen', hora: '9' }, socio)
-    expect(m.savePrefs).toHaveBeenCalledWith('comun', expect.objectContaining({ reglas: { lead_nuevo: { modo: 'resumen', hora: '09:00' } } }))
+  it('no hay canal común: todo va por WhatsApp, así que destino="comun" se rechaza', async () => {
+    expect(ok(await runNotificationTool('avisos_auto_cambiar', { destino: 'comun', aviso: 'lead_nuevo', modo: 'resumen', hora: '9' }, socio))).toBe(false)
   })
 
-  it('desde Telegram no tiene configuración personal: solo la común', async () => {
+  it('desde Telegram no tiene configuración personal', async () => {
     const tg = { ...socio, ownerKey: null }
     expect(ok(await runNotificationTool('avisos_auto_ver', {}, tg))).toBe(false)
-    expect(ok(await runNotificationTool('avisos_auto_ver', { destino: 'comun' }, tg))).toBe(true)
   })
 
   it('«todos» con un filtro de prioridad solo se aplica a los avisos que lo admiten', async () => {
     await runNotificationTool('avisos_auto_cambiar', { aviso: 'todos', prioridad_min: 'alta' }, socio)
     const prefs = m.saved.get(socio.ownerKey) as { reglas: Record<string, unknown> }
-    expect(Object.keys(prefs.reglas)).toEqual(['ticket_nuevo'])
+    // Los avisos con filtro de prioridad: el de ticket nuevo y su recordatorio diario
+    expect(Object.keys(prefs.reglas)).toEqual(['ticket_nuevo', 'recordatorio_ticket'])
   })
 
   it('horas de silencio, pausa y estilo, con validación', async () => {
@@ -91,6 +90,16 @@ describe('equipo', () => {
     const cambiar = notificationTools('equipo').find((t) => t.function.name === 'avisos_auto_cambiar')!
     const props = (cambiar.function.parameters as { properties: Record<string, { enum?: string[] }> }).properties
     expect(props.destino).toBeUndefined()
-    expect(props.aviso.enum).toEqual(['ticket_asignado', 'incidencia_mi_proyecto', 'tarea_asignada', 'tarea_vence', 'todos'])
+    expect(props.aviso.enum).toEqual([
+      'ticket_asignado',
+      'incidencia_mi_proyecto',
+      'tarea_asignada',
+      'recordatorio_incidencia_equipo',
+      'recordatorio_ticket_equipo',
+      'recordatorio_tarea',
+      'tarea_movida',
+      'tarea_vence',
+      'todos',
+    ])
   })
 })

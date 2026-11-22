@@ -33,19 +33,23 @@ export async function ensureWebhook(force = false): Promise<{ url: string; chang
 }
 
 /** Siguiente ejecución de un aviso, o null si no se repite. Mantiene la hora de Madrid aunque cambie el horario de verano. */
-export function nextRunFor(r: Pick<Reminder, 'repetir' | 'next_run_at'>, now = new Date()): Date | null {
+export function nextRunFor(r: Pick<Reminder, 'repetir' | 'next_run_at'> & { intervalo_dias?: number | null }, now = new Date()): Date | null {
   if (r.repetir === 'nunca') return null
   let next = new Date(r.next_run_at)
   const day = 24 * 60 * 60 * 1000
+  const every = r.intervalo_dias ?? 0
   const step = (d: Date): Date => {
     const out = new Date(d)
     if (r.repetir === 'diario' || r.repetir === 'laborables') out.setTime(out.getTime() + day)
     else if (r.repetir === 'semanal') out.setTime(out.getTime() + 7 * day)
+    else if (r.repetir === 'cada_n_dias') out.setTime(out.getTime() + every * day)
     else out.setUTCMonth(out.getUTCMonth() + 1)
     out.setTime(out.getTime() + (madridOffsetMin(d) - madridOffsetMin(out)) * 60_000)
     return out
   }
-  if (!['diario', 'laborables', 'semanal', 'mensual'].includes(r.repetir)) return null
+  if (!['diario', 'laborables', 'semanal', 'mensual', 'cada_n_dias'].includes(r.repetir)) return null
+  // «Cada N días» sin un N válido no se repite: mejor apagarlo que mandarlo cada día
+  if (r.repetir === 'cada_n_dias' && (!Number.isInteger(every) || every < 2)) return null
   while (next.getTime() <= now.getTime() || (r.repetir === 'laborables' && [0, 6].includes(madridWeekday(next)))) {
     next = step(next)
   }
