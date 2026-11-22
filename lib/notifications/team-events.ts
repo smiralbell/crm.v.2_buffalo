@@ -20,13 +20,21 @@ export async function notifyTaskAssigned(input: {
   actorName?: string | null
   taskId: string
   title: string
+  projectId?: string | null
   projectName?: string | null
   dueDate?: string | null
   priority?: string | null
 }): Promise<void> {
   const to = others(input.userIds, input.actorId)
   if (!to.length) return
-  const where = input.projectName ? ` en ${input.projectName}` : ''
+  let projectName = input.projectName ?? null
+  if (!projectName && input.projectId) {
+    projectName = await getPool()
+      .query<{ name: string }>(`SELECT name FROM proyectos WHERE id = $1::uuid`, [input.projectId])
+      .then((r) => r.rows[0]?.name ?? null)
+      .catch(() => null)
+  }
+  const where = projectName ? ` en ${projectName}` : ''
   const by = input.actorName ? ` (te la pone ${input.actorName})` : ''
   const subject = `Tarea nueva para ti${where}: ${input.title}`
   const text = [
@@ -43,7 +51,7 @@ export async function notifyTaskAssigned(input: {
     text,
     url: '/tareas',
     userIds: to,
-    data: { proyecto: input.projectName ?? null },
+    data: { proyecto: projectName },
     dedupeKey: `tarea_asignada:${input.taskId}`,
   })
 }

@@ -10,6 +10,7 @@ import {
   listProjectTasks,
 } from '@/lib/tareas/store'
 import { personalTaskCreateSchema } from '@/lib/tareas/schemas'
+import { notifyTaskAssigned } from '@/lib/notifications/team-events'
 import { filterProjectTasksForViewer } from '@/lib/gestion-proyecto/task-assignees-db'
 import type { TareasResponse, WorkPerson } from '@/lib/tareas/types'
 
@@ -93,6 +94,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         subtasks: data.subtasks,
         created_by_id: user.id > 0 ? user.id : null,
         created_by_name: user.name,
+      })
+      void notifyTaskAssigned({
+        userIds: [owner.id],
+        actorId: user.id,
+        actorName: user.name,
+        taskId: task.id,
+        title: task.title,
+        dueDate: task.due_date,
+        priority: task.priority,
       })
       return res.status(201).json(task)
     }

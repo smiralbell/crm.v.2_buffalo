@@ -28,6 +28,7 @@ import {
   updateProjectTask,
 } from '@/lib/tareas/store'
 import type { WorkProject, WorkTask } from '@/lib/tareas/types'
+import { notifyTaskAssigned } from '@/lib/notifications/team-events'
 
 /**
  * Tareas de developers, project managers y comerciales para el agente de los socios
@@ -377,6 +378,14 @@ export async function runTaskTool(
           created_by_id: null,
           created_by_name: ctx.actorName,
         })
+        void notifyTaskAssigned({
+          userIds: [r.value.id],
+          actorName: ctx.actorName,
+          taskId: task.id,
+          title: task.title,
+          dueDate: task.due_date,
+          priority: task.priority,
+        })
         return { ok: true, creada: taskDetailForAgent(task, baseUrl()) }
       }
       const r = await resolveProject(args.proyecto)
@@ -427,6 +436,14 @@ export async function runTaskTool(
             const moved = await reassignPersonalTask(task, p.value.id)
             if (!moved) return { ok: false, error: 'No se pudo pasar la tarea' }
             task = moved
+            void notifyTaskAssigned({
+              userIds: [p.value.id],
+              actorName: ctx.actorName,
+              taskId: `${task.id}:${p.value.id}`,
+              title: task.title,
+              dueDate: task.due_date,
+              priority: task.priority,
+            })
           }
         }
         const updated = await updatePersonalTask(task, patch)

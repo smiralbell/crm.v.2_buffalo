@@ -123,7 +123,20 @@ describe('herramientas por rol', () => {
   })
 
   it('cada uno configura su propio agente: preferencias y avisos (sin poder mandar a otros)', () => {
-    for (const name of ['mis_instrucciones', 'instruccion_guardar', 'instruccion_cambiar', 'instruccion_quitar', 'avisos_programar', 'avisos_listar', 'avisos_cambiar']) {
+    for (const name of [
+      'mis_instrucciones',
+      'instruccion_guardar',
+      'instruccion_cambiar',
+      'instruccion_quitar',
+      'avisos_programar',
+      'avisos_listar',
+      'avisos_cambiar',
+      'avisos_auto_ver',
+      'avisos_auto_cambiar',
+      'avisos_auto_general',
+      'avisos_auto_restablecer',
+      'avisos_auto_historial',
+    ]) {
       expect(dev, name).toContain(name)
     }
     const avisos = teamTools('developer').find((t) => t.function.name === 'avisos_programar')!

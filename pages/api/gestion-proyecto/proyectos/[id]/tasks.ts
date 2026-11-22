@@ -10,6 +10,7 @@ import {
   saveTaskAssigneeIds,
 } from '@/lib/gestion-proyecto/task-assignees-db'
 import { seesAllProjectTasks } from '@/lib/gestion-proyecto/task-assignees'
+import { notifyTaskAssigned } from '@/lib/notifications/team-events'
 
 const dueDateSchema = z
   .string()
@@ -101,6 +102,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         let row = inserted
         if (assignees?.ids.length) {
           row = (await saveTaskAssigneeIds(String(row.id), assignees.ids)) ?? row
+          // Aviso a quien se la ponen (no a quien la crea)
+          void notifyTaskAssigned({
+            userIds: assignees.ids,
+            actorId: user.id,
+            actorName: user.name,
+            taskId: String(row.id),
+            title: data.title,
+            projectId,
+            dueDate,
+            priority: data.priority ?? null,
+          })
         }
         if (!data.subtasks?.length) return row
         return (await saveProjectTaskSubtasks(projectId, String(row.id), data.subtasks)) ?? row

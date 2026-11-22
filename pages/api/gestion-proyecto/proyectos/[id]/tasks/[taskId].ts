@@ -9,6 +9,7 @@ import {
   canViewerSeeTask,
   saveTaskAssigneeIds,
 } from '@/lib/gestion-proyecto/task-assignees-db'
+import { notifyTaskAssigned } from '@/lib/notifications/team-events'
 
 const dueDateSchema = z
   .string()
@@ -107,6 +108,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (assignees) {
         await saveTaskAssigneeIds(taskId, assignees.ids)
         data.assignee = assignees.text
+        // Aviso solo a los que entran ahora (no a los que ya la tenían ni a quien la cambia)
+        const before = new Set(((current.assignee_user_ids as number[] | null) ?? []).map(Number))
+        const added = assignees.ids.filter((id) => !before.has(id))
+        if (added.length) {
+          void notifyTaskAssigned({
+            userIds: added,
+            actorId: user.id,
+            actorName: user.name,
+            taskId,
+            title: String(data.title ?? current.title ?? 'Tarea'),
+            projectId,
+            dueDate: (data.due_date ?? (current.due_date ? String(current.due_date).slice(0, 10) : null)) || null,
+            priority: String(data.priority ?? current.priority ?? ''),
+          })
+        }
       }
 
       if (data.subtasks !== undefined) {

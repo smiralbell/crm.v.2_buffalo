@@ -129,6 +129,12 @@ const PERSONAL_TOOLS = [
   'avisos_programar',
   'avisos_listar',
   'avisos_cambiar',
+  // Sus avisos automáticos (tickets, incidencias, tareas): solo los suyos
+  'avisos_auto_ver',
+  'avisos_auto_cambiar',
+  'avisos_auto_general',
+  'avisos_auto_restablecer',
+  'avisos_auto_historial',
   // Solo lo de su propia conversación (y si nadie lo ha tocado después)
   'deshacer',
   // Solo da formato a la respuesta (adjunta un listado largo); no lee nada
@@ -180,4 +186,6 @@ export const TEAM_READ_ONLY = new Set([
   'pipeline_tarjetas',
   'mis_instrucciones',
   'avisos_listar',
+  'avisos_auto_ver',
+  'avisos_auto_historial',
 ])

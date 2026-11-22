@@ -6,6 +6,8 @@ import { TASK_READ_ONLY, TASK_TOOL_NAMES, TASK_TOOLS, runTaskTool } from './task
 import { PERSONAL_INSTRUCTION_TOOLS, REMINDER_CHANGE_TOOL, runPersonalTool } from './personal-tools'
 import { UNDO_TOOLS, recordUndo, runUndoTool, runWithUndo, type UndoStep } from './undo'
 import { PERSON_CONTEXT_TOOL, gatherPersonContext } from './person-context'
+import { NOTIFICATION_READ_ONLY, notificationTools, runNotificationTool } from '@/lib/notifications/tools'
+import { allowedWhatsAppNumbers, isWhatsAppChat, phoneFromChatId } from '@/lib/whatsapp-agent/config'
 import { AGENT_MODULES, MODULE_KEYS, type AgentModule } from './modules'
 import {
   addInstruction,
@@ -185,6 +187,7 @@ const READ_ONLY = new Set([
   'mcp_listar',
   'mis_instrucciones',
   'contexto_persona',
+  ...Array.from(NOTIFICATION_READ_ONLY),
   ...TASK_READ_ONLY,
 ])
 
@@ -212,6 +215,7 @@ export function orchestratorTools(): ToolSchema[] {
     DELEGATE_TOOL,
     PERSON_CONTEXT_TOOL,
     ...AGENT_TOOLS,
+    ...notificationTools('socio'),
     ...TASK_TOOLS,
     ...SECRETARIA_TOOLS.filter((t) => DIRECT_ACTIONS.has(t.function.name)),
   ]
@@ -411,6 +415,15 @@ async function runTool(name: string, args: Record<string, unknown>, ctx: AgentCo
     ownChatOnly: false,
   })
   if (personal !== undefined) return personal
+
+  // Avisos automáticos: los suyos van con su WhatsApp; desde Telegram, solo el canal común
+  const isSocioWhatsApp = isWhatsAppChat(ctx.chatId) && allowedWhatsAppNumbers().has(phoneFromChatId(ctx.chatId))
+  const notification = await runNotificationTool(name, args, {
+    kind: 'socio',
+    ownerKey: isSocioWhatsApp ? `chat:${ctx.chatId}` : null,
+    chatId: ctx.chatId,
+  })
+  if (notification !== undefined) return notification
 
   if (MCP_TOOL_NAMES.has(name)) return runMcpTool(name, args)
 

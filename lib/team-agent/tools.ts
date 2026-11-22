@@ -41,6 +41,7 @@ import { runMcpTool } from '@/lib/telegram-agent/mcp-tools'
 import { PERSONAL_INSTRUCTION_TOOLS, TEAM_REMINDER_TOOLS, runPersonalTool } from '@/lib/telegram-agent/personal-tools'
 import { audit, createPending, personalOwnerKey } from '@/lib/telegram-agent/store'
 import { UNDO_TOOLS, runUndoTool, runWithUndo } from '@/lib/telegram-agent/undo'
+import { notificationTools, runNotificationTool } from '@/lib/notifications/tools'
 import type { AgentContext, ToolSchema } from '@/lib/telegram-agent/tools'
 import { listTickets } from '@/lib/tickets/list'
 import { notifyClientTicketUpdate } from '@/lib/tickets/notify'
@@ -198,6 +199,7 @@ const ALL_TOOLS: ToolSchema[] = [
   // Su propio agente: preferencias y avisos de su chat
   ...PERSONAL_INSTRUCTION_TOOLS,
   ...TEAM_REMINDER_TOOLS,
+  ...notificationTools('equipo'),
   ...UNDO_TOOLS,
 
   // Developers
@@ -410,6 +412,9 @@ async function runTeamTool(name: string, args: Record<string, unknown>, ctx: Age
     ownChatOnly: true,
   })
   if (personal !== undefined) return personal
+  // Sus avisos automáticos: el dueño es su usuario del CRM, nunca otro
+  const notification = await runNotificationTool(name, args, { kind: 'equipo', ownerKey: `user:${me.id}`, chatId: ctx.chatId })
+  if (notification !== undefined) return notification
   // Solo deshace lo de su propia conversación, y solo si nadie lo ha tocado después
   if (name === 'deshacer') return runUndoTool(ctx.chatId, args)
 

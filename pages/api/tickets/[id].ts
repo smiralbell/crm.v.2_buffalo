@@ -3,6 +3,7 @@ import { requireAuthAPI } from '@/lib/auth'
 import { notifyClientTicketUpdate } from '@/lib/tickets/notify'
 import { deleteTicketById } from '@/lib/tickets/store'
 import { assertTicketAccess } from '@/lib/tickets/access'
+import { notifyTicketAssigned } from '@/lib/notifications/team-events'
 import {
   getTicketWithProject,
   insertTicketUpdate,
@@ -111,6 +112,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return res.status(400).json({ error: 'assignee_user_id inválido' })
         }
         await updateTicketAssignee(id, aid)
+        if (aid !== null && aid !== row.assignee_user_id) {
+          void notifyTicketAssigned({
+            userId: aid,
+            actorId: user.id,
+            ticketId: id,
+            title: row.title,
+            projectName: row.project_name,
+            priority: row.priority,
+          })
+        }
       }
 
       const nextStatus = status || row.status
