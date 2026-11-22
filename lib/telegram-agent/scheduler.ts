@@ -8,6 +8,7 @@ import { sendChatText } from './channel'
 import { allowedWhatsAppNumbers, isWhatsAppChat, phoneFromChatId, waChatId } from '@/lib/whatsapp-agent/config'
 import { runTeamAgent } from '@/lib/team-agent/agent'
 import { findTeamMemberByPhone } from '@/lib/team-agent/identity'
+import { startNotificationScheduler } from '@/lib/notifications/notify'
 import type { AgentContext } from './tools'
 
 declare global {
@@ -147,6 +148,7 @@ async function tick(): Promise<void> {
 export function startAgentReminders(): void {
   if (globalThis.__buffaloAgentReminders) return
   globalThis.__buffaloAgentReminders = true
+  startNotificationScheduler()
   const run = () => void tick().catch((e) => console.warn('[telegram-agent] avisos', e instanceof Error ? e.message : e))
   setTimeout(run, 20_000)
   setInterval(run, 60_000)

@@ -1,4 +1,5 @@
-import { opsLink, sendOpsAlert } from '@/lib/ops-alerts'
+import { notify } from '@/lib/notifications/notify'
+import { opsLink } from '@/lib/ops-alerts'
 import { formatMetaRef, type ParsedMetaLead } from '@/lib/integrations/meta/parse'
 
 function line(label: string, value: string | null | undefined): string | null {
@@ -44,7 +45,7 @@ export function formatMetaLeadAlert(input: {
 export async function alertMetaLead(input: { lead: ParsedMetaLead; leadId: number }): Promise<void> {
   const msg = formatMetaLeadAlert(input)
   try {
-    await sendOpsAlert({ ...msg, url: `/leads/${input.leadId}` })
+    await notify({ event: 'lead_nuevo', ...msg, url: `/leads/${input.leadId}`, data: { origen: 'meta' } })
   } catch (e) {
     console.warn('[meta-leads] aviso', e instanceof Error ? e.message : e)
   }

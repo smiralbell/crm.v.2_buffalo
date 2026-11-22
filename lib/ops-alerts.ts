@@ -16,7 +16,7 @@ export function adminAlertEmails(): string[] {
   return fallback ? [fallback] : []
 }
 
-function telegramChatIds(): string[] {
+export function telegramChatIds(): string[] {
   return envList('TELEGRAM_CHAT_IDS').length ? envList('TELEGRAM_CHAT_IDS') : envList('TELEGRAM_CHAT_ID')
 }
 

@@ -1,5 +1,6 @@
 import { query } from '@/lib/db'
-import { opsLink, sendOpsAlert } from '@/lib/ops-alerts'
+import { notify } from '@/lib/notifications/notify'
+import { opsLink } from '@/lib/ops-alerts'
 import { ensureIncidentsTable } from '@/lib/retencion/incidents'
 
 /**
@@ -134,6 +135,6 @@ export async function runDueOpsReminders(): Promise<{
   })
   const digest = buildDigest(incidents)
   if (!digest) return { incidents: 0, checklist: 0, sent: false }
-  await sendOpsAlert({ ...digest, url: '/alertas' })
+  await notify({ event: 'incidencias_abiertas', ...digest, url: '/alertas' })
   return { incidents: incidents.length, checklist: 0, sent: true }
 }

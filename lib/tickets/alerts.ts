@@ -1,4 +1,5 @@
-import { opsLink, sendOpsAlert } from '@/lib/ops-alerts'
+import { notify } from '@/lib/notifications/notify'
+import { opsLink } from '@/lib/ops-alerts'
 import { PRIORITY_LABELS, type IngestedTicket, type TicketPriority } from './ingest'
 
 function safe(s: string): string {
@@ -57,7 +58,13 @@ export async function alertNewTicket(input: {
 }): Promise<void> {
   const msg = formatNewTicketAlert(input)
   try {
-    await sendOpsAlert({ ...msg, url: `/tickets/${input.ticketId}` })
+    await notify({
+      event: 'ticket_nuevo',
+      ...msg,
+      url: `/tickets/${input.ticketId}`,
+      urgent: input.ticket.priority === 'critical',
+      data: { prioridad: input.ticket.priority, proyecto: input.projectName },
+    })
   } catch (e) {
     console.warn('[tickets] aviso', e instanceof Error ? e.message : e)
   }

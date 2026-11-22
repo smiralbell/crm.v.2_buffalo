@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { listCrmUsers } from '@/lib/crm-users'
-import { sendOpsAlert } from '@/lib/ops-alerts'
+import { notify } from '@/lib/notifications/notify'
 import { createPersonalTask } from '@/lib/tareas/store'
 import { findSocio, ownersForColumn, taskFromChecklistItem, type ChecklistRow } from '@/lib/checklist/to-tareas'
 
@@ -109,7 +109,8 @@ export function startChecklistMigration(): void {
         .map(([name, n]) => `${name}: ${n}`)
         .join(' · ')
       console.log(`[checklist→tareas] ${r.created} tareas creadas (${detail})`)
-      await sendOpsAlert({
+      await notify({
+        event: 'sistema',
         subject: `Checklist pasado a Tareas: ${r.created} tareas`,
         text: `El antiguo Checklist ya está en Tareas.\n\n${detail}${
           r.failed ? `\n\nNo se pudieron pasar ${r.failed}; se reintentará en unos minutos.` : ''

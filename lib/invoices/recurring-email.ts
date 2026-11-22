@@ -1,7 +1,8 @@
 import { query } from '@/lib/db'
 import { prisma } from '@/lib/prisma'
 import { sendMail, isSmtpConfigured, getSmtpPublicStatus } from '@/lib/mail/smtp'
-import { opsLink, sendOpsAlert } from '@/lib/ops-alerts'
+import { notify } from '@/lib/notifications/notify'
+import { opsLink } from '@/lib/ops-alerts'
 import { renderInvoicePdf } from '@/lib/invoices/pdf'
 import {
   DEFAULT_EMAIL_BODY,
@@ -334,7 +335,9 @@ export async function runDueInvoiceEmails(): Promise<number> {
     )
     if (!retry) {
       const inv = await prisma.invoice.findUnique({ where: { id: job.invoice_id }, select: { invoice_number: true } })
-      await sendOpsAlert({
+      await notify({
+        event: 'factura_fallida',
+        urgent: true,
         subject: `No se pudo enviar la factura ${inv?.invoice_number ?? job.invoice_id}`,
         text: `La factura recurrente «${t.name}» no se ha podido enviar por email después de ${MAX_ATTEMPTS} intentos.\n\nMotivo: ${result.error}\n\nRevísala en ${opsLink('/invoices/recurring')}`,
         url: '/invoices/recurring',

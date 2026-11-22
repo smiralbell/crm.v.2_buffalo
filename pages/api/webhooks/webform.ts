@@ -6,7 +6,8 @@ import {
 } from '@/lib/marketing/web-form-submissions'
 import { applyWebFormCors, originHost } from '@/lib/marketing/web-form-cors'
 import { checkRateLimit, getClientIP } from '@/lib/rate-limit'
-import { opsLink, sendOpsAlert } from '@/lib/ops-alerts'
+import { notify } from '@/lib/notifications/notify'
+import { opsLink } from '@/lib/ops-alerts'
 
 export const config = {
   api: { bodyParser: { sizeLimit: '200kb' } },
@@ -95,7 +96,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           `Origen: ${submission.source || submission.site || '—'}${submission.page ? ` (${submission.page})` : ''}`,
           opsLink('/marketing'),
         ].filter(Boolean)
-        await sendOpsAlert({
+        await notify({
+          event: 'lead_nuevo',
+          data: { origen: 'web' },
           subject: `Nuevo lead web: ${who}`,
           text: lines.join('\n'),
           telegramHtml: lines.map(escHtml).join('\n'),

@@ -7,6 +7,10 @@ declare global {
 
 /** Revisa cada 15 min; cada ítem solo avisa una vez al día (o según su intervalo). */
 export function startOpsReminderScheduler(): void {
+  // La cola de avisos (resúmenes, horas de silencio…) va siempre, aunque los recordatorios estén apagados
+  void import('@/lib/notifications/notify')
+    .then((m) => m.startNotificationScheduler())
+    .catch((e) => console.warn('[avisos]', e instanceof Error ? e.message : e))
   if (globalThis.__buffaloOpsReminders) return
   if (process.env.OPS_REMINDERS === '0') return
   globalThis.__buffaloOpsReminders = true

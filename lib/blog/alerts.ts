@@ -1,4 +1,5 @@
-import { opsLink, sendOpsAlert } from '@/lib/ops-alerts'
+import { notify } from '@/lib/notifications/notify'
+import { opsLink } from '@/lib/ops-alerts'
 import type { Post } from './types'
 
 function safe(s: string): string {
@@ -17,7 +18,8 @@ export async function alertBlogReadyForReview(post: Post): Promise<void> {
   const subject = `Blog para revisar: ${title}`
   const text = `Hay un artículo listo para leer y publicar (sin rellenar huecos).\n\n${title}\n\nAbrir: ${link}`
   try {
-    await sendOpsAlert({
+    await notify({
+      event: 'blog_revision',
       subject,
       text,
       html: `<p>Hay un artículo listo para leer y publicar.</p><p><b>${safe(title)}</b></p><p><a href="${link}">Abrir artículo</a></p>`,
@@ -39,7 +41,8 @@ export async function alertBlogReviewDigest(posts: Post[]): Promise<void> {
     posts.length === 1 ? `Blog para revisar: ${titleOf(posts[0])}` : `${posts.length} artículos del blog para revisar`
   const text = `${subject}\n\n${lines}\n\nAbrir: ${list}`
   try {
-    await sendOpsAlert({
+    await notify({
+      event: 'blog_pendientes',
       subject,
       text,
       html: `<p>${safe(subject)}</p><pre style="font-family:inherit;white-space:pre-wrap">${safe(lines)}</pre><p><a href="${list}">Abrir el blog</a></p>`,

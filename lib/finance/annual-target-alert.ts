@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
-import { opsLink, sendOpsAlert } from '@/lib/ops-alerts'
+import { notify } from '@/lib/notifications/notify'
+import { opsLink } from '@/lib/ops-alerts'
 import { fmtEur } from './chart-theme'
 import { ensureAnnualTargetColumn, getAnnualRevenueTarget } from './annual-target'
 import { sumBankCobrosYtd } from './bank-cobros'
@@ -64,7 +65,8 @@ export async function maybeNotifyAnnualGoalReached(opts?: {
   if (!claimed[0]) return { sent: false }
 
   try {
-    await sendOpsAlert({
+    await notify({
+      event: 'objetivo_anual',
       ...formatAnnualGoalReachedAlert({ year, target, invoicedYtd: ytd }),
       url: '/finances#objetivo-anual',
     })
