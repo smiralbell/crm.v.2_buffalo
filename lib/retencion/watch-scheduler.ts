@@ -1,4 +1,5 @@
 import { runDueWatches } from '@/lib/retencion/watch-agent'
+import { runDueFlujos } from '@/lib/retencion/flujos/scheduler'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -13,6 +14,9 @@ export function startRetencionWatchScheduler(): void {
   const tick = () => {
     void runDueWatches().catch((e) => {
       console.warn('[retencion-watch]', e instanceof Error ? e.message : e)
+    })
+    void runDueFlujos().catch((e) => {
+      console.warn('[retencion-flujos]', e instanceof Error ? e.message : e)
     })
   }
 

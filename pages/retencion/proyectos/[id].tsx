@@ -5,22 +5,24 @@ import Layout from '@/components/Layout'
 import { useAuth } from '@/components/AuthContext'
 import IncidentsPanel from '@/components/retencion/IncidentsPanel'
 import McpPanel from '@/components/retencion/McpPanel'
+import FlujosPanel from '@/components/retencion/FlujosPanel'
 import TicketsPanel from '@/components/retencion/TicketsPanel'
 import WatchSystemPanel from '@/components/retencion/WatchSystemPanel'
 import { ArrowLeft, AlertCircle, Link2, Clock, FileText } from 'lucide-react'
 import type { ProyectoRow } from '@/lib/engranaje5/project-services'
 
-type Tab = 'incidencias' | 'tickets' | 'sistema' | 'mcp'
+type Tab = 'incidencias' | 'tickets' | 'sistema' | 'mcp' | 'flujos'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'incidencias', label: 'Incidencias' },
   { id: 'tickets', label: 'Tickets' },
   { id: 'sistema', label: 'Sistema' },
   { id: 'mcp', label: 'MCP' },
+  { id: 'flujos', label: 'Flujos' },
 ]
 
 function isValidTab(v: unknown): v is Tab {
-  return v === 'incidencias' || v === 'tickets' || v === 'sistema' || v === 'mcp'
+  return v === 'incidencias' || v === 'tickets' || v === 'sistema' || v === 'mcp' || v === 'flujos'
 }
 
 export default function RetencionProyectoDetailPage() {
@@ -192,6 +194,7 @@ export default function RetencionProyectoDetailPage() {
         )}
 
         {proyecto && activeTab === 'mcp' && <McpPanel proyectoId={proyecto.id} proyectoName={proyecto.name} />}
+        {proyecto && activeTab === 'flujos' && <FlujosPanel proyectoId={proyecto.id} />}
       </div>
     </Layout>
   )
