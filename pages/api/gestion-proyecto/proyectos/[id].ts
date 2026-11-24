@@ -116,6 +116,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
+    if (req.method === 'DELETE') {
+      if (user.role !== 'admin') {
+        return res.status(403).json({ error: 'Solo admin puede eliminar proyectos' })
+      }
+      // Igual que en Onboarding: el proyecto deja de estar en marcha (churn) y
+      // desaparece de esta lista. La configuración del lead se borra.
+      await prisma.$transaction(async (tx) => {
+        if (row.lead_id) {
+          await tx.lead.update({
+            where: { id: row.lead_id },
+            data: { configuracion: null },
+          })
+        }
+        await tx.$executeRaw`
+          UPDATE proyectos
+          SET
+            status = 'churned',
+            es_buffalo = FALSE,
+            lead_id = NULL,
+            config_ref = NULL,
+            updated_at = NOW()
+          WHERE id = ${id}::uuid
+        `
+      })
+      return res.status(200).json({ success: true, id })
+    }
+
     if (req.method === 'GET') {
       let onboarding = null
       let docs: unknown[] = []

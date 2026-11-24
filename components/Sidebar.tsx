@@ -106,8 +106,8 @@ const NAV: NavItem[] = [
     icon: PackageCheck,
     roles: ['admin', 'project_manager'],
     children: [
-      { href: '/onboarding', label: 'Proyectos activos', tab: 'projects' },
-      { href: '/onboarding/configure', label: 'Configurador', roles: ['admin'] },
+      { href: '/onboarding', label: 'Personas' },
+      { href: '/onboarding/configure', label: 'Configurar proyecto', roles: ['admin'] },
       { href: '/demos', label: 'Demos', roles: ['admin'] },
     ],
   },
@@ -240,13 +240,13 @@ export default function Sidebar({
     if (!showLabels && item.children) {
       // Colapsado: ir al destino por defecto
       if (item.href === '/marketing') go('/marketing?tab=global')
-      else if (item.href === '/onboarding') go('/onboarding?tab=projects')
+      else if (item.href === '/onboarding') go('/onboarding')
       else go(item.href)
       return
     }
     setOpen((prev) => ({ ...prev, [item.href]: true }))
     if (item.href === '/marketing') go('/marketing?tab=global')
-    else if (item.href === '/onboarding') go('/onboarding?tab=projects')
+    else if (item.href === '/onboarding') go('/onboarding')
     else if (item.href === '/retencion') go('/retencion')
     else if (item.href === '/gestion-proyecto') go('/gestion-proyecto')
     else if (item.href === '/finances') go('/finances')

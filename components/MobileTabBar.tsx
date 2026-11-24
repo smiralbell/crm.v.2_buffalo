@@ -52,9 +52,9 @@ const TABS: Record<CrmRole, Tab[]> = {
       match: ['/onboarding', '/demos', '/gestion-proyecto', '/tickets', '/retencion'],
       options: [
         {
-          href: '/onboarding?tab=projects',
+          href: '/onboarding',
           label: 'Onboarding',
-          description: 'Proyectos activos, configurador y demos',
+          description: 'Personas, contexto y configurador',
           icon: PackageCheck,
         },
         {
@@ -102,9 +102,9 @@ const TABS: Record<CrmRole, Tab[]> = {
       match: ['/onboarding', '/gestion-proyecto', '/retencion'],
       options: [
         {
-          href: '/onboarding?tab=projects',
+          href: '/onboarding',
           label: 'Onboarding',
-          description: 'Tus proyectos asignados',
+          description: 'Contexto de tus personas',
           icon: PackageCheck,
         },
         {

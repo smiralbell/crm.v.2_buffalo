@@ -8,23 +8,21 @@ export const ARTICLES_ENG2: HelpArticle[] = [
     category: 'eng2',
     order: 1,
     audience: ['admin'],
-    tags: ['onboarding', 'ENG2', 'configurador', 'poner en marcha', 'brief'],
+    tags: ['onboarding', 'ENG2', 'configurador', 'poner en marcha'],
     body: `# Onboarding · ENG 2
 
 ## Pantallas
 
 | Pantalla | Ruta |
 |----------|------|
-| Proyectos activos | \`/onboarding?tab=projects\` |
-| Configurador | \`/onboarding/configure\` |
-| Brief a medida | \`/onboarding/custom\` |
-| Detalle proyecto | \`/onboarding/proyectos/[id]\` |
+| Personas (contexto y preguntas a la IA) | \`/onboarding\` |
+| Configurar proyecto | \`/onboarding/configure\` |
 | Demos | \`/demos\` |
 
 ## Flujo
 
 1. Elige o crea un lead.
-2. Configura el paquete Buffalo (o brief IA a medida).
+2. Configura el paquete Buffalo.
 3. Se persiste \`leads.configuracion\` y se sincroniza \`proyectos\`.
 4. Cuando esté listo: **Poner en marcha** → \`es_buffalo = true\` → aparece en ENG 3.
 
@@ -32,7 +30,9 @@ export const ARTICLES_ENG2: HelpArticle[] = [
 
 - \`GET /api/onboarding/projects/[leadId]\`
 - \`GET /api/onboarding/projects/buffalo-status\`
-- \`POST /api/onboarding/custom-brief\`
+- \`GET|PUT /api/onboarding/personas/[leadId]\` (contexto de la persona)
+- \`POST /api/onboarding/personas/[leadId]/ask\` (pregunta a la IA)
+- \`POST /api/onboarding/personas/[leadId]/draft\` (resumen propuesto por IA)
 - \`POST /api/onboarding/pipeline-advance\`
 - Webhook externo: \`POST /api/webhooks/onboarding-form\` (token \`ONBOARDING_FORM_WEBHOOK_TOKEN\`)
 `,

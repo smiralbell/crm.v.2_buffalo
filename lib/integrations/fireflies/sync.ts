@@ -93,7 +93,6 @@ export async function ingestFirefliesTranscript(
           action: routed.action,
           leadId: routed.leadId,
           contactId: routed.contactId,
-          noteId: routed.noteId,
           reason: routed.reason,
         })
       )

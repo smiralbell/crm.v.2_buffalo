@@ -26,7 +26,7 @@ import type {
   PipelineProjectContext,
 } from '@/lib/pipelines/card-context.types'
 import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
-import { leadContextHref, leadNewNoteHref } from '@/lib/crm/lead-from-route'
+import { leadContextHref } from '@/lib/crm/lead-from-route'
 
 export { BUFFALO_STAGE_COLORS }
 
@@ -404,7 +404,7 @@ export default function PipelineCardDrawer({
 
   const handleConfigure = () => {
     router.push(
-      `/onboarding?lead=${card.entity_id}&pipeline=${pipelineId}&card=${card.id}`
+      `/onboarding/configure?lead=${card.entity_id}&pipeline=${pipelineId}&card=${card.id}`
     )
   }
 
@@ -708,15 +708,6 @@ export default function PipelineCardDrawer({
                   >
                     <StickyNote className="h-3.5 w-3.5 mr-1.5" />
                     Contexto
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 text-xs rounded-xl border-gray-200"
-                    onClick={() => router.push(leadNewNoteHref(context.lead_id!))}
-                  >
-                    <BookOpen className="h-3.5 w-3.5 mr-1.5" />
-                    Nueva nota
                   </Button>
                 </div>
               ) : null}

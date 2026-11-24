@@ -128,7 +128,6 @@ Prefijo: \`/api/coldcall/\` — roles **admin** y **comercial**.
 
 - \`GET /api/onboarding/projects/[leadId]\`
 - \`GET /api/onboarding/projects/buffalo-status\`
-- \`POST /api/onboarding/custom-brief\`
 - \`POST /api/onboarding/pipeline-advance\`
 
 ## Demos

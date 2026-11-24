@@ -43,7 +43,7 @@ function escapeQuery(value: string): string {
 /** Carpetas ya encontradas o creadas en este proceso: «padre/nombre» → id */
 const folderCache = new Map<string, string>()
 
-async function ensureChildFolder(parentId: string, name: string): Promise<string> {
+export async function ensureChildFolder(parentId: string, name: string): Promise<string> {
   const key = `${parentId}/${name}`
   const cached = folderCache.get(key)
   if (cached) return cached

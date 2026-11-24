@@ -55,6 +55,7 @@ model Lead {
   valor             Decimal? @db.Decimal(10, 2)
   notas             String?  @db.Text
   configuracion     String?  @db.Text
+  contexto          String?  @db.Text
   position          Int?
   contact           Contact  @relation(fields: [contact_id], references: [id], onDelete: Cascade)
   // pipeline          Pipeline? @relation(fields: [pipeline_id], references: [id], onDelete: SetNull)

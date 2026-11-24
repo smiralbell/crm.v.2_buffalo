@@ -1,27 +1,26 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
-export type OnboardingSectionTab = 'projects' | 'configure' | 'demos'
+export type OnboardingSectionTab = 'personas' | 'configure' | 'demos'
 
-const TABS: { id: OnboardingSectionTab; label: string; short?: string; href: string }[] = [
-  { id: 'projects', label: 'Proyectos', href: '/onboarding?tab=projects' },
-  { id: 'configure', label: 'Configurar nuevo proyecto', short: 'Nuevo', href: '/onboarding?tab=configure' },
-  { id: 'demos', label: 'Demos', href: '/demos' },
+const TABS: { id: OnboardingSectionTab; label: string; short?: string; href: string; adminOnly?: boolean }[] = [
+  { id: 'personas', label: 'Personas', href: '/onboarding' },
+  { id: 'configure', label: 'Configurar proyecto', short: 'Proyecto', href: '/onboarding/configure', adminOnly: true },
+  { id: 'demos', label: 'Demos', href: '/demos', adminOnly: true },
 ]
 
+/** Pestañas de Onboarding. «Configurar» y «Demos» solo las ve el admin. */
 export default function OnboardingSectionTabs({
   active,
-  projectsCount,
-  projectsOnly = false,
+  adminView = true,
 }: {
   active: OnboardingSectionTab
-  projectsCount?: number
-  /** Sin «Nuevo» ni «Demos» (project manager). */
-  projectsOnly?: boolean
+  /** false: oculta las pestañas de admin (project manager). */
+  adminView?: boolean
 }) {
   return (
     <div className="flex items-center gap-1 border-b border-gray-200 sm:justify-center">
-      {TABS.filter((tab) => !projectsOnly || tab.id === 'projects').map((tab) => {
+      {TABS.filter((tab) => !tab.adminOnly || adminView).map((tab) => {
         const isActive = active === tab.id
         return (
           <Link
@@ -41,16 +40,6 @@ export default function OnboardingSectionTabs({
               </>
             ) : (
               tab.label
-            )}
-            {tab.id === 'projects' && projectsCount != null && projectsCount > 0 && (
-              <span
-                className={cn(
-                  'text-[10px] font-medium px-1.5 py-0.5 rounded-full',
-                  isActive ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500'
-                )}
-              >
-                {projectsCount}
-              </span>
             )}
           </Link>
         )

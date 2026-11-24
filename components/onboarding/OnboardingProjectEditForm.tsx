@@ -12,8 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, Save, Search, UserPlus, X, Check, Building2, Mail, Phone, MapPin, User, Sparkles } from 'lucide-react'
-import OnboardingDocumentActions from '@/components/onboarding/OnboardingDocumentActions'
+import { Loader2, Save, Search, UserPlus, X, Check, Building2, Mail, Phone, MapPin, User } from 'lucide-react'
 
 type ContactHit = {
   id: number
@@ -106,8 +105,6 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
   const [form, setForm] = useState<FormState>(empty)
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(false)
-  const [contextLoading, setContextLoading] = useState(false)
-  const [includeSources, setIncludeSources] = useState(true)
   const [error, setError] = useState('')
   const [okMsg, setOkMsg] = useState('')
 
@@ -286,39 +283,6 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
       setError(err instanceof Error ? err.message : 'Error al guardar')
     } finally {
       setLoading(false)
-    }
-  }
-
-  /** Guarda contexto y regenera automáticamente la definición con IA. */
-  const updateContextAndDefinition = async () => {
-    const id = Number(leadId)
-    if (!Number.isFinite(id) || id <= 0) return
-    setContextLoading(true)
-    setError('')
-    setOkMsg('')
-    try {
-      const res = await fetch(`/api/onboarding/projects/${id}/context`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          context: form.project_context,
-          include_sources: includeSources,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Error al actualizar contexto')
-      setForm((prev) => ({
-        ...prev,
-        project_context: data.context || prev.project_context,
-        project_definition: data.definition || prev.project_definition,
-      }))
-      setOkMsg('Contexto guardado · definición actualizada con IA')
-      onSaved?.()
-      window.setTimeout(() => setOkMsg(''), 3500)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar contexto')
-    } finally {
-      setContextLoading(false)
     }
   }
 
@@ -507,7 +471,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Nombre del proyecto</Label>
-            <Input value={form.name} onChange={(e) => set('name', e.target.value)} disabled={loading || contextLoading} />
+            <Input value={form.name} onChange={(e) => set('name', e.target.value)} disabled={loading} />
           </div>
           <div className="space-y-1.5">
             <Label>Precio del proyecto (€)</Label>
@@ -516,7 +480,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
               step="0.01"
               value={form.setup_fee_eur}
               onChange={(e) => set('setup_fee_eur', e.target.value)}
-              disabled={loading || contextLoading}
+              disabled={loading}
             />
           </div>
           <div className="space-y-1.5">
@@ -526,7 +490,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
               step="0.01"
               value={form.monthly_fee_eur}
               onChange={(e) => set('monthly_fee_eur', e.target.value)}
-              disabled={loading || contextLoading}
+              disabled={loading}
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
@@ -538,7 +502,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
                 step="1"
                 value={form.duration_amount}
                 onChange={(e) => set('duration_amount', e.target.value)}
-                disabled={loading || contextLoading}
+                disabled={loading}
                 placeholder="Ej. 4"
                 className="w-28"
               />
@@ -563,7 +527,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
               type="date"
               value={form.fecha_inicio_real}
               onChange={(e) => set('fecha_inicio_real', e.target.value)}
-              disabled={loading || contextLoading}
+              disabled={loading}
             />
           </div>
           <div className="space-y-1.5">
@@ -572,7 +536,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
               type="date"
               value={form.fecha_fin_real}
               onChange={(e) => set('fecha_fin_real', e.target.value)}
-              disabled={loading || contextLoading}
+              disabled={loading}
             />
           </div>
         </div>
@@ -585,8 +549,7 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
             Contexto y definición
           </p>
           <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-            El contexto es la materia prima (auditoría, reuniones, lo hablado antes…).
-            Al actualizarlo, la IA regenera solo la definición — el contexto bien redactado y explicado.
+            Notas de lo hablado antes de la reunión, alcance y contexto del proyecto.
           </p>
         </div>
 
@@ -596,63 +559,26 @@ export default function OnboardingProjectEditForm({ leadId, onSaved, className }
             rows={10}
             value={form.project_context}
             onChange={(e) => set('project_context', e.target.value)}
-            disabled={loading || contextLoading}
-            placeholder="Pega notas, lo comentado antes de la reunión, hallazgos… La auditoría y reuniones se pueden añadir automáticamente abajo."
+            disabled={loading}
+            placeholder="Pega notas, lo comentado antes de la reunión, hallazgos…"
             className="min-h-[200px] resize-y text-sm leading-relaxed bg-white"
           />
         </div>
 
-        <label className="flex items-start gap-2.5 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={includeSources}
-            onChange={(e) => setIncludeSources(e.target.checked)}
-            disabled={contextLoading}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300"
-          />
-          <span className="text-xs text-gray-600 leading-relaxed">
-            Incluir automáticamente auditoría del copiloto y resúmenes de reuniones Fireflies
-          </span>
-        </label>
-
-        <button
-          type="button"
-          onClick={() => void updateContextAndDefinition()}
-          disabled={loading || contextLoading}
-          className="inline-flex items-center gap-2 px-4 h-10 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
-        >
-          {contextLoading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Actualizando definición…
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-4 w-4" />
-              Actualizar contexto y definición
-            </>
-          )}
-        </button>
-
         <div className="space-y-1.5 pt-2 border-t border-gray-200">
           <Label>Definición del proyecto</Label>
           <p className="text-[11px] text-gray-400 mb-1">
-            Se actualiza sola con la IA al cambiar el contexto. Puedes retocarla a mano si hace falta.
+            Descripción del proyecto. Se edita a mano.
           </p>
           <Textarea
             rows={10}
             value={form.project_definition}
             onChange={(e) => set('project_definition', e.target.value)}
-            disabled={loading || contextLoading}
-            placeholder="La definición aparecerá aquí tras actualizar el contexto…"
+            disabled={loading}
+            placeholder="Describe el proyecto…"
             className="min-h-[200px] resize-y text-sm leading-relaxed bg-white"
           />
         </div>
-      </div>
-
-      {/* Documentos */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
-        <OnboardingDocumentActions leadId={leadId} />
       </div>
 
       {error && (

@@ -70,10 +70,10 @@ describe('configuración del lead', () => {
 })
 
 describe('páginas con precios para el project manager', () => {
-  it('bloquea configurador, documentos y analítica', () => {
-    for (const p of ['/leads/analytics', '/onboarding/configure', '/onboarding/propuesta', '/onboarding/contrato', '/onboarding/factura']) {
+  it('bloquea configurador y analítica', () => {
+    for (const p of ['/leads/analytics', '/onboarding/configure']) {
       expect(canAccessPage(p, 'project_manager'), p).toBe(false)
     }
-    expect(canAccessPage('/onboarding/notas', 'project_manager')).toBe(true)
+    expect(canAccessPage('/onboarding', 'project_manager')).toBe(true)
   })
 })

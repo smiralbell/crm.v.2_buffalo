@@ -32,11 +32,6 @@ export const PROJECT_MANAGER_PAGE_PREFIXES = [
 export const PROJECT_MANAGER_PRICE_PAGES = [
   '/leads/analytics',
   '/onboarding/configure',
-  '/onboarding/custom',
-  '/onboarding/propuesta',
-  '/onboarding/contrato',
-  '/onboarding/factura',
-  '/onboarding/pre-kickoff',
 ] as const
 
 export const COMERCIAL_PAGE_PREFIXES = [

@@ -25,6 +25,3 @@ export function leadContextHref(leadId: number): string {
   return `/leads/${leadId}#contexto`
 }
 
-export function leadNewNoteHref(leadId: number): string {
-  return `/onboarding/notas?lead=${leadId}&nueva=1`
-}

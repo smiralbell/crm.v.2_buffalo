@@ -4,7 +4,7 @@ import Layout from '@/components/Layout'
 import { canSeeClientPrices } from '@/lib/price-visibility'
 import { useAuth } from '@/components/AuthContext'
 import { DeveloperTags } from '@/components/gestion-proyecto/ProjectDevelopersPanel'
-import { AlertCircle, CheckCircle2, FolderKanban, RefreshCw, Wallet } from 'lucide-react'
+import { AlertCircle, CheckCircle2, FolderKanban, RefreshCw, Trash2, Wallet } from 'lucide-react'
 import type { ProjectListRow } from '@/lib/gestion-proyecto/types'
 
 const fmtEur = (n: number) =>
@@ -53,6 +53,8 @@ export default function GestionProyectoPage() {
   const [rows, setRows] = useState<ProjectListRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const isAdmin = user?.role === 'admin'
   const [money, setMoney] = useState({
     setup_total_eur: 0,
     monthly_total_eur: 0,
@@ -84,6 +86,28 @@ export default function GestionProyectoPage() {
   useEffect(() => {
     load()
   }, [])
+
+  const removeProject = async (row: ProjectListRow) => {
+    const who = cardIdentity(row).title
+    const ok = window.confirm(
+      `¿Eliminar el proyecto de ${who}?\n\n` +
+        'Dejará de estar en marcha y desaparecerá de esta lista. ' +
+        'Se borra también la configuración del lead. No se puede deshacer desde aquí.'
+    )
+    if (!ok) return
+    setDeletingId(row.id)
+    setError('')
+    try {
+      const res = await fetch(`/api/gestion-proyecto/proyectos/${row.id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'No se pudo eliminar el proyecto')
+      setRows((prev) => prev.filter((r) => r.id !== row.id))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar el proyecto')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   return (
     <Layout>
@@ -141,10 +165,10 @@ export default function GestionProyectoPage() {
             <FolderKanban className="h-10 w-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-gray-500">No hay proyectos Buffalo en marcha.</p>
             <p className="text-xs text-gray-400 mt-1">
-              Configura un lead en Onboarding y pulsa «Poner en marcha».
+              Configura un proyecto en Onboarding y pulsa «Poner en marcha».
             </p>
             <Link
-              href="/onboarding?tab=projects"
+              href="/onboarding/configure"
               className="inline-flex mt-4 text-sm font-medium text-gray-700 hover:text-gray-900"
             >
               Ir a Onboarding →
@@ -264,7 +288,24 @@ export default function GestionProyectoPage() {
                             ? 'Cerrado · sin producción'
                             : `${openTasks} tareas abiertas · ${row.task_counts.done} hechas`}
                     </span>
-                    <span className={`font-medium ${ctaCls}`}>Abrir →</span>
+                    <div className="flex items-center gap-3">
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          disabled={deletingId === row.id}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            void removeProject(row)
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {deletingId === row.id ? 'Eliminando…' : 'Eliminar'}
+                        </button>
+                      )}
+                      <span className={`font-medium ${ctaCls}`}>Abrir →</span>
+                    </div>
                   </div>
                 </Link>
               )

@@ -7,7 +7,6 @@ import { useAuth } from '@/components/AuthContext'
 import {
   leadContextHref,
   leadIdFromRoute,
-  leadNewNoteHref,
 } from '@/lib/crm/lead-from-route'
 
 export default function LeadContextShortcuts() {
@@ -37,13 +36,6 @@ export default function LeadContextShortcuts() {
         >
           <StickyNote className="h-3.5 w-3.5" />
           Contexto
-        </Link>
-        <Link
-          href={leadNewNoteHref(leadId)}
-          className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <FileText className="h-3.5 w-3.5" />
-          Nueva nota
         </Link>
       </div>
     </div>

@@ -352,7 +352,7 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
           </div>
           <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
             {hasConfig && (
-              <Link href={`/onboarding/proyectos/${lead.id}`} className="flex-1 sm:flex-initial">
+              <Link href={`/onboarding/configure?lead=${lead.id}`} className="flex-1 sm:flex-initial">
                 <Button variant="outline" size="sm" className="w-full rounded-xl">
                   <FileText className="mr-2 h-4 w-4" />
                   Ir a onboarding

@@ -13,7 +13,6 @@ describe('project_manager page access', () => {
       '/marketing',
       '/blog',
       '/onboarding',
-      '/onboarding/proyectos/7',
       '/gestion-proyecto',
       '/gestion-proyecto/proyectos/abc',
       '/retencion',

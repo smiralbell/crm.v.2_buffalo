@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import OnboardingProjectEditForm from '@/components/onboarding/OnboardingProjectEditForm'
-import { ChevronLeft, CheckCircle, Settings, Save, Loader2, ClipboardList, Sparkles, Pencil, ChevronDown } from 'lucide-react'
+import { ChevronLeft, CheckCircle, Settings, Save, Loader2, Pencil, ChevronDown } from 'lucide-react'
 import { parseConfiguradorConfig } from '@/lib/engranaje5/map-config'
 
 interface InvoiceData {
@@ -54,19 +54,10 @@ export default function ConfigurePage() {
   // Read URL params
   const { lead, nombre, empresa, email, ciudad, pipeline, card, mode, edit } = router.query as Record<string, string>
   const activeLeadId = resolvedLeadId || lead || ''
-  const [pickedMode, setPickedMode] = useState<'packaged' | 'custom' | 'audit' | null>(null)
   const isEditIntent = edit === '1' || edit === 'true'
 
-  const effectiveMode: 'packaged' | 'custom' | 'audit' | null =
-    (mode === 'custom' || mode === 'packaged' || mode === 'audit' ? mode : null) ||
-    pickedMode ||
-    (savedConfig
-      ? parseConfiguradorConfig(savedConfig)?.mode === 'custom'
-        ? 'custom'
-        : savedConfig
-          ? 'packaged'
-          : null
-      : null)
+  // Un solo modo: el configurador empaquetado.
+  const effectiveMode = 'packaged' as const
 
   // Resolved pipeline + card (from URL params OR auto-discovered)
   const [resolvedPipeline, setResolvedPipeline] = useState('')
@@ -201,49 +192,8 @@ export default function ConfigurePage() {
       .catch(() => { /* best-effort */ })
   }, [router.isReady, activeLeadId, pipeline, card])
 
-  // Si eligen a medida o auditoría sin config aún → brief + IA
-  useEffect(() => {
-    if (!router.isReady || configLoading) return
-    if (isEditIntent || savedConfig) return
-    if (effectiveMode !== 'custom' && effectiveMode !== 'audit') return
-
-    const params = new URLSearchParams()
-    if (activeLeadId) params.set('lead', activeLeadId)
-    if (nombre) params.set('nombre', nombre)
-    if (empresa) params.set('empresa', empresa)
-    if (email) params.set('email', email)
-    if (ciudad) params.set('ciudad', ciudad || '')
-    if (pipeline) params.set('pipeline', pipeline)
-    if (card) params.set('card', card)
-    if (effectiveMode === 'audit') {
-      router.replace(`/onboarding/notas?${params.toString()}`)
-      return
-    }
-    router.replace(`/onboarding/custom?${params.toString()}`)
-  }, [
-    router.isReady,
-    configLoading,
-    isEditIntent,
-    effectiveMode,
-    savedConfig,
-    activeLeadId,
-    nombre,
-    empresa,
-    email,
-    ciudad,
-    pipeline,
-    card,
-    router,
-  ])
-
   // Edición con config: solo formulario (nombre, precios, fechas). Sin iframe de resumen/documentos/a medida.
   const isEditWithConfig = Boolean(savedConfig)
-  const showModePicker =
-    !configLoading &&
-    !isEditIntent &&
-    !isEditWithConfig &&
-    !effectiveMode
-
   // Configurador embebido: solo si no hay config guardada y el modo es empaquetado
   const showConfiguratorIframe = Boolean(
     !configLoading && effectiveMode === 'packaged' && !isEditWithConfig
@@ -596,52 +546,6 @@ export default function ConfigurePage() {
               <OnboardingProjectEditForm leadId={activeLeadId} />
             </div>
           )}
-        </div>
-      )}
-
-      {/* Mode picker — solo proyectos nuevos sin configuración */}
-      {showModePicker && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 max-w-5xl">
-          <button
-            type="button"
-            onClick={() => {
-              setPickedMode('audit')
-              void router.replace(
-                { pathname: router.pathname, query: { ...router.query, mode: 'audit' } },
-                undefined,
-                { shallow: true }
-              )
-            }}
-            className="text-left rounded-2xl border border-gray-200 bg-white px-8 py-10 min-h-[180px] hover:border-gray-900 hover:shadow-sm transition-all"
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <ClipboardList className="h-5 w-5 text-gray-800" />
-              <span className="text-base font-semibold text-gray-900">Cuaderno de reuniones</span>
-            </div>
-            <p className="text-sm text-gray-500 leading-relaxed">
-              Notas libres con copiloto de huecos. Brief + IA para propuesta, contrato y factura.
-            </p>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPickedMode('custom')
-              void router.replace(
-                { pathname: router.pathname, query: { ...router.query, mode: 'custom' } },
-                undefined,
-                { shallow: true }
-              )
-            }}
-            className="text-left rounded-2xl border border-gray-200 bg-white px-8 py-10 min-h-[180px] hover:border-gray-900 hover:shadow-sm transition-all"
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-5 w-5 text-gray-800" />
-              <span className="text-base font-semibold text-gray-900">A medida (IA)</span>
-            </div>
-            <p className="text-sm text-gray-500 leading-relaxed">
-              Brief con IA cuando el servicio no es una auditoría estándar.
-            </p>
-          </button>
         </div>
       )}
 
