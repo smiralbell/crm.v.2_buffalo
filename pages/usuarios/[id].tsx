@@ -20,6 +20,7 @@ import DeleteUserDialog from '@/components/usuarios/DeleteUserDialog'
 import type { CrmRole } from '@/lib/auth'
 import UserProjectsEditor from '@/components/usuarios/UserProjectsEditor'
 import UserWhatsAppAgentCard from '@/components/usuarios/UserWhatsAppAgentCard'
+import UserWhatsAppConversations from '@/components/usuarios/UserWhatsAppConversations'
 
 const ROLE_LABEL: Record<CrmRole, string> = {
   admin: 'Admin',
@@ -368,6 +369,10 @@ export default function UsuarioDetailPage() {
                 userName={user.name}
                 roleLabel={user.role === 'project_manager' ? 'project manager' : 'developer'}
               />
+            )}
+
+            {(isDeveloperUser || user.role === 'project_manager') && (
+              <UserWhatsAppConversations userId={user.id} userName={user.name} />
             )}
                 </>
               )

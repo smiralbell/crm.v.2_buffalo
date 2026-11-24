@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client'
+import { ensureCoreSchema } from '@/lib/schema/core-schema'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -77,6 +78,25 @@ export function getPrismaClient(): PrismaClient {
   return client
 }
 
+/**
+ * Cada llamada de Prisma espera a que el esquema automático esté aplicado (una sola vez por proceso).
+ * Así una columna nueva en prisma/schema.prisma existe antes de la primera consulta que la pida.
+ */
+function gated(owner: any, key: PropertyKey): any {
+  const value = Reflect.get(owner, key, owner)
+  if (typeof value === 'function') {
+    return (...args: unknown[]) => ensureCoreSchema().then(() => value.apply(owner, args))
+  }
+  if (value && typeof value === 'object') {
+    return new Proxy(value, {
+      get(target, k) {
+        return gated(target, k)
+      },
+    })
+  }
+  return value
+}
+
 // Proxy para inicialización lazy - solo se inicializa cuando se accede a una propiedad
 // Esto evita errores durante el build cuando DATABASE_URL no está disponible
 export const prisma = new Proxy({} as PrismaClient, {
@@ -102,10 +122,6 @@ export const prisma = new Proxy({} as PrismaClient, {
       })
     }
 
-    const value = (client as any)[prop]
-    if (typeof value === 'function') {
-      return value.bind(client)
-    }
-    return value
+    return gated(client, prop)
   },
 })
