@@ -59,8 +59,7 @@ export async function renderFlowPdf(
     logoHeader: await logo('logo1-trim.png'),
     logoCover: await logo('logo2-trim.png'),
   })
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const blob = await pdf(doc as any).toBlob()
+  const blob = await pdf(doc as Parameters<typeof pdf>[0]).toBlob()
   return {
     buffer: Buffer.from(await blob.arrayBuffer()),
     filename: `${fileSlug(title)}-${fileSlug(proyecto)}.pdf`,
