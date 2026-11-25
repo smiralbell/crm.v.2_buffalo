@@ -7,6 +7,10 @@ const nextConfig = {
   // En esta imagen Docker arrancamos con `npm start` y node_modules completo,
   // así que no necesitamos que Next calcule file tracing (fase muy lenta en CI).
   outputFileTracing: false,
+  // El deploy solo compila. Tipos y lint se comprueban en GitHub Actions
+  // (.github/workflows/ci.yml) en cada push: así el build no tarda 5 minutos más.
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
   // FullCalendar ESM: evita que webpack busque index.js en la raíz del paquete.
   transpilePackages: [
     '@fullcalendar/core',

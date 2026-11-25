@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const notify = vi.fn(async () => undefined)
+const notify = vi.fn(async (_payload: unknown) => undefined)
 vi.mock('./notify', () => ({ notify: (x: unknown) => notify(x) }))
 vi.mock('./reminders', () => ({ scheduleReminder: vi.fn(async () => undefined), cancelReminders: vi.fn(async () => undefined) }))
 vi.mock('@/lib/db', () => ({ getPool: () => ({ query: async () => ({ rows: [] }) }) }))

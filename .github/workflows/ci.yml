@@ -1,0 +1,31 @@
+# Comprobaciones que antes hacía el deploy (y lo hacían lento): tipos, lint y tests.
+# Se ejecutan en GitHub en cada push y en cada pull request. Si fallan, lo verás en la pestaña Actions.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx prisma generate
+      - name: Tipos
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: Lint
+        run: npm run lint
+      - name: Tests
+        run: npm test
