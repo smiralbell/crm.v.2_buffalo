@@ -6,14 +6,14 @@ import {
   type FlujoRow,
   type TraceStep,
 } from '@/lib/retencion/flujos/store'
-import { FLOW_TOOLS, executeFlowTool } from '@/lib/retencion/flujos/tools'
+import { executeFlowTool, toolsForGroups } from '@/lib/retencion/flujos/tools'
 
 /** Pasos máximos de herramientas por ejecución. Evita bucles y costes sin control. */
 export const MAX_TOOL_ROUNDS = 8
 
 export const FLOW_SYSTEM_PROMPT = [
   'Eres un agente de análisis de proyectos de Buffalo AI.',
-  'Obtén los datos con las herramientas disponibles (MCP del proyecto, incidencias, tickets).',
+  'Obtén los datos con las herramientas que tengas disponibles en este flujo.',
   'No inventes cifras: si una herramienta no devuelve un dato, dilo en el JSON.',
   'Responde ÚNICAMENTE con un objeto JSON válido, sin markdown ni texto fuera del JSON.',
   'Si las instrucciones piden una forma concreta, respétala. Si no, usa:',
@@ -44,7 +44,7 @@ export async function runFlujo(flujo: FlujoRow, trigger: 'manual' | 'cron'): Pro
 
     let final: string | null = null
     for (let round = 0; round < MAX_TOOL_ROUNDS && final === null; round++) {
-      const turn = await openRouterToolTurn(messages, FLOW_TOOLS, {
+      const turn = await openRouterToolTurn(messages, toolsForGroups(flujo.tools), {
         model: resolveModel('heavy'),
         temperature: 0.1,
       })
@@ -62,7 +62,7 @@ export async function runFlujo(flujo: FlujoRow, trigger: 'manual' | 'cron'): Pro
             args = {}
           }
         }
-        const outcome = await executeFlowTool(flujo.proyecto_id, call.name, args)
+        const outcome = await executeFlowTool(flujo.proyecto_id, call.name, args, flujo.tools)
         trace.push({ tool: call.name, args, ok: outcome.ok, preview: outcome.preview })
         messages.push({
           role: 'tool',

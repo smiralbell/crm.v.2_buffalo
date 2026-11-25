@@ -5,29 +5,29 @@ import Layout from '@/components/Layout'
 import { useAuth } from '@/components/AuthContext'
 import IncidentsPanel from '@/components/retencion/IncidentsPanel'
 import McpPanel from '@/components/retencion/McpPanel'
-import FlujosPanel from '@/components/retencion/FlujosPanel'
+import SistemaWorkspace from '@/components/retencion/SistemaWorkspace'
 import TicketsPanel from '@/components/retencion/TicketsPanel'
 import WatchSystemPanel from '@/components/retencion/WatchSystemPanel'
 import { ArrowLeft, AlertCircle, Link2, Clock, FileText } from 'lucide-react'
 import type { ProyectoRow } from '@/lib/engranaje5/project-services'
 
-type Tab = 'incidencias' | 'tickets' | 'sistema' | 'mcp' | 'flujos'
+type Tab = 'incidencias' | 'tickets' | 'sistema' | 'mcp'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'incidencias', label: 'Incidencias' },
   { id: 'tickets', label: 'Tickets' },
   { id: 'sistema', label: 'Sistema' },
   { id: 'mcp', label: 'MCP' },
-  { id: 'flujos', label: 'Flujos' },
 ]
 
 function isValidTab(v: unknown): v is Tab {
-  return v === 'incidencias' || v === 'tickets' || v === 'sistema' || v === 'mcp' || v === 'flujos'
+  return v === 'incidencias' || v === 'tickets' || v === 'sistema' || v === 'mcp'
 }
 
 export default function RetencionProyectoDetailPage() {
   const router = useRouter()
-  const { loading: authLoading } = useAuth()
+  const { loading: authLoading, user } = useAuth()
+  const [sistemaWatch, setSistemaWatch] = useState(true)
   const { id, tab: urlTab } = router.query
 
   const [activeTab, setActiveTab] = useState<Tab>('incidencias')
@@ -129,7 +129,7 @@ export default function RetencionProyectoDetailPage() {
                   Conexión
                 </button>
               )}
-              {activeTab === 'sistema' && (
+              {activeTab === 'sistema' && sistemaWatch && (
                 <div className="flex items-center gap-2">
                   <Link
                     href={`/retencion/proyectos/${proyecto.id}/informes`}
@@ -183,18 +183,24 @@ export default function RetencionProyectoDetailPage() {
 
         {proyecto && activeTab === 'sistema' && (
           <div className="min-h-0 flex-1 pt-3">
-            <WatchSystemPanel
+            <SistemaWorkspace
               proyectoId={proyecto.id}
-              onGoIncidents={() => switchTab('incidencias')}
-              scheduleOpen={scheduleOpen}
-              onScheduleOpenChange={setScheduleOpen}
-              onIntervalLabel={setIntervalLabel}
+              canEdit={user?.role !== 'developer'}
+              onWatchSelected={setSistemaWatch}
+              watchPanel={
+                <WatchSystemPanel
+                  proyectoId={proyecto.id}
+                  onGoIncidents={() => switchTab('incidencias')}
+                  scheduleOpen={scheduleOpen}
+                  onScheduleOpenChange={setScheduleOpen}
+                  onIntervalLabel={setIntervalLabel}
+                />
+              }
             />
           </div>
         )}
 
         {proyecto && activeTab === 'mcp' && <McpPanel proyectoId={proyecto.id} proyectoName={proyecto.name} />}
-        {proyecto && activeTab === 'flujos' && <FlujosPanel proyectoId={proyecto.id} />}
       </div>
     </Layout>
   )

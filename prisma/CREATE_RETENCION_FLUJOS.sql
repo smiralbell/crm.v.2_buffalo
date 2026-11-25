@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS retencion_flujos (
   prompt           TEXT NOT NULL,
   interval_minutes INTEGER NOT NULL DEFAULT 0,
   enabled          BOOLEAN NOT NULL DEFAULT TRUE,
+  tools            TEXT[] NOT NULL DEFAULT ARRAY['mcp','incidencias','tickets'],
   last_run_at      TIMESTAMPTZ,
   next_run_at      TIMESTAMPTZ,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),

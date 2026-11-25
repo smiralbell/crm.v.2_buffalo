@@ -5,6 +5,7 @@ import { listMcpServers } from '@/lib/retencion/mcp/store'
 import { connectionForRow } from '@/lib/retencion/mcp/api'
 import { callMcpTool, inspectMcp, type McpConnection } from '@/lib/retencion/mcp/client'
 import { ensureIncidentsTable } from '@/lib/retencion/incidents'
+import type { FlujoHerramienta } from '@/lib/retencion/flujos/store'
 
 /**
  * Las tres herramientas de un flujo:
@@ -80,6 +81,19 @@ export const FLOW_TOOLS: ORTool[] = [
     },
   },
 ]
+
+/** A qué herramienta del flujo pertenece cada función que ve el modelo. */
+export const TOOL_GROUP: Record<string, FlujoHerramienta> = {
+  mcp_listar_herramientas: 'mcp',
+  mcp_llamar_herramienta: 'mcp',
+  incidencias_listar: 'incidencias',
+  tickets_listar: 'tickets',
+}
+
+/** Funciones que ve el modelo según las herramientas activadas en el flujo. */
+export function toolsForGroups(groups: readonly FlujoHerramienta[]): ORTool[] {
+  return FLOW_TOOLS.filter((t) => groups.includes(TOOL_GROUP[t.name]))
+}
 
 export type ToolOutcome = { ok: boolean; result: unknown; preview: string }
 
@@ -164,8 +178,15 @@ async function ticketsListar(proyectoId: string, rawArgs: unknown): Promise<unkn
 }
 
 /** Ejecuta una herramienta del flujo. Los errores vuelven al modelo como resultado, no rompen el flujo. */
-export async function executeFlowTool(proyectoId: string, name: string, rawArgs: unknown): Promise<ToolOutcome> {
+export async function executeFlowTool(
+  proyectoId: string,
+  name: string,
+  rawArgs: unknown,
+  allowed: readonly FlujoHerramienta[] = ['mcp', 'incidencias', 'tickets']
+): Promise<ToolOutcome> {
   try {
+    const group = TOOL_GROUP[name]
+    if (group && !allowed.includes(group)) throw new Error(`La herramienta ${group} está desactivada en este flujo`)
     let result: unknown
     if (name === 'mcp_listar_herramientas') {
       const conn = await projectMcpConnection(proyectoId)

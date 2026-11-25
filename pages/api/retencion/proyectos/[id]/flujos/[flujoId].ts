@@ -10,6 +10,7 @@ const patchSchema = z.object({
   prompt: z.string().trim().min(10).max(20000).optional(),
   interval_minutes: z.union([z.literal(0), z.literal(15), z.literal(60), z.literal(360), z.literal(1440)]).optional(),
   enabled: z.boolean().optional(),
+  tools: z.array(z.enum(['mcp', 'incidencias', 'tickets'])).min(1, 'Activa al menos una herramienta').optional(),
 })
 
 /** PATCH cambia nombre, prompt, disparador o pausa. DELETE borra el flujo y sus ejecuciones. */
@@ -30,6 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         prompt: body.prompt,
         intervalMinutes: body.interval_minutes,
         enabled: body.enabled,
+        tools: body.tools,
       })
       if (!flujo) return res.status(404).json({ error: 'Flujo no encontrado' })
       return res.status(200).json({ flujo })

@@ -10,6 +10,7 @@ const createSchema = z.object({
   prompt: z.string().trim().min(10, 'El prompt es demasiado corto').max(20000),
   interval_minutes: z.union([z.literal(0), z.literal(15), z.literal(60), z.literal(360), z.literal(1440)]).default(0),
   enabled: z.boolean().default(true),
+  tools: z.array(z.enum(['mcp', 'incidencias', 'tickets'])).min(1, 'Activa al menos una herramienta').optional(),
 })
 
 /** Flujos de Retención del proyecto. GET lista, POST crea. */
@@ -35,6 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         prompt: body.prompt,
         intervalMinutes: body.interval_minutes,
         enabled: body.enabled,
+        tools: body.tools,
       })
       return res.status(201).json({ flujo })
     }

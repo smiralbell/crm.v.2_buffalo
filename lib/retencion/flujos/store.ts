@@ -12,6 +12,10 @@ export const INTERVALO_LABEL: Record<FlujoIntervalo, string> = {
   1440: 'Diario',
 }
 
+/** Herramientas que se pueden activar en un flujo. */
+export const FLUJO_HERRAMIENTAS = ['mcp', 'incidencias', 'tickets'] as const
+export type FlujoHerramienta = (typeof FLUJO_HERRAMIENTAS)[number]
+
 export type FlujoRow = {
   id: string
   proyecto_id: string
@@ -19,6 +23,7 @@ export type FlujoRow = {
   prompt: string
   interval_minutes: number
   enabled: boolean
+  tools: FlujoHerramienta[]
   last_run_at: string | null
   next_run_at: string | null
   created_at: string
@@ -60,6 +65,9 @@ export async function ensureFlujosTables(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`)
+  await query(
+    `ALTER TABLE retencion_flujos ADD COLUMN IF NOT EXISTS tools TEXT[] NOT NULL DEFAULT ARRAY['mcp','incidencias','tickets']`
+  )
   await query(`
     CREATE TABLE IF NOT EXISTS retencion_flujo_runs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -75,8 +83,18 @@ export async function ensureFlujosTables(): Promise<void> {
   ready = true
 }
 
-const FLUJO_COLS = `id::text, proyecto_id::text, name, prompt, interval_minutes, enabled,
+const FLUJO_COLS = `id::text, proyecto_id::text, name, prompt, interval_minutes, enabled, tools,
   last_run_at, next_run_at, created_at, updated_at`
+
+/** Solo herramientas conocidas y sin repetir; nunca una lista vacía. */
+export function cleanTools(list: readonly string[] | null | undefined): FlujoHerramienta[] {
+  const set = new Set((list || []).filter((t): t is FlujoHerramienta => (FLUJO_HERRAMIENTAS as readonly string[]).includes(t)))
+  return set.size ? FLUJO_HERRAMIENTAS.filter((t) => set.has(t)) : [...FLUJO_HERRAMIENTAS]
+}
+
+function mapRow(r: FlujoRow): FlujoRow {
+  return { ...r, tools: cleanTools(r.tools) }
+}
 
 export async function listFlujos(proyectoId: string): Promise<FlujoRow[]> {
   await ensureFlujosTables()
@@ -84,7 +102,7 @@ export async function listFlujos(proyectoId: string): Promise<FlujoRow[]> {
     `SELECT ${FLUJO_COLS} FROM retencion_flujos WHERE proyecto_id = $1::uuid ORDER BY created_at ASC`,
     [proyectoId]
   )
-  return rows
+  return rows.map(mapRow)
 }
 
 export async function getFlujo(proyectoId: string, flujoId: string): Promise<FlujoRow | null> {
@@ -93,7 +111,7 @@ export async function getFlujo(proyectoId: string, flujoId: string): Promise<Flu
     `SELECT ${FLUJO_COLS} FROM retencion_flujos WHERE id = $1::uuid AND proyecto_id = $2::uuid`,
     [flujoId, proyectoId]
   )
-  return rows[0] ?? null
+  return rows[0] ? mapRow(rows[0]) : null
 }
 
 export async function createFlujo(input: {
@@ -102,22 +120,29 @@ export async function createFlujo(input: {
   prompt: string
   intervalMinutes: FlujoIntervalo
   enabled: boolean
+  tools?: readonly string[]
 }): Promise<FlujoRow> {
   await ensureFlujosTables()
   const { rows } = await query<FlujoRow>(
-    `INSERT INTO retencion_flujos (proyecto_id, name, prompt, interval_minutes, enabled, next_run_at)
-     VALUES ($1::uuid, $2, $3, $4, $5,
+    `INSERT INTO retencion_flujos (proyecto_id, name, prompt, interval_minutes, enabled, tools, next_run_at)
+     VALUES ($1::uuid, $2, $3, $4, $5, $6::text[],
              CASE WHEN $4 > 0 AND $5 THEN NOW() + ($4 || ' minutes')::interval ELSE NULL END)
      RETURNING ${FLUJO_COLS}`,
-    [input.proyectoId, input.name, input.prompt, input.intervalMinutes, input.enabled]
+    [input.proyectoId, input.name, input.prompt, input.intervalMinutes, input.enabled, cleanTools(input.tools)]
   )
-  return rows[0]
+  return mapRow(rows[0])
 }
 
 export async function updateFlujo(
   proyectoId: string,
   flujoId: string,
-  patch: { name?: string; prompt?: string; intervalMinutes?: FlujoIntervalo; enabled?: boolean }
+  patch: {
+    name?: string
+    prompt?: string
+    intervalMinutes?: FlujoIntervalo
+    enabled?: boolean
+    tools?: readonly string[]
+  }
 ): Promise<FlujoRow | null> {
   const current = await getFlujo(proyectoId, flujoId)
   if (!current) return null
@@ -125,15 +150,16 @@ export async function updateFlujo(
   const prompt = patch.prompt ?? current.prompt
   const interval = patch.intervalMinutes ?? current.interval_minutes
   const enabled = patch.enabled ?? current.enabled
+  const tools = cleanTools(patch.tools ?? current.tools)
   const { rows } = await query<FlujoRow>(
     `UPDATE retencion_flujos
-        SET name = $3, prompt = $4, interval_minutes = $5, enabled = $6, updated_at = NOW(),
+        SET name = $3, prompt = $4, interval_minutes = $5, enabled = $6, tools = $7::text[], updated_at = NOW(),
             next_run_at = CASE WHEN $5 > 0 AND $6 THEN NOW() + ($5 || ' minutes')::interval ELSE NULL END
       WHERE id = $1::uuid AND proyecto_id = $2::uuid
       RETURNING ${FLUJO_COLS}`,
-    [flujoId, proyectoId, name, prompt, interval, enabled]
+    [flujoId, proyectoId, name, prompt, interval, enabled, tools]
   )
-  return rows[0] ?? null
+  return rows[0] ? mapRow(rows[0]) : null
 }
 
 export async function deleteFlujo(proyectoId: string, flujoId: string): Promise<boolean> {
@@ -199,5 +225,5 @@ export async function dueFlujos(limit = 5): Promise<FlujoRow[]> {
       ORDER BY next_run_at NULLS FIRST LIMIT $1`,
     [limit]
   )
-  return rows
+  return rows.map(mapRow)
 }
