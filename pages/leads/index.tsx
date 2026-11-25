@@ -24,7 +24,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, Search, Edit, Trash2, Eye, AlertTriangle, Video } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, AlertTriangle, Video, Bot } from 'lucide-react'
+import { useAuth } from '@/components/AuthContext'
 import Link from 'next/link'
 import NewLeadDialog from '@/components/NewLeadDialog'
 import EditLeadDialog from '@/components/EditLeadDialog'
@@ -270,6 +271,8 @@ export default function LeadsPage({
   estado: initialEstado,
 }: LeadsPageProps) {
   const router = useRouter()
+  const { user: authUser } = useAuth()
+  const isAdminUser = authUser?.role === 'admin'
   const [search, setSearch] = useState(initialSearch)
   const [tipo, setTipo] = useState(initialTipo || 'all')
   const [estado, setEstado] = useState(initialEstado || 'all')
@@ -442,6 +445,14 @@ export default function LeadsPage({
                     Reuniones
                   </Button>
                 </Link>
+                {isAdminUser && (
+                  <Link href="/demos" className="flex-1 lg:flex-initial">
+                    <Button type="button" variant="outline" className="rounded-xl w-full">
+                      <Bot className="mr-1.5 h-4 w-4 sm:mr-2" />
+                      Demos
+                    </Button>
+                  </Link>
+                )}
                 <Button
                   type="button"
                   variant="outline"

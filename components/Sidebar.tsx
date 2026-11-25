@@ -106,7 +106,6 @@ const NAV: NavItem[] = [
     roles: ['admin', 'developer', 'project_manager'],
     children: [
       { href: '/gestion-proyecto', label: 'Proyectos abiertos' },
-      { href: '/demos', label: 'Demos', roles: ['admin'] },
     ],
   },
   {
