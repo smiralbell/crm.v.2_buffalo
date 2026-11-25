@@ -6,6 +6,7 @@ import {
   buildIncidentsMarkdown,
   incidentsWebhookToken,
   incidentsWebhookUrl,
+  incidentStats,
   listIncidents,
 } from '@/lib/retencion/incidents'
 
@@ -21,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const eligible = await assertRetencionEligible(proyectoId)
     if (!eligible.ok) return res.status(eligible.status).json({ error: eligible.error })
 
-    const incidents = await listIncidents(proyectoId)
+    const [incidents, stats] = await Promise.all([listIncidents(proyectoId), incidentStats(proyectoId)])
     const webhookToken = incidentsWebhookToken()
     const markdown = buildIncidentsMarkdown({
       proyectoId: eligible.row.id,
@@ -44,6 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       client_id: eligible.row.id,
       markdown,
       incidents,
+      stats,
     })
   } catch (err) {
     if (res.headersSent) return

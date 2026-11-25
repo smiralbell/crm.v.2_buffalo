@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import { useAuth } from '@/components/AuthContext'
-import { Eye, RefreshCw, AlertCircle } from 'lucide-react'
+import { AlertCircle, ChevronRight } from 'lucide-react'
 
 interface RetencionRow {
   id: string
@@ -28,12 +28,6 @@ interface RetencionRow {
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n)
 
-const maintLabel = (plan: string | null) => {
-  if (plan === 'connect') return 'Buffalo Connect (10%)'
-  if (plan === 'cloud') return 'Buffalo Cloud (15%)'
-  return '—'
-}
-
 const statusLabel: Record<string, string> = {
   development: 'En desarrollo',
   active: 'Activo',
@@ -49,6 +43,7 @@ const serviceLabel: Record<string, string> = {
 
 export default function RetencionPage() {
   const { user, loading: authLoading } = useAuth()
+  const router = useRouter()
   const isAdmin = !authLoading && user?.role === 'admin'
   const [rows, setRows] = useState<RetencionRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -77,18 +72,6 @@ export default function RetencionPage() {
   return (
     <Layout>
       <div className="w-full space-y-6">
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-4 h-10 border border-border text-sm font-medium rounded-xl hover:bg-muted transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </button>
-        </div>
-
         {error && (
           <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
@@ -130,7 +113,6 @@ export default function RetencionPage() {
                     <th className="text-left font-medium text-gray-500 px-5 py-3">Proyecto</th>
                     {isAdmin && (
                       <>
-                        <th className="text-left font-medium text-gray-500 px-5 py-3">Plan</th>
                         <th className="text-right font-medium text-gray-500 px-5 py-3">Setup</th>
                         <th className="text-right font-medium text-gray-500 px-5 py-3">Mensualidad</th>
                       </>
@@ -143,7 +125,16 @@ export default function RetencionPage() {
                   {rows.map((row) => {
                     const clientName = row.contact?.nombre || row.contact?.email || row.name
                     return (
-                      <tr key={row.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                      <tr
+                        key={row.id}
+                        onClick={() => router.push(`/retencion/proyectos/${row.id}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') router.push(`/retencion/proyectos/${row.id}`)
+                        }}
+                        tabIndex={0}
+                        role="link"
+                        className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors focus:outline-none focus-visible:bg-gray-50"
+                      >
                         <td className="px-5 py-4">
                           <div className="font-medium text-gray-900">{clientName}</div>
                           {row.contact?.empresa && row.contact.empresa !== clientName && (
@@ -164,11 +155,6 @@ export default function RetencionPage() {
                         </td>
                         {isAdmin && (
                           <>
-                            <td className="px-5 py-4">
-                              <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-700">
-                                {maintLabel(row.maint_plan)}
-                              </span>
-                            </td>
                             <td className="px-5 py-4 text-right font-medium text-gray-700 tabular-nums">
                               {row.setup_fee_eur != null ? fmt(row.setup_fee_eur) : '—'}
                             </td>
@@ -185,13 +171,7 @@ export default function RetencionPage() {
                           </span>
                         </td>
                         <td className="px-5 py-4 text-right">
-                          <Link
-                            href={`/retencion/proyectos/${row.id}`}
-                            className="inline-flex items-center justify-center w-9 h-9 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-300 hover:text-gray-900 transition-colors"
-                            title="Ver proyecto"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Link>
+                          <ChevronRight className="ml-auto h-4 w-4 text-gray-300" />
                         </td>
                       </tr>
                     )

@@ -2,10 +2,10 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { assertProjectAccess } from '@/lib/project-access'
 import { assertRetencionEligible } from '@/lib/retencion/eligibility'
-import { markIncidentSolved } from '@/lib/retencion/incidents'
+import { deleteIncident, markIncidentSolved } from '@/lib/retencion/incidents'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' })
+  if (req.method !== 'PATCH' && req.method !== 'DELETE') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
     const user = await requireAuthAPI(req, res)
@@ -16,6 +16,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await assertProjectAccess(user, proyectoId, res)
     const eligible = await assertRetencionEligible(proyectoId)
     if (!eligible.ok) return res.status(eligible.status).json({ error: eligible.error })
+
+    if (req.method === 'DELETE') {
+      const ok = await deleteIncident(proyectoId, incidentId)
+      if (!ok) return res.status(404).json({ error: 'Incidencia no encontrada' })
+      return res.status(200).json({ ok: true })
+    }
 
     const body = req.body && typeof req.body === 'object' ? (req.body as { status?: string }) : {}
     if (body.status !== 'solved') {

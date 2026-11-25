@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toolKind, type McpToolKind } from '@/lib/retencion/mcp/readonly'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -21,7 +22,17 @@ import { useAuth } from '@/components/AuthContext'
  * nombre + URL → detecta la autenticación → inicio de sesión, cliente OAuth y cabeceras → Añadir.
  */
 
-type ToolInfo = { name: string; description?: string; annotations?: { readOnlyHint?: boolean; title?: string } | null }
+type ToolInfo = {
+  name: string
+  description?: string
+  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean; title?: string } | null
+}
+
+const KIND_STYLE: Record<McpToolKind, { label: string; dot: string; chip: string }> = {
+  lectura: { label: 'Lectura', dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+  escritura: { label: 'Escritura', dot: 'bg-amber-500', chip: 'bg-amber-50 text-amber-800 ring-amber-200' },
+  eliminar: { label: 'Eliminar', dot: 'bg-red-500', chip: 'bg-red-50 text-red-700 ring-red-200' },
+}
 
 type Connector = {
   id: number
@@ -577,21 +588,36 @@ function ConnectorDetail({
         </div>
         {c.tools.length > 0 && (
           <>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Herramientas de solo lectura</p>
-            <ul className="divide-y divide-gray-100 rounded-xl border border-gray-100">
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {(['lectura', 'escritura', 'eliminar'] as McpToolKind[]).map((k) => {
+                const n = c.tools.filter((t) => toolKind(t) === k).length
+                if (n === 0) return null
+                return (
+                  <span key={k} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ${KIND_STYLE[k].chip}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${KIND_STYLE[k].dot}`} />
+                    {n} {KIND_STYLE[k].label.toLowerCase()}
+                  </span>
+                )
+              })}
+            </div>
+            <ul className="grid gap-2 sm:grid-cols-2">
               {c.tools.map((t) => {
                 const enabled = !c.disabled_tools.includes(t.name)
-                const ro = t.annotations?.readOnlyHint === true
+                const kind = toolKind(t)
                 return (
-                  <li key={t.name} className="flex items-start justify-between gap-3 px-3 py-2.5">
-                    <div className="flex min-w-0 items-start gap-2">
-                      {ro ? (
-                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                      ) : (
-                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-                      )}
+                  <li
+                    key={t.name}
+                    className={`flex items-start justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-3.5 py-3 transition-opacity ${enabled ? '' : 'opacity-55'}`}
+                  >
+                    <div className="flex min-w-0 items-start gap-2.5">
+                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${KIND_STYLE[kind].dot}`} title={KIND_STYLE[kind].label} />
                       <div className="min-w-0">
-                        <p className="text-sm text-gray-900">{t.annotations?.title || t.name}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="truncate text-sm font-medium text-gray-900">{t.annotations?.title || t.name}</p>
+                          <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ${KIND_STYLE[kind].chip}`}>
+                            {KIND_STYLE[kind].label}
+                          </span>
+                        </div>
                         {t.annotations?.title && <p className="font-mono text-[11px] text-gray-400">{t.name}</p>}
                         {t.description && <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">{t.description}</p>}
                       </div>

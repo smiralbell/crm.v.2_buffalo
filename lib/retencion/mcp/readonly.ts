@@ -74,3 +74,17 @@ export function describeBlocked(check: ReadOnlyCheck): string {
   const more = check.bloqueadas.length > 8 ? ` y ${check.bloqueadas.length - 8} más` : ''
   return `Este MCP no es de solo lectura. Herramientas que lo impiden: ${list}${more}. Cada herramienta debe declarar annotations.readOnlyHint = true y no escribir nada.`
 }
+
+export type McpToolKind = 'lectura' | 'escritura' | 'eliminar'
+
+const DELETE_WORDS = new Set(['delete', 'borrar', 'eliminar', 'remove', 'quitar', 'drop', 'truncate', 'purge', 'destroy', 'trash'])
+
+/** Para pintar cada herramienta con su color: qué hace según lo que declara y su nombre. */
+export function toolKind(tool: McpToolInfo): McpToolKind {
+  const a = tool.annotations || {}
+  const words = toolWords(tool.name)
+  const readFirst = words.slice(0, 2).some((w) => READ_WORDS.has(w))
+  if (a.destructiveHint === true || (!readFirst && words.some((w) => DELETE_WORDS.has(w)))) return 'eliminar'
+  if (a.readOnlyHint !== true || writeWordIn(tool.name)) return 'escritura'
+  return 'lectura'
+}

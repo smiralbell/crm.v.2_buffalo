@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'crypto'
 import type { NextApiRequest } from 'next'
 import { query } from '@/lib/db'
 
-export type IncidentStatus = 'open' | 'solved'
+export type IncidentStatus = 'open' | 'solved' | 'deleted'
 
 export type IncidentRow = {
   id: string
@@ -216,7 +216,7 @@ export async function listIncidents(proyectoId: string): Promise<IncidentRow[]> 
     `SELECT id::text, proyecto_id::text, error_text, error_hash, payload, status,
             occurrences, last_seen_at, solved_at, created_at
        FROM retencion_incidents
-      WHERE proyecto_id = $1::uuid
+      WHERE proyecto_id = $1::uuid AND status <> 'deleted'
       ORDER BY (status = 'open') DESC, last_seen_at DESC
       LIMIT 200`,
     [proyectoId]
@@ -270,4 +270,47 @@ export async function listIncidentsSince(
     [proyectoId, sinceIso, limit]
   )
   return rows
+}
+
+export type IncidentStats = {
+  open: number
+  solved: number
+  deleted: number
+  /** Avisos recibidos en total (suma de ocurrencias, sin las eliminadas) */
+  occurrences: number
+  /** La incidencia que más veces ha llegado */
+  max_occurrences: number
+}
+
+export async function incidentStats(proyectoId: string): Promise<IncidentStats> {
+  await ensureIncidentsTable()
+  const { rows } = await query<{ status: string; n: number; occ: number; max_occ: number }>(
+    `SELECT status, COUNT(*)::int AS n, COALESCE(SUM(occurrences), 0)::int AS occ,
+            COALESCE(MAX(occurrences), 0)::int AS max_occ
+       FROM retencion_incidents
+      WHERE proyecto_id = $1::uuid
+      GROUP BY status`,
+    [proyectoId]
+  )
+  const by = (st: string) => rows.find((r) => r.status === st)
+  const live = rows.filter((r) => r.status !== 'deleted')
+  return {
+    open: by('open')?.n ?? 0,
+    solved: by('solved')?.n ?? 0,
+    deleted: by('deleted')?.n ?? 0,
+    occurrences: live.reduce((a, r) => a + r.occ, 0),
+    max_occurrences: live.reduce((a, r) => Math.max(a, r.max_occ), 0),
+  }
+}
+
+/** Elimina una incidencia de la lista (se guarda como eliminada para el recuento). */
+export async function deleteIncident(proyectoId: string, id: string): Promise<boolean> {
+  await ensureIncidentsTable()
+  const { rowCount } = await query(
+    `UPDATE retencion_incidents
+        SET status = 'deleted', solved_at = COALESCE(solved_at, NOW())
+      WHERE id = $1 AND proyecto_id = $2::uuid AND status <> 'deleted'`,
+    [id, proyectoId]
+  )
+  return (rowCount ?? 0) > 0
 }
