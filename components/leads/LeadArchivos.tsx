@@ -17,10 +17,26 @@ type Archivos = {
   carpeta: { folder_url: string; folder_name: string } | null
   documentos: Documento[]
   facturas: Factura[]
+  facturas_sugeridas?: Factura[]
   can_see_invoices: boolean
 }
 
-const TIPO_LABEL: Record<string, string> = { documento: 'Documento', propuesta: 'Propuesta' }
+type TipoDoc = 'documento' | 'propuesta' | 'presupuesto' | 'contrato' | 'kickoff'
+const TIPOS: { id: TipoDoc; label: string }[] = [
+  { id: 'documento', label: 'Documento' },
+  { id: 'propuesta', label: 'Propuesta' },
+  { id: 'presupuesto', label: 'Presupuesto' },
+  { id: 'contrato', label: 'Contrato' },
+  { id: 'kickoff', label: 'Kickoff' },
+]
+
+const TIPO_LABEL: Record<string, string> = {
+  documento: 'Documento',
+  propuesta: 'Propuesta',
+  presupuesto: 'Presupuesto',
+  contrato: 'Contrato',
+  kickoff: 'Kickoff',
+}
 const STATUS_LABEL: Record<string, string> = { draft: 'Borrador', sent: 'Enviada', paid: 'Pagada', cancelled: 'Anulada' }
 const eur = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
 const fecha = (s: string) => new Date(s).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
@@ -36,7 +52,7 @@ export default function LeadArchivos({ leadId }: { leadId: number }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [tipo, setTipo] = useState<'documento' | 'propuesta'>('documento')
+  const [tipo, setTipo] = useState<TipoDoc>('documento')
   const [buscar, setBuscar] = useState('')
   const [resultados, setResultados] = useState<Factura[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
@@ -161,23 +177,35 @@ export default function LeadArchivos({ leadId }: { leadId: number }) {
               Drive no está configurado: falta GOOGLE_DRIVE_CLIENTES_FOLDER_ID.
             </p>
           )}
-          <div className="flex gap-2">
-            <select
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value as 'documento' | 'propuesta')}
-              className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm"
-            >
-              <option value="documento">Documento</option>
-              <option value="propuesta">Propuesta</option>
-            </select>
+          <div className="space-y-2">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">Tipo de documento</p>
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Tipo de documento">
+              {TIPOS.map((t) => {
+                const active = tipo === t.id
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setTipo(t.id)}
+                    className={`h-8 rounded-full px-3 text-xs font-medium transition-colors ${
+                      active ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-600 ring-1 ring-gray-200 hover:bg-white hover:ring-gray-300'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                )
+              })}
+            </div>
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={busy === 'subida' || driveOff}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg bg-gray-900 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-40"
+              className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-40"
             >
               {busy === 'subida' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-              Subir a Drive
+              Subir {TIPO_LABEL[tipo].toLowerCase()} a Drive
             </button>
             <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => void upload(e.target.files)} />
           </div>
@@ -224,7 +252,9 @@ export default function LeadArchivos({ leadId }: { leadId: number }) {
           </CardHeader>
           <CardContent className="space-y-3">
             {!data ? null : data.facturas.length === 0 ? (
-              <p className="text-xs text-gray-400">Sin facturas vinculadas.</p>
+              <p className="text-xs text-gray-400">
+                Sin facturas vinculadas. Las que tienen el mismo email o CIF que el cliente se vinculan solas.
+              </p>
             ) : (
               <ul className="divide-y divide-gray-100">
                 {data.facturas.map((f) => (
@@ -254,6 +284,33 @@ export default function LeadArchivos({ leadId }: { leadId: number }) {
                   </li>
                 ))}
               </ul>
+            )}
+            {data && (data.facturas_sugeridas?.length ?? 0) > 0 && (
+              <div className="space-y-1.5 rounded-xl border border-dashed border-gray-200 p-2.5">
+                <p className="text-[11px] font-medium text-gray-500">Posibles facturas de este cliente (mismo nombre)</p>
+                <ul className="divide-y divide-gray-100">
+                  {data.facturas_sugeridas!.map((f) => (
+                    <li key={f.id} className="flex items-center gap-2 py-1.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-gray-900">
+                          {f.invoice_number} · {eur(f.total)}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          {fecha(f.issue_date)} · {f.client_name}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => link(f)}
+                        disabled={busy === `link-${f.id}`}
+                        className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-gray-900 hover:text-gray-600 disabled:opacity-50"
+                      >
+                        <Link2 className="h-3.5 w-3.5" /> Vincular
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />

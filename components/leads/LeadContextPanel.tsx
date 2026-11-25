@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Copy, Download, Loader2, Save, Send, Sparkles, StickyNote } from 'lucide-react'
+import { Check, Copy, Loader2, Save, Send, StickyNote } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -24,7 +24,7 @@ export async function exportLeadContext(leadId: number): Promise<void> {
   URL.revokeObjectURL(url)
 }
 
-/** Contexto del lead: editar, guardar, copiar, exportar, resumen con IA y preguntas a la IA. */
+/** Contexto escrito por el equipo: editar, guardar, copiar y preguntar a la IA. */
 export default function LeadContextPanel({ leadId, initial }: { leadId: number; initial: string }) {
   const [value, setValue] = useState(initial)
   const [baseline, setBaseline] = useState(initial)
@@ -63,52 +63,6 @@ export default function LeadContextPanel({ leadId, initial }: { leadId: number; 
     }
   }
 
-  const resumen = async () => {
-    if (dirty && !window.confirm('El texto sin guardar se reemplazará por el borrador de la IA. ¿Continuar?')) return
-    setBusy('resumen')
-    setError('')
-    try {
-      const res = await fetch(`/api/leads/${leadId}/contexto`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'resumen' }),
-      })
-      if (!res.ok) throw new Error(await readError(res, 'La IA no pudo generar el resumen'))
-      setValue(((await res.json()) as { borrador: string }).borrador)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'La IA no pudo generar el resumen')
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const exportar = async () => {
-    setBusy('exportar')
-    setError('')
-    try {
-      await exportLeadContext(leadId)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo exportar')
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const copiarTodo = async () => {
-    setBusy('copiar')
-    setError('')
-    try {
-      const res = await fetch(`/api/leads/${leadId}/contexto`)
-      if (!res.ok) throw new Error(await readError(res, 'No se pudo copiar'))
-      await navigator.clipboard.writeText(((await res.json()) as { markdown: string }).markdown)
-      flashCopied('todo')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo copiar')
-    } finally {
-      setBusy(null)
-    }
-  }
-
   const preguntar = async () => {
     if (!pregunta.trim()) return
     setBusy('preguntar')
@@ -138,14 +92,10 @@ export default function LeadContextPanel({ leadId, initial }: { leadId: number; 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
             <StickyNote className="h-4 w-4" />
-            Contexto del lead
+            Contexto escrito por el equipo
           </CardTitle>
           <div className="flex flex-wrap items-center gap-1.5">
             {savedAt && !dirty && <span className="text-[11px] text-emerald-600">Guardado {savedAt}</span>}
-            <button type="button" className={smallBtn} onClick={resumen} disabled={busy !== null}>
-              {busy === 'resumen' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-              Resumen IA
-            </button>
             <button
               type="button"
               className={smallBtn}
@@ -162,20 +112,6 @@ export default function LeadContextPanel({ leadId, initial }: { leadId: number; 
             >
               {copied === 'contexto' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
               Copiar
-            </button>
-            <button
-              type="button"
-              className={smallBtn}
-              onClick={copiarTodo}
-              disabled={busy !== null}
-              title="Copiar datos, contexto, facturas, documentos e historial"
-            >
-              {copied === 'todo' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              Copiar todo
-            </button>
-            <button type="button" className={smallBtn} onClick={exportar} disabled={busy !== null} title="Descargar como .md">
-              {busy === 'exportar' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-              Exportar
             </button>
             <Button
               size="sm"

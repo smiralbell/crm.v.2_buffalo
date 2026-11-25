@@ -129,3 +129,86 @@ export async function unlinkInvoiceFromPersona(leadId: number, invoiceId: number
   })
   if (res.count === 0) throw new Error('La factura no está vinculada a esta persona')
 }
+
+// ——— Relación automática ———
+
+/** «Grupo Corp, S.L.» → «grupo corp» para comparar nombres de cliente. */
+export function normalizeCompany(name: string | null | undefined): string {
+  return (name || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/( (sl|sa|slu|s l|s a|s l u|sociedad limitada))+$/, '')
+    .trim()
+}
+
+const INVOICE_SELECT = {
+  id: true,
+  invoice_number: true,
+  client_name: true,
+  issue_date: true,
+  total: true,
+  status: true,
+  pdf_drive_url: true,
+} as const
+
+/**
+ * Relaciona solas las facturas de cliente que son claramente de este lead
+ * (mismo email o mismo CIF) y que no están vinculadas a ningún otro.
+ * Devuelve cuántas ha vinculado.
+ */
+export async function autoRelateInvoices(leadId: number): Promise<number> {
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { contact: { select: { email: true, cif: true } } },
+  })
+  const email = lead?.contact.email?.trim()
+  const cif = lead?.contact.cif?.replace(/\s+/g, '').toUpperCase()
+  if (!email && !cif) return 0
+
+  const candidates = await prisma.invoice.findMany({
+    where: {
+      lead_id: null,
+      deleted_at: null,
+      invoice_source: 'client',
+      OR: [
+        ...(email ? [{ client_email: { equals: email, mode: 'insensitive' as const } }] : []),
+        ...(cif ? [{ client_tax_id: { equals: cif, mode: 'insensitive' as const } }] : []),
+      ],
+    },
+    select: { id: true },
+    take: 50,
+  })
+  let linked = 0
+  for (const inv of candidates) {
+    try {
+      await linkInvoiceToPersona(leadId, inv.id)
+      linked++
+    } catch {
+      // si una falla, se sigue con las demás
+    }
+  }
+  return linked
+}
+
+/** Facturas sin vincular cuyo cliente se llama igual que la empresa o la persona del lead. */
+export async function suggestInvoicesByName(leadId: number): Promise<PersonaFactura[]> {
+  const lead = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { contact: { select: { nombre: true, empresa: true } } },
+  })
+  const names = [lead?.contact.empresa, lead?.contact.nombre].map(normalizeCompany).filter((n) => n.length >= 3)
+  if (!names.length) return []
+  const pool = await prisma.invoice.findMany({
+    where: { lead_id: null, deleted_at: null, invoice_source: 'client' },
+    orderBy: { issue_date: 'desc' },
+    take: 500,
+    select: { ...INVOICE_SELECT, client_company_name: true },
+  })
+  return pool
+    .filter((inv) => names.includes(normalizeCompany(inv.client_name)) || names.includes(normalizeCompany(inv.client_company_name)))
+    .slice(0, 10)
+    .map(mapInvoice)
+}

@@ -34,6 +34,8 @@ import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
 import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
 import LeadContextPanel, { exportLeadContext } from '@/components/leads/LeadContextPanel'
 import LeadArchivos from '@/components/leads/LeadArchivos'
+import LeadSummaryCard from '@/components/leads/LeadSummaryCard'
+import LeadContextMap from '@/components/leads/LeadContextMap'
 import {
   getLeadDetailBundle,
   type LeadAlert,
@@ -247,17 +249,6 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
     document.getElementById('contexto')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
-  const projectCtx = bundle.pipeline?.project_context
-  const projectBlocks = [
-    { label: 'Resumen del proyecto', text: projectCtx?.onboarding_summary },
-    { label: 'Notas del proyecto', text: projectCtx?.onboarding_notes },
-    {
-      label: `Última reunión${projectCtx?.last_meeting_title ? ` · ${projectCtx.last_meeting_title}` : ''}`,
-      text: projectCtx?.last_meeting_summary,
-    },
-    { label: 'Retención', text: projectCtx?.retention_excerpt },
-  ].filter((b) => Boolean(b.text))
-
   const exportar = async () => {
     setExporting(true)
     try {
@@ -322,29 +313,15 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
 
         <AlertsStrip alerts={bundle.alerts} />
 
+        <LeadSummaryCard leadId={lead.id} />
+
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Columna principal */}
           <div className="min-w-0 space-y-4 lg:col-span-2">
+            <LeadContextMap leadId={lead.id} />
+
             <LeadContextPanel leadId={lead.id} initial={lead.notas || ''} />
 
-            {projectBlocks.length > 0 && (
-              <Card className="shadow-sm border-gray-200">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                    <FileText className="h-4 w-4" />
-                    Proyecto y reuniones
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-3 text-sm text-gray-700 sm:grid-cols-2">
-                  {projectBlocks.map((b) => (
-                    <div key={b.label} className="rounded-xl bg-gray-50 p-3">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">{b.label}</p>
-                      <p className="line-clamp-6 whitespace-pre-wrap leading-relaxed">{b.text}</p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
 
             <CrmActivityTimeline
               contactId={lead.contact?.id ?? null}

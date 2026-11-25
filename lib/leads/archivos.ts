@@ -22,12 +22,15 @@ import { pickClientFolder, type FolderRow } from '@/lib/leads/drive-match'
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 const SHORTCUT_MIME = 'application/vnd.google-apps.shortcut'
 
-export const PERSONA_TIPOS = ['documento', 'propuesta'] as const
+export const PERSONA_TIPOS = ['documento', 'propuesta', 'presupuesto', 'contrato', 'kickoff'] as const
 export type PersonaTipo = (typeof PERSONA_TIPOS)[number]
 
 const TIPO_FOLDER: Record<PersonaTipo | 'factura', string> = {
   documento: 'Documentación',
   propuesta: 'Propuestas',
+  presupuesto: 'Presupuestos',
+  contrato: 'Contratos',
+  kickoff: 'Kickoff',
   factura: 'Facturas',
 }
 
