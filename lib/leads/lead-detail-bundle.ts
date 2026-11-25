@@ -94,7 +94,7 @@ async function loadProyectoForLead(leadId: number) {
       tiempo_previsto: p.tiempo_previsto != null ? Number(p.tiempo_previsto) : null,
       href: p.es_buffalo
         ? `/gestion-proyecto/proyectos/${p.id}`
-        : `/onboarding/configure?lead=${leadId}`,
+        : `/onboarding/personas/${leadId}`,
     }
   } catch {
     return null

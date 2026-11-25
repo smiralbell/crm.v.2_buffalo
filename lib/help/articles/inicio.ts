@@ -100,7 +100,7 @@ El sidebar se filtra por rol. Al pasar el ratón (desktop) se expande y empuja e
 - **Finanzas** → Resumen, Facturas, Recurrentes
 - **Pipelines** → \`/pipelines\`
 - **Marketing (ENG 1)** → tabs global / web / email / coldcalling / meta / google
-- **Onboarding (ENG 2)** → Proyectos activos, Configurador, Demos
+- **Onboarding (ENG 2)** → Personas (tabla con ficha por persona), Demos
 - **Proyectos (ENG 3)** → Abiertos, Tickets
 - **Retención (ENG 4)** → Buffalo con mensualidad
 - **Calendario**

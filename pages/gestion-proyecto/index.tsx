@@ -168,7 +168,7 @@ export default function GestionProyectoPage() {
               Configura un proyecto en Onboarding y pulsa «Poner en marcha».
             </p>
             <Link
-              href="/onboarding/configure"
+              href="/onboarding"
               className="inline-flex mt-4 text-sm font-medium text-gray-700 hover:text-gray-900"
             >
               Ir a Onboarding →

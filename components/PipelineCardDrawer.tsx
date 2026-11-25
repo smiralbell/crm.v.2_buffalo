@@ -121,7 +121,7 @@ function ProjectContextBlock({
               onClick={() => onNavigate(project.hrefs.onboarding!)}
             >
               <Settings className="h-3.5 w-3.5 mr-2" />
-              Configurar proyecto
+              Abrir onboarding
             </Button>
           )}
         </div>
@@ -400,12 +400,6 @@ export default function PipelineCardDrawer({
     } finally {
       setMoving(false)
     }
-  }
-
-  const handleConfigure = () => {
-    router.push(
-      `/onboarding/configure?lead=${card.entity_id}&pipeline=${pipelineId}&card=${card.id}`
-    )
   }
 
   const handleOpenColdCallLead = () => {
@@ -711,13 +705,6 @@ export default function PipelineCardDrawer({
                   </Button>
                 </div>
               ) : null}
-              <Button
-                onClick={handleConfigure}
-                className="w-full h-11 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-xl"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Configurar proyecto
-              </Button>
             </>
           )}
 

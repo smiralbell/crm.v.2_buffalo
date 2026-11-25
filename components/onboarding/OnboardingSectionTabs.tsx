@@ -1,11 +1,10 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
-export type OnboardingSectionTab = 'personas' | 'configure' | 'demos'
+export type OnboardingSectionTab = 'personas' | 'demos'
 
 const TABS: { id: OnboardingSectionTab; label: string; short?: string; href: string; adminOnly?: boolean }[] = [
   { id: 'personas', label: 'Personas', href: '/onboarding' },
-  { id: 'configure', label: 'Configurar proyecto', short: 'Proyecto', href: '/onboarding/configure', adminOnly: true },
   { id: 'demos', label: 'Demos', href: '/demos', adminOnly: true },
 ]
 

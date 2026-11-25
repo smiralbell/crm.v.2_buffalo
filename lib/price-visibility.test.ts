@@ -71,7 +71,7 @@ describe('configuración del lead', () => {
 
 describe('páginas con precios para el project manager', () => {
   it('bloquea configurador y analítica', () => {
-    for (const p of ['/leads/analytics', '/onboarding/configure']) {
+    for (const p of ['/leads/analytics']) {
       expect(canAccessPage(p, 'project_manager'), p).toBe(false)
     }
     expect(canAccessPage('/onboarding', 'project_manager')).toBe(true)

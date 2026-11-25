@@ -326,7 +326,6 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
     document.getElementById('contexto')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
-  const configureUrl = `/onboarding/configure?lead=${lead.id}&nombre=${encodeURIComponent(lead.contact?.nombre || '')}&empresa=${encodeURIComponent(lead.contact?.empresa || '')}&email=${encodeURIComponent(lead.contact?.email || '')}&ciudad=${encodeURIComponent(lead.contact?.ciudad || '')}`
   const hasConfig = !!lead.configuracion
   const projectCtx = bundle.pipeline?.project_context
 
@@ -351,30 +350,6 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
-            {hasConfig && (
-              <Link href={`/onboarding/configure?lead=${lead.id}`} className="flex-1 sm:flex-initial">
-                <Button variant="outline" size="sm" className="w-full rounded-xl">
-                  <FileText className="mr-2 h-4 w-4" />
-                  Ir a onboarding
-                </Button>
-              </Link>
-            )}
-            <Link href={configureUrl} className="flex-1 sm:flex-initial">
-              {hasConfig ? (
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="w-full rounded-xl bg-gray-900 hover:bg-gray-700 text-white"
-                >
-                  <FileText className="mr-2 h-4 w-4" />
-                  Propuesta · contrato
-                </Button>
-              ) : (
-                <Button variant="outline" size="sm" className="w-full rounded-xl">
-                  Configurar proyecto
-                </Button>
-              )}
-            </Link>
             <Button
               variant="outline"
               size="sm"
@@ -616,11 +591,6 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
             <p className="text-sm text-gray-400 mb-3">
               Todavía no hay ningún coste de proyecto configurado
             </p>
-            <Link href={configureUrl}>
-              <Button variant="outline" size="sm" className="rounded-xl">
-                Configurar proyecto
-              </Button>
-            </Link>
           </div>
         )}
       </div>

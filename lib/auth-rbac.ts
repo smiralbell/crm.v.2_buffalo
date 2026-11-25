@@ -31,7 +31,6 @@ export const PROJECT_MANAGER_PAGE_PREFIXES = [
 /** Dentro de sus módulos, el project manager no entra en páginas con precios. */
 export const PROJECT_MANAGER_PRICE_PAGES = [
   '/leads/analytics',
-  '/onboarding/configure',
 ] as const
 
 export const COMERCIAL_PAGE_PREFIXES = [

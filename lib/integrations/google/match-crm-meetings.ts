@@ -150,7 +150,7 @@ async function loadProyectosForLeads(leadIds: number[]): Promise<Map<number, Crm
       es_buffalo: Boolean(r.es_buffalo),
       href: r.es_buffalo
         ? `/gestion-proyecto/proyectos/${r.id}`
-        : `/onboarding/configure?lead=${r.lead_id}`,
+        : `/onboarding/personas/${r.lead_id}`,
     })
     map.set(r.lead_id, list)
   }

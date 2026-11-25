@@ -16,7 +16,6 @@ export const ARTICLES_ENG2: HelpArticle[] = [
 | Pantalla | Ruta |
 |----------|------|
 | Personas (contexto y preguntas a la IA) | \`/onboarding\` |
-| Configurar proyecto | \`/onboarding/configure\` |
 | Demos | \`/demos\` |
 
 ## Flujo
