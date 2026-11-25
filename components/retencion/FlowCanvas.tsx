@@ -8,7 +8,9 @@ import {
   Copy,
   Focus,
   History,
+  FileText,
   Maximize2,
+  MessageCircle,
   Minimize2,
   Pause,
   Play,
@@ -29,6 +31,9 @@ export type Flujo = {
   interval_minutes: number
   enabled: boolean
   tools: Herramienta[]
+  whatsapp_enabled: boolean
+  whatsapp_to: string[]
+  whatsapp_title: string | null
   last_run_at: string | null
   next_run_at: string | null
 }
@@ -43,15 +48,16 @@ type Run = {
   started_at: string
 }
 
-type NodeId = 'trigger' | Herramienta | 'agent' | 'output'
+type NodeId = 'trigger' | Herramienta | 'agent' | 'output' | 'whatsapp'
 
 const NODES: { id: NodeId; label: string; x: number; y: number }[] = [
-  { id: 'trigger', label: 'Disparador', x: -470, y: 0 },
-  { id: 'mcp', label: 'MCP', x: -160, y: -150 },
-  { id: 'incidencias', label: 'Incidencias', x: -160, y: 0 },
-  { id: 'tickets', label: 'Tickets', x: -160, y: 150 },
-  { id: 'agent', label: 'Agente IA', x: 170, y: 0 },
-  { id: 'output', label: 'Salida JSON', x: 470, y: 0 },
+  { id: 'trigger', label: 'Disparador', x: -600, y: 0 },
+  { id: 'mcp', label: 'MCP', x: -300, y: -150 },
+  { id: 'incidencias', label: 'Incidencias', x: -300, y: 0 },
+  { id: 'tickets', label: 'Tickets', x: -300, y: 150 },
+  { id: 'agent', label: 'Agente IA', x: 10, y: 0 },
+  { id: 'output', label: 'Salida JSON', x: 300, y: 0 },
+  { id: 'whatsapp', label: 'Enviar por WhatsApp', x: 590, y: 0 },
 ]
 
 const EDGES: [NodeId, NodeId][] = [
@@ -62,6 +68,7 @@ const EDGES: [NodeId, NodeId][] = [
   ['incidencias', 'agent'],
   ['tickets', 'agent'],
   ['agent', 'output'],
+  ['output', 'whatsapp'],
 ]
 
 const ICONS: Record<NodeId, typeof Clock> = {
@@ -71,6 +78,7 @@ const ICONS: Record<NodeId, typeof Clock> = {
   tickets: Ticket,
   agent: Bot,
   output: Braces,
+  whatsapp: MessageCircle,
 }
 
 const TOOL_OF_FN: Record<string, Herramienta> = {
@@ -141,6 +149,10 @@ export default function FlowCanvas({
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
 
+  const [waPhones, setWaPhones] = useState(flujo.whatsapp_to.join('\n'))
+  const [waTitle, setWaTitle] = useState(flujo.whatsapp_title || '')
+  const [waMsg, setWaMsg] = useState('')
+  const [waSending, setWaSending] = useState(false)
   const [name, setName] = useState(flujo.name)
   const [prompt, setPrompt] = useState(flujo.prompt)
   const [saving, setSaving] = useState(false)
@@ -151,8 +163,30 @@ export default function FlowCanvas({
   }, [flujo.id, flujo.name, flujo.prompt])
 
   useEffect(() => {
+    setWaPhones(flujo.whatsapp_to.join('\n'))
+    setWaTitle(flujo.whatsapp_title || '')
+    setWaMsg('')
+  }, [flujo.id, flujo.whatsapp_to, flujo.whatsapp_title])
+
+  const sendWhatsappNow = async () => {
+    setWaSending(true)
+    setWaMsg('')
+    try {
+      const res = await fetch(`${base}/whatsapp`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((data as { error?: string }).error || 'No se pudo enviar')
+      const d = data as { sent: number; errors: string[] }
+      setWaMsg(d.errors.length ? `Enviado a ${d.sent}. Fallos: ${d.errors.join('; ')}` : `Enviado a ${d.sent} móvil(es)`)
+    } catch (e) {
+      setWaMsg(e instanceof Error ? e.message : 'No se pudo enviar')
+    } finally {
+      setWaSending(false)
+    }
+  }
+
+  useEffect(() => {
     const w = stageRef.current?.clientWidth || 900
-    setCam({ x: 0, y: 0, scale: clamp((w - 48) / 1200, 0.45, 1) })
+    setCam({ x: 0, y: 0, scale: clamp((w - 48) / 1440, 0.4, 1) })
   }, [flujo.id, recenter])
 
   const loadRuns = () => {
@@ -182,11 +216,17 @@ export default function FlowCanvas({
     return set
   }, [lastRun])
 
-  const isOn = (id: NodeId) => (id === 'mcp' || id === 'incidencias' || id === 'tickets' ? flujo.tools.includes(id) : true)
+  const isOn = (id: NodeId) =>
+    id === 'mcp' || id === 'incidencias' || id === 'tickets'
+      ? flujo.tools.includes(id)
+      : id === 'whatsapp'
+        ? flujo.whatsapp_enabled && flujo.whatsapp_to.length > 0
+        : true
   const isDone = (id: NodeId) => {
     if (!lastRun || running) return false
     if (id === 'trigger') return true
     if (id === 'mcp' || id === 'incidencias' || id === 'tickets') return usedTools.has(id)
+    if (id === 'whatsapp') return (lastRun.trace || []).some((t) => t.tool === 'whatsapp' && t.ok)
     return lastRun.status === 'ok'
   }
 
@@ -194,6 +234,10 @@ export default function FlowCanvas({
     if (id === 'trigger') return `${intervaloLabel(flujo.interval_minutes)}${flujo.enabled ? '' : ' · pausado'}`
     if (id === 'mcp' || id === 'incidencias' || id === 'tickets') return flujo.tools.includes(id) ? 'activada' : 'desactivada'
     if (id === 'agent') return flujo.prompt.slice(0, 40) || 'sin prompt'
+    if (id === 'whatsapp') {
+      if (!flujo.whatsapp_enabled) return 'desactivado'
+      return flujo.whatsapp_to.length ? `PDF a ${flujo.whatsapp_to.length} móvil(es)` : 'sin móviles'
+    }
     if (!lastRun) return 'sin ejecutar'
     return lastRun.status === 'ok' ? 'JSON listo' : lastRun.status === 'error' ? 'error' : 'en curso'
   }
@@ -293,6 +337,7 @@ export default function FlowCanvas({
     tickets: 'Tickets',
     agent: 'Agente IA',
     output: 'Salida JSON',
+    whatsapp: 'Enviar por WhatsApp',
   }
 
   return (
@@ -502,6 +547,65 @@ export default function FlowCanvas({
               </>
             )}
 
+            {selected === 'whatsapp' && (
+              <>
+                <p className="text-sm text-gray-600">
+                  Cuando el flujo termina bien, convierte el JSON en un PDF con el estilo de los documentos Buffalo
+                  (portada, secciones numeradas y tarjetas de cifras) y lo envía por WhatsApp a estos móviles.
+                </p>
+                <button
+                  type="button"
+                  className={styles.hudBtn}
+                  disabled={!canEdit || saving}
+                  onClick={() => void patch({ whatsapp_enabled: !flujo.whatsapp_enabled })}
+                >
+                  {flujo.whatsapp_enabled ? 'Desactivar el envío' : 'Activar el envío'}
+                </button>
+                <div className={styles.field}>
+                  <label>Móviles (uno por línea, con prefijo: 34600111222)</label>
+                  <textarea
+                    value={waPhones}
+                    disabled={!canEdit}
+                    onChange={(e) => setWaPhones(e.target.value)}
+                    rows={4}
+                    style={{ minHeight: 90 }}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label>Título del documento</label>
+                  <input value={waTitle} disabled={!canEdit} placeholder={flujo.name} onChange={(e) => setWaTitle(e.target.value)} />
+                </div>
+                <button
+                  type="button"
+                  className={styles.hudBtn}
+                  disabled={!canEdit || saving}
+                  onClick={() =>
+                    void patch({
+                      whatsapp_to: waPhones.split(/[\n,;]+/).map((p) => p.trim()).filter(Boolean),
+                      whatsapp_title: waTitle.trim() || null,
+                    })
+                  }
+                >
+                  <Save className="h-3.5 w-3.5" /> {saving ? 'Guardando…' : 'Guardar'}
+                </button>
+                <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+                  <a className={styles.hudBtn} href={`${base}/whatsapp`} target="_blank" rel="noreferrer">
+                    <FileText className="h-3.5 w-3.5" /> Ver el PDF
+                  </a>
+                  <button
+                    type="button"
+                    className={styles.hudBtn}
+                    disabled={!canEdit || waSending || flujo.whatsapp_to.length === 0}
+                    onClick={() => void sendWhatsappNow()}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" /> {waSending ? 'Enviando…' : 'Enviar la última salida ahora'}
+                  </button>
+                </div>
+                {waMsg && <p className="text-xs text-gray-600">{waMsg}</p>}
+                <p className="text-xs text-gray-400">«Ver el PDF» y «Enviar ahora» usan la última ejecución correcta del flujo.</p>
+              </>
+            )}
+
             {selected === 'output' && (
               <>
                 {runs.length === 0 ? (
@@ -554,7 +658,7 @@ export default function FlowCanvas({
         </aside>
       )}
 
-      <p className={styles.hint}>Disparador → herramientas → agente → JSON · arrastra el lienzo · clic en una caja para configurar</p>
+      <p className={styles.hint}>Disparador → herramientas → agente → JSON → WhatsApp · arrastra el lienzo · clic en una caja para configurar</p>
     </div>
   )
 }

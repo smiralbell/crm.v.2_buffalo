@@ -24,6 +24,10 @@ export type FlujoRow = {
   interval_minutes: number
   enabled: boolean
   tools: FlujoHerramienta[]
+  /** Nodo «Enviar por WhatsApp»: manda el informe en PDF al acabar */
+  whatsapp_enabled: boolean
+  whatsapp_to: string[]
+  whatsapp_title: string | null
   last_run_at: string | null
   next_run_at: string | null
   created_at: string
@@ -68,6 +72,19 @@ export async function ensureFlujosTables(): Promise<void> {
   await query(
     `ALTER TABLE retencion_flujos ADD COLUMN IF NOT EXISTS tools TEXT[] NOT NULL DEFAULT ARRAY['mcp','incidencias','tickets']`
   )
+  await query(
+    `ALTER TABLE retencion_flujos
+       ADD COLUMN IF NOT EXISTS whatsapp_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+       ADD COLUMN IF NOT EXISTS whatsapp_to TEXT[] NOT NULL DEFAULT '{}',
+       ADD COLUMN IF NOT EXISTS whatsapp_title TEXT`
+  )
+  await query(
+    `CREATE TABLE IF NOT EXISTS retencion_sistema_prefs (
+       proyecto_id UUID PRIMARY KEY REFERENCES proyectos(id) ON DELETE CASCADE,
+       watch_hidden BOOLEAN NOT NULL DEFAULT FALSE,
+       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+     )`
+  )
   await query(`
     CREATE TABLE IF NOT EXISTS retencion_flujo_runs (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -84,7 +101,7 @@ export async function ensureFlujosTables(): Promise<void> {
 }
 
 const FLUJO_COLS = `id::text, proyecto_id::text, name, prompt, interval_minutes, enabled, tools,
-  last_run_at, next_run_at, created_at, updated_at`
+  whatsapp_enabled, whatsapp_to, whatsapp_title, last_run_at, next_run_at, created_at, updated_at`
 
 /** Solo herramientas conocidas y sin repetir; nunca una lista vacía. */
 export function cleanTools(list: readonly string[] | null | undefined): FlujoHerramienta[] {
@@ -93,7 +110,57 @@ export function cleanTools(list: readonly string[] | null | undefined): FlujoHer
 }
 
 function mapRow(r: FlujoRow): FlujoRow {
-  return { ...r, tools: cleanTools(r.tools) }
+  return { ...r, tools: cleanTools(r.tools), whatsapp_to: r.whatsapp_to || [] }
+}
+
+/** Móviles válidos para WhatsApp: solo dígitos, con prefijo de país (8 a 15 cifras). */
+export function cleanPhones(list: readonly string[] | null | undefined): string[] {
+  const out = new Set<string>()
+  for (const raw of list || []) {
+    const digits = String(raw).replace(/\D/g, '')
+    if (/^\d{8,15}$/.test(digits)) out.add(digits)
+  }
+  return Array.from(out).slice(0, 10)
+}
+
+/** Nodo de WhatsApp de un flujo. */
+export async function updateFlujoWhatsapp(
+  proyectoId: string,
+  flujoId: string,
+  patch: { enabled?: boolean; to?: readonly string[]; title?: string | null }
+): Promise<FlujoRow | null> {
+  const current = await getFlujo(proyectoId, flujoId)
+  if (!current) return null
+  const to = patch.to !== undefined ? cleanPhones(patch.to) : current.whatsapp_to
+  const enabled = patch.enabled ?? current.whatsapp_enabled
+  const title = patch.title !== undefined ? (patch.title?.trim() || null) : current.whatsapp_title
+  const { rows } = await query<FlujoRow>(
+    `UPDATE retencion_flujos
+        SET whatsapp_enabled = $3, whatsapp_to = $4::text[], whatsapp_title = $5, updated_at = NOW()
+      WHERE id = $1::uuid AND proyecto_id = $2::uuid
+      RETURNING ${FLUJO_COLS}`,
+    [flujoId, proyectoId, enabled, to, title]
+  )
+  return rows[0] ? mapRow(rows[0]) : null
+}
+
+/** El informe del sistema (flujo predefinido) se puede quitar de Sistema. */
+export async function getWatchHidden(proyectoId: string): Promise<boolean> {
+  await ensureFlujosTables()
+  const { rows } = await query<{ watch_hidden: boolean }>(
+    `SELECT watch_hidden FROM retencion_sistema_prefs WHERE proyecto_id = $1::uuid`,
+    [proyectoId]
+  )
+  return rows[0]?.watch_hidden ?? false
+}
+
+export async function setWatchHidden(proyectoId: string, hidden: boolean): Promise<void> {
+  await ensureFlujosTables()
+  await query(
+    `INSERT INTO retencion_sistema_prefs (proyecto_id, watch_hidden) VALUES ($1::uuid, $2)
+     ON CONFLICT (proyecto_id) DO UPDATE SET watch_hidden = EXCLUDED.watch_hidden, updated_at = NOW()`,
+    [proyectoId, hidden]
+  )
 }
 
 export async function listFlujos(proyectoId: string): Promise<FlujoRow[]> {

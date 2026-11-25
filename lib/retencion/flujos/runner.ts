@@ -7,6 +7,7 @@ import {
   type TraceStep,
 } from '@/lib/retencion/flujos/store'
 import { executeFlowTool, toolsForGroups } from '@/lib/retencion/flujos/tools'
+import { sendFlowToWhatsapp } from '@/lib/retencion/flujos/whatsapp'
 
 /** Pasos máximos de herramientas por ejecución. Evita bucles y costes sin control. */
 export const MAX_TOOL_ROUNDS = 8
@@ -82,6 +83,21 @@ export async function runFlujo(flujo: FlujoRow, trigger: 'manual' | 'cron'): Pro
   } catch (e) {
     status = 'error'
     error = e instanceof Error ? e.message : String(e)
+  }
+
+  // Nodo «Enviar por WhatsApp»: el informe en PDF a cada móvil, solo si el flujo ha ido bien.
+  if (status === 'ok' && flujo.whatsapp_enabled && flujo.whatsapp_to.length > 0) {
+    try {
+      const wa = await sendFlowToWhatsapp(flujo, output)
+      trace.push({
+        tool: 'whatsapp',
+        args: { to: flujo.whatsapp_to },
+        ok: wa.errors.length === 0,
+        preview: wa.errors.length ? `Enviado a ${wa.sent}. Fallos: ${wa.errors.join('; ')}` : `PDF enviado a ${wa.sent} móvil(es)`,
+      })
+    } catch (e) {
+      trace.push({ tool: 'whatsapp', args: {}, ok: false, preview: e instanceof Error ? e.message : String(e) })
+    }
   }
 
   await finishRun({

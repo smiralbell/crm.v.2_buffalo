@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { requireAuthAPI } from '@/lib/auth'
 import { assertProjectAccess } from '@/lib/project-access'
 import { assertRetencionEligible } from '@/lib/retencion/eligibility'
-import { FLUJO_INTERVALOS, createFlujo, listFlujos } from '@/lib/retencion/flujos/store'
+import { FLUJO_INTERVALOS, createFlujo, getWatchHidden, listFlujos } from '@/lib/retencion/flujos/store'
 
 const createSchema = z.object({
   name: z.string().trim().min(1, 'Pon un nombre al flujo').max(120),
@@ -24,8 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!eligible.ok) return res.status(eligible.status).json({ error: eligible.error })
 
     if (req.method === 'GET') {
-      const flujos = await listFlujos(proyectoId)
-      return res.status(200).json({ flujos, intervalos: FLUJO_INTERVALOS })
+      const [flujos, watchHidden] = await Promise.all([listFlujos(proyectoId), getWatchHidden(proyectoId)])
+      return res.status(200).json({ flujos, intervalos: FLUJO_INTERVALOS, watch_hidden: watchHidden })
     }
 
     if (req.method === 'POST') {
