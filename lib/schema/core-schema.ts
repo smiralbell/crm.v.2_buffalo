@@ -1,4 +1,5 @@
-import { query } from '@/lib/db'
+// Usa el cliente de Prisma sin envolver (getPrismaClient) para no meter pg en el bundle del navegador.
+import { getPrismaClient } from '@/lib/prisma'
 
 /**
  * Cambios de esquema que la aplicación necesita en la base de datos.
@@ -41,8 +42,9 @@ let pending: Promise<void> | null = null
 export function ensureCoreSchema(): Promise<void> {
   if (!pending) {
     pending = (async () => {
+      const client = getPrismaClient()
       for (const sql of CORE_SCHEMA_STATEMENTS) {
-        await query(sql)
+        await client.$executeRawUnsafe(sql)
       }
     })().catch((e) => {
       pending = null
