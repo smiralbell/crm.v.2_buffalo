@@ -41,3 +41,14 @@ export async function getAuthorizedDriveClient() {
   auth.setCredentials({ refresh_token: refreshToken })
   return google.drive({ version: 'v3', auth })
 }
+
+/** Token de acceso de la misma cuenta de Drive (para la subida reanudable de archivos grandes). */
+export async function getDriveAccessToken(): Promise<string> {
+  const refreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN
+  if (!refreshToken) throw new Error('Falta GOOGLE_DRIVE_REFRESH_TOKEN (o GOOGLE_REFRESH_TOKEN con scope Drive)')
+  const auth = getDriveOAuth2Client()
+  auth.setCredentials({ refresh_token: refreshToken })
+  const { token } = await auth.getAccessToken()
+  if (!token) throw new Error('Google Drive no devolvió un token de acceso')
+  return token
+}

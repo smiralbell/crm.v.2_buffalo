@@ -1,5 +1,5 @@
 import { Readable } from 'stream'
-import { getAuthorizedDriveClient } from './drive-auth'
+import { getAuthorizedDriveClient, getDriveAccessToken } from './drive-auth'
 
 /**
  * Adjuntos del CRM (tareas, y lo que venga) en una carpeta de Google Drive.
@@ -12,7 +12,63 @@ import { getAuthorizedDriveClient } from './drive-auth'
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
-export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+/** Tamaño máximo por archivo adjunto. */
+export const MAX_ATTACHMENT_MB = 200
+export const MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024
+/** Por encima de esto se usa la subida reanudable de Drive (la multipart es para archivos pequeños). */
+const RESUMABLE_FROM_BYTES = 5 * 1024 * 1024
+
+/**
+ * Sube un archivo a una carpeta de Drive. Los grandes van por subida reanudable,
+ * que es la que Google recomienda por encima de 5 MB.
+ */
+export async function uploadBufferToDrive(input: {
+  parentId: string
+  name: string
+  mimeType: string
+  buffer: Buffer
+}): Promise<{ fileId: string; webViewLink: string | null }> {
+  const mimeType = input.mimeType || 'application/octet-stream'
+  if (input.buffer.length <= RESUMABLE_FROM_BYTES) {
+    const drive = await getAuthorizedDriveClient()
+    const uploaded = await drive.files.create({
+      requestBody: { name: input.name, parents: [input.parentId] },
+      media: { mimeType, body: Readable.from(input.buffer) },
+      fields: 'id,webViewLink',
+      supportsAllDrives: true,
+    })
+    if (!uploaded.data.id) throw new Error('Google Drive no devolvió el id del archivo')
+    return { fileId: uploaded.data.id, webViewLink: uploaded.data.webViewLink || null }
+  }
+
+  const token = await getDriveAccessToken()
+  const session = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id,webViewLink',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': mimeType,
+        'X-Upload-Content-Length': String(input.buffer.length),
+      },
+      body: JSON.stringify({ name: input.name, parents: [input.parentId] }),
+    }
+  )
+  const location = session.headers.get('location')
+  if (!session.ok || !location) {
+    throw new Error(`Google Drive no aceptó la subida (${session.status})`)
+  }
+  const put = await fetch(location, {
+    method: 'PUT',
+    headers: { 'Content-Type': mimeType },
+    body: new Uint8Array(input.buffer),
+  })
+  if (!put.ok) throw new Error(`Google Drive no pudo guardar el archivo (${put.status})`)
+  const data = (await put.json()) as { id?: string; webViewLink?: string }
+  if (!data.id) throw new Error('Google Drive no devolvió el id del archivo')
+  return { fileId: data.id, webViewLink: data.webViewLink || null }
+}
 
 export function attachmentsRootFolderId(): string | null {
   return process.env.GOOGLE_DRIVE_ATTACHMENTS_FOLDER_ID?.trim() || null
@@ -80,21 +136,17 @@ export async function uploadAttachmentToDrive(input: {
   const root = attachmentsRootFolderId()
   if (!root) throw new Error('Falta GOOGLE_DRIVE_ATTACHMENTS_FOLDER_ID: no hay carpeta de Drive para los adjuntos')
   if (!input.buffer.length) throw new Error('El archivo está vacío')
-  if (input.buffer.length > MAX_ATTACHMENT_BYTES) throw new Error('El archivo pasa de 25 MB')
+  if (input.buffer.length > MAX_ATTACHMENT_BYTES) throw new Error(`El archivo pasa de ${MAX_ATTACHMENT_MB} MB`)
 
   let parent = root
   for (const part of input.path) parent = await ensureChildFolder(parent, safeDriveName(part, 'Sin nombre'))
 
-  const drive = await getAuthorizedDriveClient()
-  const uploaded = await drive.files.create({
-    requestBody: { name: safeDriveName(input.fileName), parents: [parent] },
-    media: { mimeType: input.mimeType || 'application/octet-stream', body: Readable.from(input.buffer) },
-    fields: 'id,webViewLink',
-    supportsAllDrives: true,
+  return uploadBufferToDrive({
+    parentId: parent,
+    name: safeDriveName(input.fileName),
+    mimeType: input.mimeType,
+    buffer: input.buffer,
   })
-  const fileId = uploaded.data.id
-  if (!fileId) throw new Error('Google Drive no devolvió el id del archivo')
-  return { fileId, webViewLink: uploaded.data.webViewLink || null }
 }
 
 export async function downloadAttachmentFromDrive(fileId: string): Promise<Buffer> {

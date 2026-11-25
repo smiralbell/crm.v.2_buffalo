@@ -62,6 +62,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Error interno'
     console.error('[tareas/attachments upload]', err)
-    return res.status(/25 MB|archivo/.test(msg) ? 400 : 500).json({ error: msg })
+    return res.status(/ MB|archivo/.test(msg) ? 400 : 500).json({ error: msg })
   }
 }

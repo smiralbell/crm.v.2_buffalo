@@ -2,7 +2,7 @@ import type { NextApiRequest } from 'next'
 import formidable from 'formidable'
 import { readFile } from 'fs/promises'
 import { prisma } from '@/lib/prisma'
-import { MAX_ATTACHMENT_BYTES } from '@/lib/integrations/google/drive-attachments'
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_MB } from '@/lib/integrations/google/drive-attachments'
 import type { ProjectTaskAttachment } from '@/lib/gestion-proyecto/types'
 
 /**
@@ -19,7 +19,7 @@ export function readUploadedFiles(req: NextApiRequest): Promise<UploadedFile[]> 
     form.parse(req, async (err, _fields, files) => {
       if (err) {
         const tooBig = /maxFileSize|exceeded/i.test(String(err.message || err))
-        reject(new Error(tooBig ? 'Cada archivo puede ocupar como mucho 25 MB' : 'No se pudo leer el archivo'))
+        reject(new Error(tooBig ? `Cada archivo puede ocupar como mucho ${MAX_ATTACHMENT_MB} MB` : 'No se pudo leer el archivo'))
         return
       }
       try {

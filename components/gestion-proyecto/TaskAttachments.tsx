@@ -135,7 +135,7 @@ export default function TaskAttachments({
             onClick={() => inputRef.current?.click()}
             className="w-full rounded-xl border border-dashed border-gray-200 px-4 py-5 text-center text-xs text-gray-400 hover:border-gray-300 hover:text-gray-500"
           >
-            Arrastra aquí imágenes o documentos, pega una captura con Ctrl+V o pulsa para elegirlos (hasta 25 MB cada uno)
+            Arrastra aquí imágenes o documentos, pega una captura con Ctrl+V o pulsa para elegirlos (hasta 200 MB cada uno)
           </button>
         )
       ) : (

@@ -1,8 +1,13 @@
 import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
-import { Readable } from 'stream'
 import { getAuthorizedDriveClient } from '@/lib/integrations/google/drive-auth'
-import { ensureChildFolder, safeDriveName, MAX_ATTACHMENT_BYTES } from '@/lib/integrations/google/drive-attachments'
+import {
+  ensureChildFolder,
+  safeDriveName,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENT_MB,
+  uploadBufferToDrive,
+} from '@/lib/integrations/google/drive-attachments'
 import { pickClientFolder, type FolderRow } from '@/lib/leads/drive-match'
 
 /**
@@ -154,33 +159,26 @@ export async function uploadPersonaDocumento(input: {
     throw new Error('Drive no está configurado (GOOGLE_DRIVE_CLIENTES_FOLDER_ID)')
   }
   if (!input.buffer.length) throw new Error('El archivo está vacío')
-  if (input.buffer.length > MAX_ATTACHMENT_BYTES) throw new Error('El archivo pasa de 25 MB')
+  if (input.buffer.length > MAX_ATTACHMENT_BYTES) throw new Error(`El archivo pasa de ${MAX_ATTACHMENT_MB} MB`)
 
   const client = await ensureClientFolder(input.leadId)
   const sub = await ensureChildFolder(client.folder_id, TIPO_FOLDER[input.tipo])
-  const drive = await getAuthorizedDriveClient()
   const name = safeDriveName(input.fileName)
-  const uploaded = await drive.files.create({
-    requestBody: { name, parents: [sub] },
-    media: { mimeType: input.mime || 'application/octet-stream', body: Readable.from(input.buffer) },
-    fields: 'id,webViewLink',
-    supportsAllDrives: true,
-  })
-  const fileId = uploaded.data.id
-  if (!fileId) throw new Error('Google Drive no devolvió el id del archivo')
+  const uploaded = await uploadBufferToDrive({ parentId: sub, name, mimeType: input.mime, buffer: input.buffer })
+  const fileId = uploaded.fileId
 
   await ensureTables()
   const inserted = await query<{ id: number; created_at: Date }>(
     `INSERT INTO persona_documents (lead_id, tipo, file_name, drive_file_id, web_link)
      VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
-    [input.leadId, input.tipo, name, fileId, uploaded.data.webViewLink || null]
+    [input.leadId, input.tipo, name, fileId, uploaded.webViewLink]
   )
   const row = inserted.rows[0]
   return {
     id: row.id,
     tipo: input.tipo,
     file_name: name,
-    web_link: uploaded.data.webViewLink || null,
+    web_link: uploaded.webViewLink,
     created_at: new Date(row.created_at).toISOString(),
   }
 }
