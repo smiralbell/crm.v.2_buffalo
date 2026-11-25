@@ -111,7 +111,7 @@ export const AGENT_MODULES: AgentModule[] = [
     ],
     guia: `- Cartera abierta = es_buffalo AND status IN (development, active, paused).
 - setup_fee_eur es el pago único; monthly_fee_eur la mensualidad.
-- TAREAS DEL EQUIPO: usa SIEMPRE las herramientas tareas_* (no SQL ni create_project_task). Son las del módulo Tareas que ve cada developer, PM o comercial en el CRM.
+- TAREAS DEL EQUIPO: usa SIEMPRE las herramientas tareas_* (no SQL ni create_project_task). Son las del módulo Tareas del CRM, también las de los socios (usuarios admin): si un socio dice «ponme una tarea», búscalo con tareas_personas y pónsela a él.
   - Tarea suelta (sin proyecto) para una persona: tareas_crear con persona. Tarea de un proyecto: tareas_crear con proyecto (y asignado si toca).
   - Antes de editar, mover, tocar subtareas o borrar, saca el id con tareas_listar (y tareas_ver si necesitas las subtareas numeradas).
   - Subtareas: los pasos de una tarea, cada uno con su explicación. Se gestionan con tareas_subtareas.

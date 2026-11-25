@@ -6,6 +6,7 @@ import {
   Calendar,
   ChevronRight,
   DollarSign,
+  Bot,
   FolderKanban,
   HeartHandshake,
   LayoutDashboard,
@@ -48,13 +49,19 @@ const TABS: Record<CrmRole, Tab[]> = {
       href: '/gestion-proyecto',
       label: 'Proyectos',
       icon: FolderKanban,
-      match: ['/gestion-proyecto', '/tickets', '/retencion'],
+      match: ['/gestion-proyecto', '/demos', '/tickets', '/retencion'],
       options: [
         {
           href: '/gestion-proyecto',
           label: 'Proyectos',
           description: 'Proyectos abiertos',
           icon: FolderKanban,
+        },
+        {
+          href: '/demos',
+          label: 'Demos',
+          description: 'Demos de WhatsApp y voz',
+          icon: Bot,
         },
         {
           href: '/retencion',

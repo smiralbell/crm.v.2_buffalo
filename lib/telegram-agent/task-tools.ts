@@ -32,7 +32,7 @@ import { notifyTaskAssigned, notifyTaskMoved } from '@/lib/notifications/team-ev
 import { cancelReminders, scheduleReminder } from '@/lib/notifications/reminders'
 
 /**
- * Tareas de developers, project managers y comerciales para el agente de los socios
+ * Tareas del equipo (socios, developers, project managers y comerciales) para el agente de los socios
  * (WhatsApp y Telegram). Son las mismas que ven en su módulo Tareas del CRM:
  * tareas sueltas (crm_user_tasks) y tareas de proyecto (project_dev_tasks).
  * Borrar siempre pasa por la doble confirmación del socio.
@@ -62,7 +62,7 @@ const prioridadProp = { type: 'string', enum: [...AGENT_PRIORITIES] }
 export const TASK_TOOLS = [
   tool(
     'tareas_personas',
-    'Lista las personas del equipo (developers, project managers, comerciales) a las que se les pueden poner tareas, con sus proyectos y cuántas tareas sueltas abiertas tienen.',
+    'Lista las personas del equipo a las que se les pueden poner tareas (socios/admin, developers, project managers y comerciales), con sus proyectos y cuántas tareas sueltas abiertas tienen.',
     { buscar: { type: 'string', description: 'Filtrar por nombre o email (opcional)' } }
   ),
   tool(
@@ -183,8 +183,8 @@ function norm(s: string): string {
 async function listPeople(): Promise<Person[]> {
   return prisma.$queryRaw<Person[]>`
     SELECT id, name, email, role FROM crm_users
-    WHERE active = TRUE AND role <> 'admin'
-    ORDER BY name ASC
+    WHERE active = TRUE
+    ORDER BY (role = 'admin') DESC, name ASC
   `
 }
 

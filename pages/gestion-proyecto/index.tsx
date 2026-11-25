@@ -1,69 +1,77 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import Layout from '@/components/Layout'
 import { canSeeClientPrices } from '@/lib/price-visibility'
 import { useAuth } from '@/components/AuthContext'
 import { DeveloperTags } from '@/components/gestion-proyecto/ProjectDevelopersPanel'
-import { AlertCircle, CheckCircle2, FolderKanban, RefreshCw, Trash2, Wallet } from 'lucide-react'
+import { AlertCircle, ArrowRight, Bot, FolderKanban, Search, Trash2 } from 'lucide-react'
 import type { ProjectListRow } from '@/lib/gestion-proyecto/types'
 
 const fmtEur = (n: number) =>
-  new Intl.NumberFormat('es-ES', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(n)
+  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n)
 
-const statusLabel: Record<string, string> = {
-  development: 'En desarrollo',
-  active: 'En producción',
-  paused: 'Pausado',
-  done: 'Finalizado',
+const fmtDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+
+type StatusKey = 'development' | 'active' | 'paused' | 'done'
+
+const STATUS: Record<StatusKey, { label: string; dot: string; badge: string }> = {
+  development: { label: 'En desarrollo', dot: 'bg-sky-500', badge: 'bg-sky-50 text-sky-700 ring-sky-200' },
+  active: { label: 'En producción', dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+  paused: { label: 'Pausado', dot: 'bg-amber-500', badge: 'bg-amber-50 text-amber-800 ring-amber-200' },
+  done: { label: 'Finalizado', dot: 'bg-gray-400', badge: 'bg-gray-100 text-gray-600 ring-gray-200' },
 }
+const STATUS_ORDER: StatusKey[] = ['development', 'active', 'paused', 'done']
 
 const serviceLabel: Record<string, string> = {
-  voice_agent: 'Agente de Voz',
-  text_agent: 'Agente de Chat',
+  voice_agent: 'Agente de voz',
+  text_agent: 'Agente de chat',
   dashboard_app: 'Dashboard',
   automation: 'Automatización',
   lead_gen: 'Generación de leads',
   geo_seo: 'GEO / SEO',
 }
 
+function statusOf(row: ProjectListRow): StatusKey {
+  return (STATUS_ORDER as string[]).includes(row.status) ? (row.status as StatusKey) : 'development'
+}
+
 function sameText(a: string, b: string) {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
-/** Título de caja: cliente asociado grande, empresa debajo. Sin repetir el nombre del proyecto. */
+/** Cliente como título y empresa debajo, sin repetir. */
 function cardIdentity(row: ProjectListRow): { title: string; subtitle: string | null } {
   const nombre = (row.contact?.nombre || '').trim()
   const empresa = (row.contact?.empresa || '').trim()
-  if (nombre && empresa && !sameText(nombre, empresa)) {
-    return { title: nombre, subtitle: empresa }
-  }
+  if (nombre && empresa && !sameText(nombre, empresa)) return { title: nombre, subtitle: empresa }
   if (nombre) return { title: nombre, subtitle: null }
   if (empresa) return { title: empresa, subtitle: null }
   return { title: row.contact?.email || row.name || 'Sin cliente', subtitle: null }
 }
 
+function taskStats(row: ProjectListRow) {
+  const open = row.task_counts.pending + row.task_counts.in_progress + (row.task_counts.buffalo_validation ?? 0)
+  const total = open + row.task_counts.done
+  return { open, done: row.task_counts.done, total, pct: total ? Math.round((row.task_counts.done / total) * 100) : 0 }
+}
+
+type Filter = 'all' | StatusKey
+
 export default function GestionProyectoPage() {
   const { user } = useAuth()
-  const isDeveloper = user?.role === 'developer'
   const showMoney = canSeeClientPrices(user?.role)
+  const isAdmin = user?.role === 'admin'
   const [rows, setRows] = useState<ProjectListRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const isAdmin = user?.role === 'admin'
-  const [money, setMoney] = useState({
-    setup_total_eur: 0,
-    monthly_total_eur: 0,
-    projects_count: 0,
-  })
+  const [filter, setFilter] = useState<Filter>('all')
+  const [query, setQuery] = useState('')
+  const [money, setMoney] = useState({ setup_total_eur: 0, monthly_total_eur: 0 })
 
-  const load = () => {
-    setLoading(true)
-    setError('')
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true)
     fetch('/api/gestion-proyecto/proyectos')
       .then(async (r) => {
         const d = await r.json()
@@ -72,26 +80,28 @@ export default function GestionProyectoPage() {
         setMoney({
           setup_total_eur: Number(d.money?.setup_total_eur) || 0,
           monthly_total_eur: Number(d.money?.monthly_total_eur) || 0,
-          projects_count: Number(d.money?.projects_count) || 0,
         })
+        setError('')
       })
       .catch((e: Error) => {
-        setRows([])
-        setMoney({ setup_total_eur: 0, monthly_total_eur: 0, projects_count: 0 })
+        if (!silent) setRows([])
         setError(e.message)
       })
       .finally(() => setLoading(false))
-  }
+  }, [])
 
   useEffect(() => {
     load()
-  }, [])
+    // Al volver a la pestaña se actualiza solo (sin botón «Actualizar»)
+    const onFocus = () => load(true)
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [load])
 
   const removeProject = async (row: ProjectListRow) => {
     const who = cardIdentity(row).title
     const ok = window.confirm(
-      `¿Eliminar el proyecto de ${who}?\n\n` +
-        'Dejará de estar en marcha y desaparecerá de esta lista. ' +
+      `¿Eliminar el proyecto de ${who}?\n\nDejará de estar en marcha y desaparecerá de esta lista. ` +
         'Se borra también la configuración del lead. No se puede deshacer desde aquí.'
     )
     if (!ok) return
@@ -109,186 +119,176 @@ export default function GestionProyectoPage() {
     }
   }
 
+  const counts = useMemo(() => {
+    const c: Record<Filter, number> = { all: rows.length, development: 0, active: 0, paused: 0, done: 0 }
+    for (const r of rows) c[statusOf(r)]++
+    return c
+  }, [rows])
+
+  const openTasks = useMemo(() => rows.reduce((a, r) => a + (statusOf(r) === 'done' ? 0 : taskStats(r).open), 0), [rows])
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return rows
+      .filter((r) => filter === 'all' || statusOf(r) === filter)
+      .filter((r) => {
+        if (!q) return true
+        const hay = [r.name, r.contact?.nombre, r.contact?.empresa, r.contact?.email, r.config_ref, serviceLabel[r.service_type], ...r.developers.map((d) => d.name)]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return hay.includes(q)
+      })
+      .sort(
+        (a, b) =>
+          STATUS_ORDER.indexOf(statusOf(a)) - STATUS_ORDER.indexOf(statusOf(b)) ||
+          b.updated_at.localeCompare(a.updated_at)
+      )
+  }, [rows, filter, query])
+
+  const kpis = [
+    { label: 'En desarrollo', value: String(counts.development) },
+    { label: 'En producción', value: String(counts.active) },
+    { label: 'Tareas abiertas', value: String(openTasks) },
+    ...(showMoney
+      ? [
+          { label: 'Setup total', value: fmtEur(money.setup_total_eur) },
+          { label: 'Mensualidades', value: `${fmtEur(money.monthly_total_eur)}/mes` },
+        ]
+      : [{ label: 'Finalizados', value: String(counts.done) }]),
+  ]
+
+  const FILTERS: { id: Filter; label: string }[] = [
+    { id: 'all', label: 'Todos' },
+    { id: 'development', label: 'En desarrollo' },
+    { id: 'active', label: 'En producción' },
+    { id: 'paused', label: 'Pausados' },
+    { id: 'done', label: 'Finalizados' },
+  ]
+
   return (
     <Layout>
-      <div className="w-full space-y-4 -mt-2 lg:-mt-3">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {showMoney && (
-            <div className="inline-flex w-full sm:w-auto items-stretch h-10 rounded-xl border border-gray-200 bg-white overflow-hidden">
-              <div className="flex flex-1 sm:flex-initial items-center gap-2 px-3.5 border-r border-gray-100">
-                <Wallet className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                <div className="leading-tight min-w-0">
-                  <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">
-                    Proyectos
-                  </p>
-                  <p className="text-xs font-semibold text-gray-900 tabular-nums truncate">
-                    {loading ? '…' : fmtEur(money.setup_total_eur)}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-1 sm:flex-initial items-center px-3.5">
-                <div className="leading-tight min-w-0">
-                  <p className="text-[9px] font-medium uppercase tracking-wide text-gray-400">
-                    Mensualidades
-                  </p>
-                  <p className="text-xs font-semibold text-gray-900 tabular-nums truncate">
-                    {loading ? '…' : `${fmtEur(money.monthly_total_eur)}/mes`}
-                  </p>
-                </div>
-              </div>
+      <div className="w-full space-y-5 -mt-2 lg:-mt-3">
+        {/* Pestañas: Proyectos y Demos */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200">
+          <nav className="-mb-px flex gap-1">
+            <span className="inline-flex items-center gap-2 border-b-2 border-gray-900 px-3 py-2.5 text-sm font-semibold text-gray-900">
+              <FolderKanban className="h-4 w-4" /> Proyectos
+            </span>
+            {isAdmin && (
+              <Link
+                href="/demos"
+                className="inline-flex items-center gap-2 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-900"
+              >
+                <Bot className="h-4 w-4" /> Demos
+              </Link>
+            )}
+          </nav>
+          <div className="relative mb-2 w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar cliente, proyecto, developer…"
+              className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm focus:border-gray-400 focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* KPIs */}
+        <div className={`grid grid-cols-2 gap-3 ${showMoney ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
+          {kpis.map((k) => (
+            <div key={k.label} className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{k.label}</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums text-gray-900">{loading ? '…' : k.value}</p>
             </div>
-          )}
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            className="inline-flex items-center justify-center gap-2 px-4 h-10 flex-1 sm:flex-initial border border-gray-200 text-sm font-medium text-gray-700 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </button>
+          ))}
+        </div>
+
+        {/* Filtros por estado */}
+        <div className="flex flex-wrap gap-1.5">
+          {FILTERS.map((f) => {
+            const active = filter === f.id
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilter(f.id)}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors ${
+                  active ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 ring-1 ring-gray-200 hover:ring-gray-300'
+                }`}
+              >
+                {f.id !== 'all' && <span className={`h-1.5 w-1.5 rounded-full ${STATUS[f.id].dot}`} />}
+                {f.label}
+                <span className={active ? 'text-gray-300' : 'text-gray-400'}>{counts[f.id]}</span>
+              </button>
+            )
+          })}
         </div>
 
         {error && (
           <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium">{error}</p>
-            </div>
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+            <p className="font-medium">{error}</p>
           </div>
         )}
 
         {loading ? (
-          <div className="py-20 text-center text-sm text-gray-400">Cargando proyectos...</div>
+          <div className="py-20 text-center text-sm text-gray-400">Cargando proyectos…</div>
         ) : rows.length === 0 && !error ? (
           <div className="rounded-2xl border border-gray-200 bg-white py-16 text-center">
-            <FolderKanban className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+            <FolderKanban className="mx-auto mb-3 h-10 w-10 text-gray-300" />
             <p className="text-sm text-gray-500">No hay proyectos Buffalo en marcha.</p>
-            <p className="text-xs text-gray-400 mt-1">
-              Los proyectos aparecen aquí cuando se ponen en marcha.
-            </p>
-            <Link
-              href="/leads"
-              className="inline-flex mt-4 text-sm font-medium text-gray-700 hover:text-gray-900"
-            >
-              Ir a Leads →
-            </Link>
+            <p className="mt-1 text-xs text-gray-400">Los proyectos aparecen aquí cuando se ponen en marcha.</p>
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-200 py-12 text-center text-sm text-gray-400">
+            Ningún proyecto con estos filtros.
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {rows.map((row) => {
-              const href = `/gestion-proyecto/proyectos/${row.id}`
+            {visible.map((row) => {
               const { title, subtitle } = cardIdentity(row)
-              const openTasks =
-                row.task_counts.pending +
-                row.task_counts.in_progress +
-                (row.task_counts.buffalo_validation ?? 0)
-              const inProduction = row.status === 'active'
-              const isFinalized = row.status === 'done'
-              const cardTone = inProduction
-                ? 'rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-50 via-emerald-50/80 to-white p-5 shadow-sm shadow-emerald-100 hover:border-emerald-400 hover:shadow-md transition-all ring-1 ring-emerald-200/60'
-                : isFinalized
-                  ? 'rounded-2xl border border-sky-300 bg-gradient-to-br from-sky-50 via-sky-50/70 to-white p-5 shadow-sm shadow-sky-100 hover:border-sky-400 hover:shadow-md transition-all ring-1 ring-sky-200/60'
-                  : 'rounded-2xl border border-gray-200 bg-white p-5 hover:border-gray-300 hover:shadow-sm transition-all'
-              const muted = inProduction
-                ? 'text-emerald-900/60'
-                : isFinalized
-                  ? 'text-sky-900/60'
-                  : 'text-gray-500'
-              const titleCls = inProduction
-                ? 'text-emerald-950'
-                : isFinalized
-                  ? 'text-sky-950'
-                  : 'text-gray-900'
-              const eyebrowCls = inProduction
-                ? 'text-emerald-700/80 font-semibold'
-                : isFinalized
-                  ? 'text-sky-700/80 font-semibold'
-                  : 'text-gray-400'
-              const subCls = inProduction
-                ? 'text-emerald-800/70'
-                : isFinalized
-                  ? 'text-sky-800/70'
-                  : 'text-gray-600'
-              const ctaCls = inProduction
-                ? 'text-emerald-800'
-                : isFinalized
-                  ? 'text-sky-800'
-                  : 'text-gray-700'
+              const st = STATUS[statusOf(row)]
+              const tasks = taskStats(row)
+              const finished = statusOf(row) === 'done'
               return (
-                <Link key={row.id} href={href} className={cardTone}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className={`text-xs uppercase tracking-wide ${eyebrowCls}`}>
-                        {inProduction
-                            ? 'En producción'
-                            : isFinalized
-                              ? 'Finalizado'
-                              : 'Proyecto Buffalo'}
-                      </p>
-                      <h2 className={`text-lg font-semibold truncate ${titleCls}`}>{title}</h2>
-                      {subtitle && (
-                        <p className={`text-sm mt-1 truncate ${subCls}`}>{subtitle}</p>
-                      )}
-                    </div>
-                    <div className="shrink-0 flex flex-col items-end gap-1">
-                                              <span
-                          className={
-                            inProduction
-                              ? 'inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm'
-                              : isFinalized
-                                ? 'inline-flex items-center gap-1 rounded-full bg-sky-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm'
-                                : 'inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-800'
-                          }
-                        >
-                          <CheckCircle2 className="h-3 w-3" />
-                          {inProduction ? 'Producción' : isFinalized ? 'Finalizado' : 'Buffalo'}
-                        </span>
-                      <span
-                        className={
-                          inProduction
-                            ? 'rounded-full bg-emerald-600/10 border border-emerald-300 px-2.5 py-1 text-[11px] font-semibold text-emerald-800'
-                            : isFinalized
-                              ? 'rounded-full bg-sky-600/10 border border-sky-300 px-2.5 py-1 text-[11px] font-semibold text-sky-800'
-                              : 'rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600'
-                        }
-                      >
-                        {statusLabel[row.status] || row.status}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className={`mt-4 space-y-2 text-sm ${muted}`}>
-                                          <>
-                        <p>{serviceLabel[row.service_type] || row.service_type}</p>
-                        {row.config_ref && (
-                          <p
-                            className={`font-mono text-[11px] ${
-                              inProduction
-                                ? 'text-emerald-700/50'
-                                : isFinalized
-                                  ? 'text-sky-700/50'
-                                  : 'text-gray-400'
-                            }`}
-                          >
-                            {row.config_ref}
-                          </p>
-                        )}
-                        {row.developers?.length > 0 && (
-                          <DeveloperTags developers={row.developers} className="pt-1" />
-                        )}
-                      </>
-                  </div>
-
-                  <div className="mt-5 flex items-center justify-between text-xs">
-                    <span className={subCls}>
-                      {inProduction
-                          ? 'Entregado · en producción'
-                          : isFinalized
-                            ? 'Cerrado · sin producción'
-                            : `${openTasks} tareas abiertas · ${row.task_counts.done} hechas`}
+                <Link
+                  key={row.id}
+                  href={`/gestion-proyecto/proyectos/${row.id}`}
+                  className="group flex flex-col rounded-2xl border border-gray-200 bg-white p-5 transition-all hover:border-gray-300 hover:shadow-sm"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${st.badge}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
+                      {st.label}
                     </span>
-                    <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">{serviceLabel[row.service_type] || row.service_type}</span>
+                  </div>
+
+                  <h2 className="mt-3 truncate text-base font-semibold text-gray-900">{title}</h2>
+                  <p className="truncate text-sm text-gray-500">{subtitle || row.name}</p>
+                  {row.config_ref && <p className="mt-1 font-mono text-[11px] text-gray-400">{row.config_ref}</p>}
+
+                  {!finished && tasks.total > 0 && (
+                    <div className="mt-4">
+                      <div className="mb-1 flex justify-between text-[11px] text-gray-500">
+                        <span>
+                          {tasks.open} abiertas · {tasks.done} hechas
+                        </span>
+                        <span className="tabular-nums">{tasks.pct}%</span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+                        <div className="h-full rounded-full bg-gray-900" style={{ width: `${tasks.pct}%` }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {row.developers?.length > 0 && <DeveloperTags developers={row.developers} className="mt-4" />}
+
+                  <div className="mt-auto flex items-center justify-between gap-2 border-t border-gray-100 pt-3 text-xs" style={{ marginTop: 'auto' }}>
+                    <span className="text-gray-400">Actualizado {fmtDate(row.updated_at)}</span>
+                    <div className="flex items-center gap-1">
                       {isAdmin && (
                         <button
                           type="button"
@@ -298,13 +298,16 @@ export default function GestionProyectoPage() {
                             e.stopPropagation()
                             void removeProject(row)
                           }}
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-gray-300 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+                          title="Eliminar proyecto"
+                          aria-label="Eliminar proyecto"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
-                          {deletingId === row.id ? 'Eliminando…' : 'Eliminar'}
                         </button>
                       )}
-                      <span className={`font-medium ${ctaCls}`}>Abrir →</span>
+                      <span className="inline-flex items-center gap-1 font-medium text-gray-700 group-hover:text-gray-900">
+                        Abrir <ArrowRight className="h-3.5 w-3.5" />
+                      </span>
                     </div>
                   </div>
                 </Link>
