@@ -107,6 +107,12 @@ interface ProjectTaskBoardProps<T extends ProjectTask = ProjectTask> {
   renderCardContext?: (task: T) => ReactNode
   /** Información extra en la cabecera de la tarea abierta */
   renderDialogContext?: (task: T) => ReactNode
+  /** Campos extra que solo salen al pulsar Editar (proyecto, persona…) */
+  renderEditExtras?: (task: T) => ReactNode
+  /** Al final del cuerpo de la tarea abierta (p. ej. la respuesta) */
+  renderDialogBottom?: (task: T) => ReactNode
+  /** Botones extra en el pie de la tarea abierta (p. ej. Responder) */
+  renderDialogActions?: (task: T) => ReactNode
   canDelete?: (task: T) => boolean
   /** Si se puede editar título, descripción, prioridad y horas (por defecto, sí) */
   canEdit?: (task: T) => boolean
@@ -157,6 +163,9 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
   const tasks = props.tasks as ProjectTask[]
   const onChange = props.onChange as (tasks: ProjectTask[]) => void
   const renderCardContext = props.renderCardContext as ((task: ProjectTask) => ReactNode) | undefined
+  const renderEditExtras = props.renderEditExtras as ((task: ProjectTask) => ReactNode) | undefined
+  const renderDialogBottom = props.renderDialogBottom as ((task: ProjectTask) => ReactNode) | undefined
+  const renderDialogActions = props.renderDialogActions as ((task: ProjectTask) => ReactNode) | undefined
   const renderDialogContext = props.renderDialogContext as
     | ((task: ProjectTask) => ReactNode)
     | undefined
@@ -670,10 +679,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                 const stale = isStaleTask(task)
                 const daysInColumn = daysInCurrentColumn(task)
                 const assigneeColor = task.assignee ? assigneeColors.get(task.assignee) : undefined
-                const cardTint =
-                  multipleAssignees && assigneeColor
-                    ? { borderLeftWidth: 4, borderLeftColor: assigneeColor }
-                    : undefined
+                const cardTint = undefined
                 const isActing = staleActionId === task.id
 
                 return (
@@ -769,11 +775,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                           {task.assignee && (
                             <span
                               className="inline-flex items-center gap-1 text-xs text-gray-600 px-2 py-0.5 rounded-full border border-gray-200 max-w-full truncate"
-                              style={
-                                multipleAssignees && assigneeColor
-                                  ? { backgroundColor: `${assigneeColor}18`, borderColor: `${assigneeColor}55` }
-                                  : { backgroundColor: 'rgb(249 250 251)' }
-                              }
+                              style={{ backgroundColor: 'rgb(249 250 251)' }}
                             >
                               <User className="h-3 w-3 shrink-0" />
                               <span className="truncate">{task.assignee}</span>
@@ -1142,7 +1144,8 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                     </div>
                   </div>
                 )}
-                {viewTask.project_id && (
+                {editing && renderEditExtras && <div className="mb-4 space-y-3">{renderEditExtras(viewTask)}</div>}
+                {editing && viewTask.project_id && (
                   <div className="mb-4 space-y-2">
                     <p className="text-sm font-medium text-gray-700">Para quién</p>
                     <AssigneePicker
@@ -1154,6 +1157,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                     />
                   </div>
                 )}
+                {editing && (
                 <div className="mb-4 space-y-2">
                   <label className="text-sm font-medium text-gray-700" htmlFor="view_task_due">
                     Fecha de finalización
@@ -1170,6 +1174,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                     className="max-w-xs"
                   />
                 </div>
+                )}
                 <div className="mb-4 space-y-2">
                   <p className="text-sm font-medium text-gray-700">Subtareas</p>
                   <SubtaskList
@@ -1195,6 +1200,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                     applyChange((list) => list.map((t) => (t.id === viewTask.id ? { ...t, attachments } : t)))
                   }}
                 />
+                {renderDialogBottom && renderDialogBottom(viewTask)}
               </div>
               <DialogFooter className="shrink-0 gap-2 sm:gap-0 px-6 py-4 border-t border-gray-100 bg-white">
                 {canDelete(viewTask) && (
@@ -1209,6 +1215,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                     Eliminar
                   </Button>
                 )}
+                {!editing && renderDialogActions && renderDialogActions(viewTask)}
                 {canEdit(viewTask) &&
                   (editing ? (
                     <>

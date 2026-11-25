@@ -86,6 +86,8 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
   const [filters, setFilters] = useState<TaskFilterState>(EMPTY_FILTERS)
   const [view, setView] = useState<TasksView>('board')
   const [selectedPeople, setSelectedPeople] = useState<PersonKey[]>([])
+  /** Tarea en la que se está escribiendo la respuesta (botón Responder del pie) */
+  const [replyingId, setReplyingId] = useState<string | null>(null)
   const restored = useRef(false)
   /** Dueño de las preferencias leídas; se compara con quien mira al cargar */
   const savedOwner = useRef<number | null | undefined>(undefined)
@@ -492,9 +494,12 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
             renderDialogContext={(task) => {
               // La tarea abierta puede ir por detrás: se usa la versión más reciente
               const latest = tasks.find((t) => t.id === task.id) ?? task
+              return <TaskOriginDetail task={latest} />
+            }}
+            renderEditExtras={(task) => {
+              const latest = tasks.find((t) => t.id === task.id) ?? task
               return (
-                <div className="space-y-2">
-                  <TaskOriginDetail task={latest} />
+                <>
                   {/* Las de proyecto se reparten con «Para quién» (uno o varios developers) */}
                   {adminOverview && people.length > 0 && latest.source === 'personal' && (
                     <PersonPicker task={latest} people={people} nameIndex={nameIndex} onPick={reassign} />
@@ -502,8 +507,28 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
                   {(data?.projects.length ?? 0) > 0 && (
                     <ProjectPicker task={latest} projects={data?.projects ?? []} onPick={moveToProject} />
                   )}
-                  <TaskResponse task={latest} onSave={saveResponse} />
-                </div>
+                </>
+              )
+            }}
+            renderDialogBottom={(task) => {
+              const latest = tasks.find((t) => t.id === task.id) ?? task
+              return (
+                <TaskResponse
+                  task={latest}
+                  open={replyingId === latest.id}
+                  onClose={() => setReplyingId(null)}
+                  onSave={saveResponse}
+                />
+              )
+            }}
+            renderDialogActions={(task) => {
+              const latest = tasks.find((t) => t.id === task.id) ?? task
+              if (replyingId === latest.id) return null
+              return (
+                <Button type="button" variant="outline" onClick={() => setReplyingId(latest.id)} className="gap-1.5">
+                  <MessageSquareReply className="h-4 w-4" />
+                  {latest.response ? 'Editar respuesta' : 'Responder'}
+                </Button>
               )
             }}
           />
@@ -664,16 +689,46 @@ function ProjectPicker({
 }
 
 /** Respuesta de quien tiene la tarea; la ve quien la puso. */
-function TaskResponse({ task, onSave }: { task: WorkTask; onSave: (task: WorkTask, text: string) => Promise<void> }) {
+function TaskResponse({
+  task,
+  open,
+  onClose,
+  onSave,
+}: {
+  task: WorkTask
+  open: boolean
+  onClose: () => void
+  onSave: (task: WorkTask, text: string) => Promise<void>
+}) {
   const [text, setText] = useState(task.response || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
     setText(task.response || '')
-  }, [task.id, task.response])
+    setError('')
+  }, [task.id, task.response, open])
   const dirty = text.trim() !== (task.response || '').trim()
+  const when = task.response_at
+    ? new Date(task.response_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : ''
+
+  // Cerrada: solo se ve la respuesta que ya hay, abajo del todo y sin estorbar
+  if (!open) {
+    if (!task.response) return null
+    return (
+      <div className="mt-2 border-t border-gray-100 pt-4">
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+          <MessageSquareReply className="h-3.5 w-3.5" />
+          Respuesta{task.response_by ? ` de ${task.response_by}` : ''}
+          {when && <span className="font-normal text-gray-400">· {when}</span>}
+        </p>
+        <p className="whitespace-pre-wrap text-sm text-gray-800">{task.response}</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3 space-y-2">
+    <div className="mt-2 rounded-xl border border-gray-200 bg-gray-50/60 p-3 space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
           <MessageSquareReply className="h-4 w-4" />
@@ -687,6 +742,7 @@ function TaskResponse({ task, onSave }: { task: WorkTask; onSave: (task: WorkTas
         )}
       </div>
       <textarea
+        autoFocus
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={3}
@@ -695,6 +751,9 @@ function TaskResponse({ task, onSave }: { task: WorkTask; onSave: (task: WorkTas
       />
       <div className="flex items-center justify-end gap-2">
         {error && <span className="text-xs text-red-600">{error}</span>}
+        <Button size="sm" variant="ghost" type="button" onClick={onClose} disabled={saving}>
+          Cancelar
+        </Button>
         <Button
           size="sm"
           disabled={!dirty || saving}
@@ -703,6 +762,7 @@ function TaskResponse({ task, onSave }: { task: WorkTask; onSave: (task: WorkTas
             setError('')
             try {
               await onSave(task, text)
+              onClose()
             } catch (err) {
               setError(err instanceof Error ? err.message : 'No se pudo guardar')
             } finally {
