@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { AlertCircle, ExternalLink, FolderKanban, ListTodo, Loader2 } from 'lucide-react'
+import { AlertCircle, ExternalLink, FolderKanban, ListTodo, Loader2, MessageSquareReply } from 'lucide-react'
 import ProjectTaskBoard, { VIEW_TABS, type TasksView } from '@/components/gestion-proyecto/ProjectTaskBoard'
 import {
   jsonInit,
@@ -324,6 +324,49 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
     [people, track]
   )
 
+  /** Asocia la tarea a un proyecto. Una suelta pasa a ser del proyecto (cambia su id). */
+  const moveToProject = useCallback(
+    async (task: WorkTask, projectId: string) => {
+      const res = await track(() =>
+        requestJson<{ task: WorkTask; previous_id: string }>(
+          '/api/tareas/mover',
+          jsonInit('POST', { source: task.source, task_id: task.id, project_id: projectId }),
+          'No se pudo cambiar de proyecto'
+        )
+      )
+      const moved: WorkTask = {
+        ...res.task,
+        estimated_hours: toNumber(res.task.estimated_hours),
+        project_name: projectNames.get(projectId) ?? res.task.project_name,
+        attachments: task.source === 'project' ? task.attachments : res.task.attachments,
+      }
+      setTasks((prev) => [...prev.filter((t) => t.id !== res.previous_id && t.id !== moved.id), moved])
+      return moved
+    },
+    [projectNames, track]
+  )
+
+  /** Guarda la respuesta de quien tiene la tarea. */
+  const saveResponse = useCallback(
+    async (task: WorkTask, text: string) => {
+      const res = await track(() =>
+        requestJson<{ task: WorkTask }>(
+          '/api/tareas/respuesta',
+          jsonInit('POST', { source: task.source, task_id: task.id, response: text }),
+          'No se pudo guardar la respuesta'
+        )
+      )
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id
+            ? { ...t, response: res.task.response, response_at: res.task.response_at, response_by: res.task.response_by }
+            : t
+        )
+      )
+    },
+    [track]
+  )
+
   // Con una sola persona marcada, "Nueva tarea" se la pone a ella
   const singleUserTarget =
     adminOverview && activePeople.length === 1 && activePeople[0].startsWith('u:')
@@ -431,8 +474,20 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
             createTargets={createTargets}
             defaultCreateTarget={scope ? `user:${scope.id}` : singleUserTarget}
             canDelete={(task) => canDeleteWorkTask(viewer, task)}
+            columnSearch
+            doneLimit={3}
             emptyColumnText={tasks.length > 0 && visible.length === 0 ? 'Nada con estos filtros' : 'Sin tareas'}
-            renderCardContext={(task) => <TaskOrigin task={task} showOwner={adminOverview} />}
+            renderCardContext={(task) => (
+              <>
+                <TaskOrigin task={task} showOwner={adminOverview} />
+                {task.response && (
+                  <span className="mt-0.5 flex max-w-full items-center gap-1 text-[11px] text-emerald-700">
+                    <MessageSquareReply className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{task.response}</span>
+                  </span>
+                )}
+              </>
+            )}
             renderDialogContext={(task) => {
               // La tarea abierta puede ir por detrás: se usa la versión más reciente
               const latest = tasks.find((t) => t.id === task.id) ?? task
@@ -443,6 +498,10 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
                   {adminOverview && people.length > 0 && latest.source === 'personal' && (
                     <PersonPicker task={latest} people={people} nameIndex={nameIndex} onPick={reassign} />
                   )}
+                  {(data?.projects.length ?? 0) > 0 && (
+                    <ProjectPicker task={latest} projects={data?.projects ?? []} onPick={moveToProject} />
+                  )}
+                  <TaskResponse task={latest} onSave={saveResponse} />
                 </div>
               )
             }}
@@ -548,5 +607,111 @@ function TaskOriginDetail({ task }: { task: WorkTask }) {
         </>
       )}
     </p>
+  )
+}
+
+/** Asociar la tarea a un proyecto desde el panel de Tareas. */
+function ProjectPicker({
+  task,
+  projects,
+  onPick,
+}: {
+  task: WorkTask
+  projects: { id: string; name: string }[]
+  onPick: (task: WorkTask, projectId: string) => Promise<WorkTask>
+}) {
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+  const current = task.source === 'project' ? task.project_id : ''
+  return (
+    <label className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
+      <span className="font-medium text-gray-700">Proyecto</span>
+      <select
+        value={current}
+        disabled={saving}
+        onChange={async (e) => {
+          const projectId = e.target.value
+          if (!projectId || projectId === current) return
+          const name = projects.find((p) => p.id === projectId)?.name || 'el proyecto'
+          if (task.source === 'personal' && !window.confirm(`¿Pasar esta tarea suelta a «${name}»? Quedará como tarea del proyecto.`)) {
+            return
+          }
+          setSaving(true)
+          setMsg('')
+          try {
+            await onPick(task, projectId)
+            setMsg(`Ahora está en «${name}»`)
+          } catch (err) {
+            setMsg(err instanceof Error ? err.message : 'No se pudo cambiar de proyecto')
+          } finally {
+            setSaving(false)
+          }
+        }}
+        className="h-9 min-w-[12rem] rounded-lg border border-gray-200 bg-white px-2 text-sm text-gray-900 outline-none focus:border-gray-400 disabled:opacity-60"
+      >
+        {task.source === 'personal' && <option value="">Sin proyecto (tarea suelta)</option>}
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      {saving && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+      {msg && <span className="text-xs text-gray-500">{msg}</span>}
+    </label>
+  )
+}
+
+/** Respuesta de quien tiene la tarea; la ve quien la puso. */
+function TaskResponse({ task, onSave }: { task: WorkTask; onSave: (task: WorkTask, text: string) => Promise<void> }) {
+  const [text, setText] = useState(task.response || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    setText(task.response || '')
+  }, [task.id, task.response])
+  const dirty = text.trim() !== (task.response || '').trim()
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3 space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
+          <MessageSquareReply className="h-4 w-4" />
+          Respuesta
+        </p>
+        {task.response && task.response_by && (
+          <p className="text-[11px] text-gray-500">
+            {task.response_by}
+            {task.response_at ? ` · ${new Date(task.response_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
+          </p>
+        )}
+      </div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+        placeholder="Cómo ha ido, qué falta o qué necesitas de quien te la puso…"
+        className="w-full rounded-lg border border-gray-200 bg-white p-2.5 text-sm text-gray-900 outline-none focus:border-gray-400"
+      />
+      <div className="flex items-center justify-end gap-2">
+        {error && <span className="text-xs text-red-600">{error}</span>}
+        <Button
+          size="sm"
+          disabled={!dirty || saving}
+          onClick={async () => {
+            setSaving(true)
+            setError('')
+            try {
+              await onSave(task, text)
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'No se pudo guardar')
+            } finally {
+              setSaving(false)
+            }
+          }}
+        >
+          {saving ? 'Guardando…' : 'Guardar respuesta'}
+        </Button>
+      </div>
+    </div>
   )
 }

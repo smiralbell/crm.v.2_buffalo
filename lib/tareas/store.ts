@@ -40,6 +40,11 @@ export function ensureUserTasksSchema(): Promise<void> {
       await prisma.$executeRawUnsafe(
         `CREATE INDEX IF NOT EXISTS idx_crm_user_tasks_user ON crm_user_tasks(user_id, status)`
       )
+      for (const table of ['crm_user_tasks', 'project_dev_tasks']) {
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE IF EXISTS ${table} ADD COLUMN IF NOT EXISTS response TEXT, ADD COLUMN IF NOT EXISTS response_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS response_by TEXT`
+        )
+      }
     })().catch((e) => {
       schemaReady = null
       throw e
@@ -86,6 +91,9 @@ function mapPersonalRow(row: Row): WorkTask {
     owner_user_id: Number(row.user_id),
     created_by_id: row.created_by_id == null ? null : Number(row.created_by_id),
     created_by_name: (row.created_by_name as string | null) ?? null,
+    response: (row.response as string | null) ?? null,
+    response_at: row.response_at ? iso(row.response_at) : null,
+    response_by: (row.response_by as string | null) ?? null,
   }
 }
 
@@ -115,6 +123,9 @@ function mapProjectRow(row: Row): WorkTask {
     owner_user_id: null,
     created_by_id: null,
     created_by_name: null,
+    response: (row.response as string | null) ?? null,
+    response_at: row.response_at ? iso(row.response_at) : null,
+    response_by: (row.response_by as string | null) ?? null,
   }
 }
 
@@ -481,4 +492,85 @@ export async function reassignPersonalTask(current: WorkTask, userId: number): P
     WHERE id = ${current.id}::uuid
   `
   return getPersonalTask(current.id)
+}
+
+// ——— Respuesta y cambio de proyecto ———
+
+/** Guarda (o borra, con texto vacío) la respuesta de quien tiene la tarea. */
+export async function setTaskResponse(
+  task: WorkTask,
+  text: string,
+  byName: string
+): Promise<WorkTask | null> {
+  await ensureUserTasksSchema()
+  const value = text.trim() ? text.trim() : null
+  const by = value ? byName : null
+  if (task.source === 'personal') {
+    await prisma.$executeRaw`
+      UPDATE crm_user_tasks
+         SET response = ${value}, response_by = ${by},
+             response_at = CASE WHEN ${value}::text IS NULL THEN NULL ELSE NOW() END, updated_at = NOW()
+       WHERE id = ${task.id}::uuid
+    `
+    return getPersonalTask(task.id)
+  }
+  await prisma.$executeRaw`
+    UPDATE project_dev_tasks
+       SET response = ${value}, response_by = ${by},
+           response_at = CASE WHEN ${value}::text IS NULL THEN NULL ELSE NOW() END, updated_at = NOW()
+     WHERE id = ${task.id}::uuid
+  `
+  return getProjectTask(task.id)
+}
+
+export class TaskMoveError extends Error {}
+
+/**
+ * Asocia una tarea a un proyecto.
+ * - Suelta → proyecto: se crea en el proyecto con el dueño como responsable y la suelta se borra.
+ * - De proyecto → otro proyecto: se cambia de proyecto (conserva adjuntos e historial).
+ */
+export async function moveTaskToProject(task: WorkTask, projectId: string): Promise<WorkTask> {
+  await ensureUserTasksSchema()
+  if (task.source === 'project') {
+    if (task.project_id === projectId) return task
+    const maxPos = await prisma.$queryRaw<{ max_pos: number | null }[]>`
+      SELECT MAX(position)::int AS max_pos FROM project_dev_tasks
+      WHERE project_id = ${projectId}::uuid AND status = ${task.status}
+    `
+    await prisma.$executeRaw`
+      UPDATE project_dev_tasks
+         SET project_id = ${projectId}::uuid, position = ${(maxPos[0]?.max_pos ?? -1) + 1}, updated_at = NOW()
+       WHERE id = ${task.id}::uuid
+    `
+    const moved = await getProjectTask(task.id)
+    if (!moved) throw new TaskMoveError('Tarea no encontrada')
+    return moved
+  }
+
+  if ((task.attachments?.length ?? 0) > 0) {
+    throw new TaskMoveError('Esta tarea tiene archivos adjuntos: descárgalos o quítalos antes de pasarla a un proyecto.')
+  }
+  const created = await createProjectTask({
+    project_id: projectId,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority,
+    assignee: task.assignee,
+    estimated_hours: task.estimated_hours,
+    due_date: task.due_date,
+    subtasks: task.subtasks,
+  })
+  if (task.owner_user_id) await saveTaskAssigneeIds(created.id, [task.owner_user_id])
+  if (task.response) {
+    await prisma.$executeRaw`
+      UPDATE project_dev_tasks
+         SET response = ${task.response}, response_by = ${task.response_by ?? null},
+             response_at = ${task.response_at ?? null}::timestamptz
+       WHERE id = ${created.id}::uuid
+    `
+  }
+  await deletePersonalTask(task.id)
+  return (await getProjectTask(created.id)) ?? created
 }

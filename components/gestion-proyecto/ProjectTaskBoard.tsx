@@ -114,6 +114,19 @@ interface ProjectTaskBoardProps<T extends ProjectTask = ProjectTask> {
    * número se abre el formulario (y el tablero no pinta su barra de arriba).
    */
   createSignal?: number
+  /** Buscador en la cabecera de cada columna */
+  columnSearch?: boolean
+  /** En «Hecho» solo se ven las N últimas hasta pulsar «Ver todas» */
+  doneLimit?: number
+}
+
+/** Texto en el que busca el buscador de columna. */
+function taskSearchText(task: ProjectTask): string {
+  const extra = task as ProjectTask & { project_name?: string | null; created_by_name?: string | null }
+  return [task.title, task.description, task.assignee, extra.project_name, extra.created_by_name]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
 }
 
 export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
@@ -130,7 +143,11 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
     defaultCreateTarget,
     emptyColumnText = 'Sin tareas',
     createSignal,
+    columnSearch = false,
+    doneLimit,
   } = props
+  const [columnQuery, setColumnQuery] = useState<Record<string, string>>({})
+  const [showAllDone, setShowAllDone] = useState(false)
   const tasks = props.tasks as ProjectTask[]
   const onChange = props.onChange as (tasks: ProjectTask[]) => void
   const renderCardContext = props.renderCardContext as ((task: ProjectTask) => ReactNode) | undefined
@@ -538,6 +555,18 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
       {TASK_COLUMNS.map((column) => {
         const columnTasks = grouped[column.id]
         const isOver = draggedOver === column.id
+        const query = (columnQuery[column.id] || '').trim().toLowerCase()
+        let shownTasks = query ? columnTasks.filter((t) => taskSearchText(t).includes(query)) : columnTasks
+        let hiddenDone = 0
+        const limitDone = column.id === 'done' && !!doneLimit && !showAllDone && !query
+        if (limitDone && shownTasks.length > doneLimit!) {
+          // Las que se hicieron más recientemente
+          const recent = [...shownTasks].sort((a, b) =>
+            (b.status_changed_at || b.updated_at).localeCompare(a.status_changed_at || a.updated_at)
+          )
+          hiddenDone = recent.length - doneLimit!
+          shownTasks = recent.slice(0, doneLimit)
+        }
 
         return (
           <div
@@ -574,11 +603,24 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
               </button>
             </div>
 
+            {columnSearch && (
+              <div className="px-3 pt-2.5">
+                <input
+                  value={columnQuery[column.id] || ''}
+                  onChange={(e) => setColumnQuery((prev) => ({ ...prev, [column.id]: e.target.value }))}
+                  placeholder={`Buscar en ${column.label.toLowerCase()}…`}
+                  className="h-8 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
+                />
+              </div>
+            )}
+
             <div className="flex-1 p-3 space-y-3">
-              {columnTasks.length === 0 && (
-                <p className="px-2 py-8 text-center text-xs text-gray-400">{emptyColumnText}</p>
+              {shownTasks.length === 0 && (
+                <p className="px-2 py-8 text-center text-xs text-gray-400">
+                  {query && columnTasks.length > 0 ? 'Nada con esta búsqueda' : emptyColumnText}
+                </p>
               )}
-              {columnTasks.map((task) => {
+              {shownTasks.map((task) => {
                 const isDragging = draggedTask?.id === task.id
                 const stale = isStaleTask(task)
                 const daysInColumn = daysInCurrentColumn(task)
@@ -746,6 +788,15 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                   </div>
                 )
               })}
+              {column.id === 'done' && !!doneLimit && !query && (hiddenDone > 0 || showAllDone) && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllDone((v) => !v)}
+                  className="w-full rounded-lg border border-dashed border-gray-300 py-2 text-xs font-medium text-gray-600 hover:border-gray-400 hover:text-gray-900"
+                >
+                  {showAllDone ? `Mostrar solo las ${doneLimit} últimas` : `Ver todas (${columnTasks.length})`}
+                </button>
+              )}
             </div>
           </div>
         )

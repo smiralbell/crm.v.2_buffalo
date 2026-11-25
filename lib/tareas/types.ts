@@ -15,6 +15,10 @@ export interface WorkTask extends ProjectTask {
   /** Quién creó la tarea suelta (para "Asignada por …") */
   created_by_id: number | null
   created_by_name: string | null
+  /** Respuesta de quien tiene la tarea, para quien la puso */
+  response?: string | null
+  response_at?: string | null
+  response_by?: string | null
 }
 
 export interface WorkPerson {
