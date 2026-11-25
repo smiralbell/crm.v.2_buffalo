@@ -19,6 +19,7 @@ import {
   Grip,
   Kanban,
   Paperclip,
+  Pencil,
   Plus,
   Trash2,
   User,
@@ -107,6 +108,8 @@ interface ProjectTaskBoardProps<T extends ProjectTask = ProjectTask> {
   /** Información extra en la cabecera de la tarea abierta */
   renderDialogContext?: (task: T) => ReactNode
   canDelete?: (task: T) => boolean
+  /** Si se puede editar título, descripción, prioridad y horas (por defecto, sí) */
+  canEdit?: (task: T) => boolean
   /** Texto cuando una columna está vacía */
   emptyColumnText?: string
   /**
@@ -148,6 +151,9 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
   } = props
   const [columnQuery, setColumnQuery] = useState<Record<string, string>>({})
   const [showAllDone, setShowAllDone] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({ title: '', description: '', priority: 'medium' as TaskPriority, hours: '' })
+  const [savingEdit, setSavingEdit] = useState(false)
   const tasks = props.tasks as ProjectTask[]
   const onChange = props.onChange as (tasks: ProjectTask[]) => void
   const renderCardContext = props.renderCardContext as ((task: ProjectTask) => ReactNode) | undefined
@@ -156,6 +162,8 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
     | undefined
   const canDelete = (task: ProjectTask) =>
     props.canDelete ? (props.canDelete as (t: ProjectTask) => boolean)(task) : true
+  const canEdit = (task: ProjectTask) =>
+    props.canEdit ? (props.canEdit as (t: ProjectTask) => boolean)(task) : true
   const client = useMemo(
     () => props.client ?? projectTaskClient(projectId ?? ''),
     [props.client, projectId]
@@ -432,6 +440,43 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
     } finally {
       setDeleting(false)
     }
+  }
+
+  const viewTaskId = viewTask?.id ?? null
+  useEffect(() => {
+    setEditing(false)
+  }, [viewTaskId])
+
+  const startEdit = (task: ProjectTask) => {
+    setEditForm({
+      title: task.title,
+      description: task.description || '',
+      priority: task.priority,
+      hours: task.estimated_hours != null ? String(task.estimated_hours) : '',
+    })
+    setEditing(true)
+  }
+
+  const saveEdit = async (task: ProjectTask) => {
+    const title = editForm.title.trim()
+    if (!title) {
+      alert('El título es obligatorio')
+      return
+    }
+    const hours = editForm.hours.trim() ? Number(editForm.hours.replace(',', '.')) : null
+    if (hours != null && (!Number.isFinite(hours) || hours <= 0)) {
+      alert('Las horas tienen que ser un número mayor que 0')
+      return
+    }
+    setSavingEdit(true)
+    await patchTaskMeta(task.id, {
+      title,
+      description: editForm.description.trim() || null,
+      priority: editForm.priority,
+      estimated_hours: hours,
+    })
+    setSavingEdit(false)
+    setEditing(false)
   }
 
   const patchTaskMeta = async (taskId: string, body: Record<string, unknown>) => {
@@ -1049,6 +1094,54 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                 {renderDialogContext && <div className="pr-8">{renderDialogContext(viewTask)}</div>}
               </DialogHeader>
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pb-4">
+                {editing && (
+                  <div className="mb-5 space-y-3 rounded-xl border border-gray-200 bg-gray-50/70 p-4">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700" htmlFor="edit_task_title">Título</label>
+                      <Input
+                        id="edit_task_title"
+                        value={editForm.title}
+                        onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-gray-700" htmlFor="edit_task_priority">Prioridad</label>
+                        <select
+                          id="edit_task_priority"
+                          value={editForm.priority}
+                          onChange={(e) => setEditForm((f) => ({ ...f, priority: e.target.value as TaskPriority }))}
+                          className="h-10 w-full rounded-md border border-gray-200 bg-white px-2 text-sm"
+                        >
+                          {PRIORITIES.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-gray-700" htmlFor="edit_task_hours">Horas estimadas</label>
+                        <Input
+                          id="edit_task_hours"
+                          inputMode="decimal"
+                          value={editForm.hours}
+                          placeholder="Ej.: 2"
+                          onChange={(e) => setEditForm((f) => ({ ...f, hours: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-gray-700" htmlFor="edit_task_desc">Descripción</label>
+                      <Textarea
+                        id="edit_task_desc"
+                        rows={6}
+                        value={editForm.description}
+                        onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                )}
                 {viewTask.project_id && (
                   <div className="mb-4 space-y-2">
                     <p className="text-sm font-medium text-gray-700">Para quién</p>
@@ -1116,7 +1209,23 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                     Eliminar
                   </Button>
                 )}
-                <Button onClick={() => setViewTask(null)}>Cerrar</Button>
+                {canEdit(viewTask) &&
+                  (editing ? (
+                    <>
+                      <Button variant="outline" onClick={() => setEditing(false)} disabled={savingEdit}>
+                        Cancelar
+                      </Button>
+                      <Button onClick={() => void saveEdit(viewTask)} disabled={savingEdit}>
+                        {savingEdit ? 'Guardando…' : 'Guardar cambios'}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="outline" onClick={() => startEdit(viewTask)}>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Editar
+                    </Button>
+                  ))}
+                {!editing && <Button onClick={() => setViewTask(null)}>Cerrar</Button>}
               </DialogFooter>
             </>
           )}

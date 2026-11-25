@@ -9,7 +9,7 @@ import {
   updatePersonalTask,
 } from '@/lib/tareas/store'
 import { personalTaskUpdateSchema } from '@/lib/tareas/schemas'
-import { canDeletePersonalTask } from '@/lib/tareas/permissions'
+import { canDeletePersonalTask, canEditPersonalTask } from '@/lib/tareas/permissions'
 import { personalAttachmentDriveIds } from '@/lib/tareas/attachments'
 import { trashAttachmentInDrive } from '@/lib/integrations/google/drive-attachments'
 
@@ -27,8 +27,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const task = await getPersonalTask(id)
-    // Cada uno ve y toca solo sus tareas sueltas; admin, todas.
-    if (!task || (user.role !== 'admin' && task.owner_user_id !== user.id)) {
+    // Cada uno ve y toca sus tareas sueltas y las que creó; admin, todas.
+    if (!task || !canEditPersonalTask(user, task)) {
       return res.status(404).json({ error: 'Tarea no encontrada' })
     }
 

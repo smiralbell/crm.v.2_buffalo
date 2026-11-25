@@ -5,7 +5,7 @@ import {
   countActiveFilters,
   mergeVisibleTasks,
 } from '@/lib/tareas/filters'
-import { canDeletePersonalTask } from '@/lib/tareas/permissions'
+import { canDeletePersonalTask, canEditPersonalTask } from '@/lib/tareas/permissions'
 import type { WorkTask } from '@/lib/tareas/types'
 
 function task(over: Partial<WorkTask>): WorkTask {
@@ -113,10 +113,20 @@ describe('mergeVisibleTasks', () => {
 })
 
 describe('canDeletePersonalTask', () => {
-  it('admin siempre; el usuario solo las que se creó él', () => {
+  it('admin siempre; el resto, las que creó (aunque sean de otra persona)', () => {
     expect(canDeletePersonalTask({ id: 0, role: 'admin' }, { owner_user_id: 5, created_by_id: null })).toBe(true)
     expect(canDeletePersonalTask({ id: 5, role: 'developer' }, { owner_user_id: 5, created_by_id: 5 })).toBe(true)
     expect(canDeletePersonalTask({ id: 5, role: 'developer' }, { owner_user_id: 5, created_by_id: null })).toBe(false)
-    expect(canDeletePersonalTask({ id: 6, role: 'developer' }, { owner_user_id: 5, created_by_id: 6 })).toBe(false)
+    expect(canDeletePersonalTask({ id: 6, role: 'project_manager' }, { owner_user_id: 5, created_by_id: 6 })).toBe(true)
+    expect(canDeletePersonalTask({ id: 7, role: 'developer' }, { owner_user_id: 5, created_by_id: 6 })).toBe(false)
+  })
+})
+
+describe('canEditPersonalTask', () => {
+  it('admin, quien la tiene y quien la creó; nadie más', () => {
+    expect(canEditPersonalTask({ id: 0, role: 'admin' }, { owner_user_id: 5, created_by_id: 6 })).toBe(true)
+    expect(canEditPersonalTask({ id: 5, role: 'developer' }, { owner_user_id: 5, created_by_id: 6 })).toBe(true)
+    expect(canEditPersonalTask({ id: 6, role: 'project_manager' }, { owner_user_id: 5, created_by_id: 6 })).toBe(true)
+    expect(canEditPersonalTask({ id: 7, role: 'developer' }, { owner_user_id: 5, created_by_id: 6 })).toBe(false)
   })
 })

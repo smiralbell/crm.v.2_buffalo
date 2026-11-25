@@ -28,7 +28,7 @@ import {
   mergeVisibleTasks,
   type TaskFilterState,
 } from '@/lib/tareas/filters'
-import { canDeleteWorkTask } from '@/lib/tareas/permissions'
+import { canDeleteWorkTask, canEditWorkTask } from '@/lib/tareas/permissions'
 import type { TareasResponse, WorkTask } from '@/lib/tareas/types'
 
 interface Props {
@@ -474,6 +474,7 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
             createTargets={createTargets}
             defaultCreateTarget={scope ? `user:${scope.id}` : singleUserTarget}
             canDelete={(task) => canDeleteWorkTask(viewer, task)}
+            canEdit={(task) => canEditWorkTask(viewer, task)}
             columnSearch
             doneLimit={3}
             emptyColumnText={tasks.length > 0 && visible.length === 0 ? 'Nada con estos filtros' : 'Sin tareas'}
