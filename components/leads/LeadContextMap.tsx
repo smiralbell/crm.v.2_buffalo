@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   Check,
   Copy,
   Download,
   ExternalLink,
   FileText,
-  Focus,
   FolderKanban,
   LogIn,
   Mail,
@@ -23,7 +22,8 @@ import type { ContextSource, LeadContext, SourceId, SourceItem } from '@/lib/lea
 
 /**
  * Mapa del contexto de un lead: el lead en el centro y cada fuente (correos, reuniones,
- * mensajes, notas…) como un conector. Al pulsar una caja se ve todo su contenido.
+ * mensajes, notas…) como un conector. Es fijo y ocupa todo el ancho; al pulsar una caja
+ * se ve todo su contenido en el panel lateral.
  */
 
 const ICON: Record<SourceId, LucideIcon> = {
@@ -41,10 +41,12 @@ const ICON: Record<SourceId, LucideIcon> = {
 /** Izquierda: lo que llega del cliente. Derecha: lo que hacemos nosotros. */
 const LEFT: SourceId[] = ['origen', 'correos', 'reuniones', 'mensajes']
 const RIGHT: SourceId[] = ['escrito', 'notas', 'documentos', 'facturas', 'proyecto']
-const COL_X = 380
-const ROW_GAP = 128
 
-const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v))
+const NODE_W = 230
+const NODE_H = 58
+const HUB_W = 250
+const ROW_GAP = 78
+const PAD_Y = 34
 
 function fecha(d: string | null): string {
   if (!d) return ''
@@ -54,12 +56,6 @@ function fecha(d: string | null): string {
 function curve(x1: number, y1: number, x2: number, y2: number): string {
   const mid = (x1 + x2) / 2
   return `M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`
-}
-
-function positions(ids: SourceId[], side: -1 | 1): Map<SourceId, { x: number; y: number }> {
-  const m = new Map<SourceId, { x: number; y: number }>()
-  ids.forEach((id, i) => m.set(id, { x: side * COL_X, y: (i - (ids.length - 1) / 2) * ROW_GAP }))
-  return m
 }
 
 function ItemCard({ item }: { item: SourceItem }) {
@@ -107,15 +103,22 @@ function ItemCard({ item }: { item: SourceItem }) {
   )
 }
 
-export default function LeadContextMap({ leadId }: { leadId: number }) {
-  const stageRef = useRef<HTMLDivElement>(null)
+export default function LeadContextMap({
+  leadId,
+  refreshKey = 0,
+  actions,
+}: {
+  leadId: number
+  /** Cambia para volver a cargar (p. ej. tras importar correos o guardar una reunión) */
+  refreshKey?: number
+  /** Botones extra en la cabecera */
+  actions?: ReactNode
+}) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(0)
   const [ctx, setCtx] = useState<LeadContext | null>(null)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<SourceId | null>(null)
-  const [cam, setCam] = useState({ x: 0, y: 0, scale: 0.8 })
-  const pan = useRef<{ x: number; y: number; camX: number; camY: number } | null>(null)
-  const [panning, setPanning] = useState(false)
-  const [recenter, setRecenter] = useState(0)
   const [busy, setBusy] = useState<'md' | 'copy' | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -126,16 +129,22 @@ export default function LeadContextMap({ leadId }: { leadId: number }) {
         if (!r.ok) throw new Error((d as { error?: string }).error || 'No se pudo cargar el contexto')
         return d as LeadContext
       })
-      .then(setCtx)
+      .then((d) => {
+        setCtx(d)
+        setError('')
+      })
       .catch((e: Error) => setError(e.message))
-  }, [leadId])
+  }, [leadId, refreshKey])
 
-  useEffect(() => {
-    const el = stageRef.current
-    const w = el?.clientWidth || 800
-    const h = el?.clientHeight || 520
-    setCam({ x: 0, y: 0, scale: clamp(Math.min((w - 40) / 1000, (h - 40) / 640), 0.45, 1) })
-  }, [recenter, ctx])
+  useLayoutEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    const update = () => setWidth(el.clientWidth)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const getMarkdown = useCallback(async () => {
     const res = await fetch(`/api/leads/${leadId}/contexto`)
@@ -177,41 +186,21 @@ export default function LeadContextMap({ leadId }: { leadId: number }) {
     }
   }
 
-  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return
-    const t = e.target as HTMLElement
-    if (t.closest('[data-hud]') || t.closest('[data-sheet]') || t.closest('[data-node]')) return
-    pan.current = { x: e.clientX, y: e.clientY, camX: cam.x, camY: cam.y }
-    setPanning(true)
-    e.currentTarget.setPointerCapture(e.pointerId)
-  }
-  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const p = pan.current
-    if (!p) return
-    setCam((c) => ({ ...c, x: p.camX + (e.clientX - p.x), y: p.camY + (e.clientY - p.y) }))
-  }
-  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
-    pan.current = null
-    setPanning(false)
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId)
-    } catch {
-      /* ignore */
-    }
-  }
-  const onWheel = (e: ReactWheelEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('[data-sheet],[data-hud]')) return
-    setCam((c) => ({ ...c, scale: clamp(c.scale * (e.deltaY > 0 ? 0.92 : 1.08), 0.4, 1.5) }))
-  }
-
   const sources = new Map<SourceId, ContextSource>((ctx?.sources || []).map((s) => [s.id, s]))
   const left = LEFT.filter((id) => sources.has(id))
   const right = RIGHT.filter((id) => sources.has(id))
-  const pos = new Map<SourceId, { x: number; y: number }>([
-    ...Array.from(positions(left, -1)),
-    ...Array.from(positions(right, 1)),
-  ])
   const current = selected ? sources.get(selected) : null
+
+  // Geometría: columnas pegadas a los bordes, el lead en el centro
+  const rows = Math.max(left.length, right.length, 1)
+  const height = PAD_Y * 2 + (rows - 1) * ROW_GAP + NODE_H
+  const cy = height / 2
+  const wide = width >= 760
+  const nodeW = Math.min(NODE_W, Math.max(170, (width - HUB_W - 120) / 2))
+  const leftX = 28
+  const rightX = width - 28 - nodeW
+  const hubX = (width - HUB_W) / 2
+  const rowY = (i: number, n: number) => cy + (i - (n - 1) / 2) * ROW_GAP - NODE_H / 2
 
   const subOf = (s: ContextSource): string => {
     if (!s.items.length) return 'sin datos'
@@ -220,14 +209,45 @@ export default function LeadContextMap({ leadId }: { leadId: number }) {
     return `${s.items.length} · último ${last ? fecha(last) : '—'}`
   }
 
+  const nodeButton = (id: SourceId, style?: CSSProperties) => {
+    const s = sources.get(id)!
+    const Icon = ICON[id]
+    const has = s.items.length > 0
+    const isSel = selected === id
+    return (
+      <button
+        key={id}
+        type="button"
+        onClick={() => setSelected(isSel ? null : id)}
+        style={style}
+        className={`flex items-center gap-3 rounded-2xl border bg-white px-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${
+          isSel ? 'border-gray-900 shadow-md ring-2 ring-gray-900/10' : 'border-gray-200 shadow-sm'
+        } ${has ? '' : 'opacity-55'}`}
+      >
+        <span
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+            has ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-400'
+          }`}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] font-semibold text-gray-900">{s.label}</span>
+          <span className="block truncate text-[11px] text-gray-500">{subOf(s)}</span>
+        </span>
+      </button>
+    )
+  }
+
   return (
     <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-5 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-3.5">
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Todo el contexto</h2>
-          <p className="text-xs text-gray-500">Cada caja es una fuente conectada al lead. Púlsala para ver todo su contenido.</p>
+          <p className="text-xs text-gray-500">Cada caja es una fuente conectada. Púlsala para ver todo su contenido.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {actions}
           <button
             type="button"
             onClick={() => void copy()}
@@ -249,122 +269,101 @@ export default function LeadContextMap({ leadId }: { leadId: number }) {
         </div>
       </div>
 
-      <div style={{ height: 560 }}>
-        <div
-          ref={stageRef}
-          className={`${styles.stage} ${panning ? styles.stagePanning : ''}`}
-          style={{ minHeight: 0 }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          onWheel={onWheel}
-        >
-          {!ctx ? (
-            <p className="absolute inset-0 flex items-center justify-center text-sm text-gray-400">
-              {error || 'Cargando el contexto…'}
-            </p>
-          ) : (
-            <div className={styles.world} style={{ transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.scale})` }}>
-              <div className={styles.grid} />
-              <svg className={styles.wires} viewBox="-2400 -2400 4800 4800">
-                {Array.from(pos.entries()).map(([id, p]) => {
-                  const s = sources.get(id)!
-                  const has = s.items.length > 0
-                  const lit = has && (selected === null || selected === id)
-                  const d = p.x < 0 ? curve(p.x + 98, p.y, -110, 0) : curve(110, 0, p.x - 104, p.y)
-                  return (
-                    <path
-                      key={id}
-                      d={d}
-                      fill="none"
-                      stroke={lit ? '#111827' : '#d4d4d8'}
-                      strokeWidth={lit ? 1.8 : 1.2}
-                      strokeDasharray={has ? undefined : '5 6'}
-                      strokeLinecap="round"
-                    />
-                  )
-                })}
-              </svg>
-
-              {/* El lead, en el centro */}
-              <div
-                className={styles.node}
-                style={{ transform: 'translate(0px, 0px)', width: 220, marginLeft: -110, cursor: 'default', borderColor: '#a7f3d0' }}
-              >
-                <span className={styles.icon} style={{ background: '#d1fae5', color: '#047857' }}>
-                  <User className="h-4 w-4" />
-                </span>
-                <span className={styles.copy}>
-                  <span className={styles.title}>{ctx.lead.nombre}</span>
-                  <span className={styles.sub}>{ctx.lead.empresa || ctx.lead.email || 'Lead'}</span>
-                </span>
-              </div>
-
-              {Array.from(pos.entries()).map(([id, p]) => {
+      <div
+        ref={boxRef}
+        className="relative w-full bg-gray-50/70 [background-image:radial-gradient(#d4d4d8_1px,transparent_1px)] [background-size:18px_18px]"
+        style={{ height: wide ? height : undefined, minHeight: 200 }}
+      >
+        {!ctx ? (
+          <p className="flex h-[200px] items-center justify-center text-sm text-gray-400">{error || 'Cargando el contexto…'}</p>
+        ) : wide ? (
+          <>
+            <svg className="pointer-events-none absolute inset-0" width={width} height={height}>
+              {[...left.map((id, i) => ({ id, side: -1, y: rowY(i, left.length) + NODE_H / 2 })),
+                ...right.map((id, i) => ({ id, side: 1, y: rowY(i, right.length) + NODE_H / 2 }))].map(({ id, side, y }) => {
                 const s = sources.get(id)!
-                const Icon = ICON[id]
                 const has = s.items.length > 0
+                const lit = has && (selected === null || selected === id)
+                const d =
+                  side < 0
+                    ? curve(leftX + nodeW, y, hubX, cy)
+                    : curve(hubX + HUB_W, cy, rightX, y)
                 return (
-                  <button
+                  <path
                     key={id}
-                    type="button"
-                    data-node={id}
-                    onClick={() => setSelected(selected === id ? null : id)}
-                    className={`${styles.node} ${selected === id ? styles.selected : ''}`}
-                    style={{ transform: `translate(${p.x}px, ${p.y}px)`, opacity: has ? 1 : 0.5 }}
-                  >
-                    <span className={styles.icon}>
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <span className={styles.copy}>
-                      <span className={styles.title}>{s.label}</span>
-                      <span className={styles.sub}>{subOf(s)}</span>
-                    </span>
-                  </button>
+                    d={d}
+                    fill="none"
+                    stroke={lit ? '#111827' : '#d4d4d8'}
+                    strokeWidth={lit ? 1.6 : 1.2}
+                    strokeDasharray={has ? undefined : '5 6'}
+                    strokeLinecap="round"
+                  />
                 )
               })}
+            </svg>
+
+            {/* El lead, en el centro */}
+            <div
+              className="absolute flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white px-3.5 shadow-sm"
+              style={{ left: hubX, top: cy - 33, width: HUB_W, height: 66 }}
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                <User className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-gray-900">{ctx.lead.nombre}</span>
+                <span className="block truncate text-xs text-gray-500">
+                  {ctx.lead.es_cliente ? 'Cliente' : 'Lead'}
+                  {ctx.lead.empresa ? ` · ${ctx.lead.empresa}` : ''}
+                </span>
+              </span>
             </div>
-          )}
 
-          <div className={styles.hud} data-hud style={{ top: 14, left: 14 }}>
-            <button type="button" className={styles.hudBtn} onClick={() => setRecenter((n) => n + 1)}>
-              <Focus className="h-3.5 w-3.5" /> Recentrar
-            </button>
+            {left.map((id, i) =>
+              nodeButton(id, { position: 'absolute', left: leftX, top: rowY(i, left.length), width: nodeW, height: NODE_H })
+            )}
+            {right.map((id, i) =>
+              nodeButton(id, { position: 'absolute', left: rightX, top: rowY(i, right.length), width: nodeW, height: NODE_H })
+            )}
+          </>
+        ) : (
+          // Pantallas estrechas: las fuentes en rejilla, sin conectores
+          <div className="grid grid-cols-1 gap-2 p-4 sm:grid-cols-2">
+            {[...left, ...right].map((id) => nodeButton(id, { height: NODE_H }))}
           </div>
+        )}
 
-          {current && (
-            <aside className={styles.sheet} data-sheet onPointerDown={(e) => e.stopPropagation()}>
-              <div className={styles.sheetHead}>
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                    {current.items.length} {current.items.length === 1 ? 'elemento' : 'elementos'}
-                  </p>
-                  <h3 className="text-[15px] font-semibold text-gray-900">{current.label}</h3>
-                </div>
-                <button
-                  type="button"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-gray-50 text-gray-500"
-                  onClick={() => setSelected(null)}
-                  aria-label="Cerrar"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+        {current && (
+          <aside className={styles.sheet} style={{ position: 'absolute' }}>
+            <div className={styles.sheetHead}>
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                  {current.items.length} {current.items.length === 1 ? 'elemento' : 'elementos'}
+                </p>
+                <h3 className="text-[15px] font-semibold text-gray-900">{current.label}</h3>
               </div>
-              <div className={styles.sheetBody}>
-                {current.items.length === 0 ? (
-                  <p className="text-sm text-gray-500">No hay nada todavía en esta fuente.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {current.items.map((it) => (
-                      <ItemCard key={it.id} item={it} />
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </aside>
-          )}
-        </div>
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-gray-50 text-gray-500"
+                onClick={() => setSelected(null)}
+                aria-label="Cerrar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className={styles.sheetBody}>
+              {current.items.length === 0 ? (
+                <p className="text-sm text-gray-500">No hay nada todavía en esta fuente.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {current.items.map((it) => (
+                    <ItemCard key={it.id} item={it} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </aside>
+        )}
       </div>
     </section>
   )

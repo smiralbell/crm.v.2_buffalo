@@ -15,6 +15,7 @@ import {
   GoogleReauthRequiredError,
 } from '@/lib/integrations/google/calendar-client'
 import { hasGmailScope } from '@/lib/integrations/google/oauth'
+import { allLeadEmails, leadsByExtraEmails } from '@/lib/leads/lead-extras'
 import {
   listActiveConnectionsForGmail,
   markNeedsReauth,
@@ -135,7 +136,12 @@ async function contactsByEmail(emails: string[]): Promise<ContactHit[]> {
       leads: { take: 1, orderBy: { updated_at: 'desc' }, select: { id: true } },
     },
   })
-  return contacts.map((c) => ({ contactId: c.id, leadId: c.leads[0]?.id ?? null }))
+  const hits: ContactHit[] = contacts.map((c) => ({ contactId: c.id, leadId: c.leads[0]?.id ?? null }))
+  const extra = await leadsByExtraEmails(emails).catch(() => [])
+  for (const e of extra) {
+    if (!hits.some((h) => h.contactId === e.contactId)) hits.push({ contactId: e.contactId, leadId: e.leadId })
+  }
+  return hits
 }
 
 async function listMessageIds(
@@ -184,6 +190,24 @@ async function syncMailbox(conn: GmailSyncConnection): Promise<GmailSyncResult> 
 
   for (const id of ids) {
     result.scanned += 1
+    const r = await ingestMessage(gmail, id, conn.google_email, mailbox)
+    if (r.matched) result.matched += 1
+    result.inserted += r.inserted
+  }
+
+  await setGmailSyncedAt(conn.owner_key, runStartedAt)
+  return result
+}
+
+/** Lee un correo y, si es de un contacto del CRM, lo guarda en su historial. */
+async function ingestMessage(
+  gmail: gmail_v1.Gmail,
+  id: string,
+  googleEmail: string | null,
+  mailbox: string | null
+): Promise<{ matched: boolean; inserted: number }> {
+  const out = { matched: false, inserted: 0 }
+  {
     const meta = await gmail.users.messages.get({
       userId: 'me',
       id,
@@ -200,13 +224,13 @@ async function syncMailbox(conn: GmailSyncConnection): Promise<GmailSyncResult> 
       (e) => e !== mailbox && !isInternalParticipantEmail(e)
     )
     const hits = await contactsByEmail(external)
-    if (!hits.length) continue
-    result.matched += 1
+    if (!hits.length) return out
+    out.matched = true
 
     const messageId = header(msg, 'Message-ID') || `gmail:${id}`
     const already = await contactIdsWithEmail(messageId)
     const pending = hits.filter((h) => !already.has(h.contactId))
-    if (!pending.length) continue
+    if (!pending.length) return out
 
     const full = await gmail.users.messages.get({ userId: 'me', id, format: 'full' })
     const body = messageBody(full.data)
@@ -227,7 +251,7 @@ async function syncMailbox(conn: GmailSyncConnection): Promise<GmailSyncResult> 
         title,
         body: body || null,
         sentAt,
-        createdBy: conn.google_email,
+        createdBy: googleEmail,
         meta: {
           source: 'gmail',
           direction: outgoing ? 'out' : 'in',
@@ -237,15 +261,53 @@ async function syncMailbox(conn: GmailSyncConnection): Promise<GmailSyncResult> 
           cc: cc || null,
           gmail_id: id,
           thread_id: msg.threadId || null,
-          mailbox: conn.google_email,
+          mailbox: googleEmail,
         },
       })
-      if (ok) result.inserted += 1
+      if (ok) out.inserted += 1
     }
   }
+  return out
+}
 
-  await setGmailSyncedAt(conn.owner_key, runStartedAt)
-  return result
+const IMPORT_MAX_PER_MAILBOX = 300
+
+/**
+ * Trae TODO el historial de correo de un lead (sin límite de fecha) desde los buzones
+ * conectados: correo principal y correos adicionales. La sincronización normal solo mira
+ * hacia delante, así que los clientes antiguos se quedaban sin correos.
+ */
+export async function importLeadEmailHistory(
+  leadId: number
+): Promise<{ mailboxes: number; scanned: number; inserted: number; errors: string[] }> {
+  const emails = (await allLeadEmails(leadId)).filter((e) => !isInternalParticipantEmail(e))
+  const out = { mailboxes: 0, scanned: 0, inserted: 0, errors: [] as string[] }
+  if (!emails.length) return out
+  const q = `{${emails.map((e) => `from:${e} to:${e} cc:${e}`).join(' ')}} -in:spam -in:trash -in:draft`
+  const connections = (await listActiveConnectionsForGmail()).filter((c) => hasGmailScope(c.scopes))
+  for (const conn of connections) {
+    try {
+      const { auth } = await getAuthorizedCalendarClient(conn.owner_key)
+      const gmail = google.gmail({ version: 'v1', auth })
+      const mailbox = conn.google_email?.toLowerCase() || null
+      const ids: string[] = []
+      let pageToken: string | undefined
+      do {
+        const res = await gmail.users.messages.list({ userId: 'me', q, maxResults: 100, pageToken })
+        for (const m of res.data.messages || []) if (m.id) ids.push(m.id)
+        pageToken = res.data.nextPageToken || undefined
+      } while (pageToken && ids.length < IMPORT_MAX_PER_MAILBOX)
+      out.mailboxes += 1
+      for (const id of ids.slice(0, IMPORT_MAX_PER_MAILBOX)) {
+        out.scanned += 1
+        const r = await ingestMessage(gmail, id, conn.google_email, mailbox)
+        out.inserted += r.inserted
+      }
+    } catch (e) {
+      out.errors.push(`${conn.google_email || conn.owner_key}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  return out
 }
 
 /** Sincroniza todos los buzones conectados (o solo uno si se pasa ownerKey). */

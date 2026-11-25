@@ -1,7 +1,7 @@
 import { createHash } from 'crypto'
 import { query } from '@/lib/db'
 import { openRouterChatCompletion } from '@/lib/openrouter'
-import { VALUE_SOURCES, collectLeadContext, contextToMarkdown, type LeadContext } from '@/lib/leads/context-sources'
+import { STABLE_SOURCES, VALUE_SOURCES, collectLeadContext, contextToMarkdown, type LeadContext } from '@/lib/leads/context-sources'
 
 /**
  * Resumen con IA de un lead, arriba de su ficha.
@@ -39,7 +39,9 @@ export function valueFingerprint(ctx: LeadContext): { fingerprint: string; hasCo
     if (!VALUE_SOURCES.includes(s.id)) continue
     for (const it of s.items) {
       count++
-      parts.push(`${s.id}:${it.id}:${it.date ?? ''}:${(it.body ?? '').length}`)
+      parts.push(
+        STABLE_SOURCES.includes(s.id) ? `${s.id}:${it.id}` : `${s.id}:${it.id}:${it.date ?? ''}:${(it.body ?? '').length}`
+      )
     }
   }
   return { fingerprint: createHash('sha1').update(parts.sort().join('|')).digest('hex'), hasContent: count > 0 }
@@ -72,6 +74,9 @@ const SYSTEM = [
   'Usa solo la información que se te da. No inventes datos, cifras ni nombres.',
   'Escribe en español de España, en texto plano y sin markdown, como máximo 6 frases cortas:',
   'quién es y qué necesita, en qué punto está, qué se ha hablado (correos y reuniones) y qué queda pendiente.',
+  'Si tiene proyecto o facturas, ya es cliente aunque su estado diga otra cosa: cuenta qué se le ha hecho,',
+  'cómo va el proyecto (tareas, tickets) y si hay cobros pendientes, en vez de tratarlo como un lead por cerrar.',
+  'No digas que falta información ni enumeres lo que no hay.',
   'Termina con una línea que empiece por «Siguiente paso:».',
 ].join(' ')
 

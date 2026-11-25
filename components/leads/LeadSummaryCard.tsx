@@ -16,7 +16,7 @@ function ago(iso: string): string {
  * Resumen del lead hecho con IA. Se regenera solo cuando hay contenido nuevo de valor
  * (correos, reuniones, mensajes, notas o documentos); no por que el lead entre o cambie de estado.
  */
-export default function LeadSummaryCard({ leadId }: { leadId: number }) {
+export default function LeadSummaryCard({ leadId, refreshKey = 0 }: { leadId: number; refreshKey?: number }) {
   const [data, setData] = useState<Summary | null>(null)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
@@ -51,10 +51,10 @@ export default function LeadSummaryCard({ leadId }: { leadId: number }) {
         }
       })
       .catch(() => setError('No se pudo cargar el resumen'))
-  }, [leadId, regenerate])
+  }, [leadId, regenerate, refreshKey])
 
   return (
-    <section className="rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 via-white to-white p-5 shadow-sm">
+    <section className="h-full rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 via-white to-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
           <Sparkles className="h-4 w-4 text-emerald-600" />

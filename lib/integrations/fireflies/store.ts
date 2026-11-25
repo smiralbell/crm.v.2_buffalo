@@ -278,6 +278,26 @@ export async function listMeetingsForContact(
   return rows.map(mapRow)
 }
 
+/** Reuniones en las que participó alguno de estos correos (aunque no estén vinculadas al lead). */
+export async function listMeetingsByParticipantEmails(emails: string[]): Promise<MeetingRecordingRow[]> {
+  const clean = Array.from(new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean)))
+  if (!clean.length) return []
+  await ensureMeetingRecordingsTable()
+  const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
+    `SELECT * FROM meeting_recordings
+     WHERE status <> 'ignored'
+       AND jsonb_typeof(participants) = 'array'
+       AND EXISTS (
+         SELECT 1 FROM jsonb_array_elements(participants) p
+          WHERE lower(p->>'email') = ANY($1::text[])
+       )
+     ORDER BY COALESCE(started_at, created_at) DESC
+     LIMIT 50`,
+    clean
+  )
+  return rows.map(mapRow)
+}
+
 export async function listUnmatchedMeetings(limit = 50): Promise<MeetingRecordingRow[]> {
   await ensureMeetingRecordingsTable()
   const safe = Math.min(Math.max(limit, 1), 200)

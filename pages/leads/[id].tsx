@@ -1,6 +1,6 @@
 import { GetServerSideProps } from 'next'
 import { useRouter } from 'next/router'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { requireAuth } from '@/lib/auth'
 import { canSeeClientPrices } from '@/lib/price-visibility'
 import { sanitizeConfiguracionPrices } from '@/lib/onboarding/sanitize-config-prices'
@@ -25,7 +25,9 @@ import {
   Save,
   StickyNote,
   User,
+  Users,
   Wallet,
+  X,
 } from 'lucide-react'
 import { LeadOutcomeField } from '@/components/marketing/LeadOutcome'
 import { LeadAttributionField } from '@/components/marketing/LeadAttribution'
@@ -36,6 +38,8 @@ import LeadContextPanel, { exportLeadContext } from '@/components/leads/LeadCont
 import LeadArchivos from '@/components/leads/LeadArchivos'
 import LeadSummaryCard from '@/components/leads/LeadSummaryCard'
 import LeadContextMap from '@/components/leads/LeadContextMap'
+import LeadCorreos from '@/components/leads/LeadCorreos'
+import LeadReunionDialog from '@/components/leads/LeadReunionDialog'
 import {
   getLeadDetailBundle,
   type LeadAlert,
@@ -191,49 +195,67 @@ function alertIcon(kind: LeadAlert['kind']) {
   }
 }
 
-function AlertsStrip({ alerts }: { alerts: LeadAlert[] }) {
-  if (!alerts.length) return null
+function AlertsStrip({ leadId, alerts }: { leadId: number; alerts: LeadAlert[] }) {
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const visible = alerts.filter((a) => !hidden.has(a.id))
+  if (!visible.length) return null
+
+  const dismiss = (id: string) => {
+    setHidden((prev) => new Set(prev).add(id))
+    void fetch(`/api/leads/${leadId}/avisos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alert_id: id }),
+    }).then((r) => {
+      if (!r.ok)
+        setHidden((prev) => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
+    })
+  }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2 px-0.5">
-        <AlertTriangle className="h-4 w-4 text-amber-500" />
-        <h2 className="text-sm font-semibold text-gray-900">Avisos</h2>
-        <span className="text-xs text-gray-400">{alerts.length}</span>
-      </div>
-      <div className="space-y-2">
-        {alerts.map((a) => {
-          const Icon = alertIcon(a.kind)
-          const box =
-            a.severity === 'bad'
-              ? 'border-red-200 bg-red-50 text-red-900'
-              : a.severity === 'warn'
-                ? 'border-amber-200 bg-amber-50 text-amber-950'
-                : 'border-sky-200 bg-sky-50 text-sky-950'
-          const inner = (
-            <div
-              className={cn(
-                'rounded-xl border px-3.5 py-3 flex gap-3 items-start',
-                box,
-                a.href && 'hover:shadow-sm transition-shadow'
-              )}
-            >
-              <Icon className="h-4 w-4 mt-0.5 shrink-0 opacity-80" />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold leading-snug">{a.title}</p>
-                <p className="text-xs mt-0.5 opacity-80 leading-snug">{a.message}</p>
-              </div>
+    <div className="grid gap-2 md:grid-cols-2">
+      {visible.map((a) => {
+        const Icon = alertIcon(a.kind)
+        const box =
+          a.severity === 'bad'
+            ? 'border-red-200 bg-red-50 text-red-900'
+            : a.severity === 'warn'
+              ? 'border-amber-200 bg-amber-50/80 text-amber-950'
+              : 'border-sky-200 bg-sky-50 text-sky-950'
+        const text = (
+          <>
+            <Icon className="mt-0.5 h-4 w-4 shrink-0 opacity-80" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold leading-snug">{a.title}</p>
+              <p className="mt-0.5 text-xs leading-snug opacity-80">{a.message}</p>
             </div>
-          )
-          return a.href ? (
-            <Link key={a.id} href={a.href} className="block">
-              {inner}
-            </Link>
-          ) : (
-            <div key={a.id}>{inner}</div>
-          )
-        })}
-      </div>
+          </>
+        )
+        return (
+          <div key={a.id} className={cn('group flex items-start gap-3 rounded-xl border px-3.5 py-3', box)}>
+            {a.href ? (
+              <Link href={a.href} className="flex min-w-0 flex-1 items-start gap-3 hover:opacity-80">
+                {text}
+              </Link>
+            ) : (
+              <div className="flex min-w-0 flex-1 items-start gap-3">{text}</div>
+            )}
+            <button
+              type="button"
+              onClick={() => dismiss(a.id)}
+              className="-mr-1 shrink-0 rounded-md p-1 opacity-50 transition hover:bg-black/5 hover:opacity-100"
+              title="Quitar aviso"
+              aria-label="Quitar aviso"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -241,8 +263,14 @@ function AlertsStrip({ alerts }: { alerts: LeadAlert[] }) {
 export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
   const router = useRouter()
   const [editOpen, setEditOpen] = useState(false)
+  const [reunionOpen, setReunionOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [marking, setMarking] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), [])
   const displayName = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
+  const esCliente = Boolean(bundle.proyecto) || ['cerrado', 'activo'].includes(lead.estado)
+  const estadoDesfasado = Boolean(bundle.proyecto) && !['cerrado', 'activo', 'perdido'].includes(lead.estado)
 
   useEffect(() => {
     if (typeof window === 'undefined' || window.location.hash !== '#contexto') return
@@ -260,9 +288,26 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
     }
   }
 
+  const marcarCliente = async () => {
+    setMarking(true)
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: 'activo' }),
+      })
+      if (!res.ok) throw new Error('No se pudo cambiar el estado')
+      router.replace(router.asPath)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'No se pudo cambiar el estado')
+    } finally {
+      setMarking(false)
+    }
+  }
+
   return (
     <Layout>
-      <div className="mx-auto w-full max-w-6xl space-y-4 px-1 sm:px-0">
+      <div className="w-full space-y-5">
         {/* Cabecera */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
@@ -274,11 +319,25 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="truncate text-xl font-bold text-gray-900 sm:text-2xl">{displayName}</h1>
+                {esCliente && (
+                  <Badge className="border border-emerald-200 bg-emerald-50 text-xs text-emerald-700">Cliente</Badge>
+                )}
                 <Badge className={`border text-xs ${estadoBadgeClass(lead.estado)}`}>{estadoLabel(lead.estado)}</Badge>
                 {lead.prioridad && (
                   <Badge className={`text-xs ${prioridadColors[lead.prioridad] || 'bg-gray-100 text-gray-600'}`}>
                     {lead.prioridad.charAt(0).toUpperCase() + lead.prioridad.slice(1)}
                   </Badge>
+                )}
+                {estadoDesfasado && (
+                  <button
+                    type="button"
+                    onClick={() => void marcarCliente()}
+                    disabled={marking}
+                    className="text-xs font-medium text-emerald-700 underline-offset-2 hover:underline disabled:opacity-50"
+                    title="Tiene proyecto: pasa el lead a Activo"
+                  >
+                    {marking ? 'Guardando…' : 'Marcar como Activo'}
+                  </button>
                 )}
               </div>
               <p className="truncate text-sm text-gray-500">
@@ -290,7 +349,7 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
           </div>
           <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
             {lead.valor != null && (
-              <div className="mr-1 text-right">
+              <div className="mr-2 text-right">
                 <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400">Ingreso de venta</p>
                 <p className="text-lg font-bold leading-tight text-gray-900">
                   {lead.valor.toLocaleString('es-ES', { maximumFractionDigits: 0 })} €
@@ -310,97 +369,105 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
         </div>
 
         <EditLeadDialog open={editOpen} leadId={lead.id} onOpenChange={setEditOpen} onSaved={() => router.reload()} />
+        <LeadReunionDialog leadId={lead.id} open={reunionOpen} onOpenChange={setReunionOpen} onSaved={refresh} />
 
-        <AlertsStrip alerts={bundle.alerts} />
+        <AlertsStrip leadId={lead.id} alerts={bundle.alerts} />
 
-        <LeadSummaryCard leadId={lead.id} />
+        {/* Resumen y datos, a la misma altura */}
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="min-w-0 lg:col-span-2">
+            <LeadSummaryCard leadId={lead.id} refreshKey={refreshKey} />
+          </div>
+          <Card className="h-full border-gray-200 shadow-sm">
+            <CardHeader className="pb-1">
+              <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <User className="h-4 w-4" />
+                Datos
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {lead.contact ? (
+                <>
+                  <Row label="Empresa" value={lead.contact.empresa} />
+                  <Row
+                    label="Teléfono"
+                    value={
+                      lead.contact.telefono ? (
+                        <a href={`tel:${lead.contact.telefono}`} className="hover:underline">
+                          {lead.contact.telefono}
+                        </a>
+                      ) : null
+                    }
+                  />
+                  <Row label="Ciudad" value={lead.contact.ciudad} />
+                </>
+              ) : (
+                <p className="py-2 text-sm text-gray-400">Sin contacto asociado</p>
+              )}
+              <Row label="Origen" value={lead.origen_principal} />
+              <LeadAttributionField leadId={lead.id} />
+              <LeadOutcomeField leadId={lead.id} name={displayName} />
+              {lead.valor != null && (
+                <Row
+                  label="Con IVA (21%)"
+                  value={
+                    <span className="text-gray-500">
+                      {(lead.valor * 1.21).toLocaleString('es-ES', { maximumFractionDigits: 0 })} €
+                    </span>
+                  }
+                />
+              )}
+              {bundle.proyecto && (
+                <Row
+                  label="Proyecto"
+                  value={
+                    <Link href={bundle.proyecto.href} className="text-blue-600 hover:underline">
+                      {bundle.proyecto.name}
+                    </Link>
+                  }
+                />
+              )}
+              <Row label="Actualizado" value={new Date(lead.updated_at).toLocaleDateString('es-ES')} />
+            </CardContent>
+          </Card>
+        </div>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          {/* Columna principal */}
-          <div className="min-w-0 space-y-4 lg:col-span-2">
-            <LeadContextMap leadId={lead.id} />
+        {/* Todo el contexto, a lo ancho */}
+        <div id="mapa-contexto" className="scroll-mt-6">
+          <LeadContextMap
+            leadId={lead.id}
+            refreshKey={refreshKey}
+            actions={
+              <button
+                type="button"
+                onClick={() => setReunionOpen(true)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                title="Guarda una reunión en persona: notas escritas o audio que se transcribe"
+              >
+                <Users className="h-3.5 w-3.5" /> Reunión presencial
+              </button>
+            }
+          />
+        </div>
 
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="min-w-0 space-y-5 lg:col-span-2">
             <LeadContextPanel leadId={lead.id} initial={lead.notas || ''} />
-
 
             <CrmActivityTimeline
               contactId={lead.contact?.id ?? null}
               leadId={lead.id}
               derived={bundle.timeline}
-              title="Historial del lead"
-              subtitle="Entrada, reuniones, correos, documentos y notas manuales"
+              title="Historial"
+              subtitle="Entrada, reuniones, correos, documentos y notas"
             />
 
             <LeadMeetingsPanel leadId={lead.id} />
           </div>
 
-          {/* Columna lateral */}
-          <aside className="min-w-0 space-y-4">
-            <Card className="shadow-sm border-gray-200">
-              <CardHeader className="pb-1">
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <User className="h-4 w-4" />
-                  Datos
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {lead.contact ? (
-                  <>
-                    <Row label="Empresa" value={lead.contact.empresa} />
-                    <Row
-                      label="Email"
-                      value={
-                        lead.contact.email ? (
-                          <a href={`mailto:${lead.contact.email}`} className="break-all text-blue-600 hover:underline">
-                            {lead.contact.email}
-                          </a>
-                        ) : null
-                      }
-                    />
-                    <Row
-                      label="Teléfono"
-                      value={
-                        lead.contact.telefono ? (
-                          <a href={`tel:${lead.contact.telefono}`} className="hover:underline">
-                            {lead.contact.telefono}
-                          </a>
-                        ) : null
-                      }
-                    />
-                    <Row label="Ciudad" value={lead.contact.ciudad} />
-                  </>
-                ) : (
-                  <p className="py-2 text-sm text-gray-400">Sin contacto asociado</p>
-                )}
-                <Row label="Origen" value={lead.origen_principal} />
-                <LeadAttributionField leadId={lead.id} />
-                <LeadOutcomeField leadId={lead.id} name={displayName} />
-                {lead.valor != null && (
-                  <Row
-                    label="Con IVA (21%)"
-                    value={
-                      <span className="text-gray-500">
-                        {(lead.valor * 1.21).toLocaleString('es-ES', { maximumFractionDigits: 0 })} €
-                      </span>
-                    }
-                  />
-                )}
-                <Row label="Actualizado" value={new Date(lead.updated_at).toLocaleDateString('es-ES')} />
-                {bundle.proyecto && (
-                  <Row
-                    label="Proyecto"
-                    value={
-                      <Link href={bundle.proyecto.href} className="text-blue-600 hover:underline">
-                        {bundle.proyecto.name}
-                      </Link>
-                    }
-                  />
-                )}
-              </CardContent>
-            </Card>
-
+          <aside className="min-w-0 space-y-5">
+            <LeadCorreos leadId={lead.id} mainEmail={lead.contact?.email ?? null} onImported={refresh} />
             <LeadArchivos leadId={lead.id} />
-
             {metaAds && <MetaAdsAttributionCard data={metaAds} />}
           </aside>
         </div>

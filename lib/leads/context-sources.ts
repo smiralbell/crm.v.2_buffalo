@@ -1,7 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import { query } from '@/lib/db'
 import { listActivities } from '@/lib/crm/activities'
-import { listMeetingsForContact, listMeetingsForLead } from '@/lib/integrations/fireflies/store'
+import {
+  listMeetingsByParticipantEmails,
+  listMeetingsForContact,
+  listMeetingsForLead,
+} from '@/lib/integrations/fireflies/store'
+import { listExtraEmails } from '@/lib/leads/lead-extras'
 import { getMetaAttributionByLeadId } from '@/lib/integrations/meta/store'
 import { listPersonaDocumentos } from '@/lib/leads/archivos'
 import { listLinkedInvoices } from '@/lib/leads/facturas'
@@ -44,8 +49,12 @@ export type LeadContext = {
     nombre: string
     empresa: string | null
     email: string | null
+    /** Otros correos desde los que escribe el cliente */
+    emails_extra: string[]
     telefono: string | null
     estado: string
+    /** Tiene proyecto o facturas: ya es cliente aunque el estado no esté al día */
+    es_cliente: boolean
     prioridad: string | null
     origen: string | null
     valor: number | null
@@ -56,7 +65,19 @@ export type LeadContext = {
 }
 
 /** Fuentes que cuentan como «contenido de valor» para el resumen (la entrada del lead no). */
-export const VALUE_SOURCES: SourceId[] = ['correos', 'reuniones', 'mensajes', 'escrito', 'notas', 'documentos']
+export const VALUE_SOURCES: SourceId[] = [
+  'correos',
+  'reuniones',
+  'mensajes',
+  'escrito',
+  'notas',
+  'documentos',
+  'facturas',
+  'proyecto',
+]
+
+/** En estas fuentes solo cuenta que aparezca algo nuevo, no que cambie (las tareas cambian a diario). */
+export const STABLE_SOURCES: SourceId[] = ['facturas', 'proyecto']
 
 const iso = (d: Date | string | null | undefined): string | null => (d ? new Date(d).toISOString() : null)
 
@@ -64,6 +85,21 @@ function metaPairs(pairs: [string, unknown][]): { label: string; value: string }
   return pairs
     .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')
     .map(([label, v]) => ({ label, value: String(v) }))
+}
+
+type ProyectoRow = {
+  id: string
+  name: string
+  status: string
+  service_type: string | null
+  updated_at: Date
+  fecha_inicio_real: Date | null
+  fecha_fin_real: Date | null
+  ob_summary: string | null
+  ob_context: string | null
+  ob_scope: string | null
+  ob_deliverables: string | null
+  ob_notes: string | null
 }
 
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
@@ -96,10 +132,14 @@ export async function collectLeadContext(
   if (!lead) return null
   const c = lead.contact
 
-  const [activities, meetingsLead, meetingsContact, meta, messages, documentos, facturas, proyectos] = await Promise.all([
+  const extraEmails = await safe(() => listExtraEmails(leadId), [] as string[])
+  const allEmails = [c.email, ...extraEmails].filter((e): e is string => Boolean(e))
+
+  const [activities, meetingsLead, meetingsContact, meetingsByEmail, meta, messages, documentos, facturas, proyectos] = await Promise.all([
     safe(() => listActivities({ contactId: lead.contact_id, limit: 200 }), []),
     safe(() => listMeetingsForLead(leadId), []),
     safe(() => listMeetingsForContact(lead.contact_id), []),
+    safe(() => listMeetingsByParticipantEmails(allEmails), []),
     safe(() => getMetaAttributionByLeadId(leadId), null),
     safe(
       () =>
@@ -114,12 +154,45 @@ export async function collectLeadContext(
     opts.includePrices ? safe(() => listLinkedInvoices(leadId), []) : Promise.resolve([]),
     safe(
       () =>
-        query<{ id: string; name: string; status: string; service_type: string | null; updated_at: Date }>(
-          `SELECT id::text, name, status, service_type, updated_at FROM proyectos WHERE lead_id = $1 ORDER BY updated_at DESC`,
+        query<ProyectoRow>(
+          `SELECT p.id::text, p.name, p.status, p.service_type, p.updated_at,
+                  p.fecha_inicio_real, p.fecha_fin_real,
+                  o.summary AS ob_summary, o.client_context AS ob_context, o.scope_text AS ob_scope,
+                  o.deliverables AS ob_deliverables, o.internal_notes AS ob_notes
+             FROM proyectos p
+             LEFT JOIN project_dev_onboarding o ON o.project_id = p.id
+            WHERE p.lead_id = $1
+            ORDER BY p.updated_at DESC`,
           [leadId]
         ).then((r) => r.rows),
-      [] as { id: string; name: string; status: string; service_type: string | null; updated_at: Date }[]
+      [] as ProyectoRow[]
     ),
+  ])
+
+  const projectIds = proyectos.map((p) => p.id)
+  const [tareas, tickets] = await Promise.all([
+    projectIds.length
+      ? safe(
+          () =>
+            query<{ project_id: string; title: string; status: string; assignee: string | null; updated_at: Date }>(
+              `SELECT project_id::text, title, status, assignee, updated_at FROM project_dev_tasks
+                WHERE project_id = ANY($1::uuid[]) ORDER BY updated_at DESC LIMIT 200`,
+              [projectIds]
+            ).then((r) => r.rows),
+          [] as { project_id: string; title: string; status: string; assignee: string | null; updated_at: Date }[]
+        )
+      : Promise.resolve([]),
+    projectIds.length
+      ? safe(
+          () =>
+            query<{ project_id: string; title: string; status: string; priority: string; created_at: Date }>(
+              `SELECT project_id::text, title, status, priority, created_at FROM tickets
+                WHERE project_id = ANY($1::uuid[]) ORDER BY created_at DESC LIMIT 60`,
+              [projectIds]
+            ).then((r) => r.rows),
+          [] as { project_id: string; title: string; status: string; priority: string; created_at: Date }[]
+        )
+      : Promise.resolve([]),
   ])
 
   // Origen: por dónde entró
@@ -168,7 +241,25 @@ export async function collectLeadContext(
     })
 
   const seen = new Set<string>()
-  const reuniones: SourceItem[] = [...meetingsLead, ...meetingsContact]
+  const presenciales: SourceItem[] = activities
+    .filter((a) => a.kind === 'meeting')
+    .map((a) => {
+      const m = (a.meta || {}) as Record<string, unknown>
+      return {
+        id: `act-${a.id}`,
+        title: a.title,
+        date: iso((m.fecha as string) || a.created_at),
+        body: a.body,
+        meta: metaPairs([
+          ['Tipo', m.presencial ? 'Presencial' : 'Reunión'],
+          ['Origen', m.transcrita ? 'Audio transcrito' : 'Notas escritas'],
+          ['Por', a.created_by],
+        ]),
+        link: null,
+      }
+    })
+
+  const firefliesItems: SourceItem[] = [...meetingsLead, ...meetingsContact, ...meetingsByEmail]
     .filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)))
     .map((m) => ({
       id: m.id,
@@ -183,6 +274,9 @@ export async function collectLeadContext(
       ]),
       link: m.transcript_url,
     }))
+  const reuniones: SourceItem[] = [...presenciales, ...firefliesItems].sort((a, b) =>
+    String(b.date ?? '').localeCompare(String(a.date ?? ''))
+  )
 
   const mensajes: SourceItem[] = messages.map((m) => ({
     id: String(m.id),
@@ -232,17 +326,48 @@ export async function collectLeadContext(
     link: f.pdf_drive_url,
   }))
 
-  const proyecto: SourceItem[] = proyectos.map((p) => ({
-    id: p.id,
-    title: p.name,
-    date: iso(p.updated_at),
-    body: null,
-    meta: metaPairs([
-      ['Estado', p.status],
-      ['Servicio', p.service_type],
-    ]),
-    link: `/gestion-proyecto/proyectos/${p.id}`,
-  }))
+  const STATUS_TAREA: Record<string, string> = { pending: 'pendiente', in_progress: 'en curso', done: 'hecha' }
+  const proyecto: SourceItem[] = proyectos.map((p) => {
+    const ts = tareas.filter((t) => t.project_id === p.id)
+    const tk = tickets.filter((t) => t.project_id === p.id)
+    const hechas = ts.filter((t) => t.status === 'done').length
+    const body = [
+      p.ob_summary && `Resumen: ${p.ob_summary}`,
+      p.ob_context && `Contexto del cliente: ${p.ob_context}`,
+      p.ob_scope && `Alcance: ${p.ob_scope}`,
+      p.ob_deliverables && `Entregables: ${p.ob_deliverables}`,
+      p.ob_notes && `Notas internas: ${p.ob_notes}`,
+      ts.length
+        ? `Tareas (${hechas}/${ts.length} hechas):\n${ts
+            .slice(0, 40)
+            .map((t) => `- [${STATUS_TAREA[t.status] || t.status}] ${t.title}${t.assignee ? ` · ${t.assignee}` : ''}`)
+            .join('\n')}`
+        : null,
+      tk.length
+        ? `Tickets del cliente (${tk.length}):\n${tk
+            .slice(0, 20)
+            .map((t) => `- [${t.status} · ${t.priority}] ${t.title}`)
+            .join('\n')}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+    return {
+      id: p.id,
+      title: p.name,
+      date: iso(p.updated_at),
+      body: body || null,
+      meta: metaPairs([
+        ['Estado', p.status],
+        ['Servicio', p.service_type],
+        ['Inicio', p.fecha_inicio_real ? fecha(iso(p.fecha_inicio_real)) : null],
+        ['Fin', p.fecha_fin_real ? fecha(iso(p.fecha_fin_real)) : null],
+        ['Tareas', ts.length ? `${hechas}/${ts.length} hechas` : null],
+        ['Tickets', tk.length || null],
+      ]),
+      link: `/gestion-proyecto/proyectos/${p.id}`,
+    }
+  })
 
   const sources: ContextSource[] = [
     { id: 'origen', label: 'Canal de entrada', items: origen },
@@ -262,8 +387,10 @@ export async function collectLeadContext(
       nombre: c.nombre || c.empresa || c.email || `Lead ${lead.id}`,
       empresa: c.empresa,
       email: c.email,
+      emails_extra: extraEmails,
       telefono: c.telefono,
       estado: lead.estado ?? 'frio',
+      es_cliente: proyectos.length > 0 || facturas.length > 0 || ['cerrado', 'activo'].includes(lead.estado ?? ''),
       prioridad: lead.prioridad,
       origen: lead.origen_principal,
       valor: opts.includePrices && lead.valor != null ? Number(lead.valor) : null,
@@ -290,8 +417,10 @@ export function contextToMarkdown(ctx: LeadContext, opts?: { maxBodyChars?: numb
     '',
     '## Datos',
     `- Email: ${l.email || '—'}`,
+    ...(l.emails_extra.length ? [`- Otros correos: ${l.emails_extra.join(', ')}`] : []),
     `- Teléfono: ${l.telefono || '—'}`,
     `- Estado: ${estadoLabel(l.estado)}${l.prioridad ? ` · prioridad ${l.prioridad}` : ''}`,
+    ...(l.es_cliente ? ['- Ya es cliente: tiene proyecto o facturas con Buffalo.'] : []),
     `- Canal de entrada: ${l.origen || '—'}`,
     ...(l.valor != null ? [`- Valor: ${l.valor.toLocaleString('es-ES')} €`] : []),
     `- Alta: ${fecha(l.created_at)} · Última actualización: ${fecha(l.updated_at)}`,

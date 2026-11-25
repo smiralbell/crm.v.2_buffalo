@@ -5,6 +5,7 @@ import type {
   PipelineTimelineItem,
 } from '@/lib/pipelines/card-context.types'
 import { listOpenAlerts } from '@/lib/crm/activities'
+import { dismissedAlertIds } from '@/lib/leads/lead-extras'
 
 export type LeadAlertKind =
   | 'meeting_upcoming'
@@ -294,7 +295,7 @@ export async function getLeadDetailBundle(input: {
   hidePrices?: boolean
 }): Promise<LeadDetailBundle> {
   const contactId = input.contactId
-  const [pipeline, proyecto, invoiceAlerts, stageAlert, openManualAlerts] = await Promise.all([
+  const [pipeline, proyecto, invoiceAlerts, stageAlert, openManualAlerts, dismissed] = await Promise.all([
     contactId ? getPipelineCardContext(contactId) : Promise.resolve(null),
     loadProyectoForLead(input.leadId),
     input.hidePrices ? Promise.resolve([]) : loadInvoiceAlerts(input.email, input.contactName),
@@ -302,6 +303,7 @@ export async function getLeadDetailBundle(input: {
     contactId
       ? listOpenAlerts({ contactId, limit: 20 })
       : listOpenAlerts({ leadId: input.leadId, limit: 20 }),
+    dismissedAlertIds(input.leadId),
   ])
 
   const alerts: LeadAlert[] = []
@@ -341,11 +343,12 @@ export async function getLeadDetailBundle(input: {
   alerts.push(...invoiceAlerts)
   alerts.push(...projectAlerts(proyecto))
 
-  // Lead frío sin tocar en >21 días
+  // Lead frío sin tocar en >21 días (si ya tiene proyecto es cliente: no aplica)
   const staleDays = daysBetween(input.leadUpdatedAt, new Date())
   const estado = (input.leadEstado || '').toLowerCase()
   if (
     staleDays >= 21 &&
+    !proyecto &&
     !['cerrado', 'perdido', 'activo'].includes(estado) &&
     !alerts.some((a) => a.kind === 'meeting_upcoming')
   ) {
@@ -366,7 +369,8 @@ export async function getLeadDetailBundle(input: {
   return {
     pipeline,
     timeline: pipeline?.timeline || [],
-    alerts,
+    // Los que el equipo ha quitado a mano no vuelven a salir
+    alerts: alerts.filter((a) => !dismissed.has(a.id)),
     proyecto,
   }
 }
