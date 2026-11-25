@@ -1,33 +1,83 @@
 export type ChannelKey =
+  | 'meta_ads'
+  | 'google_ads'
   | 'web'
+  | 'ai_search'
+  | 'instagram'
+  | 'linkedin'
   | 'email'
   | 'cold_calling'
-  | 'instagram'
   | 'whatsapp'
   | 'referral'
+  | 'event'
+  | 'youtube'
+  | 'tiktok'
   | 'other'
   | 'unknown'
 
 export const CHANNEL_LABELS: Record<ChannelKey, string> = {
+  meta_ads: 'Meta Ads',
+  google_ads: 'Google Ads',
   web: 'Web',
+  ai_search: 'Buscadores IA (GEO)',
+  linkedin: 'LinkedIn',
   email: 'Email marketing',
   cold_calling: 'Cold calling',
   instagram: 'Instagram',
   whatsapp: 'WhatsApp',
   referral: 'Referido',
+  event: 'Evento / ponencia',
+  youtube: 'YouTube',
+  tiktok: 'TikTok',
   other: 'Otros',
   unknown: 'Sin origen',
 }
 
 export const CHANNEL_COLORS: Record<ChannelKey, string> = {
+  meta_ads: '#0866FF',
+  google_ads: '#EA4335',
   web: '#111827',
+  ai_search: '#7C3AED',
+  linkedin: '#0A66C2',
   email: '#2563EB',
   cold_calling: '#059669',
   instagram: '#DB2777',
   whatsapp: '#16A34A',
   referral: '#D97706',
+  event: '#B45309',
+  youtube: '#FF0000',
+  tiktok: '#374151',
   other: '#6B7280',
   unknown: '#9CA3AF',
+}
+
+/** Grupos de marketing: Paid · Orgánico · Outbound · Relaciones */
+export type ChannelGroupKey = 'paid' | 'organic' | 'outbound' | 'relations' | 'other'
+
+export const CHANNEL_GROUP: Record<ChannelKey, ChannelGroupKey> = {
+  meta_ads: 'paid',
+  google_ads: 'paid',
+  web: 'organic',
+  ai_search: 'organic',
+  instagram: 'organic',
+  linkedin: 'organic',
+  email: 'outbound',
+  cold_calling: 'outbound',
+  whatsapp: 'other',
+  referral: 'relations',
+  event: 'relations',
+  youtube: 'organic',
+  tiktok: 'organic',
+  other: 'other',
+  unknown: 'other',
+}
+
+export const CHANNEL_GROUP_LABELS: Record<ChannelGroupKey, string> = {
+  paid: 'Paid',
+  organic: 'Orgánico',
+  outbound: 'Outbound',
+  relations: 'Relaciones',
+  other: 'Otros',
 }
 
 export type LeadListItem = {

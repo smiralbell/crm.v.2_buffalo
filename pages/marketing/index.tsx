@@ -1,13 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { GetServerSideProps } from 'next'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
 import Layout from '@/components/Layout'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, ChevronDown, FileText } from 'lucide-react'
+import { RefreshCw, ChevronDown } from 'lucide-react'
 import WebMarketingTab from '@/components/WebMarketingTab'
 import ColdCallingDashboard from '@/components/coldcall/ColdCallingDashboard'
 import ColdCallTeamDashboard from '@/components/coldcall/ColdCallTeamDashboard'
@@ -16,6 +15,13 @@ import ColdCallScopeToolbar from '@/components/coldcall/ColdCallScopeToolbar'
 import ChannelCostsEditor from '@/components/leads/ChannelCostsEditor'
 import MetaAdsDashboard from '@/components/marketing/MetaAdsDashboard'
 import MetaAdsConfigButton from '@/components/marketing/MetaAdsConfigButton'
+import MarketingOverview from '@/components/marketing/MarketingOverview'
+import MarketingPlanCalendar from '@/components/marketing/MarketingPlanCalendar'
+import { AddLeadButton, AttributionInbox } from '@/components/marketing/LeadAttribution'
+import SalesFunnel from '@/components/marketing/SalesFunnel'
+import FollowUps from '@/components/marketing/FollowUps'
+import WeeklyReview from '@/components/marketing/WeeklyReview'
+import MarketingChannelSection from '@/components/marketing/MarketingChannelSection'
 import { parseColdCallFilterParam } from '@/lib/coldcall/api-query'
 import type { ColdCallFilter } from '@/lib/coldcall/scope'
 import { useAuth } from '@/components/AuthContext'
@@ -32,95 +38,127 @@ const BlogWorkspace = dynamic(() => import('@/components/blog/BlogWorkspace'), {
   loading: () => <div className="flex justify-center py-24"><div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700" /></div>,
 })
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Estructura de Marketing ─────────────────────────────────────────────────
+// Panel general · Paid · Orgánico · Outbound · Relaciones · Planificación
 
-interface MetricRow {
-  id: number
-  channel: string
-  period: string
-  spend: number
-}
+type SectionId =
+  | 'panel'
+  | 'embudo'
+  | 'seguimiento'
+  | 'revision'
+  | 'meta'
+  | 'google'
+  | 'web'
+  | 'redes'
+  | 'blog'
+  | 'coldcalling'
+  | 'email'
+  | 'relaciones'
+  | 'plan'
 
-interface MarketingData {
-  period: string
-  periods: string[]
-  metrics: MetricRow[]
-}
+type GroupId = 'panel' | 'paid' | 'organic' | 'outbound' | 'relations' | 'plan'
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+/** Google Ads se muestra cuando haya campaña activa (NEXT_PUBLIC_GOOGLE_ADS=1). */
+const SHOW_GOOGLE_ADS = process.env.NEXT_PUBLIC_GOOGLE_ADS === '1'
 
-function fmt(n: number | null | undefined, decimals = 0) {
-  if (n == null) return '—'
-  return n.toLocaleString('es-ES', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })
-}
+const GROUPS: { id: GroupId; label: string; sections: { id: SectionId; label: string }[] }[] = [
+  { id: 'panel', label: 'Panel general', sections: [
+      { id: 'panel', label: 'Resumen' },
+      { id: 'embudo', label: 'Embudo' },
+      { id: 'seguimiento', label: 'Leads parados' },
+      { id: 'revision', label: 'Revisión del lunes' },
+    ],
+  },
+  {
+    id: 'paid',
+    label: 'Paid',
+    sections: [
+      { id: 'meta', label: 'Meta Ads' },
+      ...(SHOW_GOOGLE_ADS ? [{ id: 'google' as const, label: 'Google Ads' }] : []),
+    ],
+  },
+  {
+    id: 'organic',
+    label: 'Orgánico',
+    sections: [
+      { id: 'web', label: 'Web · SEO · GEO' },
+      { id: 'redes', label: 'Redes sociales' },
+      { id: 'blog', label: 'Blog' },
+    ],
+  },
+  {
+    id: 'outbound',
+    label: 'Outbound',
+    sections: [
+      { id: 'coldcalling', label: 'Cold calling' },
+      { id: 'email', label: 'Email outreach' },
+    ],
+  },
+  { id: 'relations', label: 'Relaciones', sections: [{ id: 'relaciones', label: 'Referidos y partners' }] },
+  { id: 'plan', label: 'Planificación', sections: [{ id: 'plan', label: 'Calendario' }] },
+]
 
-function periodLabel(p: string) {
-  const [y, m] = p.split('-')
-  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-  return `${months[parseInt(m) - 1]} ${y}`
-}
+const ALL_SECTIONS: SectionId[] = ['panel', 'embudo', 'seguimiento', 'revision', 'meta', 'google', 'web', 'redes', 'blog', 'coldcalling', 'email', 'relaciones', 'plan']
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function ComingSoon({ name }: { name: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-24 space-y-3">
-      <div className="text-center space-y-1">
-        <h3 className="text-base font-semibold text-gray-700">{name}</h3>
-        <p className="text-sm text-gray-400 max-w-xs">
-          Este canal todavía no tiene datos. Cuando empiece a generar métricas aparecerán aquí automáticamente.
-        </p>
-      </div>
-      <Badge variant="outline" className="text-xs text-gray-400 border-gray-200 rounded-full">
-        Próximamente
-      </Badge>
-    </div>
-  )
-}
-
-// ── Tabs ─────────────────────────────────────────────────────────────────────
-
-const TABS = [
-  { id: 'global',      label: 'Métricas Globales' },
-  { id: 'web',         label: 'Web' },
-  { id: 'coldcalling', label: 'Cold Calling', hasSubmenu: true },
-  { id: 'meta',        label: 'Meta Ads' },
-  { id: 'google',      label: 'Google Ads' },
-] as const
+const groupOf = (s: SectionId): GroupId =>
+  GROUPS.find((g) => g.sections.some((x) => x.id === s))?.id ?? (s === 'google' ? 'paid' : 'panel')
 
 const COLD_CALLING_SECTIONS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'equipo', label: 'Equipo' },
   { id: 'campanas', label: 'Campañas' },
 ] as const
-
-const VALID_TABS = ['blog', 'global', 'web', 'coldcalling', 'meta', 'google'] as const
-type TabId = typeof VALID_TABS[number]
 type ColdCallingSection = typeof COLD_CALLING_SECTIONS[number]['id']
 
-function resolveTab(queryTab: string | string[] | undefined): TabId {
+/** Acepta los enlaces antiguos (?tab=global, ?tab=chat…). */
+function resolveSection(queryTab: string | string[] | undefined): SectionId {
   const t = Array.isArray(queryTab) ? queryTab[0] : queryTab
   if (t === 'chat') return 'web'
-  return VALID_TABS.includes(t as TabId) ? (t as TabId) : 'global'
+  if (t === 'global') return 'panel'
+  return ALL_SECTIONS.includes(t as SectionId) ? (t as SectionId) : 'panel'
 }
 
-function resolveColdCallingFilter(
-  queryCcUser: string | string[] | undefined,
-  defaultUserId: number
-): ColdCallFilter {
-  return parseColdCallFilterParam(queryCcUser, defaultUserId)
-}
-
-function resolveColdCallingSection(
-  queryCc: string | string[] | undefined
-): ColdCallingSection {
+function resolveColdCallingSection(queryCc: string | string[] | undefined): ColdCallingSection {
   const cc = Array.isArray(queryCc) ? queryCc[0] : queryCc
   if (cc === 'campanas') return 'campanas'
   if (cc === 'equipo') return 'equipo'
   return 'dashboard'
+}
+
+const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+function periodLabel(p: string) {
+  const [y, m] = p.split('-')
+  return `${MONTHS[parseInt(m) - 1]} ${y}`
+}
+function currentPeriod() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+/** 12 meses atrás + 3 adelante (para planificar), más los que tengan datos. */
+function buildPeriods(extra: string[]): string[] {
+  const out = new Set<string>(extra)
+  const now = new Date()
+  for (let i = -3; i <= 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    out.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  return Array.from(out).sort().reverse()
+}
+
+function ComingSoon({ name }: { name: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center space-y-3 py-24">
+      <div className="space-y-1 text-center">
+        <h3 className="text-base font-semibold text-gray-700">{name}</h3>
+        <p className="max-w-xs text-sm text-gray-400">
+          Este canal todavía no tiene datos. Cuando empiece a generar métricas aparecerán aquí automáticamente.
+        </p>
+      </div>
+      <Badge variant="outline" className="rounded-full border-gray-200 text-xs text-gray-400">
+        Próximamente
+      </Badge>
+    </div>
+  )
 }
 
 export default function MarketingPage() {
@@ -128,341 +166,273 @@ export default function MarketingPage() {
   const { user } = useAuth()
   // Project manager: ve lo invertido, no lo cobrado a clientes
   const showClientPrices = canSeeClientPrices(user?.role)
-  const tabFromUrl = resolveTab(router.query.tab)
+  const sectionFromUrl = resolveSection(router.query.tab)
   const ccFromUrl = resolveColdCallingSection(router.query.cc)
-  const ccFilterFromUrl = resolveColdCallingFilter(router.query.ccUser, user?.id ?? 0)
-  const chatSectionOpen =
-    router.query.section === 'chat' || router.query.tab === 'chat'
-  const [tab, setTab] = useState<TabId>(tabFromUrl)
+  const ccFilterFromUrl = parseColdCallFilterParam(router.query.ccUser, user?.id ?? 0)
+  const chatSectionOpen = router.query.section === 'chat' || router.query.tab === 'chat'
+
+  const [section, setSection] = useState<SectionId>(sectionFromUrl)
   const [ccSection, setCcSection] = useState<ColdCallingSection>(ccFromUrl)
-  const [ccHover, setCcHover] = useState(false)
-  const [ccMenuPos, setCcMenuPos] = useState<{ top: number; left: number } | null>(null)
-  const ccTabRef = useRef<HTMLDivElement>(null)
-  const ccCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [data, setData] = useState<MarketingData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [ccFilter, setCcFilter] = useState<ColdCallFilter>(ccFilterFromUrl)
   const [coldCallLoading, setColdCallLoading] = useState(false)
   const [coldCallReload, setColdCallReload] = useState(0)
-  const [ccFilter, setCcFilter] = useState<ColdCallFilter>(ccFilterFromUrl)
-  const [period, setPeriod] = useState('')
+  const [dataPeriods, setDataPeriods] = useState<string[]>([])
+  const [period, setPeriod] = useState(currentPeriod())
   const [metaRange, setMetaRange] = useState<{ since: string; until: string } | null>(null)
   const [metaReload, setMetaReload] = useState(0)
+  const [reloadKey, setReloadKey] = useState(0)
+  // Al añadir un lead o pulsar Actualizar se recarga también la bandeja de canales
+  const [addKey, setAddKey] = useState(0)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (tabFromUrl !== tab) setTab(tabFromUrl)
-  }, [tabFromUrl])
-
+    if (sectionFromUrl !== section) setSection(sectionFromUrl)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionFromUrl])
   useEffect(() => {
     if (ccFromUrl !== ccSection) setCcSection(ccFromUrl)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ccFromUrl])
-
   useEffect(() => {
     setCcFilter(ccFilterFromUrl)
-  }, [ccFilterFromUrl])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [String(ccFilterFromUrl)])
 
-  const load = useCallback(async (p?: string) => {
+  // Meses con métricas guardadas (para el selector)
+  const loadPeriods = useCallback(async () => {
     setLoading(true)
     try {
-      const qs = p ? `?period=${p}` : ''
-      const res = await fetch(`/api/marketing/metrics${qs}`)
+      const res = await fetch('/api/marketing/metrics')
       if (res.ok) {
         const json = await res.json()
-        setData(json)
-        if (!p) setPeriod(json.period)
+        setDataPeriods(json.periods || [])
       }
     } finally {
       setLoading(false)
     }
   }, [])
+  useEffect(() => {
+    loadPeriods()
+  }, [loadPeriods])
 
-  useEffect(() => { load() }, [load])
+  const periods = useMemo(() => buildPeriods(dataPeriods), [dataPeriods])
+  const group = groupOf(section)
+  const groupDef = GROUPS.find((g) => g.id === group)!
 
-  const handlePeriod = (p: string) => {
-    setPeriod(p)
-    setMetaRange(null)
-    load(p)
-  }
-
-  const effectivePeriod =
-    period ||
-    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
-
-  const goToTab = (tabId: TabId, cc?: ColdCallingSection) => {
-    setTab(tabId)
-    if (tabId === 'coldcalling') {
-      const section = cc || ccSection
-      setCcSection(section)
-      const query: Record<string, string> = { tab: tabId }
-      if (section === 'campanas') query.cc = 'campanas'
-      else if (section === 'equipo') query.cc = 'equipo'
-      else query.cc = 'dashboard'
-      if (ccFilter !== 'team' && ccFilter) query.ccUser = String(ccFilter)
-      if (ccFilter === 'team') query.ccUser = 'team'
-      router.push({ pathname: '/marketing', query }, undefined, { shallow: true })
-      return
+  const go = (s: SectionId, cc?: ColdCallingSection) => {
+    setSection(s)
+    const query: Record<string, string> = { tab: s }
+    if (s === 'coldcalling') {
+      const c = cc || ccSection
+      setCcSection(c)
+      query.cc = c
+      query.ccUser = ccFilter === 'team' ? 'team' : String(ccFilter)
     }
-    router.push({ pathname: '/marketing', query: { tab: tabId } }, undefined, { shallow: true })
+    router.push({ pathname: '/marketing', query }, undefined, { shallow: true })
   }
 
   const setColdCallFilter = (filter: ColdCallFilter) => {
     setCcFilter(filter)
-    const query: Record<string, string> = { tab: 'coldcalling' }
-    if (ccSection === 'campanas') query.cc = 'campanas'
-    else if (ccSection === 'equipo') query.cc = 'equipo'
-    query.ccUser = filter === 'team' ? 'team' : String(filter)
-    router.push({ pathname: '/marketing', query }, undefined, { shallow: true })
+    router.push(
+      { pathname: '/marketing', query: { tab: 'coldcalling', cc: ccSection, ccUser: filter === 'team' ? 'team' : String(filter) } },
+      undefined,
+      { shallow: true }
+    )
   }
 
-  const goToColdCalling = (section: ColdCallingSection) => {
-    if (ccCloseTimer.current) {
-      clearTimeout(ccCloseTimer.current)
-      ccCloseTimer.current = null
+  const refresh = () => {
+    if (section === 'coldcalling') {
+      setColdCallLoading(true)
+      setColdCallReload((n) => n + 1)
+      return
     }
-    setCcHover(false)
-    setCcMenuPos(null)
-    goToTab('coldcalling', section)
+    if (section === 'meta') setMetaReload((n) => n + 1)
+    setReloadKey((n) => n + 1)
+    setAddKey((n) => n + 1)
+    loadPeriods()
   }
 
-  const openCcMenu = () => {
-    if (ccCloseTimer.current) {
-      clearTimeout(ccCloseTimer.current)
-      ccCloseTimer.current = null
-    }
-    const rect = ccTabRef.current?.getBoundingClientRect()
-    if (rect) {
-      setCcMenuPos({ top: rect.bottom + 2, left: rect.left })
-    }
-    setCcHover(true)
-  }
-
-  const closeCcMenu = () => {
-    ccCloseTimer.current = setTimeout(() => {
-      setCcHover(false)
-      setCcMenuPos(null)
-    }, 150)
-  }
+  const showPeriodSelect = section !== 'blog' && section !== 'coldcalling' && section !== 'seguimiento' && section !== 'revision'
 
   return (
     <Layout>
-      <div className="space-y-6">
-
-        {tab === 'blog' && <BlogWorkspace />}
-
-        {/* Toolbar: tabs centered + period controls. El blog se abre aparte, sin estas pestañas. */}
-        {tab !== 'blog' && (
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="hide-scrollbar flex flex-1 justify-start sm:justify-center border-b border-gray-200 lg:border-b-0 lg:pb-0 overflow-x-auto">
-            <div className="flex gap-0 flex-nowrap sm:flex-wrap justify-start sm:justify-center min-w-max sm:min-w-0">
-              {TABS.map(t => {
-                const isActive = tab === t.id
-
-                if ('hasSubmenu' in t && t.hasSubmenu) {
-                  return (
-                    <div
-                      key={t.id}
-                      ref={ccTabRef}
-                      className="relative"
-                      onMouseEnter={openCcMenu}
-                      onMouseLeave={closeCcMenu}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => goToColdCalling('dashboard')}
-                        className={cn(
-                          'whitespace-nowrap px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg inline-flex items-center gap-1',
-                          isActive
-                            ? 'border-gray-900 text-gray-900'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                        )}
-                      >
-                        {t.label}
-                        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-                      </button>
-                    </div>
-                  )
-                }
-
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => goToTab(t.id)}
-                    className={`whitespace-nowrap px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors rounded-t-lg ${
-                      isActive
-                        ? 'border-gray-900 text-gray-900'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-          <div className="flex items-center justify-center gap-2 shrink-0">
-            {tab === 'coldcalling' ? (
-              ccSection === 'equipo' ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-xl"
-                  onClick={() => {
-                    setColdCallLoading(true)
-                    setColdCallReload((n) => n + 1)
-                  }}
-                  disabled={coldCallLoading}
-                >
-                  <RefreshCw className={`h-4 w-4 ${coldCallLoading ? 'animate-spin' : ''}`} />
-                </Button>
-              ) : (
-                <>
-                  {ccSection === 'dashboard' && (
-                    <ChannelCostsEditor
-                      period={effectivePeriod}
-                      periodLabel={periodLabel(effectivePeriod)}
-                      filterChannel="cold_calling"
-                      triggerLabel="Costes"
-                      dialogTitle="Costes Cold calling"
-                    />
-                  )}
-                  <ColdCallScopeToolbar
-                    filter={ccFilter}
-                    onFilterChange={setColdCallFilter}
-                    onRefresh={() => {
-                      setColdCallLoading(true)
-                      setColdCallReload((n) => n + 1)
-                    }}
-                    loading={coldCallLoading}
-                  />
-                </>
-              )
-            ) : (
-              <>
-                {data && data.periods.length > 0 && (
-                  <div className="relative">
-                    <select
-                      value={period}
-                      onChange={e => handlePeriod(e.target.value)}
-                      className="appearance-none border border-gray-200 rounded-xl px-3 py-2 pr-8 text-sm font-medium bg-white text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-200"
-                    >
-                      {data.periods.map(p => (
-                        <option key={p} value={p}>{periodLabel(p)}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
-                  </div>
+      <div className="space-y-5">
+        {/* Nivel 1: grupos */}
+        <div className="hide-scrollbar overflow-x-auto border-b border-gray-200">
+          <div className="flex min-w-max gap-0 sm:justify-center">
+            {GROUPS.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => go(g.sections[0].id)}
+                className={cn(
+                  'whitespace-nowrap rounded-t-lg border-b-2 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4',
+                  group === g.id ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
                 )}
-                {(tab === 'meta' || tab === 'google') && (
-                  <ChannelCostsEditor
-                    period={effectivePeriod}
-                    periodLabel={periodLabel(effectivePeriod)}
-                    filterChannel={tab === 'meta' ? 'meta' : 'google'}
-                    triggerLabel="Costes"
-                    dialogTitle={tab === 'meta' ? 'Costes Meta Ads' : 'Costes Google Ads'}
-                  />
-                )}
-                {tab === 'meta' && (
-                  <MetaAdsConfigButton
-                    period={effectivePeriod}
-                    onRangeApplied={(since, until) => setMetaRange({ since, until })}
-                    onSynced={() => setMetaReload((n) => n + 1)}
-                  />
-                )}
-                <Button variant="outline" size="sm" className="rounded-xl" onClick={() => load(period)} disabled={loading}>
-                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                </Button>
-              </>
-            )}
-            <button
-              type="button"
-              onClick={() => goToTab('blog')}
-              className="inline-flex items-center gap-1.5 appearance-none border border-gray-200 rounded-xl px-3 py-2 text-sm font-medium bg-white text-gray-700 hover:bg-gray-50"
-            >
-              <FileText className="h-4 w-4" />
-              Blog
-            </button>
+              >
+                {g.label}
+              </button>
+            ))}
           </div>
         </div>
-        )}
 
-        {/* ── WEB TAB ──────────────────────────────────────────────────────── */}
-        {tab === 'web' && (
-          <WebMarketingTab period={effectivePeriod} initialChatOpen={chatSectionOpen} />
-        )}
-
-        {/* ── GLOBAL TAB ───────────────────────────────────────────────────── */}
-        {tab === 'global' && (
-          <div className="space-y-6">
-            {loading && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-pulse">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="h-28 bg-gray-100 rounded-xl" />
+        {/* Nivel 2: secciones del grupo + controles */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {groupDef.sections.length > 1 &&
+              groupDef.sections.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => go(s.id)}
+                  className={cn(
+                    'rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
+                    section === s.id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
+            {section === 'coldcalling' && (
+              <div className="ml-1 inline-flex rounded-full border border-gray-200 bg-white p-0.5">
+                {COLD_CALLING_SECTIONS.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => go('coldcalling', c.id)}
+                    className={cn(
+                      'rounded-full px-3 py-1 text-xs font-medium',
+                      ccSection === c.id ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-800'
+                    )}
+                  >
+                    {c.label}
+                  </button>
                 ))}
               </div>
             )}
+          </div>
 
-            {!loading && data && (
-              <>
-                {data.metrics.length > 0 && (
-                  <Card className="shadow-sm">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm font-semibold text-gray-700">
-                        Canales activos · {periodLabel(period)}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="divide-y divide-gray-50">
-                        {data.metrics.map((m) => (
-                          <div key={m.id} className="flex items-center justify-between py-3">
-                            <div>
-                              <p className="text-sm font-medium text-gray-800 capitalize">
-                                {m.channel.replace('_', ' ')}
-                              </p>
-                              <p className="text-xs text-gray-400">
-                                {m.spend > 0
-                                  ? `${fmt(Number(m.spend))} € invertidos`
-                                  : 'Sin inversión registrada'}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </>
+          <div className="flex shrink-0 items-center gap-2">
+            {section === 'coldcalling' && ccSection === 'dashboard' && (
+              <ChannelCostsEditor
+                period={period}
+                periodLabel={periodLabel(period)}
+                filterChannel="cold_calling"
+                triggerLabel="Costes"
+                dialogTitle="Costes Cold calling"
+              />
             )}
+            {section === 'coldcalling' && ccSection !== 'equipo' && (
+              <ColdCallScopeToolbar filter={ccFilter} onFilterChange={setColdCallFilter} onRefresh={refresh} loading={coldCallLoading} />
+            )}
+            {showPeriodSelect && (
+              <div className="relative">
+                <select
+                  value={period}
+                  onChange={(e) => {
+                    setPeriod(e.target.value)
+                    setMetaRange(null)
+                  }}
+                  className="cursor-pointer appearance-none rounded-xl border border-gray-200 bg-white px-3 py-2 pr-8 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                >
+                  {periods.map((p) => (
+                    <option key={p} value={p}>
+                      {periodLabel(p)}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-gray-400" />
+              </div>
+            )}
+            {(section === 'meta' || section === 'google' || section === 'email') && (
+              <ChannelCostsEditor
+                period={period}
+                periodLabel={periodLabel(period)}
+                filterChannel={section === 'meta' ? 'meta' : section === 'google' ? 'google' : 'email'}
+                triggerLabel="Costes"
+                dialogTitle={section === 'meta' ? 'Costes Meta Ads' : section === 'google' ? 'Costes Google Ads' : 'Costes Email outreach'}
+              />
+            )}
+            {section === 'meta' && (
+              <MetaAdsConfigButton
+                period={period}
+                onRangeApplied={(since, until) => setMetaRange({ since, until })}
+                onSynced={() => setMetaReload((n) => n + 1)}
+              />
+            )}
+            {section !== 'blog' && section !== 'plan' && section !== 'coldcalling' && (
+              <AddLeadButton
+                onAdded={() => {
+                  setReloadKey((n) => n + 1)
+                  setAddKey((n) => n + 1)
+                }}
+              />
+            )}
+            {(section !== 'coldcalling' || ccSection === 'equipo') && section !== 'blog' && (
+              <Button variant="outline" size="sm" className="rounded-xl" onClick={refresh} disabled={loading || coldCallLoading}>
+                <RefreshCw className={cn('h-4 w-4', (loading || coldCallLoading) && 'animate-spin')} />
+              </Button>
+            )}
+          </div>
+        </div>
 
-            {/* Mismo bloque que Dashboard → Analítica de leads */}
-            {showClientPrices && (
-            <LeadsAnalyticsPanel
-              period={effectivePeriod || undefined}
-              onPeriodChange={handlePeriod}
-              hidePeriodSelect
-              defaultOpen
-            />
+        {/* ── Panel general ── */}
+        {section === 'panel' && (
+          <div className="space-y-6">
+            {showClientPrices ? (
+              <>
+                <MarketingOverview key={`ov-${reloadKey}`} period={period} onOpenPlan={() => go('plan')} />
+                <AttributionInbox key={`in-${addKey}`} period={period} onChanged={() => setReloadKey((n) => n + 1)} />
+                {/* Detalle completo (el mismo bloque que Dashboard → Analítica de leads) */}
+                <LeadsAnalyticsPanel key={`la-${reloadKey}`} period={period} onPeriodChange={setPeriod} hidePeriodSelect defaultOpen={false} />
+              </>
+            ) : (
+              <>
+                <p className="rounded-xl bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+                  El panel general incluye lo cobrado a clientes y solo lo ven los administradores. Tienes acceso a cada canal y a Planificación.
+                </p>
+                <AttributionInbox key={`in-${addKey}`} period={period} />
+              </>
             )}
           </div>
         )}
 
-        {/* ── COLD CALLING TAB ─────────────────────────────────────────────── */}
-        {tab === 'coldcalling' && ccSection === 'equipo' && (
-          <ColdCallTeamDashboard
+        {section === 'embudo' && <SalesFunnel key={`em-${reloadKey}`} period={period} />}
+        {section === 'seguimiento' && <FollowUps key={`se-${reloadKey}`} />}
+        {section === 'revision' && <WeeklyReview key={`re-${reloadKey}`} />}
+
+        {/* ── Paid ── */}
+        {section === 'meta' && <MetaAdsDashboard period={period} range={metaRange} reloadToken={metaReload} />}
+        {section === 'google' && <ComingSoon name="Google Ads" />}
+
+        {/* ── Orgánico ── */}
+        {section === 'web' && <WebMarketingTab key={`web-${reloadKey}`} period={period} initialChatOpen={chatSectionOpen} />}
+        {section === 'redes' && (
+          <MarketingChannelSection
+            key={`redes-${reloadKey}`}
+            period={period}
+            title="Redes sociales"
+            description="Leads que llegan por Instagram, LinkedIn, YouTube, TikTok y recomendaciones de asistentes de IA, y lo planificado en Instagram, LinkedIn, YouTube Shorts y TikTok."
+            channels={['instagram', 'linkedin', 'youtube', 'tiktok', 'ai_search']}
+            planChannels={['instagram', 'linkedin', 'youtube', 'tiktok']}
+          />
+        )}
+        {section === 'blog' && <BlogWorkspace />}
+
+        {/* ── Outbound ── */}
+        {section === 'coldcalling' && ccSection === 'equipo' && (
+          <ColdCallTeamDashboard reloadToken={coldCallReload} onLoadingChange={setColdCallLoading} />
+        )}
+        {section === 'coldcalling' && ccSection === 'dashboard' && (
+          <ColdCallingDashboard
+            filter={ccFilter}
+            onFilterChange={setColdCallFilter}
             reloadToken={coldCallReload}
+            hideToolbar
             onLoadingChange={setColdCallLoading}
           />
         )}
-        {tab === 'coldcalling' && ccSection === 'dashboard' && (
-          <div className="space-y-6">
-            <ColdCallingDashboard
-              filter={ccFilter}
-              onFilterChange={setColdCallFilter}
-              reloadToken={coldCallReload}
-              hideToolbar
-              onLoadingChange={setColdCallLoading}
-            />
-          </div>
-        )}
-        {tab === 'coldcalling' && ccSection === 'campanas' && (
+        {section === 'coldcalling' && ccSection === 'campanas' && (
           <ColdCallingCampanasTab
             filter={ccFilter}
             onFilterChange={setColdCallFilter}
@@ -471,49 +441,31 @@ export default function MarketingPage() {
             onLoadingChange={setColdCallLoading}
           />
         )}
-
-        {/* ── META ADS TAB ─────────────────────────────────────────────────── */}
-        {tab === 'meta' && (
-          <MetaAdsDashboard period={effectivePeriod} range={metaRange} reloadToken={metaReload} />
+        {section === 'email' && (
+          <MarketingChannelSection
+            key={`email-${reloadKey}`}
+            period={period}
+            title="Email outreach"
+            description="Leads que han llegado por las campañas de correo. El coste se edita en «Costes»."
+            channels={['email']}
+          />
         )}
 
-        {/* ── GOOGLE ADS TAB ───────────────────────────────────────────────── */}
-        {tab === 'google' && (
-          <div className="space-y-6">
-            <ComingSoon name="Google Ads" />
-          </div>
+        {/* ── Relaciones ── */}
+        {section === 'relaciones' && (
+          <MarketingChannelSection
+            key={`rel-${reloadKey}`}
+            period={period}
+            title="Referidos y partners"
+            description="Clientes que llegan por recomendación, partners, eventos y ponencias. Para que cuenten aquí, pon como origen del lead «referido», «partner» o «evento»."
+            channels={['referral', 'event']}
+            emptyHint="Ningún lead con origen referido, partner o evento este mes."
+          />
         )}
 
+        {/* ── Planificación ── */}
+        {section === 'plan' && <MarketingPlanCalendar key={`plan-${period}-${reloadKey}`} period={period} />}
       </div>
-
-      {ccHover && ccMenuPos && (
-        <div
-          className="fixed z-[200] min-w-[160px] rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl"
-          style={{ top: ccMenuPos.top, left: ccMenuPos.left }}
-          onMouseEnter={openCcMenu}
-          onMouseLeave={closeCcMenu}
-        >
-          {COLD_CALLING_SECTIONS.map((section) => {
-            const sectionActive = tab === 'coldcalling' && ccSection === section.id
-
-            return (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => goToColdCalling(section.id)}
-                className={cn(
-                  'block w-full text-left px-4 py-2.5 text-sm font-medium transition-colors',
-                  sectionActive
-                    ? 'bg-gray-100 text-gray-900'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                )}
-              >
-                {section.label}
-              </button>
-            )
-          })}
-        </div>
-      )}
     </Layout>
   )
 }

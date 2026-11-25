@@ -7,6 +7,9 @@ import {
 } from '@/lib/finance/payment-concepts'
 import { CHANNEL_LABELS, type ChannelKey } from '@/lib/leads/analytics.types'
 
+/** Canal de leads al que se imputa cada coste (Meta y Google ya no van a «web») */
+export type SpendLeadChannel = 'meta_ads' | 'google_ads' | 'email' | 'cold_calling'
+
 /** Canales editables de coste (captación) */
 export type CostChannelKey = 'meta' | 'google' | 'email' | 'cold_calling'
 export type CostKind = 'setup' | 'monthly' | 'commission'
@@ -17,7 +20,7 @@ export const COST_CHANNEL_META: Record<
   CostChannelKey,
   {
     label: string
-    lead_channel: LeadCostChannel
+    lead_channel: SpendLeadChannel
     kinds: CostKind[]
     model: string
     metrics_channel: string | null
@@ -25,14 +28,14 @@ export const COST_CHANNEL_META: Record<
 > = {
   meta: {
     label: 'Meta Ads',
-    lead_channel: 'web',
+    lead_channel: 'meta_ads',
     kinds: ['setup', 'monthly'],
     model: 'Setup + mensualidad',
     metrics_channel: 'meta_ads',
   },
   google: {
     label: 'Google Ads',
-    lead_channel: 'web',
+    lead_channel: 'google_ads',
     kinds: ['setup', 'monthly'],
     model: 'Setup + mensualidad',
     metrics_channel: 'google_ads',
@@ -71,7 +74,7 @@ export type CostLineDetail = {
 export type CostChannelDetail = {
   channel: CostChannelKey
   label: string
-  lead_channel: LeadCostChannel
+  lead_channel: SpendLeadChannel
   model: string
   total_eur: number
   source: SpendSource
@@ -393,7 +396,7 @@ export async function getChannelCostsDetail(
   return details
 }
 
-/** Agrega a canales de leads (web = meta+google). */
+/** Agrega el gasto a su canal de leads: Meta Ads, Google Ads, email y cold calling por separado. */
 export async function resolveChannelSpend(input: {
   period: string
   start: Date
@@ -403,14 +406,14 @@ export async function resolveChannelSpend(input: {
   const details = await getChannelCostsDetail(input.period, input.start, input.end)
   const out = new Map<ChannelKey, { spend: number; source: SpendSource }>()
 
-  const byLead = new Map<LeadCostChannel, CostChannelDetail[]>()
+  const byLead = new Map<SpendLeadChannel, CostChannelDetail[]>()
   for (const d of details) {
     const list = byLead.get(d.lead_channel) || []
     list.push(d)
     byLead.set(d.lead_channel, list)
   }
 
-  for (const leadCh of ['email', 'web', 'cold_calling'] as LeadCostChannel[]) {
+  for (const leadCh of ['email', 'meta_ads', 'google_ads', 'cold_calling'] as SpendLeadChannel[]) {
     const parts = byLead.get(leadCh) || []
     let spend = parts.reduce((s, p) => s + p.total_eur, 0)
     let source = channelTotalSource(parts.flatMap((p) => p.lines))

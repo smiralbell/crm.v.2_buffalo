@@ -26,6 +26,8 @@ import {
   User,
   Wallet,
 } from 'lucide-react'
+import { LeadOutcomeField } from '@/components/marketing/LeadOutcome'
+import { LeadAttributionField } from '@/components/marketing/LeadAttribution'
 import EditLeadDialog from '@/components/EditLeadDialog'
 import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
 import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
@@ -499,6 +501,8 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
                 }
               />
               <Row label="Origen" value={lead.origen_principal} />
+              <LeadAttributionField leadId={lead.id} />
+              <LeadOutcomeField leadId={lead.id} name={lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`} />
               <Row
                 label="Creado"
                 value={new Date(lead.created_at).toLocaleDateString('es-ES')}

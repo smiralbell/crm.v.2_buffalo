@@ -42,6 +42,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   void import('@/lib/demos/whatsapp')
     .then((m) => m.startDemosWhatsApp())
     .catch(() => {})
+  // Marketing: apunta cada hora en qué columna está cada tarjeta (solo lee el pipeline).
+  void import('@/lib/marketing/sales')
+    .then((m) => m.startMarketingSnapshotScheduler())
+    .catch(() => {})
   // Una sola vez: el antiguo Checklist pasa a las Tareas de Santi y Sergi.
   void import('@/lib/checklist/migrate-to-tareas')
     .then((m) => m.startChecklistMigration())

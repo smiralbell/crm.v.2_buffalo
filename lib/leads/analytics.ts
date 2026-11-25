@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { isCalBookingsTableAvailable } from '@/lib/marketing/cal-bookings'
 import { query } from '@/lib/db'
+import { normalizeChannel } from '@/lib/leads/channel-normalize'
+import { loadAttributionChannels } from '@/lib/marketing/attribution'
 import { resolveChannelSpend } from '@/lib/leads/channel-costs'
 import {
   getGlobalPipelineId,
@@ -32,29 +34,6 @@ export {
   CHANNEL_LABELS,
   currentPeriod,
 } from '@/lib/leads/analytics.types'
-
-export function normalizeChannel(origen: string | null | undefined): ChannelKey {
-  const o = (origen || '').trim().toLowerCase()
-  if (!o) return 'unknown'
-  if (o.includes('cold') || o === 'coldcall') return 'cold_calling'
-  if (o.includes('email') || o.includes('mail_marketing') || o.includes('newsletter')) return 'email'
-  if (
-    o.includes('web') ||
-    o.includes('form') ||
-    o.includes('chat') ||
-    o.includes('landing') ||
-    o.includes('widget') ||
-    o.includes('cal') ||
-    o.includes('meta') ||
-    o.includes('facebook')
-  ) {
-    return 'web'
-  }
-  if (o.includes('insta')) return 'instagram'
-  if (o.includes('whats')) return 'whatsapp'
-  if (o.includes('refer')) return 'referral'
-  return 'other'
-}
 
 export function periodBounds(period: string): { start: Date; end: Date; label: string } {
   const [y, m] = period.split('-').map(Number)
@@ -144,7 +123,7 @@ async function loadScheduledLeadIds(): Promise<Set<number>> {
  * Reuniones de calendario YA CELEBRADAS en el periodo
  * (start_time ≤ ahora; no cuenta citas futuras del mes en curso).
  */
-async function loadMeetingLeadIds(start: Date, end: Date): Promise<{
+export async function loadMeetingLeadIds(start: Date, end: Date): Promise<{
   meetingCount: number
   leadIds: number[]
 }> {
@@ -235,7 +214,8 @@ async function loadMeetingLeadIds(start: Date, end: Date): Promise<{
 
 async function hydrateLeadItems(
   ids: number[],
-  channelByLead?: Map<number, ChannelKey>
+  channelByLead?: Map<number, ChannelKey>,
+  attributed?: Map<number, ChannelKey>
 ): Promise<LeadListItem[]> {
   if (ids.length === 0) return []
   const unique = Array.from(new Set(ids))
@@ -256,7 +236,7 @@ async function hydrateLeadItems(
     .map((id) => byId.get(id))
     .filter((r): r is NonNullable<typeof r> => Boolean(r))
     .map((r) => {
-      const channel = channelByLead?.get(r.id) ?? normalizeChannel(r.origen_principal)
+      const channel = channelByLead?.get(r.id) ?? attributed?.get(r.id) ?? normalizeChannel(r.origen_principal)
       return {
         id: r.id,
         name: r.contact?.nombre || r.contact?.email || `Lead #${r.id}`,
@@ -647,14 +627,14 @@ async function loadColdCallFunnel(
   }
 }
 
-const TIMELINE_ALWAYS_CHANNELS: ChannelKey[] = ['web', 'email', 'cold_calling']
+const TIMELINE_ALWAYS_CHANNELS: ChannelKey[] = ['meta_ads', 'web', 'email', 'cold_calling']
 
 /**
  * Analítica de leads para un mes calendario (YYYY-MM).
  */
 export async function getLeadsAnalytics(period: string): Promise<LeadsAnalytics> {
   const { start, end, label } = periodBounds(period)
-  const [leads, scheduledIds, payments, meetings] = await Promise.all([
+  const [leads, scheduledIds, payments, meetings, attributed] = await Promise.all([
     prisma.lead.findMany({
       where: { created_at: { gte: start, lte: end } },
       select: {
@@ -671,6 +651,8 @@ export async function getLeadsAnalytics(period: string): Promise<LeadsAnalytics>
     loadScheduledLeadIds(),
     loadSetupPaymentLeads(start, end),
     loadMeetingLeadIds(start, end),
+    // Canal confirmado por el equipo (manda sobre el origen automático)
+    loadAttributionChannels(),
   ])
 
   const channelMap = new Map<
@@ -731,7 +713,7 @@ export async function getLeadsAnalytics(period: string): Promise<LeadsAnalytics>
   })
 
   for (const lead of leads) {
-    const ch = normalizeChannel(lead.origen_principal)
+    const ch = attributed.get(lead.id) ?? normalizeChannel(lead.origen_principal)
     channelByLead.set(lead.id, ch)
     const bucket = ensure(ch)
     bucket.leads += 1
@@ -780,6 +762,10 @@ export async function getLeadsAnalytics(period: string): Promise<LeadsAnalytics>
     end,
     channelsWithLeads: new Set(Array.from(channelMap.keys())),
   })
+  // Un canal con gasto y sin leads también debe salir (p. ej. Meta Ads con 0 leads este mes)
+  for (const [ch, info] of Array.from(spendByChannel.entries())) {
+    if (info.spend > 0) ensure(ch)
+  }
 
   // Ensure every timeline day has an explicit 0 for channels that appear in the month
   const channelsInMonth = new Set<ChannelKey>([
@@ -800,11 +786,11 @@ export async function getLeadsAnalytics(period: string): Promise<LeadsAnalytics>
 
   const [scheduledList, clientsWonItems, clientsClosedItems, meetingItems, meetingToClientItems] =
     await Promise.all([
-      hydrateLeadItems(Array.from(scheduledIds), channelByLead),
-      hydrateLeadItems(payments.firstPaidInPeriod, channelByLead),
-      hydrateLeadItems(payments.closedInPeriod, channelByLead),
-      hydrateLeadItems(meetings.leadIds, channelByLead),
-      hydrateLeadItems(meetingWonIds, channelByLead),
+      hydrateLeadItems(Array.from(scheduledIds), channelByLead, attributed),
+      hydrateLeadItems(payments.firstPaidInPeriod, channelByLead, attributed),
+      hydrateLeadItems(payments.closedInPeriod, channelByLead, attributed),
+      hydrateLeadItems(meetings.leadIds, channelByLead, attributed),
+      hydrateLeadItems(meetingWonIds, channelByLead, attributed),
     ])
 
   const by_channel: ChannelBreakdownRow[] = Array.from(channelMap.entries())
