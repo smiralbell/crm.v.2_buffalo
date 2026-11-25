@@ -117,7 +117,7 @@ Prefijo: \`/api/coldcall/\` — roles **admin** y **comercial**.
   {
     id: 'api-engranajes',
     title: 'API: onboarding, demos, proyectos, retención',
-    summary: 'ENG 2–4: endpoints de producto, ejecución e informes',
+    summary: 'ENG 2–3: endpoints de proyectos, retención e informes',
     category: 'api',
     order: 4,
     audience: ['admin', 'developer'],
@@ -127,8 +127,6 @@ Prefijo: \`/api/coldcall/\` — roles **admin** y **comercial**.
 ## Onboarding
 
 - \`GET /api/onboarding/projects/[leadId]\`
-- \`GET /api/onboarding/projects/buffalo-status\`
-- \`POST /api/onboarding/pipeline-advance\`
 
 ## Demos
 
@@ -355,7 +353,7 @@ Consulta también el \`README.md\` del repo para el arranque local (\`npm run de
 
 | Término | Significado |
 |---------|-------------|
-| **ENG 1–4** | Engranajes Marketing → Onboarding → Proyectos → Retención |
+| **ENG 1–3** | Engranajes Marketing → Proyectos → Retención |
 | **es_buffalo** | Flag: el proyecto está en marcha internamente |
 | **Mensualidad / retainer** | Cuota recurrente de mantenimiento |
 | **MRR** | Monthly Recurring Revenue |

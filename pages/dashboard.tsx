@@ -496,7 +496,6 @@ export default function Dashboard({
               { label: 'Nueva factura',       href: '/invoices/new' },
               { label: 'Nuevo lead',          href: '/leads' },
               { label: 'Ver pipeline',        href: '/pipelines' },
-              { label: 'Configurar proyecto', href: '/onboarding' },
               { label: 'Finanzas',            href: '/finances' },
             ].map(a => (
               <Link

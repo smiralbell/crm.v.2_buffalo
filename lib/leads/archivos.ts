@@ -3,7 +3,7 @@ import { query } from '@/lib/db'
 import { Readable } from 'stream'
 import { getAuthorizedDriveClient } from '@/lib/integrations/google/drive-auth'
 import { ensureChildFolder, safeDriveName, MAX_ATTACHMENT_BYTES } from '@/lib/integrations/google/drive-attachments'
-import { pickClientFolder, type FolderRow } from '@/lib/onboarding/persona-clientes-match'
+import { pickClientFolder, type FolderRow } from '@/lib/leads/drive-match'
 
 /**
  * Archivos de una persona (onboarding): carpeta del cliente en Google Drive,

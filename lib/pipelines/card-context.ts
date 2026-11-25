@@ -284,7 +284,6 @@ async function buildProjectContext(input: {
   }
 
   ctx.status = input.proyecto?.status ?? null
-  ctx.hrefs.onboarding = '/onboarding'
 
   if (input.proyecto) {
     ctx.hrefs.gestion = `/gestion-proyecto/proyectos/${input.proyecto.id}`

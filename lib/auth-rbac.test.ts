@@ -12,7 +12,6 @@ describe('project_manager page access', () => {
       '/pipelines/3',
       '/marketing',
       '/blog',
-      '/onboarding',
       '/gestion-proyecto',
       '/gestion-proyecto/proyectos/abc',
       '/retencion',

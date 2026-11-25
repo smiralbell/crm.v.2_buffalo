@@ -2,41 +2,6 @@ import type { HelpArticle } from '../types'
 
 export const ARTICLES_ENG2: HelpArticle[] = [
   {
-    id: 'onboarding',
-    title: 'Onboarding (ENG 2)',
-    summary: 'Configurador, proyectos activos, poner en marcha y brief a medida',
-    category: 'eng2',
-    order: 1,
-    audience: ['admin'],
-    tags: ['onboarding', 'ENG2', 'configurador', 'poner en marcha'],
-    body: `# Onboarding · ENG 2
-
-## Pantallas
-
-| Pantalla | Ruta |
-|----------|------|
-| Personas (contexto y preguntas a la IA) | \`/onboarding\` |
-| Demos | \`/demos\` |
-
-## Flujo
-
-1. Elige o crea un lead.
-2. Configura el paquete Buffalo.
-3. Se persiste \`leads.configuracion\` y se sincroniza \`proyectos\`.
-4. Cuando esté listo: **Poner en marcha** → \`es_buffalo = true\` → aparece en ENG 3.
-
-## APIs
-
-- \`GET /api/onboarding/projects/[leadId]\`
-- \`GET /api/onboarding/projects/buffalo-status\`
-- \`GET|PUT /api/onboarding/personas/[leadId]\` (contexto de la persona)
-- \`POST /api/onboarding/personas/[leadId]/ask\` (pregunta a la IA)
-- \`POST /api/onboarding/personas/[leadId]/draft\` (resumen propuesto por IA)
-- \`POST /api/onboarding/pipeline-advance\`
-- Webhook externo: \`POST /api/webhooks/onboarding-form\` (token \`ONBOARDING_FORM_WEBHOOK_TOKEN\`)
-`,
-  },
-  {
     id: 'demos',
     title: 'Demos WhatsApp y voz',
     summary: 'Crear demos, formulario público, llamadas Retell y WhatsApp por Evolution',
@@ -76,13 +41,13 @@ Configura un agente de chat (WhatsApp vía Evolution API, con su propia instanci
 export const ARTICLES_ENG3: HelpArticle[] = [
   {
     id: 'gestion-proyecto',
-    title: 'Gestión de proyectos (ENG 3)',
+    title: 'Gestión de proyectos (ENG 2)',
     summary: 'Proyectos Buffalo, tareas, docs, developers y finalizar',
     category: 'eng3',
     order: 1,
     audience: ['admin', 'developer'],
-    tags: ['proyectos', 'ENG3', 'tareas', 'developers', 'docs'],
-    body: `# Proyectos · ENG 3
+    tags: ['proyectos', 'ENG2', 'tareas', 'developers', 'docs'],
+    body: `# Proyectos · ENG 2
 
 Solo aparecen proyectos con **\`es_buffalo = true\`** y onboarding válido.
 
@@ -152,13 +117,13 @@ Developers ven tickets de sus proyectos asignados.
 export const ARTICLES_ENG4: HelpArticle[] = [
   {
     id: 'retencion-overview',
-    title: 'Retención (ENG 4): visión general',
+    title: 'Retención (ENG 3): visión general',
     summary: 'Proyectos con mensualidad, mantenimiento e informes',
     category: 'eng4',
     order: 1,
     audience: ['admin', 'developer'],
-    tags: ['retención', 'ENG4', 'mensualidad', 'mantenimiento', 'MRR'],
-    body: `# Retención · ENG 4
+    tags: ['retención', 'ENG3', 'mensualidad', 'mantenimiento', 'MRR'],
+    body: `# Retención · ENG 3
 
 Lista proyectos Buffalo con **mensualidad / mantenimiento** (\`has_mensualidad\`).
 

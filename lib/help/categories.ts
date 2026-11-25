@@ -27,19 +27,19 @@ export const HELP_CATEGORIES: HelpCategory[] = [
   },
   {
     id: 'eng2',
-    label: 'ENG 2 · Onboarding y demos',
+    label: 'Demos',
     description: 'Configurar el proyecto, propuesta y demos WhatsApp/voz',
     order: 5,
   },
   {
     id: 'eng3',
-    label: 'ENG 3 · Proyectos y tickets',
+    label: 'ENG 2 · Proyectos y tickets',
     description: 'Ejecución: tareas, developers, documentos y soporte',
     order: 6,
   },
   {
     id: 'eng4',
-    label: 'ENG 4 · Retención',
+    label: 'ENG 3 · Retención',
     description: 'Mensualidad, agente de auditoría e informes Buffalo',
     order: 7,
   },

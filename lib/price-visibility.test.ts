@@ -74,6 +74,6 @@ describe('páginas con precios para el project manager', () => {
     for (const p of ['/leads/analytics']) {
       expect(canAccessPage(p, 'project_manager'), p).toBe(false)
     }
-    expect(canAccessPage('/onboarding', 'project_manager')).toBe(true)
+    expect(canAccessPage('/leads', 'project_manager')).toBe(true)
   })
 })

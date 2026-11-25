@@ -34,7 +34,6 @@ import {
   Trash2,
   Phone,
 } from 'lucide-react'
-import OnboardingSectionTabs from '@/components/onboarding/OnboardingSectionTabs'
 
 type DemosTab = 'agentes' | 'preparar'
 
@@ -290,7 +289,6 @@ export default function DemosPage() {
   return (
     <Layout>
       <div className="space-y-6">
-        <OnboardingSectionTabs active="demos" />
 
         <div className="flex flex-row flex-wrap items-center gap-2 sm:gap-3">
           <div className="inline-flex rounded-xl border border-border bg-card p-0.5 shrink-0">

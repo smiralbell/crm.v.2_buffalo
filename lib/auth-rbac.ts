@@ -20,7 +20,6 @@ export const PROJECT_MANAGER_PAGE_PREFIXES = [
   '/pipelines',
   '/marketing',
   '/blog',
-  '/onboarding',
   '/gestion-proyecto',
   '/retencion',
   '/tareas',

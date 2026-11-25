@@ -10,10 +10,7 @@ import { getPrismaClient } from '@/lib/prisma'
  * añade aquí su ALTER TABLE ... ADD COLUMN IF NOT EXISTS.
  */
 export const CORE_SCHEMA_STATEMENTS: string[] = [
-  // Onboarding: contexto libre por persona (lead).
-  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS contexto TEXT`,
-
-  // Onboarding: carpeta de cliente en Drive y documentos subidos.
+  // Leads: carpeta de cliente en Drive y documentos subidos.
   `CREATE TABLE IF NOT EXISTS persona_drive_folders (
      lead_id      INTEGER PRIMARY KEY REFERENCES leads(id) ON DELETE CASCADE,
      folder_id    TEXT NOT NULL,

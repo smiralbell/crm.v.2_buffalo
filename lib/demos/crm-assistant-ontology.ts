@@ -11,12 +11,12 @@ ONTOLOGÍA CRM BUFFALO AI — FUENTE DE VERDAD PARA EL ASISTENTE
 0. NEGOCIO
 Buffalo vende agentes IA (voz/chat), dashboards, automatización, lead gen, GEO/SEO.
 Modelo: setup (one-shot) + mensualidad (MRR). Objetivo anual ref. 65.000 €.
-Engranajes UI: ENG1 Marketing → ENG2 Onboarding → ENG3 Proyectos → ENG4 Retención.
+Engranajes UI: ENG1 Marketing → ENG2 Proyectos → ENG3 Retención (Onboarding ya no existe: el contexto, documentos y facturas viven en la ficha del lead).
 
 CADENA DE VERDAD (no saltar pasos):
 contact → lead (1:1) → leads.configuracion (onboarding) → sync proyectos (es_buffalo=false)
-→ «Poner en marcha» es_buffalo=true → Gestión ENG3 → Finalizar status=active + fecha_fin_real
-→ si has_mensualidad → Retención ENG4.
+→ «Poner en marcha» es_buffalo=true → Gestión ENG2 → Finalizar status=active + fecha_fin_real
+→ si has_mensualidad → Retención ENG3.
 
 DISTINCIONES CRÍTICAS (nunca mezclar):
 · leads.estado ≠ pipeline_cards.stage ≠ proyectos.status ≠ coldcall_prospects.stage

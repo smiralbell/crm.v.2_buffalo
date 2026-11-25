@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeClientName, pickClientFolder } from './persona-clientes-match'
+import { normalizeClientName, pickClientFolder } from './drive-match'
 
 describe('normalizeClientName', () => {
   it('quita acentos, puntuación y sufijos de sociedad', () => {

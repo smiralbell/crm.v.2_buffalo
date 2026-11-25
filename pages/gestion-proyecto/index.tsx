@@ -165,13 +165,13 @@ export default function GestionProyectoPage() {
             <FolderKanban className="h-10 w-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-gray-500">No hay proyectos Buffalo en marcha.</p>
             <p className="text-xs text-gray-400 mt-1">
-              Configura un proyecto en Onboarding y pulsa «Poner en marcha».
+              Los proyectos aparecen aquí cuando se ponen en marcha.
             </p>
             <Link
-              href="/onboarding"
+              href="/leads"
               className="inline-flex mt-4 text-sm font-medium text-gray-700 hover:text-gray-900"
             >
-              Ir a Onboarding →
+              Ir a Leads →
             </Link>
           </div>
         ) : (

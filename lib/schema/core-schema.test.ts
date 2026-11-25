@@ -8,9 +8,8 @@ describe('esquema automático', () => {
     }
   })
 
-  it('incluye la columna de contexto de persona y sus tablas', () => {
+  it('incluye las tablas de documentos y carpetas de Drive', () => {
     const all = CORE_SCHEMA_STATEMENTS.join('\n')
-    expect(all).toMatch(/ALTER TABLE leads ADD COLUMN IF NOT EXISTS contexto TEXT/)
     expect(all).toMatch(/persona_drive_folders/)
     expect(all).toMatch(/persona_documents/)
   })

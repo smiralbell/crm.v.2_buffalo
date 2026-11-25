@@ -11,7 +11,6 @@ import {
   LayoutDashboard,
   ListTodo,
   Megaphone,
-  PackageCheck,
   TrendingUp,
   Workflow,
 } from 'lucide-react'
@@ -49,14 +48,8 @@ const TABS: Record<CrmRole, Tab[]> = {
       href: '/gestion-proyecto',
       label: 'Proyectos',
       icon: FolderKanban,
-      match: ['/onboarding', '/demos', '/gestion-proyecto', '/tickets', '/retencion'],
+      match: ['/gestion-proyecto', '/tickets', '/retencion'],
       options: [
-        {
-          href: '/onboarding',
-          label: 'Onboarding',
-          description: 'Personas, contexto y configurador',
-          icon: PackageCheck,
-        },
         {
           href: '/gestion-proyecto',
           label: 'Proyectos',
@@ -99,14 +92,8 @@ const TABS: Record<CrmRole, Tab[]> = {
       href: '/gestion-proyecto',
       label: 'Proyectos',
       icon: FolderKanban,
-      match: ['/onboarding', '/gestion-proyecto', '/retencion'],
+      match: ['/gestion-proyecto', '/retencion'],
       options: [
-        {
-          href: '/onboarding',
-          label: 'Onboarding',
-          description: 'Contexto de tus personas',
-          icon: PackageCheck,
-        },
         {
           href: '/gestion-proyecto',
           label: 'Proyectos',

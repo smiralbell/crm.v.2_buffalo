@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { addInvoiceShortcut, isPersonaDriveConfigured } from '@/lib/onboarding/persona-archivos'
+import { addInvoiceShortcut, isPersonaDriveConfigured } from '@/lib/leads/archivos'
 
 export type PersonaFactura = {
   id: number
@@ -117,7 +117,7 @@ export async function linkInvoiceToPersona(
     return { warning: null }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'error desconocido'
-    console.error('[persona-facturas] acceso directo', msg)
+    console.error('[leads/facturas] acceso directo', msg)
     return { warning: `Factura vinculada, pero no se pudo añadir a la carpeta de Drive: ${msg}` }
   }
 }

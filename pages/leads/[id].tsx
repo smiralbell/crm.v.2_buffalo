@@ -18,6 +18,7 @@ import {
   Calendar,
   ClipboardList,
   Clock,
+  Download,
   Edit,
   Euro,
   FileText,
@@ -31,6 +32,8 @@ import { LeadAttributionField } from '@/components/marketing/LeadAttribution'
 import EditLeadDialog from '@/components/EditLeadDialog'
 import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
 import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
+import LeadContextPanel, { exportLeadContext } from '@/components/leads/LeadContextPanel'
+import LeadArchivos from '@/components/leads/LeadArchivos'
 import {
   getLeadDetailBundle,
   type LeadAlert,
@@ -187,13 +190,7 @@ function alertIcon(kind: LeadAlert['kind']) {
 }
 
 function AlertsStrip({ alerts }: { alerts: LeadAlert[] }) {
-  if (!alerts.length) {
-    return (
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-800">
-        Sin avisos urgentes ahora mismo
-      </div>
-    )
-  }
+  if (!alerts.length) return null
 
   return (
     <div className="space-y-2">
@@ -239,88 +236,10 @@ function AlertsStrip({ alerts }: { alerts: LeadAlert[] }) {
   )
 }
 
-function LeadContextEditor({
-  leadId,
-  initial,
-}: {
-  leadId: number
-  initial: string
-}) {
-  const [value, setValue] = useState(initial)
-  const [baseline, setBaseline] = useState(initial)
-  const [saving, setSaving] = useState(false)
-  const [savedAt, setSavedAt] = useState<string | null>(null)
-  const [error, setError] = useState('')
-  const dirty = value !== baseline
-
-  async function save() {
-    setSaving(true)
-    setError('')
-    try {
-      const next = value.trim() || null
-      const res = await fetch(`/api/leads/${leadId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notas: next }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || 'Error al guardar')
-      const saved = next || ''
-      setValue(saved)
-      setBaseline(saved)
-      setSavedAt(new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Card id="contexto" className="shadow-sm border-gray-200 scroll-mt-6">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-            <StickyNote className="h-4 w-4" />
-            Contexto del lead
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            {savedAt && !dirty && (
-              <span className="text-[11px] text-emerald-600">Guardado {savedAt}</span>
-            )}
-            <Button
-              size="sm"
-              variant={dirty ? 'default' : 'outline'}
-              className="rounded-xl h-8"
-              disabled={saving || !dirty}
-              onClick={() => void save()}
-            >
-              <Save className="h-3.5 w-3.5 mr-1.5" />
-              {saving ? 'Guardando…' : 'Guardar'}
-            </Button>
-          </div>
-        </div>
-        <p className="text-xs text-gray-500 mt-1">
-          Notas internas, situación comercial, acuerdos… visible en pipeline y onboarding.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <Textarea
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          rows={7}
-          placeholder="Escribe el contexto del lead: qué necesita, presupuesto, objeciones, siguiente paso…"
-          className="rounded-xl text-sm leading-relaxed resize-y min-h-[140px]"
-        />
-        {error && <p className="text-xs text-red-600">{error}</p>}
-      </CardContent>
-    </Card>
-  )
-}
-
 export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
   const router = useRouter()
   const [editOpen, setEditOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const displayName = lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`
 
   useEffect(() => {
@@ -328,275 +247,186 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
     document.getElementById('contexto')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
-  const hasConfig = !!lead.configuracion
   const projectCtx = bundle.pipeline?.project_context
+  const projectBlocks = [
+    { label: 'Resumen del proyecto', text: projectCtx?.onboarding_summary },
+    { label: 'Notas del proyecto', text: projectCtx?.onboarding_notes },
+    {
+      label: `Última reunión${projectCtx?.last_meeting_title ? ` · ${projectCtx.last_meeting_title}` : ''}`,
+      text: projectCtx?.last_meeting_summary,
+    },
+    { label: 'Retención', text: projectCtx?.retention_excerpt },
+  ].filter((b) => Boolean(b.text))
+
+  const exportar = async () => {
+    setExporting(true)
+    try {
+      await exportLeadContext(lead.id)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'No se pudo exportar')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <Layout>
-      <div className="mx-auto w-full max-w-3xl space-y-5 px-1 sm:px-0">
-        {/* Header */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-center gap-3 min-w-0">
+      <div className="mx-auto w-full max-w-6xl space-y-4 px-1 sm:px-0">
+        {/* Cabecera */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
             <Link href="/leads">
               <Button variant="ghost" size="icon" className="shrink-0 rounded-xl">
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
-                {displayName}
-              </h1>
-              {lead.contact?.empresa && (
-                <p className="text-sm text-gray-500 truncate">{lead.contact.empresa}</p>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-xl font-bold text-gray-900 sm:text-2xl">{displayName}</h1>
+                <Badge className={`border text-xs ${estadoBadgeClass(lead.estado)}`}>{estadoLabel(lead.estado)}</Badge>
+                {lead.prioridad && (
+                  <Badge className={`text-xs ${prioridadColors[lead.prioridad] || 'bg-gray-100 text-gray-600'}`}>
+                    {lead.prioridad.charAt(0).toUpperCase() + lead.prioridad.slice(1)}
+                  </Badge>
+                )}
+              </div>
+              <p className="truncate text-sm text-gray-500">
+                {[lead.contact?.empresa, lead.origen_principal, `creado ${new Date(lead.created_at).toLocaleDateString('es-ES')}`]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 pl-12 sm:pl-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setEditOpen(true)}
-              className="flex-1 sm:flex-initial rounded-xl"
-            >
+            {lead.valor != null && (
+              <div className="mr-1 text-right">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400">Ingreso de venta</p>
+                <p className="text-lg font-bold leading-tight text-gray-900">
+                  {lead.valor.toLocaleString('es-ES', { maximumFractionDigits: 0 })} €
+                  <span className="ml-1 text-[11px] font-normal text-gray-400">sin IVA</span>
+                </p>
+              </div>
+            )}
+            <Button variant="outline" size="sm" onClick={() => void exportar()} disabled={exporting} className="rounded-xl">
+              <Download className="mr-2 h-4 w-4" />
+              {exporting ? 'Exportando…' : 'Exportar contexto'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} className="rounded-xl">
               <Edit className="mr-2 h-4 w-4" />
               Editar
             </Button>
           </div>
         </div>
 
-        <EditLeadDialog
-          open={editOpen}
-          leadId={lead.id}
-          onOpenChange={setEditOpen}
-          onSaved={() => router.reload()}
-        />
+        <EditLeadDialog open={editOpen} leadId={lead.id} onOpenChange={setEditOpen} onSaved={() => router.reload()} />
 
         <AlertsStrip alerts={bundle.alerts} />
 
-        {lead.valor != null && (
-          <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-900 text-white">
-              <Euro className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
-                Ingreso de venta
-              </p>
-              <p className="text-2xl font-bold text-gray-900">
-                {lead.valor.toLocaleString('es-ES', {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0,
-                })}{' '}
-                €
-                <span className="ml-1.5 text-xs font-normal text-gray-400">sin IVA</span>
-              </p>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Badge
-                className={`border text-xs ${estadoBadgeClass(lead.estado)}`}
-              >
-                {estadoLabel(lead.estado)}
-              </Badge>
-              {lead.prioridad && (
-                <Badge
-                  className={`text-xs ${prioridadColors[lead.prioridad] || 'bg-gray-100 text-gray-600'}`}
-                >
-                  {lead.prioridad.charAt(0).toUpperCase() + lead.prioridad.slice(1)}
-                </Badge>
-              )}
-            </div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* Columna principal */}
+          <div className="min-w-0 space-y-4 lg:col-span-2">
+            <LeadContextPanel leadId={lead.id} initial={lead.notas || ''} />
+
+            {projectBlocks.length > 0 && (
+              <Card className="shadow-sm border-gray-200">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <FileText className="h-4 w-4" />
+                    Proyecto y reuniones
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-3 text-sm text-gray-700 sm:grid-cols-2">
+                  {projectBlocks.map((b) => (
+                    <div key={b.label} className="rounded-xl bg-gray-50 p-3">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">{b.label}</p>
+                      <p className="line-clamp-6 whitespace-pre-wrap leading-relaxed">{b.text}</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            <CrmActivityTimeline
+              contactId={lead.contact?.id ?? null}
+              leadId={lead.id}
+              derived={bundle.timeline}
+              title="Historial del lead"
+              subtitle="Entrada, reuniones, correos, documentos y notas manuales"
+            />
+
+            <LeadMeetingsPanel leadId={lead.id} />
           </div>
-        )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Card className="shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                <User className="h-4 w-4" />
-                Datos del contacto
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {lead.contact ? (
-                <div>
-                  <Row label="Nombre" value={lead.contact.nombre} />
-                  <Row label="Empresa" value={lead.contact.empresa} />
+          {/* Columna lateral */}
+          <aside className="min-w-0 space-y-4">
+            <Card className="shadow-sm border-gray-200">
+              <CardHeader className="pb-1">
+                <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <User className="h-4 w-4" />
+                  Datos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {lead.contact ? (
+                  <>
+                    <Row label="Empresa" value={lead.contact.empresa} />
+                    <Row
+                      label="Email"
+                      value={
+                        lead.contact.email ? (
+                          <a href={`mailto:${lead.contact.email}`} className="break-all text-blue-600 hover:underline">
+                            {lead.contact.email}
+                          </a>
+                        ) : null
+                      }
+                    />
+                    <Row
+                      label="Teléfono"
+                      value={
+                        lead.contact.telefono ? (
+                          <a href={`tel:${lead.contact.telefono}`} className="hover:underline">
+                            {lead.contact.telefono}
+                          </a>
+                        ) : null
+                      }
+                    />
+                    <Row label="Ciudad" value={lead.contact.ciudad} />
+                  </>
+                ) : (
+                  <p className="py-2 text-sm text-gray-400">Sin contacto asociado</p>
+                )}
+                <Row label="Origen" value={lead.origen_principal} />
+                <LeadAttributionField leadId={lead.id} />
+                <LeadOutcomeField leadId={lead.id} name={displayName} />
+                {lead.valor != null && (
                   <Row
-                    label="Email"
+                    label="Con IVA (21%)"
                     value={
-                      lead.contact.email ? (
-                        <a
-                          href={`mailto:${lead.contact.email}`}
-                          className="hover:underline text-blue-600"
-                        >
-                          {lead.contact.email}
-                        </a>
-                      ) : null
+                      <span className="text-gray-500">
+                        {(lead.valor * 1.21).toLocaleString('es-ES', { maximumFractionDigits: 0 })} €
+                      </span>
                     }
                   />
+                )}
+                <Row label="Actualizado" value={new Date(lead.updated_at).toLocaleDateString('es-ES')} />
+                {bundle.proyecto && (
                   <Row
-                    label="Teléfono"
+                    label="Proyecto"
                     value={
-                      lead.contact.telefono ? (
-                        <a href={`tel:${lead.contact.telefono}`} className="hover:underline">
-                          {lead.contact.telefono}
-                        </a>
-                      ) : null
+                      <Link href={bundle.proyecto.href} className="text-blue-600 hover:underline">
+                        {bundle.proyecto.name}
+                      </Link>
                     }
                   />
-                  <Row label="Ciudad" value={lead.contact.ciudad} />
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400 py-4 text-center">Sin contacto asociado</p>
-              )}
-            </CardContent>
-          </Card>
+                )}
+              </CardContent>
+            </Card>
 
-          <Card className="shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                <ClipboardList className="h-4 w-4" />
-                Datos del lead
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Row
-                label="Estado"
-                value={
-                  <Badge
-                    className={`border text-xs ${estadoBadgeClass(lead.estado)}`}
-                  >
-                    {estadoLabel(lead.estado)}
-                  </Badge>
-                }
-              />
-              <Row
-                label="Ingreso venta"
-                value={
-                  lead.valor != null ? (
-                    <span className="font-semibold">
-                      {lead.valor.toLocaleString('es-ES', { minimumFractionDigits: 0 })} €
-                    </span>
-                  ) : null
-                }
-              />
-              {lead.valor != null && (
-                <Row
-                  label="Con IVA (21%)"
-                  value={
-                    <span className="text-gray-500">
-                      {(lead.valor * 1.21).toLocaleString('es-ES', { minimumFractionDigits: 0 })} €
-                    </span>
-                  }
-                />
-              )}
-              <Row
-                label="Prioridad"
-                value={
-                  lead.prioridad ? (
-                    <Badge className={`text-xs ${prioridadColors[lead.prioridad] || ''}`}>
-                      {lead.prioridad.charAt(0).toUpperCase() + lead.prioridad.slice(1)}
-                    </Badge>
-                  ) : null
-                }
-              />
-              <Row label="Origen" value={lead.origen_principal} />
-              <LeadAttributionField leadId={lead.id} />
-              <LeadOutcomeField leadId={lead.id} name={lead.contact?.nombre || lead.contact?.email || `Lead #${lead.id}`} />
-              <Row
-                label="Creado"
-                value={new Date(lead.created_at).toLocaleDateString('es-ES')}
-              />
-              <Row
-                label="Actualizado"
-                value={new Date(lead.updated_at).toLocaleDateString('es-ES')}
-              />
-              {bundle.proyecto && (
-                <Row
-                  label="Proyecto"
-                  value={
-                    <Link href={bundle.proyecto.href} className="text-blue-600 hover:underline">
-                      {bundle.proyecto.name}
-                    </Link>
-                  }
-                />
-              )}
-            </CardContent>
-          </Card>
+            <LeadArchivos leadId={lead.id} />
+
+            {metaAds && <MetaAdsAttributionCard data={metaAds} />}
+          </aside>
         </div>
-
-        {metaAds && <MetaAdsAttributionCard data={metaAds} />}
-
-        <LeadContextEditor leadId={lead.id} initial={lead.notas || ''} />
-
-        {(projectCtx?.onboarding_notes ||
-          projectCtx?.onboarding_summary ||
-          projectCtx?.last_meeting_summary ||
-          projectCtx?.retention_excerpt) && (
-          <Card className="shadow-sm border-gray-200">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                <FileText className="h-4 w-4" />
-                Contexto de proyecto / reuniones
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-gray-700">
-              {projectCtx?.onboarding_summary && (
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
-                    Resumen onboarding
-                  </p>
-                  <p className="leading-relaxed whitespace-pre-wrap">{projectCtx.onboarding_summary}</p>
-                </div>
-              )}
-              {projectCtx?.onboarding_notes && (
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
-                    Notas onboarding
-                  </p>
-                  <p className="leading-relaxed whitespace-pre-wrap">{projectCtx.onboarding_notes}</p>
-                </div>
-              )}
-              {projectCtx?.last_meeting_summary && (
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
-                    Última reunión
-                    {projectCtx.last_meeting_title ? ` · ${projectCtx.last_meeting_title}` : ''}
-                  </p>
-                  <p className="leading-relaxed whitespace-pre-wrap">
-                    {projectCtx.last_meeting_summary}
-                  </p>
-                </div>
-              )}
-              {projectCtx?.retention_excerpt && (
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">
-                    Retención
-                  </p>
-                  <p className="leading-relaxed whitespace-pre-wrap">{projectCtx.retention_excerpt}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        <CrmActivityTimeline
-          contactId={lead.contact?.id ?? null}
-          leadId={lead.id}
-          derived={bundle.timeline}
-          title="Historial del lead"
-          subtitle="Entrada, reuniones, documentos, onboarding y notas manuales"
-        />
-
-        <LeadMeetingsPanel leadId={lead.id} />
-
-        {lead.valor == null && !hasConfig && (
-          <div className="rounded-2xl border border-dashed border-gray-200 p-6 text-center">
-            <p className="text-sm text-gray-400 mb-3">
-              Todavía no hay ningún coste de proyecto configurado
-            </p>
-          </div>
-        )}
       </div>
     </Layout>
   )

@@ -11,7 +11,6 @@ import {
   Megaphone,
   ChevronDown,
   ChevronRight,
-  PackageCheck,
   HeartHandshake,
   Bot,
   FolderKanban,
@@ -69,6 +68,7 @@ const NAV: NavItem[] = [
     children: [
       { href: '/leads', label: 'Listado' },
       { href: '/leads/reuniones', label: 'Reuniones' },
+      { href: '/demos', label: 'Demos', roles: ['admin'] },
     ],
   },
   {
@@ -100,20 +100,9 @@ const NAV: NavItem[] = [
     ],
   },
   {
-    href: '/onboarding',
-    label: 'Onboarding',
-    badge: 'ENG 2',
-    icon: PackageCheck,
-    roles: ['admin', 'project_manager'],
-    children: [
-      { href: '/onboarding', label: 'Personas' },
-      { href: '/demos', label: 'Demos', roles: ['admin'] },
-    ],
-  },
-  {
     href: '/gestion-proyecto',
     label: 'Proyectos',
-    badge: 'ENG 3',
+    badge: 'ENG 2',
     icon: FolderKanban,
     roles: ['admin', 'developer', 'project_manager'],
     children: [
@@ -123,7 +112,7 @@ const NAV: NavItem[] = [
   {
     href: '/retencion',
     label: 'Retención',
-    badge: 'ENG 4',
+    badge: 'ENG 3',
     icon: HeartHandshake,
     roles: ['admin', 'developer', 'project_manager'],
     children: [
@@ -239,13 +228,11 @@ export default function Sidebar({
     if (!showLabels && item.children) {
       // Colapsado: ir al destino por defecto
       if (item.href === '/marketing') go('/marketing?tab=global')
-      else if (item.href === '/onboarding') go('/onboarding')
       else go(item.href)
       return
     }
     setOpen((prev) => ({ ...prev, [item.href]: true }))
     if (item.href === '/marketing') go('/marketing?tab=global')
-    else if (item.href === '/onboarding') go('/onboarding')
     else if (item.href === '/retencion') go('/retencion')
     else if (item.href === '/gestion-proyecto') go('/gestion-proyecto')
     else if (item.href === '/finances') go('/finances')

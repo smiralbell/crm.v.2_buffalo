@@ -11,14 +11,13 @@ export const ARTICLES_INICIO: HelpArticle[] = [
     tags: ['engranajes', 'ENG', 'negocio', 'flujo', 'buffalo'],
     body: `# Modelo de negocio Buffalo
 
-Buffalo vende proyectos de IA (agentes de voz/chat, dashboards, automatización, lead gen, GEO/SEO). El CRM organiza el recorrido del cliente en **cuatro engranajes** visibles en el menú lateral (admin):
+Buffalo vende proyectos de IA (agentes de voz/chat, dashboards, automatización, lead gen, GEO/SEO). El CRM organiza el recorrido del cliente en **tres engranajes** visibles en el menú lateral (admin):
 
 | Badge | Área | Qué significa |
 |-------|------|---------------|
 | **ENG 1** | Marketing | Captación: web, cold call, Meta Ads, Google Ads |
-| **ENG 2** | Onboarding | Configurar el proyecto del cliente, propuesta/contrato/factura y **poner en marcha** |
-| **ENG 3** | Proyectos | Ejecución interna: tareas, developers, tickets (solo proyectos Buffalo en marcha) |
-| **ENG 4** | Retención | Clientes con **mensualidad** + informes y KPIs de mantenimiento |
+| **ENG 2** | Proyectos | Ejecución interna: tareas, developers, tickets (solo proyectos Buffalo en marcha) |
+| **ENG 3** | Retención | Clientes con **mensualidad** + informes y KPIs de mantenimiento |
 
 ## Cadena de verdad (imprescindible)
 
@@ -100,9 +99,8 @@ El sidebar se filtra por rol. Al pasar el ratón (desktop) se expande y empuja e
 - **Finanzas** → Resumen, Facturas, Recurrentes
 - **Pipelines** → \`/pipelines\`
 - **Marketing (ENG 1)** → tabs global / web / email / coldcalling / meta / google
-- **Onboarding (ENG 2)** → Personas (tabla con ficha por persona), Demos
-- **Proyectos (ENG 3)** → Abiertos, Tickets
-- **Retención (ENG 4)** → Buffalo con mensualidad
+- **Proyectos (ENG 2)** → Abiertos, Tickets
+- **Retención (ENG 3)** → Buffalo con mensualidad
 - **Calendario**
 - Pie: tema, **Usuarios**, cerrar sesión, **Ayuda** (?)
 
