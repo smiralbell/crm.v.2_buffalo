@@ -39,6 +39,8 @@ interface Stats {
   invoices_pending_draft: number
 }
 
+const fmtHours = (n: number) => n.toLocaleString('es-ES', { maximumFractionDigits: 1 })
+
 const fmt = (n: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
 
@@ -60,6 +62,7 @@ export default function DeveloperDashboardPage() {
   const { user } = useAuth()
   const [stats, setStats] = useState<Stats | null>(null)
   const [charts, setCharts] = useState<Charts | null>(null)
+  const [myHours, setMyHours] = useState<{ week: number; month: number } | null>(null)
   const [displayName, setDisplayName] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -68,6 +71,7 @@ export default function DeveloperDashboardPage() {
       .then((r) => r.json())
       .then((d) => {
         setStats(d.stats || null)
+        setMyHours(d.hours || null)
         setCharts(d.charts || null)
         const name = d.user?.name || user?.name || user?.email?.split('@')[0] || ''
         setDisplayName(developerFirstName(name, d.user?.email || user?.email))
@@ -156,22 +160,26 @@ export default function DeveloperDashboardPage() {
               <div className="rounded-2xl border border-gray-200 bg-white p-6">
                 <div className="flex items-center gap-2 mb-4">
                   <Clock className="h-4 w-4 text-gray-400" />
-                  <h2 className="text-sm font-semibold text-gray-900">Horas estimadas</h2>
+                  <h2 className="text-sm font-semibold text-gray-900">Tus horas</h2>
+                  <Link href="/tareas/horas" className="ml-auto text-[11px] font-medium text-gray-500 hover:text-gray-900">
+                    Ver detalle
+                  </Link>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-gray-500">En tareas abiertas</p>
+                    <p className="text-xs text-gray-500">Esta semana</p>
                     <p className="text-2xl font-bold text-gray-900 mt-1">
-                      {stats.estimated_hours_open}h
+                      {fmtHours(myHours?.week ?? 0)}h
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">En tareas hechas</p>
+                    <p className="text-xs text-gray-500">Este mes</p>
                     <p className="text-2xl font-bold text-gray-900 mt-1">
-                      {stats.estimated_hours_done}h
+                      {fmtHours(myHours?.month ?? 0)}h
                     </p>
                   </div>
                 </div>
+                <p className="mt-3 text-[11px] text-gray-400">Se calculan solas con el tiempo de tus tareas en curso.</p>
               </div>
 
               <Link
@@ -201,7 +209,7 @@ export default function DeveloperDashboardPage() {
                   </span>
                 </div>
                 <p className="text-xs text-gray-400 mb-4">
-                  Horas estimadas de tareas completadas cada día
+                  Horas trabajadas cada día (tiempo en curso)
                 </p>
                 <DeveloperWorkTimelineChart data={charts?.daily_hours ?? []} />
               </div>
@@ -217,7 +225,7 @@ export default function DeveloperDashboardPage() {
                   </Link>
                 </div>
                 <p className="text-xs text-gray-400 mb-4">
-                  Total de horas en tareas hechas por proyecto asignado
+                  Horas trabajadas por proyecto en los últimos 30 días
                 </p>
                 <DeveloperHoursByProjectChart data={charts?.hours_by_project ?? []} />
               </div>

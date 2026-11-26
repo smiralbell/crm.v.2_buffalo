@@ -1,5 +1,6 @@
 import { listPersonalAttachments } from '@/lib/tareas/attachments'
 import { prisma } from '@/lib/prisma'
+import { HOURS_SCHEMA_STATEMENTS } from '@/lib/horas/schema'
 import { serializeTaskRow, STALE_EXTENSION_DAYS } from '@/lib/gestion-proyecto/task-stale'
 import type { TaskPriority, TaskStatus } from '@/lib/gestion-proyecto/types'
 import { normalizeSubtasks } from '@/lib/subtasks'
@@ -45,6 +46,8 @@ export function ensureUserTasksSchema(): Promise<void> {
           `ALTER TABLE IF EXISTS ${table} ADD COLUMN IF NOT EXISTS response TEXT, ADD COLUMN IF NOT EXISTS response_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS response_by TEXT`
         )
       }
+      // Por si la tabla se acaba de crear: el registro de horas necesita su trigger
+      for (const sql of HOURS_SCHEMA_STATEMENTS) await prisma.$executeRawUnsafe(sql)
     })().catch((e) => {
       schemaReady = null
       throw e

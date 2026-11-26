@@ -6,6 +6,7 @@ import ProjectTaskBoard, {
   type TasksView,
 } from '@/components/gestion-proyecto/ProjectTaskBoard'
 import ProjectDashboard from '@/components/gestion-proyecto/ProjectDashboard'
+import HoursConfirmDialog, { type HoursConfirmTarget } from '@/components/tareas/HoursConfirmDialog'
 import ProjectValorInfoDialog from '@/components/gestion-proyecto/ProjectValorInfoDialog'
 import { ArrowLeft, AlertCircle, CalendarDays, GanttChart, Kanban, KeyRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -50,6 +51,9 @@ export default function GestionProyectoDetailPage() {
     const v = Array.isArray(urlView) ? urlView[0] : urlView
     if (v === 'calendar' || v === 'gantt' || v === 'board') setTasksView(v)
   }, [router.isReady, urlTab, urlView])
+
+  const [hoursTarget, setHoursTarget] = useState<HoursConfirmTarget | null>(null)
+  const closeHours = useCallback(() => setHoursTarget(null), [])
 
   const load = useCallback(async () => {
     if (!id || typeof id !== 'string') return
@@ -196,14 +200,18 @@ export default function GestionProyectoDetailPage() {
           activeTab === 'dashboard' ? (
             <ProjectDashboard projectId={proyecto.id} />
           ) : activeTab === 'tareas' ? (
-            <ProjectTaskBoard
-              projectId={proyecto.id}
-              tasks={tasks}
-              onChange={setTasks}
-              view={tasksView}
-              onViewChange={switchTasksView}
-              hideViewSwitcher
-            />
+            <>
+              <HoursConfirmDialog target={hoursTarget} onClose={closeHours} />
+              <ProjectTaskBoard
+                projectId={proyecto.id}
+                tasks={tasks}
+                onChange={setTasks}
+                view={tasksView}
+                onViewChange={switchTasksView}
+                hideViewSwitcher
+                onMovedToDone={(task) => setHoursTarget({ id: task.id, title: task.title, source: 'project' })}
+              />
+            </>
           ) : null
         ) : null}
 

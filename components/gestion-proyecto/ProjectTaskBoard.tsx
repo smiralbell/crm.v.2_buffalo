@@ -113,6 +113,8 @@ interface ProjectTaskBoardProps<T extends ProjectTask = ProjectTask> {
   renderDialogBottom?: (task: T) => ReactNode
   /** Botones extra en el pie de la tarea abierta (p. ej. Responder) */
   renderDialogActions?: (task: T) => ReactNode
+  /** Una tarea se ha pasado a «Hecha» (para pedir que se confirmen las horas) */
+  onMovedToDone?: (task: T) => void
   canDelete?: (task: T) => boolean
   /** Si se puede editar título, descripción, prioridad y horas (por defecto, sí) */
   canEdit?: (task: T) => boolean
@@ -166,6 +168,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
   const renderEditExtras = props.renderEditExtras as ((task: ProjectTask) => ReactNode) | undefined
   const renderDialogBottom = props.renderDialogBottom as ((task: ProjectTask) => ReactNode) | undefined
   const renderDialogActions = props.renderDialogActions as ((task: ProjectTask) => ReactNode) | undefined
+  const onMovedToDone = props.onMovedToDone as ((task: ProjectTask) => void) | undefined
   const renderDialogContext = props.renderDialogContext as
     | ((task: ProjectTask) => ReactNode)
     | undefined
@@ -426,6 +429,7 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
       applyChange((list) =>
         list.map((t) => (t.id === data.id ? { ...t, ...data, attachments: t.attachments } : t))
       )
+      if (targetStatus === 'done') onMovedToDone?.({ ...moved, ...data })
       if (viewTask?.id === data.id) {
         setViewTask((v) => (v ? { ...v, ...data, attachments: v.attachments } : v))
       }
@@ -930,27 +934,12 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                 />
               </div>
             )}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700" htmlFor="task_hours">
-                  Horas estimadas
-                </label>
-                <Input
-                  id="task_hours"
-                  type="number"
-                  min="0.5"
-                  step="0.5"
-                  value={estimatedHours}
-                  onChange={(e) => setEstimatedHours(e.target.value)}
-                  placeholder="Ej. 4"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-gray-700" htmlFor="task_due">
-                  Fecha de finalización
-                </label>
-                <Input id="task_due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-              </div>
+            {/* Sin horas estimadas: las horas reales se calculan solas con el tiempo en curso */}
+            <div className="space-y-1.5 sm:max-w-[50%]">
+              <label className="text-sm font-medium text-gray-700" htmlFor="task_due">
+                Fecha de finalización
+              </label>
+              <Input id="task_due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-gray-700" htmlFor="task_title">
@@ -1121,16 +1110,6 @@ export default function ProjectTaskBoard<T extends ProjectTask = ProjectTask>(
                             </option>
                           ))}
                         </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-gray-700" htmlFor="edit_task_hours">Horas estimadas</label>
-                        <Input
-                          id="edit_task_hours"
-                          inputMode="decimal"
-                          value={editForm.hours}
-                          placeholder="Ej.: 2"
-                          onChange={(e) => setEditForm((f) => ({ ...f, hours: e.target.value }))}
-                        />
                       </div>
                     </div>
                     <div className="space-y-1.5">

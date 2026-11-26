@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { AlertCircle, ExternalLink, FolderKanban, ListTodo, Loader2, MessageSquareReply } from 'lucide-react'
+import { AlertCircle, Clock, ExternalLink, FolderKanban, ListTodo, Loader2, MessageSquareReply } from 'lucide-react'
 import ProjectTaskBoard, { VIEW_TABS, type TasksView } from '@/components/gestion-proyecto/ProjectTaskBoard'
 import {
   jsonInit,
@@ -10,6 +10,7 @@ import {
   type TaskCreateTarget,
 } from '@/components/gestion-proyecto/task-board-client'
 import TaskFiltersBar from '@/components/tareas/TaskFiltersBar'
+import HoursConfirmDialog, { type HoursConfirmTarget } from '@/components/tareas/HoursConfirmDialog'
 import { PeopleFilter, PeopleSummary } from '@/components/tareas/PeopleFilter'
 import {
   buildNameIndex,
@@ -88,6 +89,9 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
   const [selectedPeople, setSelectedPeople] = useState<PersonKey[]>([])
   /** Tarea en la que se está escribiendo la respuesta (botón Responder del pie) */
   const [replyingId, setReplyingId] = useState<string | null>(null)
+  /** Tarea recién pasada a «Hecha»: se piden las horas */
+  const [hoursTarget, setHoursTarget] = useState<HoursConfirmTarget | null>(null)
+  const closeHours = useCallback(() => setHoursTarget(null), [])
   const restored = useRef(false)
   /** Dueño de las preferencias leídas; se compara con quien mira al cargar */
   const savedOwner = useRef<number | null | undefined>(undefined)
@@ -418,6 +422,15 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
           ) : undefined
         }
         trailing={
+          <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/tareas/horas"
+            title="Horas trabajadas por persona"
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Clock className="h-4 w-4" />
+            <span className="hidden md:inline">Horas</span>
+          </Link>
           <div className="inline-flex h-10 shrink-0 rounded-lg border border-gray-200 bg-gray-50 p-0.5">
             {VIEW_TABS.map((tab) => {
               const Icon = tab.icon
@@ -438,6 +451,7 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
                 </button>
               )
             })}
+          </div>
           </div>
         }
       />
@@ -466,10 +480,12 @@ export default function TasksWorkspace({ scopeUserId, storageKey }: Props) {
           {adminOverview && (
             <PeopleSummary options={personOptions} selected={selectedPeople} onChange={setSelectedPeople} />
           )}
+          <HoursConfirmDialog target={hoursTarget} onClose={closeHours} />
           <ProjectTaskBoard<WorkTask>
             tasks={visible}
             onChange={onBoardChange}
             client={client}
+            onMovedToDone={(task) => setHoursTarget({ id: task.id, title: task.title, source: task.source })}
             view={view}
             onViewChange={setView}
             hideViewSwitcher

@@ -4,7 +4,7 @@ import { CORE_SCHEMA_STATEMENTS } from './core-schema'
 describe('esquema automático', () => {
   it('todas las sentencias son idempotentes (se pueden repetir sin error)', () => {
     for (const sql of CORE_SCHEMA_STATEMENTS) {
-      expect(sql, sql).toMatch(/IF NOT EXISTS/)
+      expect(sql, sql).toMatch(/IF NOT EXISTS|NOT EXISTS|CREATE OR REPLACE/)
     }
   })
 

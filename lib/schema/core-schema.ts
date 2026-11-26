@@ -1,5 +1,6 @@
 // Usa el cliente de Prisma sin envolver (getPrismaClient) para no meter pg en el bundle del navegador.
 import { getPrismaClient } from '@/lib/prisma'
+import { HOURS_SCHEMA_STATEMENTS } from '@/lib/horas/schema'
 
 /**
  * Cambios de esquema que la aplicación necesita en la base de datos.
@@ -28,6 +29,8 @@ export const CORE_SCHEMA_STATEMENTS: string[] = [
      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
    )`,
   `CREATE INDEX IF NOT EXISTS idx_persona_documents_lead ON persona_documents (lead_id, created_at DESC)`,
+  // Tareas: registro automático de horas (tramos en «En curso»).
+  ...HOURS_SCHEMA_STATEMENTS,
 ]
 
 let pending: Promise<void> | null = null

@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { getAccessibleProjectIds } from '@/lib/project-access'
 import type { AuthUser } from '@/lib/auth'
 import { taskEstimatedHours } from '@/lib/developer/task-hours'
+import { getHoursReport } from '@/lib/horas/store'
 
 export interface DeveloperDailyHoursPoint {
   date: string
@@ -139,20 +140,28 @@ export async function getDeveloperWorkCharts(user: AuthUser): Promise<DeveloperW
       `
     }
 
+    // Horas reales (registro automático del tiempo en curso), no estimadas
+    const now = new Date()
+    const report = await getHoursReport(new Date(now.getTime() - TIMELINE_DAYS * DAY_MS), now, { onlyUserId: user.id })
+    const me = report.people[0]
+    const tasksByDay = new Map(
+      dailyRows.map((r) => [r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10), Number(r.tasks)])
+    )
+    const doneByProject = new Map(projectRows.map((r) => [r.project_id, Number(r.tasks_done)]))
+    const days = Array.from(new Set([...Object.keys(me?.by_day ?? {}), ...Array.from(tasksByDay.keys())]))
+
     return {
       daily_hours: buildDailySeries(
-        dailyRows.map((r) => ({
-          day: r.day,
-          hours: Number(r.hours),
-          tasks: Number(r.tasks),
-        }))
+        days.map((day) => ({ day, hours: me?.by_day[day] ?? 0, tasks: tasksByDay.get(day) ?? 0 }))
       ),
-      hours_by_project: projectRows.map((r) => ({
-        project_id: r.project_id,
-        project_name: r.project_name,
-        hours: Math.round(Number(r.hours) * 10) / 10,
-        tasks_done: Number(r.tasks_done),
-      })),
+      hours_by_project: (me?.by_project ?? [])
+        .filter((p) => p.project_id)
+        .map((p) => ({
+          project_id: p.project_id as string,
+          project_name: p.name,
+          hours: p.hours,
+          tasks_done: doneByProject.get(p.project_id as string) ?? 0,
+        })),
     }
   } catch {
     return EMPTY_CHARTS
