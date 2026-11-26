@@ -32,7 +32,6 @@ import {
 import { LeadOutcomeField } from '@/components/marketing/LeadOutcome'
 import { LeadAttributionField } from '@/components/marketing/LeadAttribution'
 import EditLeadDialog from '@/components/EditLeadDialog'
-import LeadMeetingsPanel from '@/components/fireflies/LeadMeetingsPanel'
 import CrmActivityTimeline from '@/components/crm/CrmActivityTimeline'
 import LeadContextPanel, { exportLeadContext } from '@/components/leads/LeadContextPanel'
 import LeadArchivos from '@/components/leads/LeadArchivos'
@@ -461,8 +460,6 @@ export default function LeadDetail({ lead, bundle, metaAds }: LeadDetailProps) {
               title="Historial"
               subtitle="Entrada, reuniones, correos, documentos y notas"
             />
-
-            <LeadMeetingsPanel leadId={lead.id} />
           </div>
 
           <aside className="min-w-0 space-y-5">

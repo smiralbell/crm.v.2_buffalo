@@ -15,6 +15,8 @@ import {
   Bell,
   Check,
   Mail,
+  ExternalLink,
+  Video,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -30,6 +32,44 @@ type TimelineItem = {
   rawId?: string
   dueAt?: string | null
   resolvedAt?: string | null
+  meta?: Record<string, unknown> | null
+}
+
+/** Quita el formato markdown que trae el resumen de Fireflies. */
+function plain(text: string): string {
+  return text.replace(/\*\*/g, '').replace(/^#+\s*/gm, '').trim()
+}
+
+/**
+ * Una reunión (Fireflies o presencial) partida en lo que se enseña:
+ * los puntos clave, el resumen completo y la transcripción (enlace o texto).
+ */
+function meetingParts(item: TimelineItem): {
+  title: string
+  highlights: string[]
+  summary: string
+  transcriptUrl: string | null
+  transcriptText: string | null
+} {
+  const body = item.detail || ''
+  const cut = body.search(/\n*Transcripci[oó]n:\s*/i)
+  const summary = plain(cut >= 0 ? body.slice(0, cut) : body)
+  const rest = cut >= 0 ? body.slice(cut).replace(/^\n*Transcripci[oó]n:\s*/i, '').trim() : ''
+  const metaUrl = typeof item.meta?.transcript_url === 'string' ? (item.meta.transcript_url as string) : null
+  const restIsUrl = /^https?:\/\/\S+$/.test(rest)
+  const highlights = summary
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => /^[-•*]\s+/.test(l))
+    .map((l) => l.replace(/^[-•*]\s+/, ''))
+    .slice(0, 3)
+  return {
+    title: item.title.replace(/^Reuni[oó]n Fireflies:\s*/i, '').trim() || item.title,
+    highlights: highlights.length ? highlights : summary ? [summary.split('\n')[0]] : [],
+    summary,
+    transcriptUrl: metaUrl || (restIsUrl ? rest : null),
+    transcriptText: rest && !restIsUrl ? rest : null,
+  }
 }
 
 type Props = {
@@ -143,6 +183,7 @@ export default function CrmActivityTimeline({
           created_at: string
           due_at?: string | null
           resolved_at?: string | null
+          meta?: Record<string, unknown> | null
         }) => ({
           id: `stored-${it.id}`,
           kind: it.kind,
@@ -155,6 +196,7 @@ export default function CrmActivityTimeline({
           rawId: it.id,
           dueAt: it.due_at ?? null,
           resolvedAt: it.resolved_at ?? null,
+          meta: it.meta ?? null,
         })
       )
       setStored(items)
@@ -172,8 +214,19 @@ export default function CrmActivityTimeline({
 
   const merged = useMemo(() => {
     const map = new Map<string, TimelineItem>()
-    for (const d of derived) map.set(d.id, { ...d, source: d.source || 'derived' })
-    for (const s of stored) map.set(s.id, s)
+    const derivedById = new Map(derived.map((d) => [d.id, d]))
+    const covered = new Set<string>()
+    for (const s of stored) {
+      const rec = s.meta?.meeting_recording_id
+      if (typeof rec === 'string' && derivedById.has(`ff-${rec}`)) covered.add(`ff-${rec}`)
+    }
+    for (const d of derived) if (!covered.has(d.id)) map.set(d.id, { ...d, source: d.source || 'derived' })
+    for (const s of stored) {
+      const rec = s.meta?.meeting_recording_id
+      const twin = typeof rec === 'string' ? derivedById.get(`ff-${rec}`) : undefined
+      // Con la hora real de la reunión, no la de cuando llegó el resumen
+      map.set(s.id, twin ? { ...s, at: twin.at } : s)
+    }
     return Array.from(map.values()).sort(
       (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
     )
@@ -390,7 +443,14 @@ export default function CrmActivityTimeline({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <p className="text-sm font-medium text-gray-900 leading-snug">{item.title}</p>
+                      {item.kind === 'meeting' && item.source === 'stored' && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                          <Video className="h-3 w-3" /> {item.meta?.presencial ? 'Presencial' : 'Reunión'}
+                        </span>
+                      )}
+                      <p className="text-sm font-medium text-gray-900 leading-snug">
+                        {item.kind === 'meeting' && item.source === 'stored' ? meetingParts(item).title : item.title}
+                      </p>
                       {isOpenAlert && (
                         <span className="rounded-full bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                           Alerta
@@ -402,7 +462,62 @@ export default function CrmActivityTimeline({
                         </span>
                       )}
                     </div>
-                    {item.detail && (
+                    {item.kind === 'meeting' && item.source === 'stored' && item.detail ? (
+                      (() => {
+                        const m = meetingParts(item)
+                        const open = expanded.has(item.id)
+                        const showT = expanded.has(`${item.id}:t`)
+                        return (
+                          <div className="mt-1.5 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+                            {m.highlights.length > 0 && !open && (
+                              <ul className="space-y-0.5">
+                                {m.highlights.map((h) => (
+                                  <li key={h} className="line-clamp-1 text-xs text-gray-600">
+                                    {h}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {open && (
+                              <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-700">{m.summary}</p>
+                            )}
+                            {showT && m.transcriptText && (
+                              <p className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap border-t border-gray-100 pt-2 text-xs leading-relaxed text-gray-600">
+                                {m.transcriptText}
+                              </p>
+                            )}
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => toggleExpanded(item.id)}
+                                className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                              >
+                                {open ? 'Ocultar resumen' : 'Ver resumen'}
+                              </button>
+                              {m.transcriptUrl && (
+                                <a
+                                  href={m.transcriptUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                                >
+                                  Transcripción <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                              {m.transcriptText && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleExpanded(`${item.id}:t`)}
+                                  className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                                >
+                                  {showT ? 'Ocultar transcripción' : 'Ver transcripción'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })()
+                    ) : item.detail && (
                       <p
                         className={cn(
                           'text-xs text-gray-600 mt-0.5 leading-snug whitespace-pre-wrap',

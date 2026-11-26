@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { canSeeClientPrices } from '@/lib/price-visibility'
 import { collectLeadContext } from '@/lib/leads/context-sources'
 import { autoRelateInvoices } from '@/lib/leads/facturas'
+import { rematchPendingMeetings } from '@/lib/integrations/fireflies/sync'
 import { isSessionError, requireLeadPage } from '@/lib/leads/lead-api-guard'
 
 /** GET: todas las fuentes de contexto del lead (para el mapa de la ficha). */
@@ -12,6 +13,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
     const includePrices = canSeeClientPrices(ctx.user.role)
     if (includePrices) await autoRelateInvoices(ctx.leadId).catch(() => undefined)
+    // Reuniones de Fireflies que siguieran pendientes de vincular (como mucho cada 5 min)
+    await rematchPendingMeetings().catch(() => undefined)
     const data = await collectLeadContext(ctx.leadId, { includePrices })
     if (!data) return res.status(404).json({ error: 'Lead no encontrado' })
     return res.json(data)
