@@ -18,6 +18,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!eligible.ok) return res.status(eligible.status).json({ error: eligible.error })
 
     if (req.method === 'DELETE') {
+      // Los developers pueden marcarlas como solucionadas, pero no eliminarlas
+      if (user.role === 'developer') {
+        return res.status(403).json({ error: 'Los developers no pueden eliminar incidencias' })
+      }
       const ok = await deleteIncident(proyectoId, incidentId)
       if (!ok) return res.status(404).json({ error: 'Incidencia no encontrada' })
       return res.status(200).json({ ok: true })

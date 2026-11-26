@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Download, AlertTriangle, CheckCircle2, Copy, Check, ChevronDown, Trash2 } from 'lucide-react'
 import { parseIncidentText } from '@/lib/retencion/incident-parse'
+import { useAuth } from '@/components/AuthContext'
 import {
   Dialog,
   DialogContent,
@@ -38,6 +39,9 @@ export default function IncidentsPanel({
   webhookOpen: boolean
   onWebhookOpenChange: (open: boolean) => void
 }) {
+  const { user } = useAuth()
+  /** Los developers no pueden eliminar incidencias */
+  const canDelete = Boolean(user) && user?.role !== 'developer'
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [webhookUrl, setWebhookUrl] = useState('')
@@ -297,15 +301,17 @@ export default function IncidentsPanel({
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   {busy(inc.id) ? 'Guardando…' : 'Marcar solucionada'}
                 </button>
-                <button
-                  type="button"
-                  disabled={busy(inc.id)}
-                  onClick={() => remove(inc)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-red-200 hover:text-red-700 disabled:opacity-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Eliminar
-                </button>
+                {canDelete && (
+                  <button
+                    type="button"
+                    disabled={busy(inc.id)}
+                    onClick={() => remove(inc)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-red-200 hover:text-red-700 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Eliminar
+                  </button>
+                )}
               </IncidentCard>
             ))}
           </section>
@@ -331,15 +337,17 @@ export default function IncidentsPanel({
               ) : (
                 solved.map((inc) => (
                   <IncidentCard key={inc.id} inc={inc} solved>
-                    <button
-                      type="button"
-                      disabled={busy(inc.id)}
-                      onClick={() => remove(inc)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-red-200 hover:text-red-700 disabled:opacity-50"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Eliminar
-                    </button>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        disabled={busy(inc.id)}
+                        onClick={() => remove(inc)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-red-200 hover:text-red-700 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Eliminar
+                      </button>
+                    )}
                   </IncidentCard>
                 ))
               ))}
@@ -351,7 +359,7 @@ export default function IncidentsPanel({
 }
 
 /** Una incidencia legible: título, ruta, veces, fechas; el detalle técnico se despliega. */
-function IncidentCard({ inc, solved = false, children }: { inc: Incident; solved?: boolean; children: React.ReactNode }) {
+function IncidentCard({ inc, solved = false, children }: { inc: Incident; solved?: boolean; children?: React.ReactNode }) {
   const [openDetail, setOpenDetail] = useState(false)
   const p = parseIncidentText(inc.error_text)
   const hasDetail = p.stack.length > 0 || p.context.length > 0 || !!p.contextRaw
@@ -416,7 +424,7 @@ function IncidentCard({ inc, solved = false, children }: { inc: Incident; solved
             </pre>
           )}
 
-          <div className="flex flex-wrap gap-2 pt-1">{children}</div>
+          {children ? <div className="flex flex-wrap gap-2 pt-1">{children}</div> : null}
         </div>
       </div>
     </article>
