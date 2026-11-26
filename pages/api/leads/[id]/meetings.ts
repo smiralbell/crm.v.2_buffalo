@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireAuthAPI } from '@/lib/auth'
 import { listMeetingsForLead, toMeetingDto } from '@/lib/integrations/fireflies/store'
+import { rematchPendingMeetings } from '@/lib/integrations/fireflies/sync'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -19,6 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    // Por si alguna reunión de este cliente seguía pendiente de vincular
+    await rematchPendingMeetings().catch(() => undefined)
     const rows = await listMeetingsForLead(leadId)
     return res.status(200).json({
       ok: true,

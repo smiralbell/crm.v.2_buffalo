@@ -246,30 +246,51 @@ export function pickActionItems(summary: FirefliesSummary | null | undefined): s
   return s || null
 }
 
+const EMAIL_IN_TEXT = /[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi
+
 export function extractParticipants(t: FirefliesTranscript): FirefliesParticipant[] {
   const byEmail = new Map<string, FirefliesParticipant>()
-  const add = (email: string | null | undefined, name: string | null | undefined) => {
-    const e = email?.trim().toLowerCase() || null
+  const put = (email: string | null, name: string | null) => {
+    if (email) {
+      const prev = byEmail.get(email)
+      byEmail.set(email, { email, name: name || prev?.name || null })
+    } else if (name) {
+      const k = `name:${name.toLowerCase()}`
+      if (!byEmail.has(k)) byEmail.set(k, { email: null, name })
+    }
+  }
+  /**
+   * Un campo puede traer uno o varios correos (Fireflies a veces junta los invitados en
+   * un solo texto: «a@x.com,b@y.com» o «Ana <a@x.com>; Luis <l@y.com>»): se sacan todos.
+   */
+  const add = (value: string | null | undefined, name: string | null | undefined) => {
+    const raw = value?.trim() || ''
     const n = name?.trim() || null
-    if (!e && !n) return
-    if (e) {
-      const prev = byEmail.get(e)
-      byEmail.set(e, { email: e, name: n || prev?.name || null })
-    } else if (n) {
-      byEmail.set(`name:${n.toLowerCase()}`, { email: null, name: n })
+    const emails = Array.from(new Set((raw.match(EMAIL_IN_TEXT) || []).map((e) => e.toLowerCase())))
+    if (!emails.length) {
+      put(null, n || (raw && !raw.includes('@') ? raw : null))
+      return
+    }
+    if (emails.length === 1) {
+      const angleName = raw.includes('<') ? raw.slice(0, raw.indexOf('<')).replace(/["']/g, '').trim() : ''
+      put(emails[0], n || angleName || null)
+      return
+    }
+    for (const part of raw.split(/[,;\n]+/)) {
+      const found = part.match(EMAIL_IN_TEXT)
+      if (!found) continue
+      const angleName = part.includes('<') ? part.slice(0, part.indexOf('<')).replace(/["']/g, '').trim() : ''
+      for (const e of found) put(e.toLowerCase(), angleName || null)
     }
   }
 
+  // Invitados del calendario, participantes, anfitrión y organizador: todos cuentan
   for (const a of t.meeting_attendees || []) {
     add(a.email, a.displayName || a.name)
   }
   for (const p of (t.participants || []) as unknown[]) {
     if (typeof p === 'string') {
-      const angle = p.match(/<([^>]+@[^>]+)>/)
-      add(
-        angle ? angle[1] : p.includes('@') ? p : null,
-        angle ? p.replace(/<[^>]+>/, '').trim() : p.includes('@') ? null : p
-      )
+      add(p, null)
     } else if (p && typeof p === 'object') {
       const row = p as { email?: string; name?: string }
       add(row.email, row.name)

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import type { FirefliesParticipant } from '@/lib/integrations/fireflies/client'
+import { leadsByExtraEmails } from '@/lib/leads/lead-extras'
 
 export type CrmMatchHit = {
   contactId: number
@@ -152,6 +153,26 @@ export async function matchCrmFromParticipants(
       empresa: ct.empresa ?? null,
       nombre: ct.nombre ?? null,
     })
+  }
+
+  // Correos adicionales de un lead (el cliente escribe o se conecta desde otra cuenta)
+  const byExtra = await leadsByExtraEmails(emails).catch(() => [])
+  if (byExtra.length) {
+    const extraContacts = await prisma.contact.findMany({
+      where: { id: { in: byExtra.map((x) => x.contactId) } },
+      select: { id: true, email: true, empresa: true, nombre: true },
+    })
+    for (const x of byExtra) {
+      if (hits.some((h) => h.leadId === x.leadId)) continue
+      const ct = extraContacts.find((c) => c.id === x.contactId)
+      hits.push({
+        contactId: x.contactId,
+        leadId: x.leadId,
+        email: normEmail(ct?.email) || emails[0],
+        empresa: ct?.empresa ?? null,
+        nombre: ct?.nombre ?? null,
+      })
+    }
   }
 
   if (hits.length === 0) {

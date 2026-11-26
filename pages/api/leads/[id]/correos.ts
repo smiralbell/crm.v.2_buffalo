@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { importLeadEmailHistory } from '@/lib/integrations/google/gmail-sync'
+import { rematchPendingMeetings } from '@/lib/integrations/fireflies/sync'
 import {
   addExtraEmail,
   lastEmailImport,
@@ -34,6 +35,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const email = normalizeEmail(String(body.email))
         if (!email) return res.status(400).json({ error: 'Correo no válido' })
         await addExtraEmail(leadId, email, user.email ?? user.name ?? null)
+        // Las reuniones pendientes con ese correo se vinculan ya a este lead
+        await rematchPendingMeetings({ force: true }).catch(() => undefined)
       } else if (!body.importar) {
         return res.status(400).json({ error: 'Falta el correo' })
       }

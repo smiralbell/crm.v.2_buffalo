@@ -140,3 +140,53 @@ export async function syncRecentFirefliesMeetings(limit = 20): Promise<{
     meetings: meetings.map((m) => toMeetingDto(m, false)),
   }
 }
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __buffaloFirefliesRematchAt: number | undefined
+}
+
+const REMATCH_MIN_GAP_MS = 5 * 60_000
+
+/**
+ * Vuelve a intentar vincular las reuniones que quedaron pendientes: con todos los correos
+ * de la reunión (invitados, organizador, anfitrión), releídos de lo que mandó Fireflies, y
+ * con los leads y correos extra que existan ahora. Así una reunión que llegó antes de que
+ * se diera de alta el lead se vincula sola después. No llama a Fireflies.
+ */
+export async function rematchPendingMeetings(opts: { force?: boolean; limit?: number } = {}): Promise<{ checked: number; linked: number }> {
+  const now = Date.now()
+  if (!opts.force && globalThis.__buffaloFirefliesRematchAt && now - globalThis.__buffaloFirefliesRematchAt < REMATCH_MIN_GAP_MS) {
+    return { checked: 0, linked: 0 }
+  }
+  globalThis.__buffaloFirefliesRematchAt = now
+
+  const { prisma } = await import('@/lib/prisma')
+  const rows = await prisma.$queryRawUnsafe<{ id: string; fireflies_id: string; raw_payload: unknown }[]>(
+    `SELECT id::text, fireflies_id, raw_payload FROM meeting_recordings
+      WHERE status = 'pending_match' AND lead_id IS NULL
+      ORDER BY COALESCE(started_at, created_at) DESC
+      LIMIT $1`,
+    Math.min(Math.max(opts.limit ?? 100, 1), 300)
+  )
+  let linked = 0
+  for (const r of rows) {
+    try {
+      const raw = r.raw_payload && typeof r.raw_payload === 'object' ? (r.raw_payload as FirefliesTranscript) : null
+      if (raw) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE meeting_recordings SET participants = $2::jsonb, updated_at = NOW() WHERE id = $1::uuid`,
+          r.id,
+          JSON.stringify(extractParticipants(raw))
+        )
+      }
+      const row = await getMeetingByFirefliesId(r.fireflies_id)
+      if (!row || row.status === 'ignored') continue
+      const routed = await routeFirefliesMeeting(row)
+      if (routed.action === 'contact_ficha') linked += 1
+    } catch (e) {
+      console.warn('[fireflies/rematch]', r.fireflies_id, e instanceof Error ? e.message : e)
+    }
+  }
+  return { checked: rows.length, linked }
+}

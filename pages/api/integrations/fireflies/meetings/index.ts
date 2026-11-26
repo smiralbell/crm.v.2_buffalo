@@ -6,6 +6,7 @@ import {
   toMeetingDto,
 } from '@/lib/integrations/fireflies/store'
 import { isFirefliesConfigured } from '@/lib/integrations/fireflies/client'
+import { rematchPendingMeetings } from '@/lib/integrations/fireflies/sync'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -22,6 +23,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const limit = Number(req.query.limit || 40)
 
   try {
+    // Antes de enseñar «Vincular», se intenta vincular sola cada pendiente (como mucho cada 5 min)
+    await rematchPendingMeetings().catch((e) => console.warn('[fireflies/rematch]', e instanceof Error ? e.message : e))
     const rows = unmatchedOnly
       ? await listUnmatchedMeetings(limit)
       : await listRecentMeetings(limit)
