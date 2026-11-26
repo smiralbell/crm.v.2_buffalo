@@ -1,6 +1,6 @@
 import { GetServerSideProps } from 'next'
 import dynamic from 'next/dynamic'
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { requireAuth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -12,6 +12,7 @@ import { ArrowLeft, MoreVertical, Repeat, Trash2, Upload } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import FinancePeriodFilter, { periodToQuery } from '@/components/finances/FinancePeriodFilter'
+import BankSyncButton from '@/components/finances/BankSyncButton'
 import PaymentConceptGuide from '@/components/finances/PaymentConceptGuide'
 import {
   getDefaultPeriodRange,
@@ -494,6 +495,11 @@ export default function IncomesPage({
     }
   }, [initialDateRange?.start, initialDateRange?.end])
 
+  // Si el banco trae movimientos nuevos, se recargan los ingresos sin perder el periodo
+  const reloadFromBank = useCallback(() => {
+    void router.replace(router.asPath, undefined, { scroll: false })
+  }, [router])
+
   const handlePeriodChange = (range: PeriodRange, _preset: PeriodPresetId) => {
     setDateRange(range)
     const params = periodToQuery(range)
@@ -732,6 +738,7 @@ export default function IncomesPage({
             </Link>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto sm:justify-end">
+            <BankSyncButton onNew={reloadFromBank} />
             <PaymentConceptGuide />
             <FinancePeriodFilter value={dateRange} onChange={handlePeriodChange} />
           </div>

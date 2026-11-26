@@ -6,6 +6,7 @@ import {
   getEnableBankingConfig,
 } from './config'
 import { createEnableBankingJwt, validUntilIso } from './jwt'
+import { psuHeaders } from './psu-context'
 
 export { EnableBankingConfigError }
 
@@ -46,6 +47,8 @@ async function enableBankingRequest<T>(
   const headers: Record<string, string> = {
     Accept: 'application/json',
     Authorization: `Bearer ${token}`,
+    // Con alguien usando el CRM, la consulta no cuenta para el límite diario de PSD2
+    ...psuHeaders(),
     ...(init.headers as Record<string, string> | undefined),
   }
   if (init.body && !headers['Content-Type']) {

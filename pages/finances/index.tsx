@@ -469,21 +469,22 @@ export default function FinancesDashboard({
     }
   }, [router.query.status, refreshConnectionStatus, runSync])
 
-  // Auto-sync al abrir Finanzas si el último sync tiene > ~20h
+  // Al abrir Finanzas se traen los movimientos nuevos del banco (con usuario presente:
+  // no cuenta para el límite diario de PSD2). El servidor no repite si hace < 3 min.
   useEffect(() => {
     if (!bankConnection.connected || syncing) return
     if (router.query.status === 'ok') return // ya sincroniza el efecto de OAuth
     const last = bankConnection.last_synced_at
       ? new Date(bankConnection.last_synced_at).getTime()
       : 0
-    const gapMs = 20 * 60 * 60 * 1000
+    const gapMs = 3 * 60 * 1000
     if (Date.now() - last < gapMs) return
 
     let cancelled = false
     ;(async () => {
       setSyncing(true)
       try {
-        const response = await fetch('/api/bank/sync', { method: 'POST' })
+        const response = await fetch('/api/bank/sync?auto=1', { method: 'POST' })
         const data = await response.json().catch(() => ({}))
         if (cancelled || !response.ok) return
         if (data.inserted > 0) {
