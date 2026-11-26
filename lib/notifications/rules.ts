@@ -127,6 +127,13 @@ export const EVENTS: EventDef[] = [
     filtros: ['prioridad', 'proyectos'],
   },
   {
+    key: 'horas_semana',
+    nombre: 'Horas de la semana',
+    descripcion: 'Los viernes por la tarde: cuántas horas ha trabajado cada persona esa semana',
+    audience: 'socios',
+    filtros: [],
+  },
+  {
     key: 'recordatorio_tarea_socio',
     nombre: 'Recordatorio de tarea',
     descripcion: 'Cada X horas, solo para las tareas que tú pidas, hasta que estén hechas',

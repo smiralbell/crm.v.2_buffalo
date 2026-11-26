@@ -19,6 +19,12 @@ export function startOpsReminderScheduler(): void {
     void runDueOpsReminders().catch((e) => {
       console.warn('[ops-reminders]', e instanceof Error ? e.message : e)
     })
+    // Viernes por la tarde: resumen de horas de la semana a los socios
+    void import('@/lib/horas/weekly-digest')
+      .then((m) => m.maybeSendWeeklyHoursDigest())
+      .catch((e) => {
+        console.warn('[horas-semana]', e instanceof Error ? e.message : e)
+      })
     void import('@/lib/finance/annual-target-alert')
       .then((m) => m.maybeNotifyAnnualGoalReached())
       .catch((e) => {
