@@ -65,6 +65,15 @@ Mapa: Disparador → MCP → Normas y cerebro → IA → Informe → WhatsApp.
 - **Mejoras:** propuestas con impacto y esfuerzo, apoyadas en conversaciones reales. Las que son reglas de comportamiento entran en la bandeja del flujo de cambios (origen «Mejoras»).
 - **WhatsApp:** al terminar, el PDF del informe con el estilo de Buffalo y el resumen y las métricas en el mensaje.
 
+## Parar y seguir ejecuciones
+
+Todos los flujos de Sistema se pueden parar con el botón **Parar** mientras corren: Cerebro, informes de calidad, Informe del sistema y flujos propios.
+
+- Corren **en segundo plano** y la pantalla los sigue consultando su estado. El CRM va detrás de Cloudflare, que corta a los 100 s cualquier petición sin respuesta y devuelve una página HTML. Por eso ninguna ejecución espera dentro de la petición.
+- La parada se marca en memoria (`lib/retencion/run-control.ts`). La ejecución la comprueba entre pasos y corta la espera de la IA o del MCP en cuanto se pide parar.
+- Si la ejecución ya no corre en el proceso (el servidor se reinició), «Parar» la cierra directamente en la base.
+- Un informe de calidad que lleva 5 minutos sin dar señales se cierra solo como interrumpido. El rastreo del cerebro, a los 10 minutos.
+
 ## Código
 
 - `lib/retencion/qa/`: tipos, tablas (`store.ts`), araña, parada y estimación (`spider.ts`), IA con coste y herramientas (`llm.ts`), lector de repositorios y GitHub, flujo de cambios (`flow1.ts`), informes (`reports.ts`), WhatsApp (`notify.ts`), y prompts, troceado y fusión (`brain-format.ts`).

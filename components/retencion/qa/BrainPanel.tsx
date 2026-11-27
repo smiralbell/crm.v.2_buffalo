@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import ws from '@/components/retencion/WatchSystemMap.module.css'
 import s from './qa.module.css'
+import { readJson } from './http'
 import { FanWire, FlowNode, LineWire, ProgressRing, timeAgo, type NodeState } from './FlowBits'
 import type { Brain, BrainEstimate, BrainPhase, BrainPhaseId, BrainPublic, GithubRepo } from '@/lib/retencion/qa/types'
 
@@ -104,7 +105,7 @@ export default function BrainPanel({
     if (sheet === 'arana' && !running) {
       setEstimating(true)
       fetch(`/api/retencion/proyectos/${proyectoId}/cerebro?estimate=1`)
-        .then(async (r) => (r.ok ? ((await r.json()) as { estimate: BrainEstimate }).estimate : null))
+        .then(async (r) => (r.ok ? ((await readJson<any>(r)) as { estimate: BrainEstimate }).estimate : null))
         .then(setEstimate)
         .catch(() => setEstimate(null))
         .finally(() => setEstimating(false))
@@ -121,7 +122,7 @@ export default function BrainPanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const d = await res.json()
+      const d = await readJson<any>(res)
       if (!res.ok) throw new Error(d.error || 'No se pudo guardar')
       onSaved(d as BrainData)
       setMsg('Guardado')
@@ -428,7 +429,7 @@ function RepoPicker({
     if (!github || !isAdmin) return
     fetch('/api/retencion/github')
       .then(async (r) => {
-        const d = await r.json()
+        const d = await readJson<any>(r)
         if (!r.ok) throw new Error(d.error || 'Error con GitHub')
         setRepos(d.repos as GithubRepo[])
       })
@@ -441,7 +442,7 @@ function RepoPicker({
       return
     }
     fetch(`/api/retencion/github?repo=${encodeURIComponent(selected)}`)
-      .then(async (r) => (r.ok ? ((await r.json()) as { branches: string[] }).branches : []))
+      .then(async (r) => (r.ok ? ((await readJson<any>(r)) as { branches: string[] }).branches : []))
       .then(setBranches)
       .catch(() => setBranches([]))
   }, [github, selected, repos])
@@ -610,7 +611,7 @@ function BrainView({ proyectoId, brain, docsCount, onGoInbox }: { proyectoId: st
 
   const loadDocs = () =>
     fetch(`/api/retencion/proyectos/${proyectoId}/cerebro?docs=1`)
-      .then(async (r) => (r.ok ? ((await r.json()) as { docs: typeof docs }).docs : []))
+      .then(async (r) => (r.ok ? ((await readJson<any>(r)) as { docs: typeof docs }).docs : []))
       .then((d) => setDocs(d || []))
       .catch(() => setDocs([]))
 

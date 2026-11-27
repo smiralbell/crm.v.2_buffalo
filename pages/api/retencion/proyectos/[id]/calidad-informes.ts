@@ -4,7 +4,7 @@ import { requireAuthAPI } from '@/lib/auth'
 import { assertProjectAccess } from '@/lib/project-access'
 import { assertRetencionEligible } from '@/lib/retencion/eligibility'
 import { listMcpServers } from '@/lib/retencion/mcp/store'
-import { runReport } from '@/lib/retencion/qa/reports'
+import { runReport, stopReport } from '@/lib/retencion/qa/reports'
 import { getReportConfig, listNormas, listReportRuns, saveReportConfig } from '@/lib/retencion/qa/store'
 import type { ReportKind } from '@/lib/retencion/qa/types'
 
@@ -54,7 +54,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === 'POST') {
-      if ((req.body as { action?: string } | undefined)?.action !== 'run') return res.status(400).json({ error: 'action debe ser run' })
+      const action = (req.body as { action?: string } | undefined)?.action
+      if (action === 'stop') {
+        await stopReport(proyectoId, kind)
+        return respond()
+      }
+      if (action !== 'run') return res.status(400).json({ error: 'action debe ser run o stop' })
       const runId = await runReport(proyectoId, kind, 'manual')
       if (!runId) return res.status(409).json({ error: 'Ya hay un informe en marcha' })
       return respond(202, { run_id: runId })

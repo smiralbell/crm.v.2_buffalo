@@ -5,16 +5,27 @@ import { listMcpServers } from '@/lib/retencion/mcp/store'
 import { brainDigest, extractJson, gravedadOf, upgradeBrain } from './brain-format'
 import { qaChat, qaModel, qaToolTurn, type QaMessage, type QaTool } from './llm'
 import { sendQaPdf } from './notify'
+import { RunStopped, checkStop, markFinished, markRunning, raceStop, requestStop } from '@/lib/retencion/run-control'
 import {
   addInbox,
   finishReportRun,
   getBrainRow,
   getReportConfig,
+  heartbeatReportRun,
   listDueReports,
   listNormas,
+  markReportRunsStopped,
   reportSince,
   startReportRun,
 } from './store'
+
+/** Clave para parar el informe de un proyecto. */
+export const reportKey = (proyectoId: string, kind: ReportKind) => `qa-report:${proyectoId}:${kind}`
+
+/** Para el informe en marcha. Si ya no corre en este proceso, se cierra en la base. */
+export async function stopReport(proyectoId: string, kind: ReportKind): Promise<void> {
+  if (!requestStop(reportKey(proyectoId, kind))) await markReportRunsStopped(proyectoId, kind)
+}
 import type { BrainUsage, ReportItem, ReportKind, ReportOutput, ReportRun } from './types'
 
 /**
@@ -182,11 +193,15 @@ export async function runReport(proyectoId: string, kind: ReportKind, trigger: '
   const since = await reportSince(proyectoId, kind, fallback)
   const runId = await startReportRun(proyectoId, kind, trigger)
   if (!runId) return null
-  void execute(runId, proyectoId, kind, since, cfg.whatsapp).catch(async (e) => {
-    await finishReportRun(runId, { status: 'error', output: null, error: e instanceof Error ? e.message : String(e), usage: null, whatsapp: null }).catch(
-      () => undefined
-    )
-  })
+  const key = reportKey(proyectoId, kind)
+  markRunning(key)
+  void execute(runId, proyectoId, kind, since, cfg.whatsapp)
+    .catch(async (e) => {
+      await finishReportRun(runId, { status: 'error', output: null, error: e instanceof Error ? e.message : String(e), usage: null, whatsapp: null }).catch(
+        () => undefined
+      )
+    })
+    .finally(() => markFinished(key))
   return runId
 }
 
@@ -197,6 +212,7 @@ async function execute(
   since: Date,
   whatsapp: { enabled: boolean; to: string[] }
 ): Promise<void> {
+  const key = reportKey(proyectoId, kind)
   const usage: BrainUsage = { model: qaModel(), tokens_in: 0, tokens_out: 0, cost_usd: 0, calls: 0 }
   const meter = (u: { tokens_in: number; tokens_out: number; cost_usd: number | null }) => {
     usage.tokens_in += u.tokens_in
@@ -234,8 +250,10 @@ async function execute(
     let read = 0
     let final: string | null = null
     for (let round = 0; round < MAX_ROUNDS && final === null; round++) {
+      checkStop(key)
+      await heartbeatReportRun(runId)
       const budgetLeft = read < READ_BUDGET
-      const turn = await qaToolTurn(messages, budgetLeft ? TOOLS : [], { maxTokens: 12_000 })
+      const turn = await raceStop(key, qaToolTurn(messages, budgetLeft ? TOOLS : [], { maxTokens: 12_000 }))
       meter(turn.usage)
       if (!turn.calls.length) {
         final = turn.text
@@ -249,11 +267,15 @@ async function execute(
         } catch {
           args = {}
         }
+        checkStop(key)
         let result: string
         if (call.name === 'mcp_herramientas') {
           const parts: string[] = []
           for (const c of conns) {
-            const info = await inspectMcp(c.conn).catch((e) => ({ tools: [], error: e instanceof Error ? e.message : String(e) }))
+            const info = await raceStop(key, inspectMcp(c.conn)).catch((e) => {
+              if (e instanceof RunStopped) throw e
+              return { tools: [], error: e instanceof Error ? e.message : String(e) }
+            })
             const tools = 'tools' in info ? info.tools : []
             parts.push(
               `Servidor «${c.nombre}»:\n` +
@@ -263,7 +285,7 @@ async function execute(
           result = parts.join('\n\n')
         } else if (call.name === 'mcp_llamar') {
           const target = conns.find((c) => c.nombre === args.servidor) || conns[0]
-          const r = await callMcpTool(target.conn, String(args.nombre || ''), (args.argumentos as Record<string, unknown>) || {})
+          const r = await raceStop(key, callMcpTool(target.conn, String(args.nombre || ''), (args.argumentos as Record<string, unknown>) || {}))
           result = r.ok ? r.resultado.slice(0, TOOL_RESULT_CHARS) : `Error: ${r.error}`
         } else {
           result = `Herramienta desconocida: ${call.name}`
@@ -276,13 +298,14 @@ async function execute(
       }
     }
     if (final === null) {
-      const closing = await qaChat(
+      checkStop(key)
+      const closing = await raceStop(key, qaChat(
         [...(messages.filter((m) => m.role === 'system' || m.role === 'user') as { role: 'system' | 'user'; content: string }[]), {
           role: 'user',
           content: 'Escribe ya el informe JSON con lo que hayas podido revisar.',
         }],
         { json: true, maxTokens: 12_000 }
-      )
+      ))
       meter(closing.usage)
       final = closing.text
     }
@@ -323,6 +346,10 @@ async function execute(
     }
     await finishReportRun(runId, { status: 'ok', output, error: null, usage, whatsapp: sent })
   } catch (e) {
+    if (e instanceof RunStopped) {
+      await finishReportRun(runId, { status: 'stopped', output: null, error: 'Parado a mano', usage, whatsapp: null })
+      return
+    }
     await finishReportRun(runId, { status: 'error', output: null, error: e instanceof Error ? e.message : String(e), usage, whatsapp: null })
   }
 }

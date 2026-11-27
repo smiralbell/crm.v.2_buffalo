@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import ws from '@/components/retencion/WatchSystemMap.module.css'
 import s from './qa.module.css'
+import { readJson } from './http'
 import { FanWire, FlowNode, LineWire, timeAgo } from './FlowBits'
 import Flow1ConfigForm, { ENTRADAS, REPO_EVERY } from './Flow1Config'
 import WhatsappEditor from './WhatsappEditor'
@@ -71,7 +72,7 @@ export default function Flow1Panel({
   const load = useCallback(async () => {
     try {
       const res = await fetch(api)
-      const d = await res.json()
+      const d = await readJson<any>(res)
       if (!res.ok) throw new Error(d.error || 'Error al cargar')
       setFlow(d.flow as Flow1Public)
     } catch (e) {
@@ -94,7 +95,7 @@ export default function Flow1Panel({
     setMsg('')
     try {
       const res = await fetch(api, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      const d = await res.json()
+      const d = await readJson<any>(res)
       if (!res.ok) throw new Error(d.error || 'Error')
       if (d.flow) setFlow(d.flow as Flow1Public)
       if (ok) setMsg(ok(d))

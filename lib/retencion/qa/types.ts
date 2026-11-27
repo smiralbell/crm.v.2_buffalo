@@ -160,7 +160,7 @@ export type ReportRun = {
   id: string
   kind: ReportKind
   trigger: 'manual' | 'cron'
-  status: 'running' | 'ok' | 'error'
+  status: 'running' | 'ok' | 'error' | 'stopped'
   output: ReportOutput | null
   error: string | null
   usage: BrainUsage | null

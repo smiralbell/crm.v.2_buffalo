@@ -5,9 +5,10 @@ import { assertProjectAccess } from '@/lib/project-access'
 import { assertRetencionEligible } from '@/lib/retencion/eligibility'
 import { clearDbUrl, getDecryptedDbUrl, saveDbUrl } from '@/lib/retencion/agent-config-store'
 import { normalizePgUrl, probeConnection, redactDbError } from '@/lib/retencion/readonly-postgres'
-import { getWatchPublic, saveWatchSettings } from '@/lib/retencion/watch-store'
+import { getWatchPublic, saveWatchSettings, setWatchLiveProgress } from '@/lib/retencion/watch-store'
 import { syncWatchSchema } from '@/lib/retencion/watch-db-memory'
-import { runWatchForProject } from '@/lib/retencion/watch-agent'
+import { runWatchForProject, watchKey } from '@/lib/retencion/watch-agent'
+import { isRunning, requestStop } from '@/lib/retencion/run-control'
 
 const patchSchema = z.object({
   client_db_url: z.string().min(10).max(2000).optional(),
@@ -71,10 +72,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const watch = await getWatchPublic(proyectoId)
         return res.status(200).json({ watch })
       }
-      if (action !== 'run') return res.status(400).json({ error: 'action debe ser run o sync_schema' })
-      const result = await runWatchForProject(proyectoId, { trigger: 'manual' })
-      const watch = await getWatchPublic(proyectoId)
-      return res.status(200).json({ result, watch })
+      if (action === 'stop') {
+        if (!requestStop(watchKey(proyectoId))) setWatchLiveProgress(proyectoId, [], false)
+        return res.status(200).json({ watch: await getWatchPublic(proyectoId) })
+      }
+      if (action !== 'run') return res.status(400).json({ error: 'action debe ser run, stop o sync_schema' })
+      if (isRunning(watchKey(proyectoId))) return res.status(409).json({ error: 'El informe ya se está ejecutando' })
+      // En segundo plano: la pantalla sigue el progreso con GET (live_used / live_running) y
+      // una ejecución larga no choca con el tiempo máximo de respuesta del proxy.
+      setWatchLiveProgress(proyectoId, ['cron'], true)
+      void runWatchForProject(proyectoId, { trigger: 'manual' }).catch((e) => {
+        setWatchLiveProgress(proyectoId, [], false)
+        console.error('[retencion/watch]', e)
+      })
+      return res.status(202).json({ watch: await getWatchPublic(proyectoId) })
     }
 
     if (req.method === 'PATCH') {

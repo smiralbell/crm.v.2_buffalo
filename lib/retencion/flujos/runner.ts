@@ -8,6 +8,10 @@ import {
 } from '@/lib/retencion/flujos/store'
 import { executeFlowTool, toolsForGroups } from '@/lib/retencion/flujos/tools'
 import { sendFlowToWhatsapp } from '@/lib/retencion/flujos/whatsapp'
+import { checkStop, markFinished, markRunning, raceStop, RunStopped } from '@/lib/retencion/run-control'
+
+/** Clave para parar un flujo propio en marcha. */
+export const flujoKey = (flujoId: string) => `flujo:${flujoId}`
 
 /** Pasos máximos de herramientas por ejecución. Evita bucles y costes sin control. */
 export const MAX_TOOL_ROUNDS = 8
@@ -30,12 +34,20 @@ export type FlowRunResult = {
 }
 
 /** Ejecuta un flujo: el agente usa las herramientas, y la respuesta final se guarda como JSON. */
-export async function runFlujo(flujo: FlujoRow, trigger: 'manual' | 'cron'): Promise<FlowRunResult> {
+export async function runFlujo(
+  flujo: FlujoRow,
+  trigger: 'manual' | 'cron',
+  opts: { onStart?: (runId: string) => void } = {}
+): Promise<FlowRunResult> {
   const runId = await startRun(flujo.id, trigger)
+  opts.onStart?.(runId)
+  const key = flujoKey(flujo.id)
+  markRunning(key)
   const trace: TraceStep[] = []
   let output: unknown = null
   let error: string | null = null
   let status: 'ok' | 'error' = 'ok'
+  let stopped = false
 
   try {
     const messages: ORMessage[] = [
@@ -45,10 +57,14 @@ export async function runFlujo(flujo: FlujoRow, trigger: 'manual' | 'cron'): Pro
 
     let final: string | null = null
     for (let round = 0; round < MAX_TOOL_ROUNDS && final === null; round++) {
-      const turn = await openRouterToolTurn(messages, toolsForGroups(flujo.tools), {
-        model: resolveModel('heavy'),
-        temperature: 0.1,
-      })
+      checkStop(key)
+      const turn = await raceStop(
+        key,
+        openRouterToolTurn(messages, toolsForGroups(flujo.tools), {
+          model: resolveModel('heavy'),
+          temperature: 0.1,
+        })
+      )
       if (turn.toolCalls.length === 0) {
         final = turn.text
         break
@@ -63,7 +79,8 @@ export async function runFlujo(flujo: FlujoRow, trigger: 'manual' | 'cron'): Pro
             args = {}
           }
         }
-        const outcome = await executeFlowTool(flujo.proyecto_id, call.name, args, flujo.tools)
+        checkStop(key)
+        const outcome = await raceStop(key, executeFlowTool(flujo.proyecto_id, call.name, args, flujo.tools))
         trace.push({ tool: call.name, args, ok: outcome.ok, preview: outcome.preview })
         messages.push({
           role: 'tool',
@@ -82,8 +99,12 @@ export async function runFlujo(flujo: FlujoRow, trigger: 'manual' | 'cron'): Pro
     }
   } catch (e) {
     status = 'error'
-    error = e instanceof Error ? e.message : String(e)
+    stopped = e instanceof RunStopped
+    error = stopped ? 'Parado a mano' : e instanceof Error ? e.message : String(e)
+  } finally {
+    markFinished(key)
   }
+  if (stopped) trace.push({ tool: 'parar', args: {}, ok: false, preview: 'Parado a mano' })
 
   // Nodo «Enviar por WhatsApp»: el informe en PDF a cada móvil, solo si el flujo ha ido bien.
   if (status === 'ok' && flujo.whatsapp_enabled && flujo.whatsapp_to.length > 0) {
@@ -117,4 +138,26 @@ export async function runFlujoById(proyectoId: string, flujoId: string, trigger:
   const flujo = await getFlujo(proyectoId, flujoId)
   if (!flujo) return null
   return runFlujo(flujo, trigger)
+}
+
+/**
+ * Lanza el flujo en segundo plano y devuelve su ejecución al momento. La pantalla sigue
+ * el resultado consultando las ejecuciones: así una ejecución larga no choca con el
+ * tiempo máximo de respuesta del proxy (Cloudflare corta a los 100 s).
+ */
+export async function launchFlujoById(proyectoId: string, flujoId: string): Promise<{ runId: string } | null> {
+  const flujo = await getFlujo(proyectoId, flujoId)
+  if (!flujo) return null
+  return new Promise((resolve, reject) => {
+    let started = false
+    runFlujo(flujo, 'manual', {
+      onStart: (runId) => {
+        started = true
+        resolve({ runId })
+      },
+    }).catch((e) => {
+      if (!started) reject(e)
+      else console.error('[retencion/flujos/run]', e)
+    })
+  })
 }

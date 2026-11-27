@@ -18,6 +18,10 @@ import {
   type WatchRunTrigger,
 } from '@/lib/retencion/watch-store'
 import { query } from '@/lib/db'
+import { checkStop, markFinished, markRunning, raceStop, RunStopped } from '@/lib/retencion/run-control'
+
+/** Clave para parar el informe del sistema de un proyecto. */
+export const watchKey = (proyectoId: string) => `watch:${proyectoId}`
 
 function clip(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max)}\n…[truncado]` : s
@@ -67,21 +71,40 @@ function buildCleanPack(input: {
 /** Proyectos cuya URL de BD ya se avisó que no se puede leer (un aviso por arranque). */
 const warnedUnreadableDbUrl = new Set<string>()
 
-export async function runWatchForProject(
+type WatchResult = { ok: boolean; report: string; graph: WatchGraph; error?: string }
+
+/** Ejecuta el informe del sistema. Se puede parar (`requestStop(watchKey(id))`) entre pasos o durante la IA. */
+export async function runWatchForProject(proyectoId: string, opts?: { trigger?: WatchRunTrigger }): Promise<WatchResult> {
+  const key = watchKey(proyectoId)
+  const ctx: { runId?: string; used: WatchNodeId[] } = { used: [] }
+  markRunning(key)
+  try {
+    return await runWatchSteps(proyectoId, opts, ctx)
+  } catch (e) {
+    if (!(e instanceof RunStopped)) throw e
+    const graph: WatchGraph = { used: ctx.used, at: new Date().toISOString() }
+    await saveWatchRun({ proyectoId, runId: ctx.runId, ok: false, error: 'Parado a mano', graph }).catch(() => undefined)
+    setWatchLiveProgress(proyectoId, ctx.used, false)
+    return { ok: false, report: 'Parado a mano', graph, error: 'Parado a mano' }
+  } finally {
+    markFinished(key)
+  }
+}
+
+async function runWatchSteps(
   proyectoId: string,
-  opts?: { trigger?: WatchRunTrigger }
-): Promise<{
-  ok: boolean
-  report: string
-  graph: WatchGraph
-  error?: string
-}> {
+  opts: { trigger?: WatchRunTrigger } | undefined,
+  ctx: { runId?: string; used: WatchNodeId[] }
+): Promise<WatchResult> {
+  const key = watchKey(proyectoId)
   const trigger: WatchRunTrigger = opts?.trigger === 'cron' ? 'cron' : 'manual'
   const runId = await startWatchRun(proyectoId, trigger)
-  const used: WatchNodeId[] = []
+  ctx.runId = runId
+  const used: WatchNodeId[] = ctx.used
   const bump = (id: WatchNodeId) => {
     used.push(id)
     setWatchLiveProgress(proyectoId, used, true)
+    checkStop(key)
   }
   bump('cron')
   await ensureWatchColumns()
@@ -177,7 +200,7 @@ export async function runWatchForProject(
     const packed = clip(JSON.stringify(pack, null, 2), 180000)
     const model = resolveWatchModel(watch.watch_model)
     report = (
-      await openRouterChatCompletion(
+      await raceStop(key, openRouterChatCompletion(
         [
           { role: 'system', content: watchPrompt },
           {
@@ -192,7 +215,7 @@ export async function runWatchForProject(
           },
         ],
         { model, temperature: 0.2, maxTokens: 5000 }
-      )
+      ))
     ).trim()
     bump('ai')
     graph.used = used

@@ -130,6 +130,7 @@ export function ensureQaTables(): Promise<void> {
           finished_at  TIMESTAMPTZ
         )`)
       await query(`CREATE INDEX IF NOT EXISTS retencion_qa_report_runs_proyecto ON retencion_qa_report_runs (proyecto_id, kind, started_at DESC)`)
+      await query(`ALTER TABLE retencion_qa_report_runs ADD COLUMN IF NOT EXISTS heartbeat_at TIMESTAMPTZ`)
     })().catch((e) => {
       ensured = null
       throw e
@@ -251,9 +252,18 @@ export async function claimSpiderRun(proyectoId: string): Promise<boolean> {
   return rowCount > 0
 }
 
-/** Pide parar el rastreo en marcha. La araña lo ve en su siguiente paso (en segundos). */
+/**
+ * Pide parar el rastreo en marcha. La araña lo ve en su siguiente paso (en segundos).
+ * Si lleva más de un minuto sin avanzar (ya no corre: el servidor se reinició), se cierra ya.
+ */
 export async function requestSpiderStop(proyectoId: string): Promise<boolean> {
   await getBrainRow(proyectoId)
+  await query(
+    `UPDATE retencion_qa_brain
+        SET status = 'stopped', cancel_requested = FALSE, finished_at = NOW()
+      WHERE proyecto_id = $1 AND status = 'running' AND updated_at < NOW() - INTERVAL '1 minute'`,
+    [proyectoId]
+  )
   const { rowCount } = await query(
     `UPDATE retencion_qa_brain SET cancel_requested = TRUE WHERE proyecto_id = $1 AND status = 'running'`,
     [proyectoId]
@@ -648,13 +658,42 @@ type ReportRunRow = {
   id: string
   kind: ReportKind
   trigger: 'manual' | 'cron'
-  status: 'running' | 'ok' | 'error'
+  status: 'running' | 'ok' | 'error' | 'stopped'
   output: ReportOutput | null
   error: string | null
   usage: BrainUsage | null
   whatsapp: { sent: number; errors: string[] } | null
   started_at: Date
   finished_at: Date | null
+}
+
+/**
+ * Una ejecución que lleva 5 minutos sin dar señales (el servidor se reinició o se
+ * cortó) se cierra como interrumpida: así nunca se queda «Generando informe…» para siempre.
+ */
+async function closeStaleReportRuns(proyectoId: string, kind: ReportKind): Promise<void> {
+  await query(
+    `UPDATE retencion_qa_report_runs
+        SET status = 'error', error = 'Se interrumpió (el servidor se reinició o dejó de responder). Vuelve a ejecutarlo.', finished_at = NOW()
+      WHERE proyecto_id = $1 AND kind = $2 AND status = 'running'
+        AND COALESCE(heartbeat_at, started_at) < NOW() - INTERVAL '5 minutes'`,
+    [proyectoId, kind]
+  )
+}
+
+/** Señal de vida de una ejecución en marcha. */
+export async function heartbeatReportRun(runId: string): Promise<void> {
+  await query(`UPDATE retencion_qa_report_runs SET heartbeat_at = NOW() WHERE id = $1`, [runId])
+}
+
+/** Cierra como parada una ejecución que ya no corre en este proceso (por ejemplo, tras un reinicio). */
+export async function markReportRunsStopped(proyectoId: string, kind: ReportKind): Promise<number> {
+  const { rowCount } = await query(
+    `UPDATE retencion_qa_report_runs SET status = 'stopped', error = 'Parado a mano', finished_at = NOW()
+      WHERE proyecto_id = $1 AND kind = $2 AND status = 'running'`,
+    [proyectoId, kind]
+  )
+  return rowCount
 }
 
 function toReportRun(r: ReportRunRow): ReportRun {
@@ -675,9 +714,9 @@ function toReportRun(r: ReportRunRow): ReportRun {
 /** Empieza una ejecución. Devuelve null si ya hay una en marcha (de menos de 30 min). */
 export async function startReportRun(proyectoId: string, kind: ReportKind, trigger: 'manual' | 'cron'): Promise<string | null> {
   await ensureQaTables()
+  await closeStaleReportRuns(proyectoId, kind)
   const busy = await query(
-    `SELECT 1 FROM retencion_qa_report_runs
-      WHERE proyecto_id = $1 AND kind = $2 AND status = 'running' AND started_at > NOW() - INTERVAL '30 minutes' LIMIT 1`,
+    `SELECT 1 FROM retencion_qa_report_runs WHERE proyecto_id = $1 AND kind = $2 AND status = 'running' LIMIT 1`,
     [proyectoId, kind]
   )
   if (busy.rows.length) return null
@@ -697,7 +736,7 @@ export async function startReportRun(proyectoId: string, kind: ReportKind, trigg
 
 export async function finishReportRun(
   runId: string,
-  result: { status: 'ok' | 'error'; output: ReportOutput | null; error: string | null; usage: BrainUsage | null; whatsapp: ReportRun['whatsapp'] }
+  result: { status: 'ok' | 'error' | 'stopped'; output: ReportOutput | null; error: string | null; usage: BrainUsage | null; whatsapp: ReportRun['whatsapp'] }
 ): Promise<void> {
   await query(
     `UPDATE retencion_qa_report_runs
@@ -716,6 +755,7 @@ export async function finishReportRun(
 
 export async function listReportRuns(proyectoId: string, kind: ReportKind, limit = 20): Promise<ReportRun[]> {
   await ensureQaTables()
+  await closeStaleReportRuns(proyectoId, kind)
   const { rows } = await query<ReportRunRow>(
     `SELECT * FROM retencion_qa_report_runs WHERE proyecto_id = $1 AND kind = $2 ORDER BY started_at DESC LIMIT $3`,
     [proyectoId, kind, limit]

@@ -3,6 +3,7 @@ import { useAuth } from '@/components/AuthContext'
 import BrainPanel, { type BrainData, type BrainSheet } from './BrainPanel'
 import Flow1Panel, { type Flow1Sheet } from './Flow1Panel'
 import GuidedTour from './GuidedTour'
+import { readJson } from './http'
 import ReportPanel from './ReportPanel'
 import type { Flow1Config, TourStep } from '@/lib/retencion/qa/types'
 
@@ -47,7 +48,7 @@ export default function QaWorkspace({
   const load = useCallback(async () => {
     try {
       const res = await fetch(api)
-      const d = await res.json()
+      const d = await readJson<any>(res)
       if (!res.ok) throw new Error(d.error || 'Error al cargar')
       setData(d as BrainData)
       setErr('')
@@ -76,20 +77,20 @@ export default function QaWorkspace({
   const setTourStep = async (step: TourStep) => {
     setTourOverride(step)
     const res = await fetch(api, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tour_step: step }) })
-    if (res.ok) setData((await res.json()) as BrainData)
+    if (res.ok) setData((await readJson<any>(res)) as BrainData)
     setTourOverride(null)
   }
 
   const start = async () => {
     const res = await fetch(api, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'start' }) })
-    const d = await res.json()
+    const d = await readJson<any>(res)
     if (!res.ok) throw new Error(d.error || 'No se pudo lanzar')
     setData(d as BrainData)
   }
 
   const stop = async () => {
     const res = await fetch(api, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) })
-    if (res.ok) setData((await res.json()) as BrainData)
+    if (res.ok) setData((await readJson<any>(res)) as BrainData)
   }
 
   const saveFlow1 = async (c: Flow1Config): Promise<boolean> => {

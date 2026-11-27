@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Brain as BrainIcon, Clock, FileText, Loader2, MessageCircle, Play, Plug, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, Brain as BrainIcon, Clock, FileText, Loader2, MessageCircle, Play, Plug, Sparkles, Square, X } from 'lucide-react'
 import ws from '@/components/retencion/WatchSystemMap.module.css'
 import s from './qa.module.css'
+import { readJson } from './http'
 import { FlowNode, LineWire, timeAgo } from './FlowBits'
 import { usd } from './BrainPanel'
 import WhatsappEditor from './WhatsappEditor'
@@ -60,9 +61,10 @@ export default function ReportPanel({
   const load = useCallback(async () => {
     try {
       const res = await fetch(api)
-      const d = await res.json()
+      const d = await readJson<any>(res)
       if (!res.ok) throw new Error(d.error || 'Error al cargar')
       setData(d as Data)
+      setErr('')
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error')
     }
@@ -87,7 +89,7 @@ export default function ReportPanel({
     setErr('')
     try {
       const res = await fetch(api, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      const d = await res.json()
+      const d = await readJson<any>(res)
       if (!res.ok) throw new Error(d.error || 'Error')
       setData(d as Data)
       return d as Data & { run_id?: string }
@@ -139,12 +141,20 @@ export default function ReportPanel({
             </>
           )}
         </span>
-        {isAdmin && (
-          <button type="button" className={`${s.btn} ${s.btnDark}`} disabled={running || busy === 'run' || !mcpOk} onClick={() => void run()}>
-            {running || busy === 'run' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-            Ejecutar ahora
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isAdmin && running && (
+            <button type="button" className={s.btn} disabled={busy === 'stop'} onClick={() => void call('stop', 'POST', { action: 'stop' })}>
+              {busy === 'stop' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3 w-3" />}
+              Parar
+            </button>
+          )}
+          {isAdmin && (
+            <button type="button" className={`${s.btn} ${s.btnDark}`} disabled={running || busy === 'run' || !mcpOk} onClick={() => void run()}>
+              {running || busy === 'run' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+              Ejecutar ahora
+            </button>
+          )}
+        </div>
       </div>
 
       <div className={s.scroll}>
@@ -298,7 +308,7 @@ export default function ReportPanel({
                         key={r.id}
                         type="button"
                         onClick={() => setRunId(r.id)}
-                        className={`${s.tag} ${shown?.id === r.id ? 'bg-gray-900 text-white' : ''} ${r.status === 'error' ? s.tagRed : ''}`}
+                        className={`${s.tag} ${shown?.id === r.id ? 'bg-gray-900 text-white' : ''} ${r.status === 'error' ? s.tagRed : r.status === 'stopped' ? s.tagAmber : ''}`}
                       >
                         {new Date(r.started_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                         {r.status === 'running' ? ' · en curso' : ''}
@@ -355,6 +365,7 @@ function RunView({ run, kind, itemsTitle, onGoCambios }: { run: ReportRun; kind:
       </p>
     )
   }
+  if (run.status === 'stopped') return <p className="text-sm text-amber-700">Lo paraste antes de terminar.</p>
   if (run.status === 'error') return <p className="text-sm text-red-700">{run.error || 'El informe falló.'}</p>
   const o = run.output
   if (!o) return null

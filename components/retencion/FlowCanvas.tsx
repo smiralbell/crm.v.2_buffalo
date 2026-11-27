@@ -16,6 +16,7 @@ import {
   Play,
   Plug,
   Save,
+  Square,
   Ticket,
   Trash2,
   X,
@@ -270,19 +271,47 @@ export default function FlowCanvas({
     void patch({ tools: next })
   }
 
+  const stopRequested = useRef(false)
+
+  /**
+   * El flujo corre en segundo plano: se lanza y se sigue su ejecución hasta que termina
+   * (así no choca con el tiempo máximo de respuesta del proxy). Se puede parar.
+   */
   const runNow = async () => {
     setRunning(true)
     setError('')
+    stopRequested.current = false
     try {
       const res = await fetch(`${base}/run`, { method: 'POST' })
       if (!res.ok) throw new Error(await readError(res, 'No se pudo ejecutar el flujo'))
-      loadRuns()
+      const { run_id: runId } = (await res.json()) as { run_id: string }
+      const started = Date.now()
+      for (;;) {
+        await new Promise((r) => window.setTimeout(r, 2000))
+        const r = await fetch(`${base}/runs`).catch(() => null)
+        if (!r || !r.ok) continue
+        const data = (await r.json().catch(() => ({ runs: [] }))) as { runs: Run[] }
+        const mine = data.runs.find((x) => String(x.id) === String(runId))
+        if (mine && mine.status !== 'running') {
+          setRuns(data.runs)
+          setRunIndex(0)
+          if (mine.status === 'error' && mine.error) setError(mine.error)
+          break
+        }
+        if (Date.now() - started > 20 * 60_000) throw new Error('El flujo sigue en marcha. Mira las ejecuciones en unos minutos.')
+      }
       setSelected('output')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo ejecutar el flujo')
     } finally {
       setRunning(false)
     }
+  }
+
+  const stopNow = async () => {
+    stopRequested.current = true
+    const res = await fetch(`${base}/stop`, { method: 'POST' }).catch(() => null)
+    if (!res || !res.ok) setError('No se pudo parar el flujo')
   }
 
   const remove = async () => {
@@ -415,6 +444,11 @@ export default function FlowCanvas({
         <button type="button" className={styles.hudBtn} onClick={runNow} disabled={running}>
           <Play className="h-3.5 w-3.5" /> {running ? 'Ejecutando…' : 'Ejecutar ahora'}
         </button>
+        {running && (
+          <button type="button" className={styles.hudBtn} onClick={() => void stopNow()}>
+            <Square className="h-3 w-3" /> Parar
+          </button>
+        )}
         {canEdit && (
           <button type="button" className={styles.hudBtn} onClick={remove}>
             <Trash2 className="h-3.5 w-3.5" /> Borrar flujo

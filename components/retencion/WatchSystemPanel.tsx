@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Focus, History, Maximize2, Minimize2, Play, RefreshCw, Save, X } from 'lucide-react'
+import { Focus, History, Maximize2, Minimize2, Play, RefreshCw, Save, Square, X } from 'lucide-react'
 import { useAuth } from '@/components/AuthContext'
 import WatchSystemMap, { type WatchNodeId } from '@/components/retencion/WatchSystemMap'
 import WatchReportActions from '@/components/retencion/WatchReportActions'
@@ -222,12 +222,24 @@ export default function WatchSystemPanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'run' }),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({ error: `El servidor no respondió bien (HTTP ${res.status})` }))
       if (!res.ok) throw new Error(data.error || 'Falló el flujo')
-      apply(data.watch as WatchPublic)
-      const done = (data.watch as WatchPublic | undefined)?.last_graph?.used
+      // Corre en segundo plano: se sigue hasta que deja de estar en marcha.
+      let w = data.watch as WatchPublic
+      const started = Date.now()
+      while (Date.now() - started < 15 * 60_000) {
+        await new Promise((r) => window.setTimeout(r, 1000))
+        const r = await fetch(`/api/retencion/proyectos/${proyectoId}/watch`).catch(() => null)
+        const d = r && r.ok ? await r.json().catch(() => null) : null
+        if (!d?.watch) continue
+        w = d.watch as WatchPublic
+        if (!w.live_running) break
+      }
+      apply(w)
+      const done = w.last_graph?.used
       setLiveUsed(done && done.length ? done : ['cron', 'db', 'incidents', 'reports', 'clean', 'ai'])
-      setOkMsg(data.result?.ok ? 'Flujo ejecutado' : data.result?.error || 'Flujo con errores')
+      const last = w.runs?.[0]
+      setOkMsg(last?.ok ? 'Flujo ejecutado' : last?.error || 'Flujo con errores')
       setSelected('ai')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falló el flujo')
@@ -370,6 +382,22 @@ export default function WatchSystemPanel({
               <Play className="h-3.5 w-3.5" />
               {running ? 'Ejecutando…' : 'Ejecutar ahora'}
             </button>
+            {running && isAdmin && (
+              <button
+                type="button"
+                className={styles.hudBtn}
+                onClick={() =>
+                  void fetch(`/api/retencion/proyectos/${proyectoId}/watch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'stop' }),
+                  })
+                }
+              >
+                <Square className="h-3 w-3" />
+                Parar
+              </button>
+            )}
           </>
         }
       >
