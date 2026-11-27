@@ -18,6 +18,12 @@ export function startRetencionWatchScheduler(): void {
     void runDueFlujos().catch((e) => {
       console.warn('[retencion-flujos]', e instanceof Error ? e.message : e)
     })
+    // Calidad: tickets y repositorio del flujo de cambios.
+    void import('@/lib/retencion/qa/flow1')
+      .then((m) => m.runDueQa())
+      .catch((e) => {
+        console.warn('[retencion-qa]', e instanceof Error ? e.message : e)
+      })
   }
 
   setTimeout(tick, 8_000)

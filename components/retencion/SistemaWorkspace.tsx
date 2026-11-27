@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { Loader2, Plus, RotateCcw, Workflow, X } from 'lucide-react'
+import { Brain, FlaskConical, Loader2, Plus, RotateCcw, Workflow, X } from 'lucide-react'
 import FlowCanvas, { intervaloLabel, type Flujo } from '@/components/retencion/FlowCanvas'
+import QaWorkspace, { isQaView, type QaView } from '@/components/retencion/qa/QaWorkspace'
 
 const PROMPT_EJEMPLO =
   'Cuenta los errores de este proyecto (incidencias): total, abiertos, resueltos y ocurrencias. ' +
@@ -9,19 +10,23 @@ const PROMPT_EJEMPLO =
   'coste_total (null si no hay dato) y hallazgos (lista de frases).'
 
 /**
- * Pestaña Sistema: arriba se elige el flujo (el informe del sistema de siempre o uno propio)
- * y debajo se ve su lienzo de nodos.
+ * Pestaña Sistema: arriba se elige el flujo (cerebro y pruebas de cambios de la calidad,
+ * el informe del sistema de siempre o uno propio) y debajo se ve su lienzo de nodos.
  */
 export default function SistemaWorkspace({
   proyectoId,
+  proyectoName,
   canEdit,
   watchPanel,
   onWatchSelected,
+  onGoMcp,
 }: {
   proyectoId: string
+  proyectoName: string
   canEdit: boolean
   watchPanel: ReactNode
   onWatchSelected: (isWatch: boolean) => void
+  onGoMcp?: () => void
 }) {
   const base = `/api/retencion/proyectos/${proyectoId}/flujos`
   const [flujos, setFlujos] = useState<Flujo[]>([])
@@ -123,6 +128,13 @@ export default function SistemaWorkspace({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="flex shrink-0 items-center gap-2 overflow-x-auto pb-1">
+        <button type="button" className={pill(active === 'cerebro')} onClick={() => select('cerebro')} data-tour="flujo-cerebro">
+          <Brain className="h-3.5 w-3.5" /> Cerebro
+        </button>
+        <button type="button" className={pill(active === 'cambios')} onClick={() => select('cambios')}>
+          <FlaskConical className="h-3.5 w-3.5" /> Pruebas de cambios
+        </button>
+        <span className="mx-1 h-5 w-px shrink-0 bg-gray-200" aria-hidden />
         {!watchHidden && (
           <span className={`${pill(active === 'watch')} pr-1.5`}>
             <button type="button" className="inline-flex items-center gap-2" onClick={() => select('watch')}>
@@ -175,7 +187,15 @@ export default function SistemaWorkspace({
       </div>
 
       <div className="relative min-h-0 flex-1">
-        {!current && watchHidden ? (
+        {/* Calidad: el panel si está elegido y, siempre, el tutorial (ventanas flotantes). */}
+        <QaWorkspace
+          proyectoId={proyectoId}
+          proyectoName={proyectoName}
+          view={isQaView(active) ? active : null}
+          onView={(v: QaView) => select(v)}
+          onGoMcp={onGoMcp}
+        />
+        {isQaView(active) ? null : !current && watchHidden ? (
           loaded && (
             <div className="flex h-full items-center justify-center rounded-[28px] border border-dashed border-gray-300 text-sm text-gray-500">
               No hay flujos. Crea uno con «Nuevo flujo».

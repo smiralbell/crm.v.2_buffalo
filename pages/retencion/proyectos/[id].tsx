@@ -185,6 +185,8 @@ export default function RetencionProyectoDetailPage() {
           <div className="min-h-0 flex-1 pt-3">
             <SistemaWorkspace
               proyectoId={proyecto.id}
+              proyectoName={proyecto.name}
+              onGoMcp={() => switchTab('mcp')}
               canEdit={user?.role !== 'developer'}
               onWatchSelected={setSistemaWatch}
               watchPanel={
