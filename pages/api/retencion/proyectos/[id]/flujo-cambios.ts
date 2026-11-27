@@ -4,14 +4,21 @@ import { requireAuthAPI } from '@/lib/auth'
 import { query } from '@/lib/db'
 import { assertProjectAccess } from '@/lib/project-access'
 import { assertRetencionEligible } from '@/lib/retencion/eligibility'
-import { classifyChange, scanRepo, scanTickets } from '@/lib/retencion/qa/flow1'
+import { classifyChange, notifyInbox, scanRepo, scanTareas } from '@/lib/retencion/qa/flow1'
 import { decideInbox, getFlow1Public, saveFlow1Config } from '@/lib/retencion/qa/store'
+import type { InboxItem } from '@/lib/retencion/qa/types'
+
+const whatsappSchema = z.object({
+  enabled: z.boolean(),
+  to: z.array(z.string().trim().max(40)).max(20),
+})
 
 const configSchema = z.object({
   manual: z.boolean(),
-  tickets: z.boolean(),
+  tareas: z.boolean(),
   repo: z.boolean(),
   repo_every_minutes: z.number().int().min(15).max(10080),
+  whatsapp: whatsappSchema,
 })
 
 const postSchema = z.discriminatedUnion('action', [
@@ -59,16 +66,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).json({ ...result, flow: await getFlow1Public(proyectoId) })
       }
       const flow = await getFlow1Public(proyectoId)
-      const out: { tickets?: number; repo?: string } = {}
-      if (flow.config.tickets) out.tickets = await scanTickets(proyectoId)
+      const out: { tareas?: number; repo?: string } = {}
+      const added: InboxItem[] = []
+      if (flow.config.tareas) {
+        const t = await scanTareas(proyectoId)
+        added.push(...t)
+        out.tareas = t.length
+      }
       if (flow.config.repo) {
         try {
           const r = await scanRepo(proyectoId)
-          out.repo = r.baseline ? 'Referencia tomada: se revisarán los commits a partir de ahora' : `${r.commits ?? 0} commits · ${r.added} propuestas`
+          added.push(...r.added)
+          out.repo = r.baseline ? 'Referencia tomada: se revisarán los commits a partir de ahora' : `${r.commits ?? 0} commits · ${r.added.length} propuestas`
         } catch (e) {
           out.repo = e instanceof Error ? e.message : String(e)
         }
       }
+      if (added.length) await notifyInbox(proyectoId, added).catch(() => undefined)
       return res.status(200).json({ scan: out, flow: await getFlow1Public(proyectoId) })
     }
 

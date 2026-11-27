@@ -54,3 +54,47 @@ CREATE TABLE IF NOT EXISTS retencion_qa_inbox (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS retencion_qa_inbox_ref ON retencion_qa_inbox (proyecto_id, origen, origen_ref) WHERE origen_ref IS NOT NULL;
 CREATE INDEX IF NOT EXISTS retencion_qa_inbox_proyecto ON retencion_qa_inbox (proyecto_id, created_at DESC);
+
+-- Coste y hechos del último rastreo, y parada a mano.
+ALTER TABLE retencion_qa_brain ADD COLUMN IF NOT EXISTS usage JSONB;
+ALTER TABLE retencion_qa_brain ADD COLUMN IF NOT EXISTS facts JSONB;
+ALTER TABLE retencion_qa_brain ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Todo lo leído en el último rastreo (solo la última versión).
+CREATE TABLE IF NOT EXISTS retencion_qa_docs (
+  id           BIGSERIAL PRIMARY KEY,
+  proyecto_id  UUID NOT NULL,
+  version      INT NOT NULL,
+  fuente       TEXT NOT NULL,
+  ruta         TEXT NOT NULL,
+  contenido    TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS retencion_qa_docs_proyecto ON retencion_qa_docs (proyecto_id, version);
+
+-- Flujos de informe (conversaciones reales y mejoras).
+CREATE TABLE IF NOT EXISTS retencion_qa_report_config (
+  proyecto_id    UUID NOT NULL,
+  kind           TEXT NOT NULL,
+  enabled        BOOLEAN NOT NULL DEFAULT FALSE,
+  every_minutes  INT NOT NULL DEFAULT 0,
+  whatsapp       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_run_at    TIMESTAMPTZ,
+  next_run_at    TIMESTAMPTZ,
+  PRIMARY KEY (proyecto_id, kind)
+);
+
+CREATE TABLE IF NOT EXISTS retencion_qa_report_runs (
+  id           BIGSERIAL PRIMARY KEY,
+  proyecto_id  UUID NOT NULL,
+  kind         TEXT NOT NULL,
+  trigger      TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'running',
+  output       JSONB,
+  error        TEXT,
+  usage        JSONB,
+  whatsapp     JSONB,
+  started_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  finished_at  TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS retencion_qa_report_runs_proyecto ON retencion_qa_report_runs (proyecto_id, kind, started_at DESC);

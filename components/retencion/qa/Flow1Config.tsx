@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, GitBranch, Loader2, PenLine, Ticket } from 'lucide-react'
+import { Check, CheckSquare, GitBranch, Loader2, PenLine } from 'lucide-react'
 import s from './qa.module.css'
 import type { Flow1Config } from '@/lib/retencion/qa/types'
 
@@ -11,10 +11,18 @@ export const REPO_EVERY: { v: number; t: string }[] = [
   { v: 10080, t: 'Cada semana' },
 ]
 
-const OPTIONS: { k: 'manual' | 'tickets' | 'repo'; icon: typeof PenLine; t: string; d: string }[] = [
-  { k: 'manual', icon: PenLine, t: 'Manual', d: 'Escribes cada mejora que se hace.' },
-  { k: 'tickets', icon: Ticket, t: 'Tickets', d: 'Cada ticket nuevo se analiza y, si es una norma, se propone.' },
-  { k: 'repo', icon: GitBranch, t: 'Repositorio', d: 'Revisa los commits nuevos cada cierto tiempo.' },
+type Entrada = 'manual' | 'tareas' | 'repo'
+
+export const ENTRADAS: { k: Entrada; icon: typeof PenLine; t: string; d: string; trigger: string }[] = [
+  { k: 'manual', icon: PenLine, t: 'Manual', d: 'Escribes cada mejora que se hace.', trigger: 'Al enviarla' },
+  {
+    k: 'tareas',
+    icon: CheckSquare,
+    t: 'Tareas',
+    d: 'Cada tarea del proyecto que pasa a «Hecha» se analiza y, si cambia el comportamiento del agente, se propone como norma.',
+    trigger: 'Al marcar una tarea como Hecha',
+  },
+  { k: 'repo', icon: GitBranch, t: 'Repositorio', d: 'Revisa los commits nuevos cada cierto tiempo.', trigger: 'Cada cierto tiempo' },
 ]
 
 /** Las tres vías de entrada del flujo de cambios. Se usa en el tutorial y al pulsar «Configurar». */
@@ -33,10 +41,10 @@ export default function Flow1ConfigForm({
   const initialKey = JSON.stringify(initial)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => setCfg(initial), [initialKey])
-  const any = cfg.manual || cfg.tickets || cfg.repo
+  const any = cfg.manual || cfg.tareas || cfg.repo
   return (
     <div className="flex flex-col gap-3">
-      {OPTIONS.map((o) => {
+      {ENTRADAS.map((o) => {
         const on = cfg[o.k]
         const Icon = o.icon
         return (
@@ -54,6 +62,7 @@ export default function Flow1ConfigForm({
                 {o.t}
               </span>
               <span className="text-[13px] text-gray-500">{o.d}</span>
+              <span className="text-[11px] font-medium uppercase tracking-[0.05em] text-gray-400">Disparador · {o.trigger}</span>
               {o.k === 'repo' && on && (
                 <select
                   className="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-3 py-2 text-sm"

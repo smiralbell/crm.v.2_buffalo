@@ -3,7 +3,7 @@
  * Tipos compartidos entre servidor y pantalla (sin imports de servidor).
  */
 
-export type BrainPhaseId = 'crm' | 'repo' | 'mcp' | 'retell' | 'ia'
+export type BrainPhaseId = 'crm' | 'repo' | 'mcp' | 'ia'
 export type PhaseStatus = 'pending' | 'running' | 'done' | 'skipped' | 'error'
 
 export type BrainPhase = {
@@ -13,12 +13,12 @@ export type BrainPhase = {
   detail: string
 }
 
+/** La IA pesa más: lee todo por trozos y luego lo junta. */
 export const BRAIN_PHASES: { id: BrainPhaseId; label: string; weight: number }[] = [
-  { id: 'crm', label: 'CRM', weight: 10 },
-  { id: 'repo', label: 'Repositorio', weight: 35 },
-  { id: 'mcp', label: 'MCP', weight: 20 },
-  { id: 'retell', label: 'Retell', weight: 10 },
-  { id: 'ia', label: 'Cerebro', weight: 25 },
+  { id: 'crm', label: 'CRM', weight: 5 },
+  { id: 'repo', label: 'Repositorio', weight: 30 },
+  { id: 'mcp', label: 'MCP', weight: 15 },
+  { id: 'ia', label: 'Cerebro', weight: 50 },
 ]
 
 export function initialPhases(): BrainPhase[] {
@@ -40,31 +40,55 @@ export function computeProgress(phases: BrainPhase[], current: BrainPhaseId | nu
   return Math.min(100, Math.round(total))
 }
 
-export type BrainStatus = 'idle' | 'running' | 'done' | 'error'
+export type BrainStatus = 'idle' | 'running' | 'done' | 'error' | 'stopped'
 
 /** Pasos del tutorial guiado. */
 export type TourStep = 'bienvenida' | 'fuentes' | 'rastreo' | 'cerebro' | 'flujo1' | 'hecho'
 export const TOUR_STEPS: TourStep[] = ['bienvenida', 'fuentes', 'rastreo', 'cerebro', 'flujo1', 'hecho']
 
 export type Disparador = 'cliente' | 'sistema' | 'modo'
+export type Gravedad = 'alta' | 'media' | 'baja'
+
+/**
+ * Todo lo que lleva `detalle` se guarda completo: el resumen es solo la primera vista,
+ * nunca sustituye a la información del sistema.
+ */
+export type BrainItemBase = { nombre: string; detalle: string; fuentes: string[] }
+
+export type BrainEntrada = BrainItemBase & { disparador: Disparador; canal: string }
+export type BrainAgente = BrainItemBase & { rol: string; canal: string; modelo: string; herramientas: string[] }
+export type BrainHerramienta = BrainItemBase & { que_hace: string; efecto_real: boolean; destino: string }
+export type BrainFlujo = BrainItemBase & { pasos: string[] }
+export type BrainModelo = BrainItemBase & { tipo: 'llm' | 'voz' | 'otro'; proveedor: string; uso: string }
+export type BrainIntegracion = BrainItemBase & { uso: string }
+export type BrainModo = BrainItemBase & { efecto: string }
+export type BrainConocimiento = BrainItemBase
+
+export type BrainNorma = { regla: string; area: string; canal: string; gravedad: Gravedad; origen: string }
 
 export type Brain = {
   resumen: string
-  identidad: { negocio: string; asistente: string; tono: string; horario: string }
+  identidad: { negocio: string; asistente: string; tono: string; horario: string; contacto: string }
   objetivos: string[]
-  entradas: { nombre: string; disparador: Disparador; canal: string; descripcion: string; fuente: string }[]
-  agentes: { nombre: string; rol: string; canal: string; modelo: string; herramientas: string[]; fuente: string }[]
-  herramientas: { nombre: string; que_hace: string; efecto_real: boolean; destino: string; fuente: string }[]
-  modelos: { proveedor: string; modelo: string; uso: string }[]
-  voces: { proveedor: string; voz: string; uso: string }[]
-  integraciones: { nombre: string; uso: string }[]
-  modos: { nombre: string; efecto: string }[]
-  conocimiento: string[]
-  normas_propuestas: { regla: string; area: string; canal: string; gravedad: Gravedad; origen: string }[]
+  entradas: BrainEntrada[]
+  agentes: BrainAgente[]
+  herramientas: BrainHerramienta[]
+  flujos: BrainFlujo[]
+  modelos: BrainModelo[]
+  integraciones: BrainIntegracion[]
+  modos: BrainModo[]
+  conocimiento: BrainConocimiento[]
+  normas_propuestas: BrainNorma[]
   huecos: string[]
 }
 
-export type Gravedad = 'alta' | 'media' | 'baja'
+/** Lo que la IA saca de cada trozo de las fuentes, antes de juntarlo. */
+export type BrainFacts = Omit<Brain, 'resumen' | 'identidad' | 'objetivos' | 'huecos'> & {
+  identidad: string[]
+  objetivos: string[]
+}
+
+export type BrainUsage = { model: string; tokens_in: number; tokens_out: number; cost_usd: number | null; calls: number }
 
 export type BrainPublic = {
   status: BrainStatus
@@ -75,23 +99,99 @@ export type BrainPublic = {
   error: string | null
   repo_source: string | null
   repo_branch: string | null
-  retell_configured: boolean
   tour_step: TourStep
   started_at: string | null
   finished_at: string | null
+  usage: BrainUsage | null
+  docs_count: number
 }
 
-/** Flujo 1 · pruebas de cambios: de dónde llegan los cambios. */
+export type BrainEstimate = {
+  model: string
+  chars: number
+  files: number
+  chunks: number
+  tokens_in: number
+  tokens_out: number
+  cost_usd: number | null
+}
+
+export type GithubRepo = { full_name: string; private: boolean; default_branch: string; pushed_at: string | null; description: string | null }
+
+/** Nodo final «Enviar por WhatsApp» de un flujo. */
+export type WhatsappConfig = { enabled: boolean; to: string[] }
+
+/** Flujo 1 · pruebas de cambios: de dónde llegan los cambios y a quién se avisa. */
 export type Flow1Config = {
   manual: boolean
-  tickets: boolean
+  /** Cada tarea del proyecto que pasa a «Hecha» se analiza (se revisa cada minuto). */
+  tareas: boolean
   repo: boolean
   repo_every_minutes: number
+  whatsapp: WhatsappConfig
 }
 
-export const DEFAULT_FLOW1: Flow1Config = { manual: true, tickets: false, repo: false, repo_every_minutes: 1440 }
+export const DEFAULT_FLOW1: Flow1Config = {
+  manual: true,
+  tareas: false,
+  repo: false,
+  repo_every_minutes: 1440,
+  whatsapp: { enabled: false, to: [] },
+}
 
-export type InboxOrigen = 'cerebro' | 'manual' | 'ticket' | 'repo'
+/** «ticket» queda por las entradas antiguas; hoy entran tareas. «mejora» viene del flujo de mejoras. */
+export type InboxOrigen = 'cerebro' | 'manual' | 'tarea' | 'ticket' | 'repo' | 'mejora'
+
+/* ───────────── Flujos de informe: conversaciones reales y mejoras ───────────── */
+
+export type ReportKind = 'real' | 'mejoras'
+
+export type ReportConfig = {
+  kind: ReportKind
+  enabled: boolean
+  /** 0 = solo a mano. */
+  every_minutes: number
+  whatsapp: WhatsappConfig
+  last_run_at: string | null
+  next_run_at: string | null
+}
+
+export type ReportRun = {
+  id: string
+  kind: ReportKind
+  trigger: 'manual' | 'cron'
+  status: 'running' | 'ok' | 'error'
+  output: ReportOutput | null
+  error: string | null
+  usage: BrainUsage | null
+  whatsapp: { sent: number; errors: string[] } | null
+  started_at: string
+  finished_at: string | null
+}
+
+export type ReportItem = {
+  titulo: string
+  detalle: string
+  norma: string | null
+  conversaciones: string[]
+  gravedad: Gravedad
+  /** Mejoras: impacto y esfuerzo. */
+  impacto?: Gravedad
+  esfuerzo?: Gravedad
+  /** Mejoras: norma que se propone añadir a la bandeja. */
+  norma_propuesta?: string | null
+}
+
+export type ReportOutput = {
+  resumen: string
+  periodo: string
+  metricas: Record<string, number | string>
+  /** Conversaciones reales: incumplimientos · Mejoras: propuestas. */
+  items: ReportItem[]
+  dudosas: ReportItem[]
+  bien: string[]
+  limites: string[]
+}
 export type Accion = 'nueva' | 'modificar' | 'ya_existe' | 'no_es_norma'
 
 export type Propuesta = {
@@ -134,7 +234,7 @@ export type Norma = {
 export type Flow1Public = {
   config: Flow1Config
   configured: boolean
-  last_ticket_scan_at: string | null
+  last_task_scan_at: string | null
   last_repo_scan_at: string | null
   last_repo_sha: string | null
   normas: Norma[]

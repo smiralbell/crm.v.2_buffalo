@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Brain as BrainIcon, CheckCircle2, GitBranch, Loader2, Play, Radar, Sparkles } from 'lucide-react'
+import { Brain as BrainIcon, CheckCircle2, GitBranch, Loader2, Play, Radar, Sparkles, Square } from 'lucide-react'
 import s from './qa.module.css'
 import Flow1ConfigForm from './Flow1Config'
 import type { BrainPublic, Flow1Config, TourStep } from '@/lib/retencion/qa/types'
@@ -62,6 +62,7 @@ export default function GuidedTour({
   forced,
   onStep,
   onStart,
+  onStop,
   onOpenSheet,
   onGoFlow,
   onSaveFlow1,
@@ -75,6 +76,7 @@ export default function GuidedTour({
   forced: boolean
   onStep: (s: TourStep) => void
   onStart: () => Promise<void>
+  onStop: () => Promise<void>
   onOpenSheet: (s: 'repo' | 'cerebro' | null) => void
   onGoFlow: (f: 'cerebro' | 'cambios') => void
   onSaveFlow1: (c: Flow1Config) => Promise<boolean>
@@ -137,7 +139,7 @@ export default function GuidedTour({
               <span className={s.stepNum}><Radar className="h-4 w-4" /></span>
               <div>
                 <p className="text-sm font-semibold text-gray-900">El cerebro</p>
-                <p className="text-sm text-gray-500">Una araña recorre el repositorio, los MCP y Retell y entiende cómo funciona todo.</p>
+                <p className="text-sm text-gray-500">Una araña lee el repositorio y los MCP enteros y entiende cómo funciona todo.</p>
               </div>
             </div>
             <div className={s.stepRow}>
@@ -186,7 +188,7 @@ export default function GuidedTour({
           </div>
           <h3 className="text-lg font-semibold tracking-tight text-gray-900">Dile dónde mirar</h3>
           <p className="text-sm text-gray-500">
-            El CRM y los MCP ya están conectados. Pulsa <b className="text-gray-800">Repositorio</b> y pega la URL de GitHub o la carpeta del proyecto. Retell es opcional.
+            El CRM y los MCP ya están conectados. Pulsa <b className="text-gray-800">Repositorio</b> y elige el del proyecto en la lista de GitHub.
           </p>
           <div className="flex gap-2">
             <button type="button" className={s.btn} onClick={() => onOpenSheet('repo')}>
@@ -214,6 +216,7 @@ export default function GuidedTour({
   if (step === 'rastreo') {
     const running = brain?.status === 'running'
     const failed = brain?.status === 'error'
+    const stopped = brain?.status === 'stopped'
     const current = brain?.phases.find((p) => p.status === 'running')
     return (
       <>
@@ -233,13 +236,23 @@ export default function GuidedTour({
                 <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${brain?.progress ?? 0}%` }} />
               </div>
               <p className="truncate text-sm text-gray-500">{current?.detail || 'Preparando…'}</p>
-              <p className="text-[12px] text-gray-400">Puedes seguir trabajando. Te aviso al terminar.</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[12px] text-gray-400">Puedes seguir trabajando. Te aviso al terminar.</p>
+                <button type="button" className={s.btn} disabled={busy} onClick={() => void onStop()}>
+                  <Square className="h-3 w-3" />
+                  Parar
+                </button>
+              </div>
             </>
           ) : (
             <>
-              <h3 className="text-lg font-semibold tracking-tight text-gray-900">{failed ? 'El rastreo falló' : 'Lanza la araña'}</h3>
+              <h3 className="text-lg font-semibold tracking-tight text-gray-900">{failed ? 'El rastreo falló' : stopped ? 'Rastreo parado' : 'Lanza la araña'}</h3>
               <p className="text-sm text-gray-500">
-                {failed ? brain?.error || 'Revisa las fuentes y vuelve a intentarlo.' : 'Recorre todas las fuentes y construye el cerebro. Tarda unos minutos.'}
+                {failed
+                  ? brain?.error || 'Revisa las fuentes y vuelve a intentarlo.'
+                  : stopped
+                  ? 'Lo has parado. Cuando quieras, lánzalo otra vez desde el principio.'
+                  : 'Lee todas las fuentes por trozos con un modelo barato y construye el cerebro. Tarda unos minutos y cuesta céntimos (el coste exacto, en la Araña).'}
               </p>
               <button
                 type="button"
@@ -258,7 +271,7 @@ export default function GuidedTour({
                 }}
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                {failed ? 'Reintentar' : 'Lanzar ahora'}
+                {failed || stopped ? 'Lanzar otra vez' : 'Lanzar ahora'}
               </button>
               {err && <p className="text-sm text-red-700">{err}</p>}
             </>

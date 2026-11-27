@@ -4,22 +4,21 @@ import { requireAuthAPI } from '@/lib/auth'
 import { assertProjectAccess } from '@/lib/project-access'
 import { assertRetencionEligible } from '@/lib/retencion/eligibility'
 import { listMcpServers } from '@/lib/retencion/mcp/store'
-import { localReposAllowed } from '@/lib/retencion/qa/repo-reader'
-import { defaultRepo, startSpider } from '@/lib/retencion/qa/spider'
-import { getBrainPublic, saveBrainSources, setTourStep } from '@/lib/retencion/qa/store'
+import { githubConfigured, localReposAllowed } from '@/lib/retencion/qa/repo-reader'
+import { defaultRepo, estimateSpider, startSpider } from '@/lib/retencion/qa/spider'
+import { getBrainPublic, listBrainDocs, requestSpiderStop, saveBrainSources, setTourStep } from '@/lib/retencion/qa/store'
 import { TOUR_STEPS, type TourStep } from '@/lib/retencion/qa/types'
 
 const patchSchema = z.object({
   repo_source: z.string().max(500).nullish(),
   repo_branch: z.string().max(200).nullish(),
-  retell_api_key: z.string().max(400).nullish(),
-  clear_retell: z.boolean().optional(),
   tour_step: z.enum(TOUR_STEPS as [TourStep, ...TourStep[]]).optional(),
 })
 
 /**
  * Cerebro del proyecto (calidad).
- * GET: estado del rastreo y cerebro · PATCH: fuentes y paso del tutorial · POST {action:'start'}: lanza la araña.
+ * GET: estado y cerebro (?estimate=1 coste estimado · ?docs=1 lo que se leyó)
+ * PATCH: repositorio y paso del tutorial · POST {action:'start'}: lanza la araña.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -43,11 +42,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           mcp_connected: servers.filter((s) => s.estado === 'conectado').map((s) => s.nombre),
           mcp_total: servers.length,
           local_repos: localReposAllowed(),
+          github: githubConfigured(),
         },
       })
     }
 
     if (req.method === 'GET') {
+      if (req.query.estimate) return res.status(200).json({ estimate: await estimateSpider(proyectoId) })
+      if (req.query.docs) return res.status(200).json({ docs: await listBrainDocs(proyectoId) })
       void import('@/lib/retencion/watch-scheduler')
         .then((m) => m.startRetencionWatchScheduler())
         .catch(() => undefined)
@@ -56,8 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'PATCH') {
       const body = patchSchema.parse(req.body || {})
-      const touchesSources =
-        body.repo_source !== undefined || body.repo_branch !== undefined || body.retell_api_key !== undefined || body.clear_retell
+      const touchesSources = body.repo_source !== undefined || body.repo_branch !== undefined
       if (touchesSources && user.role !== 'admin') return res.status(403).json({ error: 'Solo administradores' })
       if (touchesSources) await saveBrainSources(proyectoId, body)
       if (body.tour_step) await setTourStep(proyectoId, body.tour_step)
@@ -67,7 +68,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === 'POST') {
       if (user.role !== 'admin') return res.status(403).json({ error: 'Solo administradores' })
       const action = (req.body as { action?: string } | undefined)?.action
-      if (action !== 'start') return res.status(400).json({ error: 'action debe ser start' })
+      if (action === 'stop') {
+        await requestSpiderStop(proyectoId)
+        return respond()
+      }
+      if (action !== 'start') return res.status(400).json({ error: 'action debe ser start o stop' })
       const started = await startSpider(proyectoId)
       if (!started) return res.status(409).json({ error: 'Ya hay un rastreo en marcha' })
       return respond(202)

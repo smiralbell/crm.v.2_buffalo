@@ -1,14 +1,37 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Brain as BrainIcon, FlaskConical, GitBranch, Inbox, ListChecks, Loader2, PenLine, RefreshCw, Send, Settings2, Ticket, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  Brain as BrainIcon,
+  CheckSquare,
+  FlaskConical,
+  GitBranch,
+  Inbox,
+  ListChecks,
+  Loader2,
+  MessageCircle,
+  PenLine,
+  RefreshCw,
+  Send,
+  Settings2,
+  X,
+} from 'lucide-react'
 import ws from '@/components/retencion/WatchSystemMap.module.css'
 import s from './qa.module.css'
 import { FanWire, FlowNode, LineWire, timeAgo } from './FlowBits'
-import Flow1ConfigForm, { REPO_EVERY } from './Flow1Config'
+import Flow1ConfigForm, { ENTRADAS, REPO_EVERY } from './Flow1Config'
+import WhatsappEditor from './WhatsappEditor'
 import type { Flow1Config, Flow1Public, InboxItem } from '@/lib/retencion/qa/types'
 
-export type Flow1Sheet = 'manual' | 'tickets' | 'repo' | 'bandeja' | 'normas' | 'pruebas' | 'config' | null
+export type Flow1Sheet = 'manual' | 'tareas' | 'repo' | 'bandeja' | 'normas' | 'pruebas' | 'whatsapp' | 'config' | null
 
-const ORIGEN: Record<InboxItem['origen'], string> = { cerebro: 'Cerebro', manual: 'Manual', ticket: 'Ticket', repo: 'Repositorio' }
+export const ORIGEN: Record<InboxItem['origen'], string> = {
+  cerebro: 'Cerebro',
+  manual: 'Manual',
+  tarea: 'Tarea',
+  ticket: 'Ticket',
+  repo: 'Repositorio',
+  mejora: 'Mejoras',
+}
 const ACCION: Record<InboxItem['propuesta']['accion'], { t: string; c: string }> = {
   nueva: { t: 'Norma nueva', c: s.tagGreen },
   modificar: { t: 'Modifica', c: s.tagAmber },
@@ -85,7 +108,7 @@ export default function Flow1Panel({
   }
 
   const saveConfig = (c: Flow1Config) => call('config', 'PATCH', c, () => 'Guardado')
-  const toggle = (k: 'manual' | 'tickets' | 'repo') => flow && void saveConfig({ ...flow.config, [k]: !flow.config[k] })
+  const toggle = (k: 'manual' | 'tareas' | 'repo') => flow && void saveConfig({ ...flow.config, [k]: !flow.config[k] })
 
   const cfg = flow?.config
   const pending = flow?.inbox.filter((i) => i.estado === 'pendiente') || []
@@ -100,15 +123,15 @@ export default function Flow1Panel({
           {pending.length} pendientes · {activas.length} normas
         </span>
         <div className="flex items-center gap-2">
-          {isAdmin && (cfg?.tickets || cfg?.repo) && (
+          {isAdmin && (cfg?.tareas || cfg?.repo) && (
             <button
               type="button"
               className={s.btn}
               disabled={busy === 'scan'}
               onClick={() =>
                 void call('scan', 'POST', { action: 'scan_now' }, (d) => {
-                  const sc = (d.scan || {}) as { tickets?: number; repo?: string }
-                  return [sc.tickets != null ? `Tickets: ${sc.tickets} propuestas` : '', sc.repo ? `Repositorio: ${sc.repo}` : ''].filter(Boolean).join(' · ') || 'Revisado'
+                  const sc = (d.scan || {}) as { tareas?: number; repo?: string }
+                  return [sc.tareas != null ? `Tareas: ${sc.tareas} propuestas` : '', sc.repo ? `Repositorio: ${sc.repo}` : ''].filter(Boolean).join(' · ') || 'Revisado'
                 }).then(() => onSheet('bandeja'))
               }
             >
@@ -126,16 +149,16 @@ export default function Flow1Panel({
       </div>
 
       <div className={s.scroll}>
-        <div className={`${s.map} ${s.map4}`}>
+        <div className={`${s.map} ${s.map5}`}>
           <div className={s.col}>
-            <FlowNode icon={PenLine} title="Manual" sub={cfg?.manual ? 'Activo' : 'Apagado'} state={cfg?.manual ? 'done' : 'dim'} selected={sheet === 'manual'} onClick={() => onSheet(sheet === 'manual' ? null : 'manual')} />
+            <FlowNode icon={PenLine} title="Manual" sub={cfg?.manual ? 'Al enviarla' : 'Apagado'} state={cfg?.manual ? 'done' : 'dim'} selected={sheet === 'manual'} onClick={() => onSheet(sheet === 'manual' ? null : 'manual')} />
             <FlowNode
-              icon={Ticket}
-              title="Tickets"
-              sub={cfg?.tickets ? (flow?.last_ticket_scan_at ? `Revisado ${timeAgo(flow.last_ticket_scan_at)}` : 'Activo') : 'Apagado'}
-              state={cfg?.tickets ? 'done' : 'dim'}
-              selected={sheet === 'tickets'}
-              onClick={() => onSheet(sheet === 'tickets' ? null : 'tickets')}
+              icon={CheckSquare}
+              title="Tareas"
+              sub={cfg?.tareas ? 'Al pasar a Hecha' : 'Apagado'}
+              state={cfg?.tareas ? 'done' : 'dim'}
+              selected={sheet === 'tareas'}
+              onClick={() => onSheet(sheet === 'tareas' ? null : 'tareas')}
             />
             <FlowNode
               icon={GitBranch}
@@ -146,12 +169,21 @@ export default function Flow1Panel({
               onClick={() => onSheet(sheet === 'repo' ? null : 'repo')}
             />
           </div>
-          <FanWire count={3} lit={[Boolean(cfg?.manual), Boolean(cfg?.tickets), Boolean(cfg?.repo)]} />
+          <FanWire count={3} lit={[Boolean(cfg?.manual), Boolean(cfg?.tareas), Boolean(cfg?.repo)]} />
           <FlowNode icon={Inbox} title="Bandeja" sub={pending.length ? `${pending.length} por revisar` : 'Al día'} badge={pending.length || null} selected={sheet === 'bandeja'} onClick={() => onSheet(sheet === 'bandeja' ? null : 'bandeja')} tour="bandeja" />
           <LineWire lit={activas.length > 0} />
           <FlowNode icon={ListChecks} title="Normas" sub={`${activas.length} activas`} state={activas.length ? 'done' : 'idle'} selected={sheet === 'normas'} onClick={() => onSheet(sheet === 'normas' ? null : 'normas')} />
           <LineWire />
           <FlowNode icon={FlaskConical} title="Pruebas" sub="Siguiente fase" state="dim" selected={sheet === 'pruebas'} onClick={() => onSheet(sheet === 'pruebas' ? null : 'pruebas')} />
+          <LineWire lit={Boolean(cfg?.whatsapp.enabled)} />
+          <FlowNode
+            icon={MessageCircle}
+            title="WhatsApp"
+            sub={cfg?.whatsapp.enabled ? `${cfg.whatsapp.to.length} ${cfg.whatsapp.to.length === 1 ? 'móvil' : 'móviles'}` : 'Apagado'}
+            state={cfg?.whatsapp.enabled ? 'done' : 'dim'}
+            selected={sheet === 'whatsapp'}
+            onClick={() => onSheet(sheet === 'whatsapp' ? null : 'whatsapp')}
+          />
         </div>
       </div>
 
@@ -177,10 +209,21 @@ export default function Flow1Panel({
           <div className={ws.sheetHead}>
             <div>
               <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-gray-400">
-                {sheet === 'manual' || sheet === 'tickets' || sheet === 'repo' ? 'Entrada' : 'Flujo de cambios'}
+                {sheet === 'manual' || sheet === 'tareas' || sheet === 'repo' ? 'Entrada' : 'Flujo de cambios'}
               </p>
               <h3 className="mt-0.5 text-lg font-semibold text-gray-900">
-                {{ manual: 'Manual', tickets: 'Tickets', repo: 'Repositorio', bandeja: 'Bandeja', normas: 'Normas', pruebas: 'Pruebas', config: 'De dónde llegan los cambios' }[sheet]}
+                {
+                  {
+                    manual: 'Manual',
+                    tareas: 'Tareas',
+                    repo: 'Repositorio',
+                    bandeja: 'Bandeja',
+                    normas: 'Normas',
+                    pruebas: 'Pruebas',
+                    whatsapp: 'Enviar por WhatsApp',
+                    config: 'De dónde llegan los cambios',
+                  }[sheet]
+                }
               </h3>
             </div>
             <button type="button" className={ws.hudBtn} onClick={() => onSheet(null)} aria-label="Cerrar">
@@ -190,11 +233,26 @@ export default function Flow1Panel({
           <div className={ws.sheetBody}>
             {sheet === 'config' && cfg && <Flow1ConfigForm initial={cfg} saving={busy === 'config'} onSave={(c) => void saveConfig(c)} />}
 
-            {(sheet === 'manual' || sheet === 'tickets' || sheet === 'repo') && cfg && (
-              <label className="flex items-center justify-between gap-3 rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-800">
-                {cfg[sheet] ? 'Activo' : 'Apagado'}
-                <input type="checkbox" className="h-4 w-4" checked={cfg[sheet]} disabled={!isAdmin || busy === 'config'} onChange={() => toggle(sheet)} />
-              </label>
+            {(sheet === 'manual' || sheet === 'tareas' || sheet === 'repo') && cfg && (
+              <>
+                <label className="flex items-center justify-between gap-3 rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-800">
+                  {cfg[sheet] ? 'Activo' : 'Apagado'}
+                  <input type="checkbox" className="h-4 w-4" checked={cfg[sheet]} disabled={!isAdmin || busy === 'config'} onChange={() => toggle(sheet)} />
+                </label>
+                <p className="text-[11px] font-medium uppercase tracking-[0.05em] text-gray-400">
+                  Disparador · {ENTRADAS.find((e) => e.k === sheet)?.trigger}
+                </p>
+              </>
+            )}
+
+            {sheet === 'whatsapp' && cfg && (
+              <WhatsappEditor
+                value={cfg.whatsapp}
+                isAdmin={isAdmin}
+                saving={busy === 'config'}
+                hint="Cuando entra en la bandeja algo que revisar (una norma nueva, un cambio o un choque con otra), llega un aviso con el resumen y el enlace."
+                onSave={(w) => void saveConfig({ ...cfg, whatsapp: w })}
+              />
             )}
 
             {sheet === 'manual' && (
@@ -231,10 +289,11 @@ export default function Flow1Panel({
               </>
             )}
 
-            {sheet === 'tickets' && (
+            {sheet === 'tareas' && (
               <p className="text-sm text-gray-600">
-                Cada ticket nuevo de este proyecto se analiza en menos de un minuto. Si cambia el comportamiento del agente, se propone como norma.
-                {flow?.last_ticket_scan_at ? ` Última revisión: ${timeAgo(flow.last_ticket_scan_at)}.` : ''}
+                Cada tarea de este proyecto que pasa a <b>Hecha</b> es un cambio hecho en el sistema. En menos de un minuto la IA la lee (título, descripción y subtareas) y, si cambia el
+                comportamiento del agente, propone la norma. Las tareas que ya estaban hechas al activarlo no cuentan: eso ya lo sabe el cerebro.
+                {flow?.last_task_scan_at ? ` Última tarea revisada: ${timeAgo(flow.last_task_scan_at)}.` : ''}
               </p>
             )}
 

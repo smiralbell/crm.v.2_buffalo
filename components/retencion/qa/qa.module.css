@@ -32,6 +32,16 @@
   min-width: 1050px;
 }
 
+.map5 {
+  grid-template-columns: 200px 64px 180px 64px 180px 64px 180px 64px 180px;
+  min-width: 1176px;
+}
+
+.map6 {
+  grid-template-columns: 170px 52px 170px 52px 170px 52px 170px 52px 170px 52px 170px;
+  min-width: 1110px;
+}
+
 .col {
   display: flex;
   flex-direction: column;

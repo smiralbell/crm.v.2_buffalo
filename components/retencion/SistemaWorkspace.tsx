@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { Brain, FlaskConical, Loader2, Plus, RotateCcw, Workflow, X } from 'lucide-react'
+import { Brain, FlaskConical, Lightbulb, Loader2, MessagesSquare, Plus, RotateCcw, Workflow, X } from 'lucide-react'
 import FlowCanvas, { intervaloLabel, type Flujo } from '@/components/retencion/FlowCanvas'
 import QaWorkspace, { isQaView, type QaView } from '@/components/retencion/qa/QaWorkspace'
 
@@ -133,6 +133,12 @@ export default function SistemaWorkspace({
         </button>
         <button type="button" className={pill(active === 'cambios')} onClick={() => select('cambios')}>
           <FlaskConical className="h-3.5 w-3.5" /> Pruebas de cambios
+        </button>
+        <button type="button" className={pill(active === 'real')} onClick={() => select('real')}>
+          <MessagesSquare className="h-3.5 w-3.5" /> Conversaciones reales
+        </button>
+        <button type="button" className={pill(active === 'mejoras')} onClick={() => select('mejoras')}>
+          <Lightbulb className="h-3.5 w-3.5" /> Mejoras
         </button>
         <span className="mx-1 h-5 w-px shrink-0 bg-gray-200" aria-hidden />
         {!watchHidden && (

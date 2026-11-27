@@ -1,31 +1,64 @@
 import { createHash } from 'crypto'
 import { query } from '@/lib/db'
-import { openRouterChatCompletion, resolveModel } from '@/lib/openrouter'
 import { collectCrmKnowledge } from '@/lib/retencion/knowledge/collect-crm'
 import { connectionForRow } from '@/lib/retencion/mcp/api'
 import { callMcpTool, inspectMcp } from '@/lib/retencion/mcp/client'
 import { listMcpServers } from '@/lib/retencion/mcp/store'
-import { BRAIN_SYSTEM_PROMPT, extractJson, normalizeBrain } from './brain-format'
-import { clip, makeRepoReader, selectRepoFiles, visibleTree } from './repo-reader'
+import {
+  EXTRACT_SYSTEM_PROMPT,
+  SYNTH_SYSTEM_PROMPT,
+  buildBrain,
+  chunkSources,
+  extractJson,
+  mergeFacts,
+  normalizeFacts,
+  synthInput,
+  type SourceBlock,
+} from './brain-format'
+import { charsToTokens, estimateCost, modelPricing, qaChat, qaModel, type ChatUsage } from './llm'
+import { makeRepoReader, mapLimit, selectRepoFiles, visibleTree } from './repo-reader'
 import {
   addInbox,
   claimSpiderRun,
   finishSpider,
   getBrainRow,
-  getRetellKey,
   listNormas,
+  markSpiderStopped,
   saveSpiderProgress,
+  type BrainDoc,
 } from './store'
-import { computeProgress, initialPhases, type BrainPhase, type BrainPhaseId } from './types'
+import { computeProgress, initialPhases, type BrainEstimate, type BrainFacts, type BrainPhase, type BrainPhaseId, type BrainUsage } from './types'
 
 /**
- * La araña: recorre CRM, repositorio, MCP y Retell del proyecto y construye su cerebro.
- * Va guardando el progreso (0–100) por fases para que la pantalla lo enseñe en vivo.
+ * La araña: recorre CRM, repositorio y MCP del proyecto, lee TODO por trozos con un
+ * modelo barato y construye el cerebro sin perder detalle. Guarda el progreso (0–100)
+ * por fases y el coste real de la IA.
  */
 
-const REPO_BUDGET = 300_000
-const MCP_CALL_CHARS = 8_000
+/** Trozo de fuentes por llamada (~40.000 tokens): cabe de sobra y no se pierde nada. */
+export const CHUNK_CHARS = 140_000
+/** Tope de lectura del repositorio: cubre de sobra un proyecto como PREICO entero. */
+const REPO_MAX_CHARS = 2_500_000
+const EXTRACT_PARALLEL = 3
+const MCP_CALL_CHARS = 40_000
+const MCP_MAX_CALLS = 30
+/** Primera pasada: herramientas de descripción del sistema que no piden argumentos. */
 const DISCOVERY = /(resumen|summary|estado|status|listar_agentes|agentes|ver_agente_voz|listar_docs|ver_guia|guia|herramientas|tools|descripcion)/i
+/** Segunda pasada (con un argumento): solo herramientas de configuración, nunca de clientes. */
+const DETAIL_TOOLS = /(agente|agent|prompt|herramient|tool|descripcion|guia|voz)/i
+const PERSONAL = /(lead|conversaci|llamada|call|ticket|cliente|contact|correo|email|cita|buscar|search|log)/i
+
+/** Se lanza cuando se pide parar el rastreo; nunca se trata como un error. */
+export class SpiderStopped extends Error {
+  constructor(public phases: BrainPhase[]) {
+    super('Rastreo parado')
+  }
+}
+
+/** En los `catch` de cada fase: una parada se deja pasar hacia arriba. */
+function rethrowStop(e: unknown): void {
+  if (e instanceof SpiderStopped) throw e
+}
 
 class Progress {
   phases: BrainPhase[] = initialPhases()
@@ -57,7 +90,24 @@ class Progress {
     const now = Date.now()
     if (!force && now - this.last < 700) return
     this.last = now
-    await saveSpiderProgress(this.proyectoId, computeProgress(this.phases, this.current, this.fraction), this.phases)
+    const stop = await saveSpiderProgress(this.proyectoId, computeProgress(this.phases, this.current, this.fraction), this.phases)
+    if (stop) {
+      if (this.current) this.set(this.current, { status: 'error', detail: 'Parado' })
+      throw new SpiderStopped(this.phases)
+    }
+  }
+}
+
+class UsageMeter {
+  u: BrainUsage
+  constructor(model: string) {
+    this.u = { model, tokens_in: 0, tokens_out: 0, cost_usd: 0, calls: 0 }
+  }
+  add(x: ChatUsage) {
+    this.u.tokens_in += x.tokens_in
+    this.u.tokens_out += x.tokens_out
+    this.u.calls++
+    this.u.cost_usd = this.u.cost_usd == null || x.cost_usd == null ? null : this.u.cost_usd + x.cost_usd
   }
 }
 
@@ -68,16 +118,141 @@ export async function startSpider(proyectoId: string): Promise<boolean> {
   const ok = await claimSpiderRun(proyectoId)
   if (!ok) return false
   void runSpider(proyectoId).catch(async (e) => {
+    if (e instanceof SpiderStopped) {
+      await markSpiderStopped(proyectoId, e.phases).catch(() => undefined)
+      return
+    }
     console.warn('[retencion-qa] rastreo', errMsg(e))
     await finishSpider(proyectoId, { ok: false, error: errMsg(e), phases: initialPhases() }).catch(() => undefined)
   })
   return true
 }
 
+/** Repositorio apuntado en Gestión de proyecto, si lo hay. */
+export async function defaultRepo(proyectoId: string): Promise<string | null> {
+  try {
+    const { rows } = await query<{ repo_url: string | null }>(`SELECT repo_url FROM project_dev_onboarding WHERE project_id = $1`, [proyectoId])
+    return rows[0]?.repo_url?.trim() || null
+  } catch {
+    return null
+  }
+}
+
+/* ───────────── fuentes ───────────── */
+
+type Collected = { blocks: SourceBlock[]; docs: BrainDoc[] }
+
+async function collectRepo(
+  source: string,
+  branch: string | null,
+  onStep: (fraction: number, detail: string) => Promise<void>
+): Promise<Collected & { read: number; total: number; label: string }> {
+  const reader = await makeRepoReader(source, branch)
+  const all = await reader.listFiles()
+  const picked: typeof all = []
+  let budget = 0
+  for (const f of selectRepoFiles(all)) {
+    if (budget + f.size > REPO_MAX_CHARS) continue
+    picked.push(f)
+    budget += f.size
+  }
+  const tree = visibleTree(all.map((f) => f.path)).join('\n')
+  const blocks: SourceBlock[] = [{ label: `${reader.label} · árbol de archivos`, text: tree }]
+  const docs: BrainDoc[] = []
+  let done = 0
+  const texts = await mapLimit(picked, 8, async (f) => {
+    const text = await reader.readFile(f.path)
+    done++
+    await onStep(done / Math.max(1, picked.length), `Leyendo ${f.path}`)
+    return text
+  })
+  picked.forEach((f, i) => {
+    const text = texts[i]
+    if (!text) return
+    blocks.push({ label: `${reader.label}/${f.path}`, text })
+    docs.push({ fuente: 'repositorio', ruta: f.path, contenido: text })
+  })
+  return { blocks, docs, read: docs.length, total: all.length, label: reader.label }
+}
+
+/** Valores para el único argumento de una herramienta, sacados de lo que ya devolvieron otras. */
+export function argCandidates(param: string, outputs: string[], max = 15): string[] {
+  const keys = [param, `${param}_id`, 'id', 'nombre', 'name', 'agent_id']
+  const found: string[] = []
+  for (const out of outputs) {
+    for (const k of keys) {
+      const re = new RegExp(`"${k}"\\s*:\\s*"([^"\\n]{1,120})"`, 'g')
+      let m: RegExpExecArray | null
+      while ((m = re.exec(out)) && found.length < max) {
+        if (!found.includes(m[1])) found.push(m[1])
+      }
+    }
+  }
+  return found.slice(0, max)
+}
+
+async function collectMcp(
+  proyectoId: string,
+  onStep: (fraction: number, detail: string) => Promise<void>
+): Promise<(Collected & { servers: number; calls: number }) | null> {
+  const servers = (await listMcpServers(proyectoId)).filter((s) => s.estado === 'conectado')
+  if (!servers.length) return null
+  const blocks: SourceBlock[] = []
+  const docs: BrainDoc[] = []
+  let calls = 0
+  for (let i = 0; i < servers.length; i++) {
+    const s = servers[i]
+    const conn = connectionForRow(s)
+    try {
+      await onStep(i / servers.length, `Listando herramientas de ${s.nombre}`)
+      const info = await inspectMcp(conn)
+      const listing = info.tools.map((t) => `- ${t.name}: ${t.description || ''}`).join('\n')
+      blocks.push({ label: `MCP ${s.nombre} · herramientas`, text: listing })
+      docs.push({ fuente: 'mcp', ruta: `${s.nombre} · herramientas`, contenido: listing })
+
+      const required = (t: (typeof info.tools)[number]) => {
+        const r = (t.inputSchema as { required?: unknown } | undefined)?.required
+        return Array.isArray(r) ? (r as string[]) : []
+      }
+      const outputs: string[] = []
+      const run = async (name: string, args: Record<string, unknown>) => {
+        if (calls >= MCP_MAX_CALLS * (i + 1)) return
+        const label = `${name}(${Object.values(args).join(', ')})`
+        await onStep((i + 0.5) / servers.length, `${s.nombre} · ${label}`)
+        const r = await callMcpTool(conn, name, args)
+        calls++
+        if (!r.ok || r.esError) return
+        const text = r.resultado.slice(0, MCP_CALL_CHARS)
+        outputs.push(text)
+        blocks.push({ label: `MCP ${s.nombre} · ${label}`, text })
+        docs.push({ fuente: 'mcp', ruta: `${s.nombre} · ${label}`, contenido: text })
+      }
+      // 1) Descripción del sistema sin argumentos.
+      for (const t of info.tools.filter((t) => DISCOVERY.test(t.name) && !PERSONAL.test(t.name) && required(t).length === 0).slice(0, 8)) {
+        await run(t.name, {})
+      }
+      // 2) Detalle de cada agente, prompt o herramienta, con los identificadores de la primera pasada.
+      for (const t of info.tools.filter((t) => DETAIL_TOOLS.test(t.name) && !PERSONAL.test(t.name) && required(t).length === 1)) {
+        const param = required(t)[0]
+        for (const v of argCandidates(param, outputs)) await run(t.name, { [param]: v })
+      }
+    } catch (e) {
+      rethrowStop(e)
+      blocks.push({ label: `MCP ${s.nombre}`, text: `No se pudo leer: ${errMsg(e)}` })
+    }
+  }
+  return { blocks, docs, servers: servers.length, calls }
+}
+
+/* ───────────── rastreo ───────────── */
+
 async function runSpider(proyectoId: string): Promise<void> {
   const pr = new Progress(proyectoId)
+  const model = qaModel()
+  const meter = new UsageMeter(model)
   const row = await getBrainRow(proyectoId)
-  const sources: string[] = []
+  const blocks: SourceBlock[] = []
+  const docs: BrainDoc[] = []
 
   const proj = await query<{ name: string }>(`SELECT name FROM proyectos WHERE id = $1`, [proyectoId])
   const projectName = proj.rows[0]?.name || 'Proyecto'
@@ -85,10 +260,12 @@ async function runSpider(proyectoId: string): Promise<void> {
   /* 1 · CRM */
   await pr.start('crm', 'Leyendo el proyecto en el CRM')
   try {
-    const crm = await collectCrmKnowledge(proyectoId)
-    sources.push(`### CRM (proyecto, cliente, onboarding, tickets)\n${clip(JSON.stringify(crm, null, 1), 25_000)}`)
-    await pr.end('crm', 'done', `${crm.sources_ok.length} fuentes del CRM`)
+    const crm = JSON.stringify(await collectCrmKnowledge(proyectoId), null, 1)
+    blocks.push({ label: 'CRM · proyecto, cliente, onboarding, tareas y tickets', text: crm })
+    docs.push({ fuente: 'crm', ruta: 'proyecto', contenido: crm })
+    await pr.end('crm', 'done', 'Proyecto, cliente, onboarding y tickets')
   } catch (e) {
+    rethrowStop(e)
     await pr.end('crm', 'error', errMsg(e))
   }
 
@@ -99,112 +276,87 @@ async function runSpider(proyectoId: string): Promise<void> {
   } else {
     await pr.start('repo', `Abriendo ${repoSource}`)
     try {
-      const reader = await makeRepoReader(repoSource, row.repo_branch)
-      const all = await reader.listFiles()
-      const picked = selectRepoFiles(all)
-      const parts: string[] = [`Árbol (${all.length} archivos):\n${visibleTree(all).join('\n')}`]
-      let used = parts[0].length
-      let read = 0
-      for (let i = 0; i < picked.length && used < REPO_BUDGET; i++) {
-        await pr.step(i / picked.length, `Leyendo ${picked[i]}`)
-        const text = await reader.readFile(picked[i])
-        if (!text) continue
-        const block = `\n--- ${picked[i]} ---\n${text}`
-        if (used + block.length > REPO_BUDGET) continue
-        parts.push(block)
-        used += block.length
-        read++
-      }
-      sources.push(`### REPOSITORIO ${reader.label}\n${parts.join('\n')}`)
-      await pr.end('repo', 'done', `${read} archivos leídos de ${all.length}`)
+      const r = await collectRepo(repoSource, row.repo_branch, (f, d) => pr.step(f, d))
+      blocks.push(...r.blocks)
+      docs.push(...r.docs)
+      await pr.end('repo', 'done', `${r.read} archivos leídos de ${r.total}`)
     } catch (e) {
+      rethrowStop(e)
       await pr.end('repo', 'error', errMsg(e))
     }
   }
 
   /* 3 · MCP */
-  const servers = (await listMcpServers(proyectoId)).filter((s) => s.estado === 'conectado')
-  if (!servers.length) {
-    await pr.end('mcp', 'skipped', 'Sin conectores MCP conectados')
-  } else {
-    await pr.start('mcp', `Conectando con ${servers.length} MCP`)
-    const parts: string[] = []
-    let calls = 0
-    for (let i = 0; i < servers.length; i++) {
-      const s = servers[i]
-      try {
-        await pr.step(i / servers.length, `Listando herramientas de ${s.nombre}`)
-        const conn = connectionForRow(s)
-        const info = await inspectMcp(conn)
-        parts.push(
-          `MCP «${s.nombre}» (${info.serverName || s.url}) · herramientas:\n` +
-            info.tools.map((t) => `- ${t.name}: ${(t.description || '').slice(0, 300)}`).join('\n')
-        )
-        const discovery = info.tools
-          .filter((t) => DISCOVERY.test(t.name))
-          .filter((t) => {
-            const req = (t.inputSchema as { required?: unknown } | undefined)?.required
-            return !Array.isArray(req) || req.length === 0
-          })
-          .slice(0, 5)
-        for (const t of discovery) {
-          await pr.step((i + 0.5) / servers.length, `${s.nombre} · ${t.name}`)
-          const r = await callMcpTool(conn, t.name, {})
-          if (r.ok) {
-            parts.push(`MCP «${s.nombre}» · ${t.name}():\n${clip(r.resultado, MCP_CALL_CHARS)}`)
-            calls++
+  await pr.start('mcp', 'Conectando con los MCP')
+  try {
+    const m = await collectMcp(proyectoId, (f, d) => pr.step(f, d))
+    if (!m) await pr.end('mcp', 'skipped', 'Sin conectores MCP conectados')
+    else {
+      blocks.push(...m.blocks)
+      docs.push(...m.docs)
+      await pr.end('mcp', 'done', `${m.servers} MCP · ${m.calls} consultas`)
+    }
+  } catch (e) {
+    rethrowStop(e)
+    await pr.end('mcp', 'error', errMsg(e))
+  }
+
+  /* 4 · IA: extraer por trozos y juntar */
+  const chunks = chunkSources(blocks, CHUNK_CHARS)
+  await pr.start('ia', `Leyendo ${chunks.length} trozos con ${model}`)
+  try {
+    if (!chunks.length) throw new Error('No hay nada que leer: conecta un repositorio o un MCP.')
+    let done = 0
+    const failed: number[] = []
+    const factsList = await mapLimit(chunks, EXTRACT_PARALLEL, async (chunk, i): Promise<BrainFacts | null> => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const out = await qaChat(
+            [
+              { role: 'system', content: EXTRACT_SYSTEM_PROMPT },
+              { role: 'user', content: `Proyecto: ${projectName}\nTrozo ${i + 1} de ${chunks.length}\n\n${chunk}` },
+            ],
+            { json: true, maxTokens: 16_000 }
+          )
+          meter.add(out.usage)
+          const facts = normalizeFacts(extractJson(out.text))
+          done++
+          await pr.step((done / chunks.length) * 0.85, `Trozo ${done} de ${chunks.length} · ${facts.normas_propuestas.length} normas`)
+          return facts
+        } catch (e) {
+          rethrowStop(e)
+          if (attempt === 1) {
+            console.warn('[retencion-qa] trozo', i + 1, errMsg(e))
+            failed.push(i + 1)
           }
         }
-      } catch (e) {
-        parts.push(`MCP «${s.nombre}»: no se pudo leer (${errMsg(e)})`)
       }
-    }
-    sources.push(`### MCP\n${parts.join('\n\n')}`)
-    await pr.end('mcp', 'done', `${servers.length} MCP · ${calls} consultas`)
-  }
+      return null
+    })
+    const ok = factsList.filter((f): f is BrainFacts => Boolean(f))
+    if (!ok.length) throw new Error('La IA no pudo leer ningún trozo')
+    const facts = mergeFacts(ok)
 
-  /* 4 · Retell */
-  const retellKey = await getRetellKey(proyectoId).catch(() => null)
-  if (!retellKey) {
-    await pr.end('retell', 'skipped', 'Sin clave de Retell')
-  } else {
-    await pr.start('retell', 'Leyendo agentes de voz')
-    try {
-      const text = await readRetell(retellKey, (f, d) => pr.step(f, d))
-      sources.push(`### RETELL\n${text.body}`)
-      await pr.end('retell', 'done', `${text.agents} agentes de voz`)
-    } catch (e) {
-      await pr.end('retell', 'error', errMsg(e))
-    }
-  }
-
-  /* 5 · Cerebro (IA) */
-  await pr.start('ia', 'Construyendo el cerebro')
-  const normas = await listNormas(proyectoId)
-  const activas = normas.filter((n) => n.estado === 'activa')
-  const userMsg = [
-    `Proyecto: ${projectName}`,
-    activas.length
-      ? `Normas que YA existen (no las repitas):\n${activas.map((n) => `- ${n.code}: ${n.regla}`).join('\n')}`
-      : 'Todavía no hay normas registradas.',
-    ...sources,
-  ].join('\n\n')
-
-  let creep: ReturnType<typeof setInterval> | null = setInterval(() => {
-    void pr.step(pr.fraction + (0.92 - pr.fraction) * 0.12, 'La IA está estructurando el sistema')
-  }, 2500)
-  try {
-    const out = await openRouterChatCompletion(
+    await pr.step(0.9, 'Juntando y escribiendo el resumen')
+    const normas = (await listNormas(proyectoId)).filter((n) => n.estado === 'activa')
+    const synth = await qaChat(
       [
-        { role: 'system', content: BRAIN_SYSTEM_PROMPT },
-        { role: 'user', content: userMsg },
+        { role: 'system', content: SYNTH_SYSTEM_PROMPT },
+        { role: 'user', content: synthInput(projectName, facts, normas.map((n) => `- ${n.code}: ${n.regla}`)) },
       ],
-      { model: process.env.QA_BRAIN_MODEL || resolveModel('heavy'), json: true, maxTokens: 12_000, temperature: 0.2 }
+      { json: true, maxTokens: 16_000 }
     )
-    clearInterval(creep)
-    creep = null
-    const brain = normalizeBrain(extractJson(out))
-    await pr.step(0.95, 'Guardando normas propuestas')
+    meter.add(synth.usage)
+    let synthJson: unknown = {}
+    try {
+      synthJson = extractJson(synth.text)
+    } catch {
+      // Sin el paso de juntar, el cerebro sigue completo: solo falta el resumen.
+    }
+    const brain = buildBrain(facts, synthJson)
+    if (failed.length) brain.huecos.unshift(`No se pudieron leer los trozos ${failed.join(', ')} de ${chunks.length}: vuelve a rastrear.`)
+
+    await pr.step(0.97, 'Guardando normas propuestas')
     let nuevas = 0
     for (const n of brain.normas_propuestas) {
       const ref = createHash('sha1').update(n.regla.toLowerCase().replace(/\s+/g, ' ')).digest('hex').slice(0, 16)
@@ -226,88 +378,54 @@ async function runSpider(proyectoId: string): Promise<void> {
       })
       if (added) nuevas++
     }
-    await pr.end('ia', 'done', `${brain.entradas.length} entradas · ${brain.agentes.length} agentes · ${nuevas} normas propuestas`)
-    await finishSpider(proyectoId, { ok: true, brain, phases: pr.phases })
+    await pr.end('ia', 'done', `${chunks.length} trozos · ${brain.entradas.length} entradas · ${nuevas} normas nuevas`)
+    await finishSpider(proyectoId, { ok: true, brain, facts, phases: pr.phases, usage: meter.u, docs })
   } catch (e) {
-    if (creep) clearInterval(creep)
+    rethrowStop(e)
     await pr.end('ia', 'error', errMsg(e))
-    await finishSpider(proyectoId, { ok: false, error: `La IA no pudo construir el cerebro: ${errMsg(e)}`, phases: pr.phases })
+    await finishSpider(proyectoId, { ok: false, error: `La IA no pudo construir el cerebro: ${errMsg(e)}`, phases: pr.phases, usage: meter.u })
   }
 }
 
-/** Repositorio apuntado en Gestión de proyecto, si lo hay. */
-export async function defaultRepo(proyectoId: string): Promise<string | null> {
-  try {
-    const { rows } = await query<{ repo_url: string | null }>(
-      `SELECT repo_url FROM project_dev_onboarding WHERE project_id = $1`,
-      [proyectoId]
-    )
-    return rows[0]?.repo_url?.trim() || null
-  } catch {
-    return null
-  }
-}
+/* ───────────── estimación ───────────── */
 
-type RetellAgent = {
-  agent_id: string
-  agent_name?: string
-  voice_id?: string
-  language?: string
-  response_engine?: { type?: string; llm_id?: string; conversation_flow_id?: string }
-  webhook_url?: string
-}
-
-async function readRetell(
-  key: string,
-  onStep: (fraction: number, detail: string) => Promise<void>
-): Promise<{ body: string; agents: number }> {
-  const get = async <T>(p: string): Promise<T> => {
-    const res = await fetch(`https://api.retellai.com${p}`, { headers: { Authorization: `Bearer ${key}` } })
-    if (!res.ok) throw new Error(`Retell ${res.status}: ${(await res.text()).slice(0, 200)}`)
-    return (await res.json()) as T
-  }
-  const list = await get<RetellAgent[]>('/list-agents')
-  // La API devuelve una fila por versión: nos quedamos con la última de cada agente.
-  const byId: Record<string, RetellAgent> = {}
-  for (const a of list) byId[a.agent_id] = a
-  const agents = Object.keys(byId).map((k) => byId[k]).slice(0, 12)
-  const parts: string[] = []
-  for (let i = 0; i < agents.length; i++) {
-    const a = agents[i]
-    await onStep(i / agents.length, `Agente ${a.agent_name || a.agent_id}`)
-    const head = `Agente «${a.agent_name || a.agent_id}» · voz ${a.voice_id || '?'} · idioma ${a.language || '?'} · motor ${a.response_engine?.type || '?'}${
-      a.webhook_url ? ` · webhook ${hostOf(a.webhook_url)}` : ''
-    }`
-    if (a.response_engine?.type === 'retell-llm' && a.response_engine.llm_id) {
-      try {
-        const llm = await get<{
-          model?: string
-          general_prompt?: string
-          begin_message?: string
-          general_tools?: { name?: string; type?: string; description?: string; url?: string }[]
-        }>(`/get-retell-llm/${encodeURIComponent(a.response_engine.llm_id)}`)
-        const tools = (llm.general_tools || [])
-          .map((t) => `- ${t.name} (${t.type}${t.url ? ` → ${hostOf(t.url)}` : ''}): ${(t.description || '').slice(0, 200)}`)
-          .join('\n')
-        parts.push(
-          `${head} · modelo ${llm.model || '?'}\nSaludo: ${llm.begin_message || ''}\nHerramientas:\n${tools}\nPrompt:\n${clip(llm.general_prompt || '', 12_000)}`
-        )
-        continue
-      } catch (e) {
-        parts.push(`${head}\n(no se pudo leer su LLM: ${errMsg(e)})`)
-        continue
+/**
+ * Coste aproximado de un rastreo antes de lanzarlo: tamaño de lo que se leerá del
+ * repositorio (sin leerlo), un margen para CRM y MCP, y el precio del modelo.
+ */
+export async function estimateSpider(proyectoId: string): Promise<BrainEstimate> {
+  const row = await getBrainRow(proyectoId)
+  const model = qaModel()
+  let chars = 30_000 // CRM
+  let files = 0
+  const source = row.repo_source || (await defaultRepo(proyectoId))
+  if (source) {
+    try {
+      const reader = await makeRepoReader(source, row.repo_branch)
+      const all = await reader.listFiles()
+      let budget = 0
+      for (const f of selectRepoFiles(all)) {
+        if (budget + f.size > REPO_MAX_CHARS) continue
+        budget += f.size
+        files++
       }
+      chars += budget + all.length * 40
+    } catch {
+      // Sin acceso al repositorio todavía: se estima sin él.
     }
-    parts.push(head)
   }
-  return { body: parts.join('\n\n'), agents: agents.length }
-}
-
-function hostOf(url: string): string {
-  try {
-    const u = new URL(url)
-    return `${u.host}${u.pathname}`
-  } catch {
-    return 'url'
+  const mcp = (await listMcpServers(proyectoId)).filter((s) => s.estado === 'conectado').length
+  chars += mcp * 120_000
+  const chunks = Math.max(1, Math.ceil(chars / CHUNK_CHARS))
+  const tokensIn = charsToTokens(chars) + chunks * 1_200 + 12_000
+  const tokensOut = chunks * 5_000 + 6_000
+  return {
+    model,
+    chars,
+    files,
+    chunks,
+    tokens_in: tokensIn,
+    tokens_out: tokensOut,
+    cost_usd: estimateCost(await modelPricing(model), tokensIn, tokensOut),
   }
 }

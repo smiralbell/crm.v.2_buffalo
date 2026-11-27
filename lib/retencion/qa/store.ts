@@ -1,5 +1,5 @@
 import { query } from '@/lib/db'
-import { decryptDbUrl, encryptDbUrl } from '@/lib/retencion/db-url-crypto'
+import { upgradeBrain } from './brain-format'
 import {
   DEFAULT_FLOW1,
   TOUR_STEPS,
@@ -8,7 +8,13 @@ import {
   type BrainPhase,
   type BrainPublic,
   type BrainStatus,
+  type BrainUsage,
   type Flow1Config,
+  type ReportConfig,
+  type ReportKind,
+  type ReportOutput,
+  type ReportRun,
+  type WhatsappConfig,
   type Flow1Public,
   type InboxItem,
   type InboxOrigen,
@@ -82,6 +88,48 @@ export function ensureQaTables(): Promise<void> {
         `CREATE UNIQUE INDEX IF NOT EXISTS retencion_qa_inbox_ref ON retencion_qa_inbox (proyecto_id, origen, origen_ref) WHERE origen_ref IS NOT NULL`
       )
       await query(`CREATE INDEX IF NOT EXISTS retencion_qa_inbox_proyecto ON retencion_qa_inbox (proyecto_id, created_at DESC)`)
+      await query(`ALTER TABLE retencion_qa_brain ADD COLUMN IF NOT EXISTS usage JSONB`)
+      await query(`ALTER TABLE retencion_qa_brain ADD COLUMN IF NOT EXISTS facts JSONB`)
+      // Todo lo que se leyó en el último rastreo, entero, para los siguientes flujos.
+      await query(`
+        CREATE TABLE IF NOT EXISTS retencion_qa_docs (
+          id           BIGSERIAL PRIMARY KEY,
+          proyecto_id  UUID NOT NULL,
+          version      INT NOT NULL,
+          fuente       TEXT NOT NULL,
+          ruta         TEXT NOT NULL,
+          contenido    TEXT NOT NULL,
+          created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`)
+      await query(`CREATE INDEX IF NOT EXISTS retencion_qa_docs_proyecto ON retencion_qa_docs (proyecto_id, version)`)
+      await query(`ALTER TABLE retencion_qa_brain ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT FALSE`)
+      // Flujos de informe (conversaciones reales y mejoras): configuración y ejecuciones.
+      await query(`
+        CREATE TABLE IF NOT EXISTS retencion_qa_report_config (
+          proyecto_id    UUID NOT NULL,
+          kind           TEXT NOT NULL,
+          enabled        BOOLEAN NOT NULL DEFAULT FALSE,
+          every_minutes  INT NOT NULL DEFAULT 0,
+          whatsapp       JSONB NOT NULL DEFAULT '{}'::jsonb,
+          last_run_at    TIMESTAMPTZ,
+          next_run_at    TIMESTAMPTZ,
+          PRIMARY KEY (proyecto_id, kind)
+        )`)
+      await query(`
+        CREATE TABLE IF NOT EXISTS retencion_qa_report_runs (
+          id           BIGSERIAL PRIMARY KEY,
+          proyecto_id  UUID NOT NULL,
+          kind         TEXT NOT NULL,
+          trigger      TEXT NOT NULL,
+          status       TEXT NOT NULL DEFAULT 'running',
+          output       JSONB,
+          error        TEXT,
+          usage        JSONB,
+          whatsapp     JSONB,
+          started_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          finished_at  TIMESTAMPTZ
+        )`)
+      await query(`CREATE INDEX IF NOT EXISTS retencion_qa_report_runs_proyecto ON retencion_qa_report_runs (proyecto_id, kind, started_at DESC)`)
     })().catch((e) => {
       ensured = null
       throw e
@@ -95,7 +143,8 @@ type BrainRow = {
   status: BrainStatus
   progress: number
   phases: BrainPhase[] | null
-  brain: Brain | null
+  brain: unknown
+  usage: BrainUsage | null
   version: number
   error: string | null
   repo_source: string | null
@@ -137,30 +186,37 @@ function tourOf(v: string): TourStep {
   return (TOUR_STEPS as string[]).includes(v) ? (v as TourStep) : 'bienvenida'
 }
 
-export function toBrainPublic(row: BrainRow): BrainPublic {
+export function toBrainPublic(row: BrainRow, docsCount = 0): BrainPublic {
   return {
     status: row.status,
     progress: row.progress,
-    phases: row.phases && row.phases.length ? row.phases : initialPhases(),
-    brain: row.brain,
+    // Los rastreos antiguos tenían una fase de Retell: se quita.
+    phases: row.phases && row.phases.length ? row.phases.filter((p) => (p.id as string) !== 'retell') : initialPhases(),
+    brain: upgradeBrain(row.brain),
     version: row.version,
     error: row.error,
     repo_source: row.repo_source,
     repo_branch: row.repo_branch,
-    retell_configured: Boolean(row.retell_key_enc),
     tour_step: tourOf(row.tour_step),
     started_at: iso(row.started_at),
     finished_at: iso(row.finished_at),
+    usage: row.usage,
+    docs_count: docsCount,
   }
 }
 
 export async function getBrainPublic(proyectoId: string): Promise<BrainPublic> {
-  return toBrainPublic(await getBrainRow(proyectoId))
+  const row = await getBrainRow(proyectoId)
+  const { rows } = await query<{ n: string }>(
+    `SELECT COUNT(*) AS n FROM retencion_qa_docs WHERE proyecto_id = $1 AND version = $2`,
+    [proyectoId, row.version]
+  )
+  return toBrainPublic(row, Number(rows[0]?.n || 0))
 }
 
 export async function saveBrainSources(
   proyectoId: string,
-  input: { repo_source?: string | null; repo_branch?: string | null; retell_api_key?: string | null; clear_retell?: boolean }
+  input: { repo_source?: string | null; repo_branch?: string | null }
 ): Promise<void> {
   await getBrainRow(proyectoId)
   if (input.repo_source !== undefined) {
@@ -175,19 +231,6 @@ export async function saveBrainSources(
       input.repo_branch?.trim() || null,
     ])
   }
-  if (input.clear_retell) {
-    await query(`UPDATE retencion_qa_brain SET retell_key_enc = NULL, updated_at = NOW() WHERE proyecto_id = $1`, [proyectoId])
-  } else if (input.retell_api_key && input.retell_api_key.trim()) {
-    await query(`UPDATE retencion_qa_brain SET retell_key_enc = $2, updated_at = NOW() WHERE proyecto_id = $1`, [
-      proyectoId,
-      encryptDbUrl(input.retell_api_key.trim()),
-    ])
-  }
-}
-
-export async function getRetellKey(proyectoId: string): Promise<string | null> {
-  const row = await getBrainRow(proyectoId)
-  return row.retell_key_enc ? decryptDbUrl(row.retell_key_enc) : null
 }
 
 export async function setTourStep(proyectoId: string, step: TourStep): Promise<void> {
@@ -200,69 +243,145 @@ export async function claimSpiderRun(proyectoId: string): Promise<boolean> {
   await getBrainRow(proyectoId)
   const { rowCount } = await query(
     `UPDATE retencion_qa_brain
-       SET status = 'running', progress = 0, phases = $2::jsonb, error = NULL, started_at = NOW(), finished_at = NULL, updated_at = NOW()
+       SET status = 'running', progress = 0, phases = $2::jsonb, error = NULL, cancel_requested = FALSE,
+           started_at = NOW(), finished_at = NULL, updated_at = NOW()
      WHERE proyecto_id = $1 AND status <> 'running'`,
     [proyectoId, JSON.stringify(initialPhases())]
   )
   return rowCount > 0
 }
 
-export async function saveSpiderProgress(proyectoId: string, progress: number, phases: BrainPhase[]): Promise<void> {
-  await query(
-    `UPDATE retencion_qa_brain SET progress = $2, phases = $3::jsonb, updated_at = NOW() WHERE proyecto_id = $1`,
+/** Pide parar el rastreo en marcha. La araña lo ve en su siguiente paso (en segundos). */
+export async function requestSpiderStop(proyectoId: string): Promise<boolean> {
+  await getBrainRow(proyectoId)
+  const { rowCount } = await query(
+    `UPDATE retencion_qa_brain SET cancel_requested = TRUE WHERE proyecto_id = $1 AND status = 'running'`,
+    [proyectoId]
+  )
+  return rowCount > 0
+}
+
+/** Guarda el progreso y devuelve si se ha pedido parar. */
+export async function saveSpiderProgress(proyectoId: string, progress: number, phases: BrainPhase[]): Promise<boolean> {
+  const { rows } = await query<{ cancel_requested: boolean }>(
+    `UPDATE retencion_qa_brain SET progress = $2, phases = $3::jsonb, updated_at = NOW() WHERE proyecto_id = $1 RETURNING cancel_requested`,
     [proyectoId, progress, JSON.stringify(phases)]
+  )
+  return Boolean(rows[0]?.cancel_requested)
+}
+
+/** Rastreo parado a mano: el cerebro anterior se queda como estaba. */
+export async function markSpiderStopped(proyectoId: string, phases: BrainPhase[]): Promise<void> {
+  await query(
+    `UPDATE retencion_qa_brain
+        SET status = 'stopped', phases = $2::jsonb, error = NULL, cancel_requested = FALSE, finished_at = NOW(), updated_at = NOW()
+      WHERE proyecto_id = $1`,
+    [proyectoId, JSON.stringify(phases)]
   )
 }
 
 export async function finishSpider(
   proyectoId: string,
-  result: { ok: true; brain: Brain; phases: BrainPhase[] } | { ok: false; error: string; phases: BrainPhase[] }
+  result:
+    | { ok: true; brain: Brain; facts: unknown; phases: BrainPhase[]; usage: BrainUsage; docs: BrainDoc[] }
+    | { ok: false; error: string; phases: BrainPhase[]; usage?: BrainUsage }
 ): Promise<void> {
   if (result.ok) {
-    await query(
+    const { rows } = await query<{ version: number }>(
       `UPDATE retencion_qa_brain
-         SET status = 'done', progress = 100, phases = $2::jsonb, brain = $3::jsonb, version = version + 1,
-             finished_at = NOW(), updated_at = NOW(),
+         SET status = 'done', progress = 100, phases = $2::jsonb, brain = $3::jsonb, facts = $4::jsonb, usage = $5::jsonb,
+             version = version + 1, finished_at = NOW(), updated_at = NOW(),
              tour_step = CASE WHEN tour_step IN ('bienvenida','fuentes','rastreo') THEN 'cerebro' ELSE tour_step END
-       WHERE proyecto_id = $1`,
-      [proyectoId, JSON.stringify(result.phases), JSON.stringify(result.brain)]
+       WHERE proyecto_id = $1
+       RETURNING version`,
+      [proyectoId, JSON.stringify(result.phases), JSON.stringify(result.brain), JSON.stringify(result.facts), JSON.stringify(result.usage)]
     )
+    await saveBrainDocs(proyectoId, rows[0]?.version ?? 1, result.docs)
   } else {
     await query(
-      `UPDATE retencion_qa_brain SET status = 'error', phases = $2::jsonb, error = $3, finished_at = NOW(), updated_at = NOW() WHERE proyecto_id = $1`,
-      [proyectoId, JSON.stringify(result.phases), result.error.slice(0, 2000)]
+      `UPDATE retencion_qa_brain SET status = 'error', phases = $2::jsonb, error = $3, usage = COALESCE($4::jsonb, usage), finished_at = NOW(), updated_at = NOW() WHERE proyecto_id = $1`,
+      [proyectoId, JSON.stringify(result.phases), result.error.slice(0, 2000), result.usage ? JSON.stringify(result.usage) : null]
     )
   }
 }
 
+export type BrainDoc = { fuente: string; ruta: string; contenido: string }
+
+/** Guarda lo leído en este rastreo y quita lo de versiones anteriores (solo vale la última). */
+async function saveBrainDocs(proyectoId: string, version: number, docs: BrainDoc[]): Promise<void> {
+  for (let i = 0; i < docs.length; i += 50) {
+    const batch = docs.slice(i, i + 50)
+    const values: unknown[] = []
+    const tuples = batch.map((d, j) => {
+      values.push(proyectoId, version, d.fuente, d.ruta, d.contenido)
+      const b = j * 5
+      return `($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5})`
+    })
+    await query(`INSERT INTO retencion_qa_docs (proyecto_id, version, fuente, ruta, contenido) VALUES ${tuples.join(', ')}`, values)
+  }
+  await query(`DELETE FROM retencion_qa_docs WHERE proyecto_id = $1 AND version <> $2`, [proyectoId, version])
+}
+
+/** Documentos leídos en el último rastreo (sin el contenido). */
+export async function listBrainDocs(proyectoId: string): Promise<{ fuente: string; ruta: string; chars: number }[]> {
+  await ensureQaTables()
+  const { rows } = await query<{ fuente: string; ruta: string; chars: number }>(
+    `SELECT d.fuente, d.ruta, LENGTH(d.contenido) AS chars
+       FROM retencion_qa_docs d JOIN retencion_qa_brain b ON b.proyecto_id = d.proyecto_id AND b.version = d.version
+      WHERE d.proyecto_id = $1
+      ORDER BY d.fuente, d.ruta`,
+    [proyectoId]
+  )
+  return rows.map((r) => ({ ...r, chars: Number(r.chars) }))
+}
+
 /* ───────────── Flujo 1 · configuración ───────────── */
 
+/** Móviles limpios: solo dígitos, con prefijo de país, sin repetir. */
+export function cleanPhones(list: unknown): string[] {
+  if (!Array.isArray(list)) return []
+  const out: string[] = []
+  for (const x of list) {
+    const d = String(x ?? '').replace(/\D/g, '')
+    if (d.length >= 9 && d.length <= 15 && !out.includes(d)) out.push(d)
+  }
+  return out.slice(0, 20)
+}
+
+export function whatsappOf(v: unknown): WhatsappConfig {
+  const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+  return { enabled: o.enabled === true, to: cleanPhones(o.to) }
+}
+
 export function flow1Of(row: { flow1: Partial<Flow1Config> | null }): Flow1Config {
-  const f = row.flow1 || {}
+  const f = (row.flow1 || {}) as Partial<Flow1Config>
   const every = Number(f.repo_every_minutes)
   return {
     manual: f.manual !== false,
-    tickets: f.tickets === true,
+    tareas: f.tareas === true,
     repo: f.repo === true,
     repo_every_minutes: Number.isFinite(every) && every >= 15 ? Math.min(every, 10080) : DEFAULT_FLOW1.repo_every_minutes,
+    whatsapp: whatsappOf(f.whatsapp),
   }
 }
 
 export async function saveFlow1Config(proyectoId: string, config: Flow1Config): Promise<void> {
   const row = await getBrainRow(proyectoId)
   const before = flow1Of(row)
+  const clean: Flow1Config = { ...config, whatsapp: whatsappOf(config.whatsapp) }
   await query(
     `UPDATE retencion_qa_brain
        SET flow1 = $2::jsonb, flow1_configured = TRUE,
            last_ticket_scan_at = CASE WHEN $3 THEN NOW() ELSE last_ticket_scan_at END,
            tour_step = CASE WHEN tour_step = 'flujo1' THEN 'hecho' ELSE tour_step END
      WHERE proyecto_id = $1`,
-    // Al activar los tickets se empieza desde ahora: los anteriores ya los resume el cerebro.
-    [proyectoId, JSON.stringify(config), config.tickets && !before.tickets]
+    // Al activar las tareas se empieza desde ahora: lo hecho antes ya lo recoge el cerebro.
+    [proyectoId, JSON.stringify(clean), clean.tareas && !before.tareas]
   )
 }
 
-export async function markTicketScan(proyectoId: string, at: Date): Promise<void> {
+/** Última tarea revisada (la columna se llama así por la primera versión, que miraba tickets). */
+export async function markTaskScan(proyectoId: string, at: Date): Promise<void> {
   await query(`UPDATE retencion_qa_brain SET last_ticket_scan_at = $2 WHERE proyecto_id = $1`, [proyectoId, at])
 }
 
@@ -450,10 +569,165 @@ export async function getFlow1Public(proyectoId: string): Promise<Flow1Public> {
   return {
     config: flow1Of(row),
     configured: row.flow1_configured,
-    last_ticket_scan_at: iso(row.last_ticket_scan_at),
+    last_task_scan_at: iso(row.last_ticket_scan_at),
     last_repo_scan_at: iso(row.last_repo_scan_at),
     last_repo_sha: row.last_repo_sha,
     normas,
     inbox,
   }
+}
+
+/* ───────────── Flujos de informe ───────────── */
+
+/** Cada cuánto puede ir un informe (minutos). 0 = solo a mano. */
+export const REPORT_EVERY = [0, 1440, 10080, 43200] as const
+
+type ReportConfigRow = {
+  kind: ReportKind
+  enabled: boolean
+  every_minutes: number
+  whatsapp: unknown
+  last_run_at: Date | null
+  next_run_at: Date | null
+}
+
+const DEFAULT_EVERY: Record<ReportKind, number> = { real: 1440, mejoras: 10080 }
+
+function toReportConfig(kind: ReportKind, r: ReportConfigRow | undefined): ReportConfig {
+  return {
+    kind,
+    enabled: r?.enabled ?? false,
+    every_minutes: r ? r.every_minutes : DEFAULT_EVERY[kind],
+    whatsapp: whatsappOf(r?.whatsapp),
+    last_run_at: iso(r?.last_run_at ?? null),
+    next_run_at: iso(r?.next_run_at ?? null),
+  }
+}
+
+export async function getReportConfig(proyectoId: string, kind: ReportKind): Promise<ReportConfig> {
+  await ensureQaTables()
+  const { rows } = await query<ReportConfigRow>(
+    `SELECT * FROM retencion_qa_report_config WHERE proyecto_id = $1 AND kind = $2`,
+    [proyectoId, kind]
+  )
+  return toReportConfig(kind, rows[0])
+}
+
+export async function saveReportConfig(
+  proyectoId: string,
+  kind: ReportKind,
+  input: { enabled: boolean; every_minutes: number; whatsapp: WhatsappConfig }
+): Promise<ReportConfig> {
+  await ensureQaTables()
+  const every = (REPORT_EVERY as readonly number[]).includes(input.every_minutes) ? input.every_minutes : DEFAULT_EVERY[kind]
+  // La siguiente ejecución cuenta desde la última (o desde ahora si nunca se ha ejecutado).
+  await query(
+    `INSERT INTO retencion_qa_report_config (proyecto_id, kind, enabled, every_minutes, whatsapp, next_run_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, CASE WHEN $3 AND $4 > 0 THEN NOW() + make_interval(mins => $4) END)
+     ON CONFLICT (proyecto_id, kind) DO UPDATE
+       SET enabled = EXCLUDED.enabled, every_minutes = EXCLUDED.every_minutes, whatsapp = EXCLUDED.whatsapp,
+           next_run_at = CASE WHEN EXCLUDED.enabled AND EXCLUDED.every_minutes > 0
+                              THEN COALESCE(retencion_qa_report_config.last_run_at, NOW()) + make_interval(mins => EXCLUDED.every_minutes)
+                         END`,
+    [proyectoId, kind, input.enabled, every, JSON.stringify(whatsappOf(input.whatsapp))]
+  )
+  return getReportConfig(proyectoId, kind)
+}
+
+/** Informes que tocan ahora. */
+export async function listDueReports(): Promise<{ proyecto_id: string; kind: ReportKind }[]> {
+  await ensureQaTables()
+  const { rows } = await query<{ proyecto_id: string; kind: ReportKind }>(
+    `SELECT proyecto_id, kind FROM retencion_qa_report_config
+      WHERE enabled AND every_minutes > 0 AND next_run_at IS NOT NULL AND next_run_at <= NOW()`
+  )
+  return rows
+}
+
+type ReportRunRow = {
+  id: string
+  kind: ReportKind
+  trigger: 'manual' | 'cron'
+  status: 'running' | 'ok' | 'error'
+  output: ReportOutput | null
+  error: string | null
+  usage: BrainUsage | null
+  whatsapp: { sent: number; errors: string[] } | null
+  started_at: Date
+  finished_at: Date | null
+}
+
+function toReportRun(r: ReportRunRow): ReportRun {
+  return {
+    id: String(r.id),
+    kind: r.kind,
+    trigger: r.trigger,
+    status: r.status,
+    output: r.output,
+    error: r.error,
+    usage: r.usage,
+    whatsapp: r.whatsapp,
+    started_at: new Date(r.started_at).toISOString(),
+    finished_at: iso(r.finished_at),
+  }
+}
+
+/** Empieza una ejecución. Devuelve null si ya hay una en marcha (de menos de 30 min). */
+export async function startReportRun(proyectoId: string, kind: ReportKind, trigger: 'manual' | 'cron'): Promise<string | null> {
+  await ensureQaTables()
+  const busy = await query(
+    `SELECT 1 FROM retencion_qa_report_runs
+      WHERE proyecto_id = $1 AND kind = $2 AND status = 'running' AND started_at > NOW() - INTERVAL '30 minutes' LIMIT 1`,
+    [proyectoId, kind]
+  )
+  if (busy.rows.length) return null
+  const { rows } = await query<{ id: string }>(
+    `INSERT INTO retencion_qa_report_runs (proyecto_id, kind, trigger) VALUES ($1, $2, $3) RETURNING id`,
+    [proyectoId, kind, trigger]
+  )
+  await query(
+    `UPDATE retencion_qa_report_config
+        SET last_run_at = NOW(),
+            next_run_at = CASE WHEN enabled AND every_minutes > 0 THEN NOW() + make_interval(mins => every_minutes) END
+      WHERE proyecto_id = $1 AND kind = $2`,
+    [proyectoId, kind]
+  )
+  return String(rows[0].id)
+}
+
+export async function finishReportRun(
+  runId: string,
+  result: { status: 'ok' | 'error'; output: ReportOutput | null; error: string | null; usage: BrainUsage | null; whatsapp: ReportRun['whatsapp'] }
+): Promise<void> {
+  await query(
+    `UPDATE retencion_qa_report_runs
+        SET status = $2, output = $3::jsonb, error = $4, usage = $5::jsonb, whatsapp = $6::jsonb, finished_at = NOW()
+      WHERE id = $1`,
+    [
+      runId,
+      result.status,
+      result.output ? JSON.stringify(result.output) : null,
+      result.error,
+      result.usage ? JSON.stringify(result.usage) : null,
+      result.whatsapp ? JSON.stringify(result.whatsapp) : null,
+    ]
+  )
+}
+
+export async function listReportRuns(proyectoId: string, kind: ReportKind, limit = 20): Promise<ReportRun[]> {
+  await ensureQaTables()
+  const { rows } = await query<ReportRunRow>(
+    `SELECT * FROM retencion_qa_report_runs WHERE proyecto_id = $1 AND kind = $2 ORDER BY started_at DESC LIMIT $3`,
+    [proyectoId, kind, limit]
+  )
+  return rows.map(toReportRun)
+}
+
+/** Fecha desde la que mira un informe: la última ejecución buena o, si no hay, su periodo. */
+export async function reportSince(proyectoId: string, kind: ReportKind, fallbackMinutes: number): Promise<Date> {
+  const { rows } = await query<{ started_at: Date }>(
+    `SELECT started_at FROM retencion_qa_report_runs WHERE proyecto_id = $1 AND kind = $2 AND status = 'ok' ORDER BY started_at DESC LIMIT 1`,
+    [proyectoId, kind]
+  )
+  return rows[0] ? new Date(rows[0].started_at) : new Date(Date.now() - fallbackMinutes * 60_000)
 }

@@ -3,12 +3,15 @@ import { useAuth } from '@/components/AuthContext'
 import BrainPanel, { type BrainData, type BrainSheet } from './BrainPanel'
 import Flow1Panel, { type Flow1Sheet } from './Flow1Panel'
 import GuidedTour from './GuidedTour'
+import ReportPanel from './ReportPanel'
 import type { Flow1Config, TourStep } from '@/lib/retencion/qa/types'
 
-export type QaView = 'cerebro' | 'cambios'
+export type QaView = 'cerebro' | 'cambios' | 'real' | 'mejoras'
+
+export const QA_VIEWS: QaView[] = ['cerebro', 'cambios', 'real', 'mejoras']
 
 export function isQaView(v: unknown): v is QaView {
-  return v === 'cerebro' || v === 'cambios'
+  return (QA_VIEWS as unknown[]).includes(v)
 }
 
 /**
@@ -84,6 +87,11 @@ export default function QaWorkspace({
     setData(d as BrainData)
   }
 
+  const stop = async () => {
+    const res = await fetch(api, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) })
+    if (res.ok) setData((await res.json()) as BrainData)
+  }
+
   const saveFlow1 = async (c: Flow1Config): Promise<boolean> => {
     const res = await fetch(`/api/retencion/proyectos/${proyectoId}/flujo-cambios`, {
       method: 'PATCH',
@@ -109,6 +117,7 @@ export default function QaWorkspace({
             sheet={brainSheet}
             onSheet={setBrainSheet}
             onStart={start}
+            onStop={stop}
             onSaved={setData}
             onGoMcp={onGoMcp || (() => undefined)}
             onGoInbox={() => {
@@ -137,6 +146,22 @@ export default function QaWorkspace({
           />
         </div>
       )}
+      {(view === 'real' || view === 'mejoras') && (
+        <div className="h-full">
+          <ReportPanel
+            key={view}
+            proyectoId={proyectoId}
+            kind={view}
+            isAdmin={isAdmin}
+            brainReady={Boolean(data?.brain.brain)}
+            onGoCerebro={() => onView('cerebro')}
+            onGoCambios={() => {
+              onView('cambios')
+              setFlowSheet('bandeja')
+            }}
+          />
+        </div>
+      )}
 
       {data && (
         <GuidedTour
@@ -147,6 +172,7 @@ export default function QaWorkspace({
           forced={tourForced}
           onStep={(st) => void setTourStep(st)}
           onStart={start}
+          onStop={stop}
           onOpenSheet={(sh) => {
             onView('cerebro')
             setBrainSheet(sh)
